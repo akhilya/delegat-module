@@ -1,0 +1,61 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PrintO.Infrastructure.Auth;
+using PrintO.Infrastructure.Data;
+using PrintO.Infrastructure.Middleware;
+using PrintO.Models;
+
+namespace PrintO.Controllers;
+
+[ApiController]
+[JwtAuthorize]
+public class InvitationTokenController : ControllerBase
+{
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IServiceProvider _serviceProvider;
+
+    public InvitationTokenController(
+        ICurrentUserService currentUserService,
+        IUnitOfWork unitOfWork,
+        IServiceProvider serviceProvider)
+    {
+        _currentUserService = currentUserService;
+        _unitOfWork = unitOfWork;
+        _serviceProvider = serviceProvider;
+    }
+
+    [HttpGet]
+    [Route("/tokens/")]
+    public async Task<IActionResult> GetInvitationTokens()
+    {
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null || !user.isAdmin)
+            throw ApiException.Forbidden("Only admins can view invitation tokens");
+
+        var tokenRepo = _unitOfWork.Repository<InvitationToken>();
+        var tokens = await tokenRepo.FindAllAsync(
+            t => true,
+            q => q.Include(t => t.usedByUser).OrderByDescending(t => t.createdAt)
+        );
+
+        return Ok(tokens.Select(t => t.MapToListDTO(_serviceProvider)));
+    }
+
+    [HttpPost]
+    [Route("/tokens/")]
+    public async Task<IActionResult> PostInvitationToken()
+    {
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null || !user.isAdmin)
+            throw ApiException.Forbidden("Only admins can create invitation tokens");
+
+        var tokenRepo = _unitOfWork.Repository<InvitationToken>();
+        var newToken = new InvitationToken();
+        newToken.AddFill(new InvitationToken.AddForm());
+        await tokenRepo.AddAsync(newToken);
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(newToken.MapToDTO(_serviceProvider));
+    }
+}

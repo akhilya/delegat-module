@@ -1,0 +1,66 @@
+version: '3.8'
+
+# Production docker-compose
+# Подключается к существующим внешним MySQL и MinIO серверам
+# Использование: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  # Backend API (ASP.NET Core)
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: printo-api
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      # MySQL (внешний сервер)
+      - MYSQL_SERVER=${MYSQL_SERVER}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      # MinIO (внешний сервер)
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_SECURE=${MINIO_SECURE:-true}
+      # JWT
+      - JWT_KEY=${JWT_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      # Admin seed (optional)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    networks:
+      - printo-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/swagger/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (Vue 3 + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_SERVER=${VITE_API_SERVER:-https://api.printo.studio}
+    container_name: printo-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - printo-network
+    restart: always
+
+networks:
+  printo-network:
+    driver: bridge

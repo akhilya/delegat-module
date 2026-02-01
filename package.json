@@ -1,0 +1,15 @@
+{
+  "name": "printo-dashboard",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n docker,api,web -c blue,green,cyan \"npm run dev:docker\" \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:docker": "docker compose -f docker-compose.dev.yml up",
+    "dev:api": "cd backend && dotenv -e ../.env.dev -- dotnet watch run",
+    "dev:web": "cd frontend && npm run dev",
+    "dev:stop": "docker compose -f docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "dotenv-cli": "^8.0.0"
+  }
+}
