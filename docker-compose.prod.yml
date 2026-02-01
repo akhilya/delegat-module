@@ -49,8 +49,8 @@ services:
 
   # MySQL Database
   mysql:
-    image: mysql:8.4.7
-    command: --upgrade=NONE
+    image: mysql:8.4
+    command: --innodb-lock-wait-timeout=3600 --lock-wait-timeout=3600
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-printo}
@@ -103,8 +103,8 @@ services:
 
 volumes:
   mysql_data:
-    external: true
-    name: system-database-l6vnfd-data
+    # New volume - old one was corrupted during MySQL 8.4.7->8.4.8 upgrade
+    name: printo-mysql-data-v2
   minio_data:
     external: true
     name: system-minio-ecslls_minio-data-system-minio-ecslls
