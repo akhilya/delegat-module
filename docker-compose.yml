@@ -1,59 +1,8 @@
+# Development - infrastructure services only
+# Usage: docker compose up -d
+# Then run backend and frontend locally with: npm run dev
+
 services:
-  # Backend API (ASP.NET Core)
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: printo-api
-    ports:
-      - "5000:5000"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      # MySQL
-      - MYSQL_SERVER=${MYSQL_SERVER:-mysql}
-      - MYSQL_PORT=${MYSQL_PORT:-3306}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-printo}
-      - MYSQL_USER=${MYSQL_USER:-printo}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      # MinIO
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-printo}
-      - MINIO_SECURE=${MINIO_SECURE:-false}
-      # JWT
-      - JWT_KEY=${JWT_KEY}
-      - JWT_ISSUER=${JWT_ISSUER:-printo.studio}
-      - JWT_AUDIENCE=${JWT_AUDIENCE:-printo.studio}
-      # Admin seed (optional)
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-    depends_on:
-      mysql:
-        condition: service_healthy
-      minio:
-        condition: service_started
-    networks:
-      - printo-network
-    restart: unless-stopped
-
-  # Frontend (Vue 3 + Vite)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_SERVER=${VITE_API_SERVER:-http://localhost:5000}
-    container_name: printo-frontend
-    ports:
-      - "5173:80"
-    depends_on:
-      - api
-    networks:
-      - printo-network
-    restart: unless-stopped
-
   # MySQL Database
   mysql:
     image: mysql:8.0
@@ -66,9 +15,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
-      - "3307:3306"  # External 3307 to avoid conflict with local MySQL
-    networks:
-      - printo-network
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -87,10 +34,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9002:9000"  # External 9002 to avoid conflict with local MinIO
-      - "9003:9001"  # MinIO console
-    networks:
-      - printo-network
+      - "9002:9000"
+      - "9003:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -117,12 +62,6 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET:-printo}
-    networks:
-      - printo-network
-
-networks:
-  printo-network:
-    driver: bridge
 
 volumes:
   mysql_data:
