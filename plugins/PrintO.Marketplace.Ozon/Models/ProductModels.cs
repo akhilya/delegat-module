@@ -40,10 +40,10 @@ public class ProductInfoListRequest
     public List<string>? OfferId { get; set; }
 
     [JsonPropertyName("product_id")]
-    public List<string>? ProductId { get; set; }
+    public List<long>? ProductId { get; set; }
 
     [JsonPropertyName("sku")]
-    public List<string>? Sku { get; set; }
+    public List<long>? Sku { get; set; }
 }
 
 /// <summary>

@@ -121,7 +121,7 @@ public class OzonApiClient : IDisposable
     /// Get product info by IDs
     /// </summary>
     public async Task<ProductInfoListResponse> GetProductInfoAsync(
-        List<string>? productIds = null,
+        List<long>? productIds = null,
         List<string>? offerIds = null,
         CancellationToken ct = default)
     {

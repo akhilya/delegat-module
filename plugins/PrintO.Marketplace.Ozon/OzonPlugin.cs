@@ -553,7 +553,7 @@ public class OzonPlugin : MarketplacePluginBase
 
         // Get product info
         var infoResponse = await client.GetProductInfoAsync(
-            productIds: new List<string> { productId.ToString() },
+            productIds: new List<long> { productId },
             ct: ct);
 
         if (infoResponse.Items.Count == 0)
@@ -602,8 +602,11 @@ public class OzonPlugin : MarketplacePluginBase
         await EnsureCategoryNameCacheAsync(client, ct);
 
         // 1. Batch: product info (1 API call)
+        var productIdsLong = externalProductIds
+            .Where(id => long.TryParse(id, out _))
+            .Select(long.Parse).ToList();
         var infoResponse = await client.GetProductInfoAsync(
-            productIds: externalProductIds, ct: ct);
+            productIds: productIdsLong, ct: ct);
 
         // 2. Batch: product attributes (1 API call)
         var attrsResponse = await client.GetProductAttributesAsync(
@@ -611,9 +614,6 @@ public class OzonPlugin : MarketplacePluginBase
         var attrsDict = attrsResponse.Result.ToDictionary(a => a.Id);
 
         // 3. Batch: stocks (1 API call)
-        var productIdsLong = externalProductIds
-            .Where(id => long.TryParse(id, out _))
-            .Select(long.Parse).ToList();
         var stocksDict = new Dictionary<long, int>();
         try
         {
@@ -671,14 +671,14 @@ public class OzonPlugin : MarketplacePluginBase
             );
         }
 
-        var productIds = listResponse.Result.Items.Select(i => i.ProductId.ToString()).ToList();
         var productIdsLong = listResponse.Result.Items.Select(i => i.ProductId).ToList();
+        var productIdsStr = productIdsLong.Select(id => id.ToString()).ToList();
 
         // Get product info
-        var infoResponse = await client.GetProductInfoAsync(productIds: productIds, ct: ct);
+        var infoResponse = await client.GetProductInfoAsync(productIds: productIdsLong, ct: ct);
 
         // Get product attributes
-        var attrsResponse = await client.GetProductAttributesAsync(productIds: productIds, ct: ct);
+        var attrsResponse = await client.GetProductAttributesAsync(productIds: productIdsStr, ct: ct);
 
         // Get detailed stocks (the product info endpoint returns 0 for FBS sellers)
         Dictionary<long, int> stocksDict = new();
