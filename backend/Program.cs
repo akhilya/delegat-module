@@ -35,7 +35,11 @@ var jwtSettings = builder.Configuration.GetJwtSettings();
 var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";
 var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseMySql(connectionString, serverVersion));
+    options.UseMySql(connectionString, serverVersion, mysqlOptions =>
+        mysqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 10,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)));
 
 // Identity
 builder.Services.AddIdentity<User, UserRole>(options =>
@@ -180,15 +184,28 @@ builder.Services.AddControllers()
 
 var app = builder.Build();
 
-// Apply migrations automatically
+// Apply migrations automatically (with retry for slow MySQL startup)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
 
-    logger.LogInformation("Applying database migrations...");
-    await db.Database.MigrateAsync();
-    logger.LogInformation("Database migrations applied successfully.");
+    const int maxRetries = 30;
+    for (int i = 0; i < maxRetries; i++)
+    {
+        try
+        {
+            logger.LogInformation("Applying database migrations...");
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied successfully.");
+            break;
+        }
+        catch (Exception ex) when (i < maxRetries - 1)
+        {
+            logger.LogWarning("Database not ready (attempt {Attempt}/{Max}): {Message}", i + 1, maxRetries, ex.InnerException?.Message ?? ex.Message);
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+    }
 }
 
 // Seed admin user if configured
