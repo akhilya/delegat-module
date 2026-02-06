@@ -224,9 +224,11 @@ if (!app.Environment.IsProduction())
     app.UseSwaggerUI();
 }
 
+app.UseStaticFiles();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 await app.RunAsync("http://0.0.0.0:5000");
