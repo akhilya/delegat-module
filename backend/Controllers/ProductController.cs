@@ -228,8 +228,7 @@ public class ProductController : ControllerBase
         if (product == null || product.storeId != selectedStoreId.Value)
             throw ApiException.NotFound("Товар не найден");
 
-        await _unitOfWork.BeginTransactionAsync();
-        try
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             product.UpdateFill(input);
 
@@ -272,13 +271,7 @@ public class ProductController : ControllerBase
             }
 
             await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+        });
 
         return Ok(new { success = true });
     }
@@ -381,8 +374,7 @@ public class ProductController : ControllerBase
 
         var updatedCount = 0;
 
-        await _unitOfWork.BeginTransactionAsync();
-        try
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             foreach (var product in products)
             {
@@ -455,13 +447,7 @@ public class ProductController : ControllerBase
             }
 
             await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+        });
 
         return Ok(new { success = true, updatedCount });
     }
@@ -523,8 +509,7 @@ public class ProductController : ControllerBase
         if (product == null)
             throw ApiException.NotFound("Товар не найден");
 
-        await _unitOfWork.BeginTransactionAsync();
-        try
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             // Batch delete related entities using ExecuteDeleteAsync (single SQL DELETE per table)
             await _context.pendingProductImports
@@ -558,13 +543,7 @@ public class ProductController : ControllerBase
             productRepo.DeleteWithoutSave(product);
 
             await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+        });
 
         return Ok(new { next = "/products" });
     }
@@ -604,8 +583,7 @@ public class ProductController : ControllerBase
         if (notFoundIds.Any())
             throw ApiException.NotFound($"Товары не найдены: {string.Join(", ", notFoundIds)}");
 
-        await _unitOfWork.BeginTransactionAsync();
-        try
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             // Batch delete related entities using ExecuteDeleteAsync
             await _context.pendingProductImports
@@ -642,13 +620,7 @@ public class ProductController : ControllerBase
             }
 
             await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+        });
 
         return Ok(new { success = true, deletedCount = products.Count });
     }

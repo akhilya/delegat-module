@@ -40,6 +40,13 @@ public interface IUnitOfWork : IDisposable
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     Task RollbackTransactionAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Executes an action within a transaction that is compatible with the configured execution strategy.
+    /// </summary>
+    /// <param name="action">The async action to execute inside the transaction.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -118,6 +125,28 @@ public class UnitOfWork : IUnitOfWork
             await _transaction.DisposeAsync();
             _transaction = null;
         }
+    }
+
+    /// <summary>
+    /// Executes an action within a transaction that is compatible with the configured execution strategy.
+    /// </summary>
+    public async Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken ct = default)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await action();
+                await transaction.CommitAsync(ct);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(ct);
+                throw;
+            }
+        });
     }
 
     /// <summary>
