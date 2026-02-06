@@ -19,4 +19,11 @@ export default defineConfig([
     languageOptions: { globals: globals.browser },
   },
   pluginVue.configs["flat/essential"],
+  {
+    files: ["**/*.vue"],
+    rules: {
+      // Allow shadcn-vue components that shadow HTML element names
+      "vue/no-reserved-component-names": "off",
+    },
+  },
 ]);

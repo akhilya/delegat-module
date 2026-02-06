@@ -55,10 +55,10 @@ public class UserController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound("Магазин не найден");
 
         if (!store.members.Any(m => m.Id == user.Id))
-            throw ApiException.Forbidden("You are not a member of this store");
+            throw ApiException.Forbidden("Вы не являетесь участником этого магазина");
 
         var userRepo = _unitOfWork.Repository<User>();
         user.UpdateFill(new User.SelectStoreForm(id));

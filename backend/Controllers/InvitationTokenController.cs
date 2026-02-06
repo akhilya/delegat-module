@@ -31,7 +31,7 @@ public class InvitationTokenController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only admins can view invitation tokens");
+            throw ApiException.Forbidden("Только администраторы могут просматривать токены приглашений");
 
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
         var tokens = await tokenRepo.FindAllAsync(
@@ -48,7 +48,7 @@ public class InvitationTokenController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only admins can create invitation tokens");
+            throw ApiException.Forbidden("Только администраторы могут создавать токены приглашений");
 
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
         var newToken = new InvitationToken();

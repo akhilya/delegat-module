@@ -110,18 +110,25 @@ export default {
 </script>
 
 <template>
-  <Page>
+  <Page class="flex flex-col">
     <NavigationBar />
-    <div class="">
-      <Breadcrumbs :items="breadcrumbs" />
-      <div class="flex justify-between items-center mb-6">
-        <Dialog v-model:open="showCreateDialog">
-          <DialogTrigger as-child>
-            <Button>
-              <Plus class="w-4 h-4 mr-2" />
-              Создать магазин
-            </Button>
-          </DialogTrigger>
+    <Breadcrumbs :items="breadcrumbs" />
+
+    <div class="flex justify-between items-center mb-4">
+      <div>
+        <h1 class="text-lg font-semibold">Магазины</h1>
+        <p class="text-sm text-muted-foreground">
+          Управление магазинами системы
+        </p>
+      </div>
+
+      <Dialog v-model:open="showCreateDialog">
+        <DialogTrigger as-child>
+          <Button>
+            <Plus class="size-4 mr-2" />
+            Создать магазин
+          </Button>
+        </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Новый магазин</DialogTitle>
@@ -141,22 +148,26 @@ export default {
                 <Button variant="outline">Отмена</Button>
               </DialogClose>
               <Button @click="handleCreateStore" :disabled="isCreating">
-                <Loader2 v-if="isCreating" class="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
                 Создать
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+    </div>
 
+    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
       <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="w-8 h-8 animate-spin text-muted-foreground" />
+        <Loader2 class="size-8 animate-spin text-muted-foreground" />
       </div>
 
-      <div v-else-if="stores.length === 0" class="text-center py-12 text-muted-foreground">
-        <Store class="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <p>Нет магазинов</p>
-        <p class="text-sm">Создайте первый магазин</p>
+      <div
+        v-else-if="stores.length === 0"
+        class="flex flex-col items-center justify-center py-12 text-center"
+      >
+        <Store class="size-12 mb-4 text-muted-foreground" />
+        <h3 class="font-medium mb-1">Нет магазинов</h3>
+        <p class="text-sm text-muted-foreground">Создайте первый магазин</p>
       </div>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -169,10 +180,10 @@ export default {
           <CardHeader>
             <CardTitle class="flex items-center justify-between">
               <span class="flex items-center gap-2">
-                <Store class="w-5 h-5" />
+                <Store class="size-5" />
                 {{ store.name }}
               </span>
-              <ChevronRight class="w-5 h-5 text-muted-foreground" />
+              <ChevronRight class="size-5 text-muted-foreground" />
             </CardTitle>
             <CardDescription>
               ID: {{ store.id }}
@@ -180,7 +191,7 @@ export default {
           </CardHeader>
           <CardContent>
             <div class="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users class="w-4 h-4" />
+              <Users class="size-4" />
               <span>{{ store.membersCount || 0 }} участников</span>
             </div>
           </CardContent>

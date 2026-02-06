@@ -1,4 +1,5 @@
 <script>
+// GoBackButton - A button that navigates back one step in browser history.
 import { ArrowLeft } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
 

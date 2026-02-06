@@ -32,13 +32,13 @@ public class FileTagController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("No store selected");
+            throw ApiException.BadRequest("Магазин не выбран");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.FindAsync(f => f.productId == productId && f.Id == fileId);
 
         if (file == null)
-            throw ApiException.NotFound("File not found");
+            throw ApiException.NotFound("Файл не найден");
 
         var tagRepo = _unitOfWork.Repository<FileTag>();
         var tag = new FileTag();
@@ -55,19 +55,19 @@ public class FileTagController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("No store selected");
+            throw ApiException.BadRequest("Магазин не выбран");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found");
+            throw ApiException.NotFound("Товар не найден");
 
         var tagRepo = _unitOfWork.Repository<FileTag>();
         var tag = await tagRepo.FindAsync(t => t.fileId == fileId && t.Id == id);
 
         if (tag == null)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound("Тег не найден");
 
         tag.UpdateFill(input);
         await tagRepo.UpdateAsync(tag);
@@ -82,19 +82,19 @@ public class FileTagController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("No store selected");
+            throw ApiException.BadRequest("Магазин не выбран");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found");
+            throw ApiException.NotFound("Товар не найден");
 
         var tagRepo = _unitOfWork.Repository<FileTag>();
         var tag = await tagRepo.FindAsync(t => t.fileId == fileId && t.Id == id);
 
         if (tag == null)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound("Тег не найден");
 
         await tagRepo.DeleteAsync(tag);
         await _unitOfWork.SaveChangesAsync();

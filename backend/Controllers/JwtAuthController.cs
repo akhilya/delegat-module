@@ -42,11 +42,11 @@ public class JwtAuthController : ControllerBase
     {
         var user = await _userManager.FindByNameAsync(input.userName);
         if (user == null)
-            throw ApiException.Unauthorized("Invalid credentials");
+            throw ApiException.Unauthorized("Неверные учётные данные");
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, false);
         if (!result.Succeeded)
-            throw ApiException.Unauthorized("Invalid credentials");
+            throw ApiException.Unauthorized("Неверные учётные данные");
 
         var token = _jwtService.GenerateToken(user.Id, user.UserName ?? "", input.rememberMe);
         SetTokenCookie(token, input.rememberMe);
@@ -67,10 +67,10 @@ public class JwtAuthController : ControllerBase
         var tokenEntity = await tokenRepo.FindAsync(t => t.token == token);
 
         if (tokenEntity == null)
-            throw ApiException.BadRequest("Invalid token");
+            throw ApiException.BadRequest("Недействительный токен");
 
         if (tokenEntity.used)
-            throw ApiException.BadRequest("Token already used");
+            throw ApiException.BadRequest("Токен уже использован");
 
         var user = new User { UserName = input.userName };
         var result = await _userManager.CreateAsync(user, input.password);
@@ -125,7 +125,7 @@ public class JwtAuthController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null)
-            throw ApiException.NotFound("User not found");
+            throw ApiException.NotFound("Пользователь не найден");
 
         return Ok(user.MapToDTO(_serviceProvider));
     }

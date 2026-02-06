@@ -3,6 +3,17 @@ import { http } from "@/main";
 
 export default {
   actions: {
+    /**
+     * Fetches a paginated list of products with optional search filtering.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Query parameters.
+     * @param {string} params.searchQuery - Text to search products by.
+     * @param {number} params.startIndex - Pagination offset.
+     * @param {number} params.pageSize - Number of products per page.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
     async getAllProducts(
       ctx,
       { searchQuery, startIndex, pageSize, onSuccess, onError },
@@ -18,6 +29,238 @@ export default {
       )
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
+    },
+
+    /**
+     * Fetches a single product by its ID.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.productId - The product ID to fetch.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async getProduct(ctx, { productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Creates a new product.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {Object} params.input - Product data to create.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async createProduct(ctx, { input, onSuccess, onError }) {
+      return await useAxios(
+        `/products`,
+        { method: "POST", data: input },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Updates an existing product by its ID.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.productId - The product ID to update.
+     * @param {Object} params.input - Partial product data to patch.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async updateProduct(ctx, { productId, input, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}`,
+        { method: "PATCH", data: input },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Deletes a product by its ID.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.productId - The product ID to delete.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async deleteProduct(ctx, { productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}`,
+        { method: "DELETE" },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Bulk updates multiple products at once.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {Array<string|number>} params.productIds - IDs of products to update.
+     * @param {Object} params.updates - Fields to update on all specified products.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async bulkUpdateProducts(ctx, { productIds, updates, onSuccess, onError }) {
+      return await useAxios(
+        `/products/bulk`,
+        { method: "PATCH", data: { productIds, updates } },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Bulk deletes multiple products at once.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {Array<string|number>} params.productIds - IDs of products to delete.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async bulkDeleteProducts(ctx, { productIds, onSuccess, onError }) {
+      return await useAxios(
+        `/products/bulk-delete`,
+        { method: "POST", data: { productIds } },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Uploads files and attaches them to a product.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {FileList|Array<File>} params.files - Files to upload.
+     * @param {string|number} params.productId - The product ID to attach files to.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async putProductFiles(ctx, { files, productId, onSuccess, onError }) {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+      return await useAxios(
+        `/products/${productId}/files`,
+        {
+          method: "PUT",
+          data: formData,
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Deletes a file attached to a product.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.id - The file ID to delete.
+     * @param {string|number} params.productId - The product ID the file belongs to.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async deleteProductFile(ctx, { id, productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/files/${id}`,
+        { method: "DELETE" },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Adds image references to a product.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.productId - The product ID to attach images to.
+     * @param {Array<Object>} params.files - Image file references to associate.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async postProductImages(ctx, { productId, files, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/images`,
+        { method: "POST", data: { files } },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    // postNote removed - use noteModule.postNote instead to avoid duplicate API calls
+
+    /**
+     * Fetches the product group that a product belongs to.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.productId - The product ID to look up group for.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async getProductGroup(ctx, { productId, onSuccess, onError }) {
+      try {
+        const response = await http.get(`/products/${productId}/group`);
+        onSuccess({ data: { value: response.data } });
+      } catch (error) {
+        onError(error);
+      }
     },
   },
   mutations: {},

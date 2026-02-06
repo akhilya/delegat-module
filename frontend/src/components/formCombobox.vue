@@ -1,4 +1,5 @@
 <script>
+// FormCombobox - A searchable dropdown (combobox) form control with item selection.
 import {
   Combobox,
   ComboboxAnchor,

@@ -1,6 +1,11 @@
 namespace PrintO.Infrastructure.Storage;
 
 /// <summary>
+/// Result of file upload with metadata
+/// </summary>
+public record FileUploadResult(string ContentType, long Length);
+
+/// <summary>
 /// Interface for object storage operations
 /// </summary>
 public interface IStorageService
@@ -19,6 +24,11 @@ public interface IStorageService
     /// Upload from URI
     /// </summary>
     Task<bool> UploadFromUriAsync(string uri, string path, CancellationToken ct = default);
+
+    /// <summary>
+    /// Upload from URI and return metadata (content type, length)
+    /// </summary>
+    Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default);
 
     /// <summary>
     /// Delete a file

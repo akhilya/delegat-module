@@ -3,19 +3,30 @@ import Page from "@/components/page.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
-import { columns as productColumns } from "@/components/products/columns";
+import ColumnSelector from "@/components/products/columnSelector.vue";
+import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
+import {
+  columns as baseProductColumns,
+  defaultVisibleColumns,
+  buildColumnsWithStoreAttributes,
+  buildColumnsWithPreset,
+  getDefaultVisibilityWithStoreAttributes,
+  combinedColumnPresets,
+} from "@/components/products/columns";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
+import { toast } from "vue-sonner";
 import Button from "@/components/ui/button/Button.vue";
 import {
-  Plus,
   Search,
   ChevronLeft,
   ChevronsLeft,
   ChevronRight,
   ChevronsRight,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-vue-next";
-import { PAGE_PRODUCT_CREATION } from "@/router";
 import Input from "@/components/ui/input/Input.vue";
 import {
   Select,
@@ -26,7 +37,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import ToolsButton from "@/components/toolsButton.vue";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const COLUMN_VISIBILITY_KEY = "products-column-visibility";
+const COLUMN_PRESET_KEY = "products-column-preset";
+const COLUMN_ORDER_KEY = "products-column-order";
 
 export default {
   components: {
@@ -34,13 +58,17 @@ export default {
     NavigationBar,
     Breadcrumbs,
     ProductsTable,
+    ColumnSelector,
+    BulkEditDialog,
     Button,
-    Plus,
     Search,
     ChevronLeft,
     ChevronsLeft,
     ChevronRight,
     ChevronsRight,
+    Pencil,
+    Trash2,
+    X,
     Input,
     Select,
     SelectContent,
@@ -49,14 +77,32 @@ export default {
     SelectLabel,
     SelectTrigger,
     SelectValue,
-    ToolsButton,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+  },
+  setup() {
+    return { toast };
   },
   methods: {
-    ...mapActions(["getAllProducts"]),
+    ...mapActions([
+      "getAllProducts",
+      "bulkDeleteProducts",
+      "getAllStoreAttributes",
+      "getCategoryAttributes",
+    ]),
 
     async fetchProducts() {
       this.isProductsLoading = true;
       this.products = [];
+      // Clear selection when fetching new data
+      this.rowSelection = {};
+
       await this.getAllProducts({
         startIndex: this.startIndex,
         pageSize: this.pageSize,
@@ -72,6 +118,122 @@ export default {
       });
       this.isProductsLoading = false;
     },
+
+    async fetchStoreAttributes() {
+      await this.getAllStoreAttributes({
+        onSuccess: (response) => {
+          this.storeAttributes = response.data.value || [];
+        },
+        onError: () => {
+          this.storeAttributes = [];
+        },
+      });
+    },
+
+    clearSelection() {
+      this.rowSelection = {};
+    },
+
+    openBulkEditDialog() {
+      this.isBulkEditDialogOpen = true;
+    },
+
+    async fetchCategoryAttributes(categoryId) {
+      if (!categoryId || categoryId === this.loadedCategoryId) return;
+
+      await this.getCategoryAttributes({
+        categoryId,
+        onSuccess: (response) => {
+          this.loadedCategoryAttributes = response.data.value || [];
+          this.loadedCategoryId = categoryId;
+        },
+        onError: () => {
+          this.loadedCategoryAttributes = [];
+          this.loadedCategoryId = null;
+        },
+      });
+    },
+
+    openBulkDeleteDialog() {
+      this.isBulkDeleteDialogOpen = true;
+    },
+
+    async handleBulkDelete() {
+      const productIds = this.selectedProductIds;
+      this.isDeleting = true;
+
+      await this.bulkDeleteProducts({
+        productIds,
+        onSuccess: ({ deletedCount }) => {
+          toast.success(`Удалено товаров: ${deletedCount}`);
+          this.isBulkDeleteDialogOpen = false;
+          this.rowSelection = {};
+          this.fetchProducts();
+        },
+        onError: (error) => {
+          toast.error(
+            error.response?.data?.message || "Не удалось удалить товары",
+          );
+        },
+      });
+
+      this.isDeleting = false;
+    },
+
+    handleBulkEditSaved() {
+      this.rowSelection = {};
+      this.fetchProducts();
+    },
+
+    saveColumnVisibility() {
+      localStorage.setItem(
+        COLUMN_VISIBILITY_KEY,
+        JSON.stringify(this.columnVisibility),
+      );
+    },
+
+    loadColumnVisibility() {
+      const saved = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+      const defaults = getDefaultVisibilityWithStoreAttributes(
+        this.storeAttributes || [],
+      );
+      if (saved) {
+        try {
+          // Merge saved settings with defaults (to include new attributes)
+          return { ...defaults, ...JSON.parse(saved) };
+        } catch {
+          return defaults;
+        }
+      }
+      return defaults;
+    },
+
+    onColumnVisibilityChange(newVisibility) {
+      this.columnVisibility = newVisibility;
+      this.saveColumnVisibility();
+    },
+
+    onPresetChange(preset) {
+      this.selectedPreset = preset;
+      localStorage.setItem(COLUMN_PRESET_KEY, preset);
+    },
+
+    onColumnOrderChange(newOrder) {
+      this.columnOrder = newOrder;
+      localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(newOrder));
+    },
+
+    loadColumnOrder() {
+      const saved = localStorage.getItem(COLUMN_ORDER_KEY);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    },
   },
   data() {
     let pageSize = Number(this.$route.query.pageSize ?? 25);
@@ -80,9 +242,7 @@ export default {
 
     return {
       products: [],
-      productColumns,
       isProductsLoading: false,
-      PAGE_PRODUCT_CREATION,
       lastPage: false,
       startIndex,
       pageSize,
@@ -90,10 +250,34 @@ export default {
       searchQuery,
       prevSearchQuery: searchQuery,
       breadcrumbs: [{ label: "Товары" }],
+
+      // Row selection
+      rowSelection: {},
+
+      // Column visibility
+      columnVisibility: this.loadColumnVisibility
+        ? this.loadColumnVisibility()
+        : { ...defaultVisibleColumns },
+
+      // Store attributes for bulk edit
+      storeAttributes: [],
+
+      // Category attributes for bulk edit (loaded dynamically)
+      loadedCategoryAttributes: [],
+      loadedCategoryId: null,
+
+      // Dialogs
+      isBulkEditDialogOpen: false,
+      isBulkDeleteDialogOpen: false,
+      isDeleting: false,
+
+      // Column preset and order
+      selectedPreset: localStorage.getItem(COLUMN_PRESET_KEY) || "none",
+      columnOrder: this.loadColumnOrder ? this.loadColumnOrder() : [],
     };
   },
   watch: {
-    startIndex(newVal) {
+    startIndex() {
       this.fetchProducts();
     },
     searchQuery(newVal, oldVal) {
@@ -112,8 +296,31 @@ export default {
       if (this.page != 1) this.page = 1;
       else this.fetchProducts();
     },
+    // Watch selected products to fetch category attributes
+    selectedProducts: {
+      handler(products) {
+        if (products.length === 0) {
+          this.loadedCategoryAttributes = [];
+          this.loadedCategoryId = null;
+          return;
+        }
+        const categoryIds = products.map((p) => p.categoryId);
+        const uniqueCategories = [...new Set(categoryIds)];
+        if (uniqueCategories.length === 1 && uniqueCategories[0] !== null) {
+          this.fetchCategoryAttributes(uniqueCategories[0]);
+        } else {
+          this.loadedCategoryAttributes = [];
+          this.loadedCategoryId = null;
+        }
+      },
+      deep: true,
+    },
   },
   computed: {
+    // Dynamic columns including store attributes and preset
+    productColumns() {
+      return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset);
+    },
     lastPossiblePage() {
       return Math.ceil(this.totalCount / this.pageSize);
     },
@@ -128,8 +335,38 @@ export default {
         this.startIndex = (value - 1) * this.pageSize;
       },
     },
+    // Selected products
+    selectedProductIds() {
+      return Object.keys(this.rowSelection)
+        .filter((key) => this.rowSelection[key])
+        .map((id) => parseInt(id, 10));
+    },
+    selectedProducts() {
+      return this.products.filter((p) =>
+        this.selectedProductIds.includes(p.id),
+      );
+    },
+    hasSelection() {
+      return this.selectedProductIds.length > 0;
+    },
+    // Category attributes for selected products (only if same category)
+    categoryAttributes() {
+      if (this.selectedProducts.length === 0) return [];
+      const categoryIds = this.selectedProducts.map((p) => p.categoryId);
+      const uniqueCategories = [...new Set(categoryIds)];
+      if (uniqueCategories.length !== 1 || uniqueCategories[0] === null)
+        return [];
+      // Return loaded category attributes
+      return this.loadedCategoryAttributes;
+    },
   },
   async mounted() {
+    // Fetch store attributes first, then load column visibility (depends on attributes)
+    await this.fetchStoreAttributes();
+
+    // Load column visibility from localStorage (now includes store attributes)
+    this.columnVisibility = this.loadColumnVisibility();
+
     await this.fetchProducts();
 
     if (this.page > this.lastPossiblePage) this.page = this.lastPossiblePage;
@@ -138,16 +375,8 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
+  <Page class="flex flex-col h-screen">
     <NavigationBar>
-      <template #pro-left>
-        <RouterLink :to="PAGE_PRODUCT_CREATION">
-          <Button variant="ghost">
-            <Plus class="size-4" />
-            Добавить товар
-          </Button>
-        </RouterLink>
-      </template>
       <template #center>
         <div class="relative w-full h-9">
           <Input
@@ -165,46 +394,93 @@ export default {
           </Button>
         </div>
       </template>
-      <template #pre-right>
-        <ToolsButton />
-      </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="border rounded-lg h-full w-full grow mb-4 flex flex-col">
+
+    <div
+      class="border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-auto thin-scrollbar"
+    >
       <ProductsTable
         :data="products"
         :columns="productColumns"
         :is-loading="isProductsLoading"
-        class="grow h-full"
-      />
+        :column-visibility="columnVisibility"
+        :column-order="columnOrder"
+        :row-selection="rowSelection"
+        @update:row-selection="rowSelection = $event"
+        @update:column-visibility="onColumnVisibilityChange"
+        @update:column-order="onColumnOrderChange"
+        class="flex-1 min-h-0"
+      >
+        <template #headerActions>
+          <ColumnSelector
+            :column-visibility="columnVisibility"
+            :store-attributes="storeAttributes"
+            :selected-preset="selectedPreset"
+            @update:column-visibility="onColumnVisibilityChange"
+            @update:selected-preset="onPresetChange"
+          />
+        </template>
+      </ProductsTable>
+      <!-- Combined Footer -->
       <div
-        class="flex items-center justify-between p-4"
+        class="flex items-center justify-between px-3 py-2 border-t bg-background"
         v-if="!isProductsLoading"
       >
-        <div class="flex space-x-2 items-center">
-          <p class="text-sm mr-4">показывать по</p>
-          <Select v-model="pageSize" :default-value="pageSize">
-            <SelectTrigger class="bg-primary-foreground">
-              <SelectValue placeholder="Размер страницы..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Размеры страницы</SelectLabel>
-                <SelectItem as="button" :value="10">10</SelectItem>
-                <SelectItem as="button" :value="25">25</SelectItem>
-                <SelectItem as="button" :value="50">50</SelectItem>
-                <SelectItem as="button" :value="100">100</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+        <!-- Left: Page size + Selection info -->
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <p class="text-sm text-muted-foreground">по</p>
+            <Select
+              :model-value="String(pageSize)"
+              @update:model-value="(val) => pageSize = Number(val)"
+            >
+              <SelectTrigger class="h-8 w-16 bg-primary-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem as="button" value="10">10</SelectItem>
+                  <SelectItem as="button" value="25">25</SelectItem>
+                  <SelectItem as="button" value="50">50</SelectItem>
+                  <SelectItem as="button" value="100">100</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <template v-if="hasSelection">
+            <div class="h-4 w-px bg-border" />
+            <span class="text-sm font-medium">
+              Выбрано: {{ selectedProductIds.length }}
+            </span>
+            <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
+              <X class="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" class="h-8" @click="openBulkEditDialog">
+              <Pencil class="h-4 w-4 mr-1" />
+              Изменить
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              class="h-8"
+              @click="openBulkDeleteDialog"
+            >
+              <Trash2 class="h-4 w-4 mr-1" />
+              Удалить
+            </Button>
+          </template>
         </div>
-        <div class="flex space-x-2 items-center">
-          <p class="text-sm mr-4">
-            страница {{ page }} из {{ lastPossiblePage }}
+
+        <!-- Right: Pagination -->
+        <div class="flex items-center gap-2">
+          <p class="text-sm text-muted-foreground mr-2">
+            {{ page }} / {{ lastPossiblePage }}
           </p>
           <Button
             variant="outline"
             size="sm"
+            class="h-8 w-8 p-0"
             :disabled="page - 1 <= 0"
             @click="page = 1"
           >
@@ -213,6 +489,7 @@ export default {
           <Button
             variant="outline"
             size="sm"
+            class="h-8 w-8 p-0"
             :disabled="page - 1 <= 0"
             @click="page--"
           >
@@ -221,6 +498,7 @@ export default {
           <Button
             variant="outline"
             size="sm"
+            class="h-8 w-8 p-0"
             :disabled="lastPage"
             @click="page++"
           >
@@ -229,6 +507,7 @@ export default {
           <Button
             variant="outline"
             size="sm"
+            class="h-8 w-8 p-0"
             :disabled="lastPage"
             @click="page = lastPossiblePage"
           >
@@ -237,5 +516,37 @@ export default {
         </div>
       </div>
     </div>
+
+    <!-- Bulk Edit Dialog -->
+    <BulkEditDialog
+      v-model="isBulkEditDialogOpen"
+      :selected-products="selectedProducts"
+      :category-attributes="categoryAttributes"
+      :store-attributes="storeAttributes"
+      @saved="handleBulkEditSaved"
+    />
+
+    <!-- Bulk Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="isBulkDeleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Удалить товары?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Вы собираетесь удалить {{ selectedProductIds.length }} товаров. Это
+            действие нельзя отменить.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="isDeleting">Отмена</AlertDialogCancel>
+          <AlertDialogAction
+            @click.prevent="handleBulkDelete"
+            :disabled="isDeleting"
+            class="bg-destructive text-white hover:bg-destructive/90"
+          >
+            {{ isDeleting ? "Удаление..." : "Удалить" }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </Page>
 </template>

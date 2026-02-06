@@ -173,26 +173,26 @@ export default {
 </script>
 
 <template>
-  <Page>
+  <Page class="flex flex-col">
     <NavigationBar />
-    <div class="">
-      <Breadcrumbs :items="breadcrumbs" />
+    <Breadcrumbs :items="breadcrumbs" />
 
+    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
       <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="w-8 h-8 animate-spin text-muted-foreground" />
+        <Loader2 class="size-8 animate-spin text-muted-foreground" />
       </div>
 
-      <div v-else-if="store" class="space-y-6">
+      <div v-else-if="store" class="space-y-4">
         <div class="flex justify-between items-center">
           <h2 class="text-lg font-semibold flex items-center gap-2">
-            <Users class="w-5 h-5" />
+            <Users class="size-5" />
             Участники ({{ store.members.length }})
           </h2>
 
           <Dialog v-model:open="showAddDialog">
             <DialogTrigger as-child>
               <Button :disabled="availableUsers.length === 0">
-                <UserPlus class="w-4 h-4 mr-2" />
+                <UserPlus class="size-4 mr-2" />
                 Добавить
               </Button>
             </DialogTrigger>
@@ -227,7 +227,7 @@ export default {
                   <Button variant="outline">Отмена</Button>
                 </DialogClose>
                 <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
-                  <Loader2 v-if="isAddingMember" class="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 v-if="isAddingMember" class="size-4 mr-2 animate-spin" />
                   Добавить
                 </Button>
               </DialogFooter>
@@ -235,10 +235,13 @@ export default {
           </Dialog>
         </div>
 
-        <div v-if="store.members.length === 0" class="text-center py-12 text-muted-foreground border rounded-lg">
-          <Users class="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Нет участников</p>
-          <p class="text-sm">Добавьте первого участника</p>
+        <div
+          v-if="store.members.length === 0"
+          class="flex flex-col items-center justify-center py-12 text-center border rounded-lg"
+        >
+          <Users class="size-12 mb-4 text-muted-foreground" />
+          <h3 class="font-medium mb-1">Нет участников</h3>
+          <p class="text-sm text-muted-foreground">Добавьте первого участника</p>
         </div>
 
         <div v-else class="border rounded-lg">
@@ -265,8 +268,8 @@ export default {
                     @click="handleRemoveMember(member.id)"
                     :disabled="removingUserId === member.id"
                   >
-                    <Loader2 v-if="removingUserId === member.id" class="w-4 h-4 animate-spin" />
-                    <UserMinus v-else class="w-4 h-4 text-destructive" />
+                    <Loader2 v-if="removingUserId === member.id" class="size-4 animate-spin" />
+                    <UserMinus v-else class="size-4 text-destructive" />
                   </Button>
                 </TableCell>
               </TableRow>

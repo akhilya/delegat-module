@@ -1,4 +1,5 @@
 <script>
+// Breadcrumbs - Renders a navigation breadcrumb trail with clickable links and a home icon.
 import { ChevronRight, Home } from "lucide-vue-next";
 
 export default {
@@ -24,7 +25,7 @@ export default {
 </script>
 
 <template>
-  <nav class="flex items-center gap-1 text-sm text-muted-foreground mb-6 border p-2 px-4 rounded-lg">
+  <nav class="flex items-center gap-1 text-sm text-muted-foreground mb-4">
     <button
       @click="navigate('/')"
       class="flex items-center hover:text-foreground transition-colors"

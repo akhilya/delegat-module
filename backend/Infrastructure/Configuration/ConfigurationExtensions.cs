@@ -26,13 +26,18 @@ public static class ConfigurationExtensions
     /// </summary>
     public static MinIOSettings GetMinIOSettings(this IConfiguration config)
     {
+        var publicEndpoint = GetValue(config, "MINIO_PUBLIC_ENDPOINT", "");
+        var publicSecureStr = GetValue(config, "MINIO_PUBLIC_SECURE", "");
+
         return new MinIOSettings
         {
             Endpoint = GetValue(config, "MINIO_ENDPOINT"),
             AccessKey = GetValue(config, "MINIO_ACCESS_KEY"),
             SecretKey = GetValue(config, "MINIO_SECRET_KEY"),
             Bucket = GetValue(config, "MINIO_BUCKET"),
-            Secure = bool.Parse(GetValue(config, "MINIO_SECURE", "true"))
+            Secure = bool.Parse(GetValue(config, "MINIO_SECURE", "true")),
+            PublicEndpoint = string.IsNullOrEmpty(publicEndpoint) ? null : publicEndpoint,
+            PublicSecure = string.IsNullOrEmpty(publicSecureStr) ? null : bool.Parse(publicSecureStr)
         };
     }
 

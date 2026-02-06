@@ -1,4 +1,5 @@
 <script>
+// ImageFile - Displays an image from a file object with loading state and a placeholder fallback.
 import { Image } from "lucide-vue-next";
 
 export default {
@@ -10,18 +11,39 @@ export default {
   },
   data() {
     return {
-      isLoading: false,
+      isLoading: true,
     };
   },
+  mounted() {
+    this.checkImageCache();
+  },
   watch: {
-    file: {
-      handler(newVal) {
-        if (newVal) {
-          this.isLoading = true;
-        }
+    'file.fullPath': {
+      handler() {
+        this.checkImageCache();
       },
-      deep: true,
-      immediate: true,
+    },
+  },
+  methods: {
+    checkImageCache() {
+      if (!this.file?.fullPath) {
+        this.isLoading = false;
+        return;
+      }
+      // Check if image is already cached
+      const img = new window.Image();
+      img.src = this.file.fullPath;
+      if (img.complete) {
+        this.isLoading = false;
+      } else {
+        this.isLoading = true;
+      }
+    },
+    onImageLoad() {
+      this.isLoading = false;
+    },
+    onImageError() {
+      this.isLoading = false;
     },
   },
 };
@@ -43,8 +65,8 @@ export default {
     />
     -->
     <img
-      @load="isLoading = false"
-      @error="isLoading = false"
+      @load="onImageLoad"
+      @error="onImageError"
       :src="file.fullPath"
       class="absolute w-full h-full object-contain"
       v-show="!isLoading"

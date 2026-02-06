@@ -1,4 +1,5 @@
 <script>
+// ProductRowActionButtons - Action buttons (edit properties, manage files) for a single product table row.
 import Button from "../ui/button/Button.vue";
 
 import { PAGE_PRODUCT_EDIT } from "@/router";

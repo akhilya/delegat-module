@@ -49,4 +49,19 @@
     <Folder Include="Infrastructure\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\sdk\PrintO.Marketplace.SDK\PrintO.Marketplace.SDK.csproj" />
+  </ItemGroup>
+
+  <!-- Copy compiled plugins from their build output to backend output directory -->
+  <Target Name="CopyPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <!-- Get all DLLs from plugin build outputs -->
+      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginDlls)"
+          DestinationFolder="$(OutputPath)plugins"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

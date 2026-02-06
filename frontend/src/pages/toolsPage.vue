@@ -2,8 +2,6 @@
 import NavigationBar from "@/components/navigationBar.vue";
 import Page from "@/components/page.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
-import GoBackButton from "@/components/goBackButton.vue";
-import HomeButton from "@/components/homeButton.vue";
 import { Wrench } from "lucide-vue-next";
 
 export default {
@@ -11,8 +9,6 @@ export default {
     Page,
     NavigationBar,
     Breadcrumbs,
-    GoBackButton,
-    HomeButton,
     Wrench,
   },
   data() {
@@ -25,20 +21,21 @@ export default {
 
 <template>
   <Page class="flex flex-col">
-    <NavigationBar>
-      <template #pre-left>
-        <GoBackButton />
-      </template>
-      <template #pro-left>
-        <HomeButton />
-      </template>
-    </NavigationBar>
+    <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="flex-1 flex items-center justify-center text-muted-foreground">
-      <div class="text-center">
-        <Wrench class="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <p>Инструменты</p>
-        <p class="text-sm">Раздел в разработке</p>
+
+    <div class="mb-4">
+      <h1 class="text-2xl font-semibold">Инструменты</h1>
+      <p class="text-muted-foreground text-sm mt-1">
+        Дополнительные функции и настройки
+      </p>
+    </div>
+
+    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
+      <div class="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+        <Wrench class="size-12 mb-4 opacity-50" />
+        <p>Пока нет дополнительных инструментов</p>
+        <p class="text-sm">Категории и атрибуты доступны через меню пользователя</p>
       </div>
     </div>
   </Page>

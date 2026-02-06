@@ -10,10 +10,21 @@ using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
 using PrintO.Infrastructure.Storage;
 using PrintO.Models;
+using PrintO.Services;
+using PrintO.Services.Marketplace;
+using PrintO.Services.Plugins;
 using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Kestrel for large file uploads
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 10L * 1024 * 1024 * 1024; // 10GB
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
+});
 
 // Configuration from environment variables
 var mysqlSettings = builder.Configuration.GetMySqlSettings();
@@ -22,8 +33,9 @@ var jwtSettings = builder.Configuration.GetJwtSettings();
 
 // Database
 var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";
+var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+    options.UseMySql(connectionString, serverVersion));
 
 // Identity
 builder.Services.AddIdentity<User, UserRole>(options =>
@@ -76,20 +88,45 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddHttpClient("MinIOStorage", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddSingleton<IStorageService>(sp =>
 {
-    return new MinIOStorageService(minioSettings);
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    return new MinIOStorageService(minioSettings, httpClientFactory);
 });
 
 // Settings as singletons for DI
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton(minioSettings);
 
-// TODO: Integrations will be re-implemented later
-// builder.Services.AddScoped<OzonIntegration>();
-// builder.Services.AddHostedService<OzonTasksInspector>();
-// builder.Services.AddScoped<WbIntegration>();
-// builder.Services.AddHostedService<WbTasksInspector>();
+// Marketplace Integration Services - Plugin System
+
+// Plugin Manager (manages loading/unloading of DLL plugins)
+builder.Services.AddSingleton<PluginManager>();
+
+// Plugin Adapter Registry (implements IMarketplaceAdapterRegistry using plugins)
+builder.Services.AddSingleton<PluginAdapterRegistry>();
+builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredService<PluginAdapterRegistry>());
+
+// Plugin HostedService (loads plugins at startup)
+builder.Services.AddHostedService<PluginHostedService>();
+
+// Sync services
+builder.Services.AddScoped<MappingService>();
+builder.Services.AddScoped<CategoryImportService>();
+builder.Services.AddScoped<ProductSyncService>();
+builder.Services.AddScoped<GroupSyncService>();
+builder.Services.AddScoped<PriceSyncService>();
+
+// Background services
+builder.Services.AddHostedService<ImageDownloadBackgroundService>();
+builder.Services.AddHostedService<ProductImportBackgroundService>();
+
+// Marketplace adapters are now loaded as DLL plugins from ./plugins/ directory
+// See: PrintO.Marketplace.SDK for plugin development
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -109,6 +146,7 @@ builder.Services.AddCors(options =>
         if (environment == "Development" || environment == "Staging")
         {
             origins.Add("http://localhost:5173");
+            origins.Add("http://127.0.0.1:5173");
         }
 
         policy
@@ -127,7 +165,9 @@ builder.Services.AddCors(options =>
 // Form options for large file uploads
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 2L * 1024 * 1024 * 1024; // 2GB
+    options.MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024; // 10GB
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
 });
 
 // Controllers

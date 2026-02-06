@@ -8,7 +8,7 @@ using PrintO;
 
 #nullable disable
 
-namespace PrintOSystem.Migrations
+namespace PrintO.Migrations
 {
     [DbContext(typeof(DataContext))]
     partial class DataContextModelSnapshot : ModelSnapshot
@@ -17,7 +17,7 @@ namespace PrintOSystem.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.18")
+                .HasAnnotation("ProductVersion", "8.0.20")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
@@ -80,6 +80,88 @@ namespace PrintOSystem.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("UserRoles");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Category", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("categories");
+                });
+
+            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("categoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("defaultValue")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("group")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("isRequired")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("key")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("options")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("sortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("categoryId");
+
+                    b.ToTable("categoryAttributes");
                 });
 
             modelBuilder.Entity("PrintO.Models.File", b =>
@@ -174,87 +256,6 @@ namespace PrintOSystem.Migrations
                     b.ToTable("images");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Integrations.OzonIntegrationTask", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("exectionUserId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("executionDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<bool>("inProgress")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("logs")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("productId")
-                        .HasColumnType("int");
-
-                    b.Property<bool?>("success")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<long>("taskId")
-                        .HasColumnType("bigint");
-
-                    b.Property<uint?>("version")
-                        .HasColumnType("int unsigned");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("exectionUserId");
-
-                    b.HasIndex("productId");
-
-                    b.ToTable("ozonIntegrationTasks");
-                });
-
-            modelBuilder.Entity("PrintO.Models.Integrations.WbIntegrationTask", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("exectionUserId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("executionDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<bool>("inProgress")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("logs")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("productId")
-                        .HasColumnType("int");
-
-                    b.Property<bool?>("success")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<uint?>("version")
-                        .HasColumnType("int unsigned");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("exectionUserId");
-
-                    b.HasIndex("productId");
-
-                    b.ToTable("wbIntegrationTasks");
-                });
-
             modelBuilder.Entity("PrintO.Models.InvitationToken", b =>
                 {
                     b.Property<int>("Id")
@@ -287,6 +288,245 @@ namespace PrintOSystem.Migrations
                     b.ToTable("invitationTokens");
                 });
 
+            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("externalCategoryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("externalCategoryName")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("localCategoryId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId");
+
+                    b.HasIndex("localCategoryId", "connectionId")
+                        .IsUnique();
+
+                    b.ToTable("categoryMappings");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.FieldMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("categoryMappingId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("externalFieldKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("externalFieldName")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<bool>("isEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("isRequired")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("sortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("sourceAttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("sourceField")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("sourceType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("staticValue")
+                        .HasMaxLength(5000)
+                        .HasColumnType("varchar(5000)");
+
+                    b.Property<string>("transformExpression")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("categoryMappingId");
+
+                    b.ToTable("fieldMappings");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("adapterKey")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("credentialsJson")
+                        .HasMaxLength(5000)
+                        .HasColumnType("varchar(5000)");
+
+                    b.Property<bool>("isActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("lastSyncAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("settingsJson")
+                        .HasMaxLength(10000)
+                        .HasColumnType("varchar(10000)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("marketplaceConnections");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.ProductGroupMarketplaceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("externalGroupId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("externalGroupName")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("lastErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime?>("lastSyncAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("productGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId");
+
+                    b.HasIndex("externalGroupId", "connectionId")
+                        .IsUnique();
+
+                    b.HasIndex("productGroupId", "connectionId")
+                        .IsUnique();
+
+                    b.ToTable("productGroupMarketplaceLinks");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.ProductMarketplaceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal?>("externalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("externalProductId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("externalSku")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int?>("externalStock")
+                        .HasColumnType("int");
+
+                    b.Property<string>("lastErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime?>("lastSyncAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId");
+
+                    b.HasIndex("externalProductId", "connectionId")
+                        .IsUnique();
+
+                    b.HasIndex("productId", "connectionId")
+                        .IsUnique();
+
+                    b.ToTable("productMarketplaceLinks");
+                });
+
             modelBuilder.Entity("PrintO.Models.Note", b =>
                 {
                     b.Property<int>("Id")
@@ -313,7 +553,7 @@ namespace PrintOSystem.Migrations
                     b.ToTable("notes");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Figurine.FigurineReference", b =>
+            modelBuilder.Entity("PrintO.Models.PendingImageDownload", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -321,17 +561,48 @@ namespace PrintOSystem.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("imageIndex")
+                        .HasColumnType("int");
+
+                    b.Property<string>("imageUrl")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("retryCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.HasIndex("productId");
 
-                    b.ToTable("figurines");
+                    b.ToTable("pendingImageDownloads");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Figurine.FigurineVariation", b =>
+            modelBuilder.Entity("PrintO.Models.PendingProductImport", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -339,68 +610,152 @@ namespace PrintOSystem.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<uint?>("averageHeightMm")
-                        .HasColumnType("int unsigned");
-
-                    b.Property<int>("color")
+                    b.Property<int>("authorUserId")
                         .HasColumnType("int");
 
-                    b.Property<uint?>("depthMm")
-                        .HasColumnType("int unsigned");
+                    b.Property<string>("batchId")
+                        .HasColumnType("varchar(255)");
 
-                    b.Property<int>("figurineId")
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("connectionId")
                         .HasColumnType("int");
 
-                    b.Property<uint?>("heightMm")
-                        .HasColumnType("int unsigned");
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<int>("integrity")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("isActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<uint?>("maxHeightMm")
-                        .HasColumnType("int unsigned");
-
-                    b.Property<uint?>("minHeightMm")
-                        .HasColumnType("int unsigned");
-
-                    b.Property<ulong>("minimalPriceRub")
-                        .HasColumnType("bigint unsigned");
-
-                    b.Property<string>("name")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<ulong>("priceBeforeSaleRub")
-                        .HasColumnType("bigint unsigned");
-
-                    b.Property<ulong>("priceRub")
-                        .HasColumnType("bigint unsigned");
-
-                    b.Property<uint>("quantity")
-                        .HasColumnType("int unsigned");
-
-                    b.Property<int?>("scale")
-                        .HasColumnType("int");
-
-                    b.Property<string>("separateSKU")
+                    b.Property<string>("externalProductId")
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<uint>("weightGr")
-                        .HasColumnType("int unsigned");
+                    b.Property<int?>("importedProductId")
+                        .HasColumnType("int");
 
-                    b.Property<uint?>("widthMm")
-                        .HasColumnType("int unsigned");
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("productName")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("retryCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("targetCategoryId")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("figurineId");
+                    b.HasIndex("batchId");
 
-                    b.ToTable("figurineVariations");
+                    b.HasIndex("importedProductId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.ToTable("pendingProductImports");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("attributeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("value")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("varchar(10000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("attributeId");
+
+                    b.HasIndex("productId");
+
+                    b.ToTable("productAttributeValues");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("productGroups");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroupMember", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("addedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("groupId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("isVariantLeader")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("sortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("productId");
+
+                    b.HasIndex("groupId", "productId")
+                        .IsUnique();
+
+                    b.ToTable("productGroupMembers");
                 });
 
             modelBuilder.Entity("PrintO.Models.Products.Product", b =>
@@ -411,32 +766,26 @@ namespace PrintOSystem.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("categoryId")
+                        .HasColumnType("int");
+
                     b.Property<string>("description")
                         .IsRequired()
                         .HasMaxLength(5000)
                         .HasColumnType("varchar(5000)");
-
-                    b.Property<bool>("explicitContent")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
-                    b.Property<string>("newSKU")
+                    b.Property<decimal?>("price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("sku")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
-
-                    b.Property<string>("oldSKU")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("SKU");
-
-                    b.Property<string>("series")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
 
                     b.Property<int?>("storageQuantity")
                         .HasColumnType("int");
@@ -444,13 +793,9 @@ namespace PrintOSystem.Migrations
                     b.Property<int>("storeId")
                         .HasColumnType("int");
 
-                    b.Property<uint>("version")
-                        .HasColumnType("int unsigned");
-
-                    b.Property<int?>("warehouseStorageNumber")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
+
+                    b.HasIndex("categoryId");
 
                     b.HasIndex("storeId");
 
@@ -473,6 +818,86 @@ namespace PrintOSystem.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("stores");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("defaultValue")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<bool>("isRequired")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("key")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("options")
+                        .HasMaxLength(5000)
+                        .HasColumnType("varchar(5000)");
+
+                    b.Property<int>("sortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("storeAttributes");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeAttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("value")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("varchar(10000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("productId");
+
+                    b.HasIndex("storeAttributeId");
+
+                    b.ToTable("storeProductAttributeValues");
                 });
 
             modelBuilder.Entity("PrintO.Models.User", b =>
@@ -576,6 +1001,28 @@ namespace PrintOSystem.Migrations
                     b.ToTable("StoreUser");
                 });
 
+            modelBuilder.Entity("PrintO.Models.Category", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany("categories")
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+                {
+                    b.HasOne("PrintO.Models.Category", "category")
+                        .WithMany("attributes")
+                        .HasForeignKey("categoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("category");
+                });
+
             modelBuilder.Entity("PrintO.Models.File", b =>
                 {
                     b.HasOne("PrintO.Models.User", "authorUser")
@@ -625,44 +1072,6 @@ namespace PrintOSystem.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Integrations.OzonIntegrationTask", b =>
-                {
-                    b.HasOne("PrintO.Models.User", "executionUser")
-                        .WithMany()
-                        .HasForeignKey("exectionUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PrintO.Models.Products.Product", "product")
-                        .WithMany("ozonIntegrations")
-                        .HasForeignKey("productId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("executionUser");
-
-                    b.Navigation("product");
-                });
-
-            modelBuilder.Entity("PrintO.Models.Integrations.WbIntegrationTask", b =>
-                {
-                    b.HasOne("PrintO.Models.User", "executionUser")
-                        .WithMany()
-                        .HasForeignKey("exectionUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PrintO.Models.Products.Product", "product")
-                        .WithMany("wbIntegrations")
-                        .HasForeignKey("productId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("executionUser");
-
-                    b.Navigation("product");
-                });
-
             modelBuilder.Entity("PrintO.Models.InvitationToken", b =>
                 {
                     b.HasOne("PrintO.Models.User", "usedByUser")
@@ -670,6 +1079,85 @@ namespace PrintOSystem.Migrations
                         .HasForeignKey("usedByUserId");
 
                     b.Navigation("usedByUser");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
+                {
+                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                        .WithMany("categoryMappings")
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.Category", "localCategory")
+                        .WithMany()
+                        .HasForeignKey("localCategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("connection");
+
+                    b.Navigation("localCategory");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.FieldMapping", b =>
+                {
+                    b.HasOne("PrintO.Models.Marketplace.CategoryMapping", "categoryMapping")
+                        .WithMany("fieldMappings")
+                        .HasForeignKey("categoryMappingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("categoryMapping");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany("marketplaceConnections")
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.ProductGroupMarketplaceLink", b =>
+                {
+                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                        .WithMany("productGroupLinks")
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.ProductGroup", "productGroup")
+                        .WithMany("marketplaceLinks")
+                        .HasForeignKey("productGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("connection");
+
+                    b.Navigation("productGroup");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.ProductMarketplaceLink", b =>
+                {
+                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                        .WithMany("productLinks")
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("marketplaceLinks")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("connection");
+
+                    b.Navigation("product");
                 });
 
             modelBuilder.Entity("PrintO.Models.Note", b =>
@@ -683,7 +1171,7 @@ namespace PrintOSystem.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Figurine.FigurineReference", b =>
+            modelBuilder.Entity("PrintO.Models.PendingImageDownload", b =>
                 {
                     b.HasOne("PrintO.Models.Products.Product", "product")
                         .WithMany()
@@ -694,26 +1182,109 @@ namespace PrintOSystem.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Figurine.FigurineVariation", b =>
+            modelBuilder.Entity("PrintO.Models.PendingProductImport", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Figurine.FigurineReference", "figurine")
-                        .WithMany("variations")
-                        .HasForeignKey("figurineId")
+                    b.HasOne("PrintO.Models.Products.Product", "importedProduct")
+                        .WithMany()
+                        .HasForeignKey("importedProductId");
+
+                    b.Navigation("importedProduct");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>
+                {
+                    b.HasOne("PrintO.Models.CategoryAttribute", "attribute")
+                        .WithMany("values")
+                        .HasForeignKey("attributeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("figurine");
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("attributeValues")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("attribute");
+
+                    b.Navigation("product");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany("productGroups")
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroupMember", b =>
+                {
+                    b.HasOne("PrintO.Models.ProductGroup", "group")
+                        .WithMany("members")
+                        .HasForeignKey("groupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("groupMemberships")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("group");
+
+                    b.Navigation("product");
                 });
 
             modelBuilder.Entity("PrintO.Models.Products.Product", b =>
                 {
+                    b.HasOne("PrintO.Models.Category", "category")
+                        .WithMany("products")
+                        .HasForeignKey("categoryId");
+
                     b.HasOne("PrintO.Models.Store", "store")
                         .WithMany("products")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("category");
+
                     b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany("storeAttributes")
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
+                {
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("storeAttributeValues")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.StoreAttribute", "storeAttribute")
+                        .WithMany("values")
+                        .HasForeignKey("storeAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("product");
+
+                    b.Navigation("storeAttribute");
                 });
 
             modelBuilder.Entity("PrintO.Models.User", b =>
@@ -740,32 +1311,77 @@ namespace PrintOSystem.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PrintO.Models.Category", b =>
+                {
+                    b.Navigation("attributes");
+
+                    b.Navigation("products");
+                });
+
+            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+                {
+                    b.Navigation("values");
+                });
+
             modelBuilder.Entity("PrintO.Models.File", b =>
                 {
                     b.Navigation("tags");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Figurine.FigurineReference", b =>
+            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
                 {
-                    b.Navigation("variations");
+                    b.Navigation("fieldMappings");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+                {
+                    b.Navigation("categoryMappings");
+
+                    b.Navigation("productGroupLinks");
+
+                    b.Navigation("productLinks");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+                {
+                    b.Navigation("marketplaceLinks");
+
+                    b.Navigation("members");
                 });
 
             modelBuilder.Entity("PrintO.Models.Products.Product", b =>
                 {
+                    b.Navigation("attributeValues");
+
                     b.Navigation("files");
+
+                    b.Navigation("groupMemberships");
 
                     b.Navigation("images");
 
+                    b.Navigation("marketplaceLinks");
+
                     b.Navigation("notes");
 
-                    b.Navigation("ozonIntegrations");
-
-                    b.Navigation("wbIntegrations");
+                    b.Navigation("storeAttributeValues");
                 });
 
             modelBuilder.Entity("PrintO.Models.Store", b =>
                 {
+                    b.Navigation("categories");
+
+                    b.Navigation("marketplaceConnections");
+
+                    b.Navigation("productGroups");
+
                     b.Navigation("products");
+
+                    b.Navigation("storeAttributes");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+                {
+                    b.Navigation("values");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,4 +1,5 @@
 <script>
+// NavigationBar - Top-level navigation bar with store selector, user menu, and page links.
 import {
   Select,
   SelectContent,
@@ -20,8 +21,8 @@ import Button from "./ui/button/Button.vue";
 
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { UserRound, Loader2, Store, Key, LogOut, AlertCircle } from "lucide-vue-next";
-import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS } from "@/router";
+import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers } from "lucide-vue-next";
+import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
   components: {
@@ -45,6 +46,13 @@ export default {
     Key,
     LogOut,
     AlertCircle,
+    House,
+    Plus,
+    ShoppingBag,
+    Puzzle,
+    FolderOpen,
+    Globe,
+    Layers,
   },
   data() {
     return {
@@ -77,6 +85,27 @@ export default {
     },
     goToAdminTokens() {
       this.$router.push(PAGE_ADMIN_TOKENS);
+    },
+    goToProducts() {
+      this.$router.push(PAGE_PRODUCTS);
+    },
+    goToProductCreation() {
+      this.$router.push(PAGE_PRODUCT_CREATION);
+    },
+    goToMarketplace() {
+      this.$router.push(PAGE_MARKETPLACE);
+    },
+    goToPlugins() {
+      this.$router.push(PAGE_MARKETPLACE_PLUGINS);
+    },
+    goToCategories() {
+      this.$router.push(PAGE_CATEGORIES);
+    },
+    goToProductGroups() {
+      this.$router.push(PAGE_PRODUCT_GROUPS);
+    },
+    goToStoreAttributes() {
+      this.$router.push(PAGE_STORE_ATTRIBUTES);
     },
   },
   async mounted() {
@@ -117,13 +146,12 @@ export default {
   <div class="w-full h-20 sticky top-0 left-0 grid grid-cols-3 z-20">
     <template v-if="!isLoading">
       <div class="flex items-center justify-start gap-2">
-        <slot name="pre-left" />
         <template v-if="memberships.length > 0">
           <Select
             :model-value="me?.selectedStoreId"
             @update:model-value="selectStore($event)"
           >
-            <SelectTrigger class="bg-primary-foreground">
+            <SelectTrigger class="bg-primary-foreground w-48">
               <SelectValue placeholder="Выберите магазин..." />
             </SelectTrigger>
             <SelectContent>
@@ -142,18 +170,16 @@ export default {
           </Select>
         </template>
         <template v-else>
-          <div class="flex items-center gap-2 text-sm text-muted-foreground bg-muted px-3 py-2 rounded-md">
-            <AlertCircle class="w-4 h-4" />
-            <span>Вы не состоите ни в одном магазине</span>
+          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-48">
+            <AlertCircle class="w-3 h-3 shrink-0" />
+            <span class="truncate">Нет магазинов</span>
           </div>
         </template>
-        <slot name="pro-left" />
       </div>
       <div class="flex items-center justify-center">
         <slot name="center" />
       </div>
       <div class="flex items-center justify-end gap-2">
-        <slot name="pre-right" />
         <DropdownMenu>
           <DropdownMenuTrigger class="flex items-center gap-2">
             <Button variant="outline">
@@ -163,6 +189,36 @@ export default {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @select="goToProducts">
+              <House class="w-4 h-4 mr-2" />
+              Товары
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToProductCreation">
+              <Plus class="w-4 h-4 mr-2" />
+              Добавить товар
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToCategories">
+              <FolderOpen class="w-4 h-4 mr-2" />
+              Категории
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToProductGroups">
+              <Layers class="w-4 h-4 mr-2" />
+              Группы товаров
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToStoreAttributes">
+              <Globe class="w-4 h-4 mr-2" />
+              Глобальные атрибуты
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @select="goToMarketplace">
+              <ShoppingBag class="w-4 h-4 mr-2" />
+              Маркетплейсы
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToPlugins">
+              <Puzzle class="w-4 h-4 mr-2" />
+              Плагины
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <template v-if="me?.isAdmin">
               <DropdownMenuItem @select="goToAdminStores">
@@ -181,7 +237,6 @@ export default {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <slot name="pro-right" />
       </div>
     </template>
     <template v-else>

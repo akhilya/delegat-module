@@ -6,26 +6,68 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PrintO.Models;
 
+/// <summary>
+/// Represents an uploaded file stored in object storage (MinIO).
+/// </summary>
 public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
 {
+    /// <summary>
+    /// Unique file identifier.
+    /// </summary>
     [Key]
     public int Id { get; set; }
 
+    /// <summary>
+    /// Foreign key to the user who uploaded the file.
+    /// </summary>
     [ForeignKey(nameof(authorUser))]
     public int authorUserId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the uploading user.
+    /// </summary>
     public User authorUser { get; set; } = null!;
 
+    /// <summary>
+    /// Foreign key to the associated product.
+    /// </summary>
     [ForeignKey(nameof(product))]
     public int productId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the associated product.
+    /// </summary>
     [InverseProperty(nameof(Products.Product.files))]
     public Products.Product product { get; set; } = null!;
 
+    /// <summary>
+    /// Relative storage path in object storage.
+    /// </summary>
     public string filePath { get; set; } = null!;
+
+    /// <summary>
+    /// Timestamp when the file was uploaded.
+    /// </summary>
     public DateTime uploadDateTime { get; set; }
+
+    /// <summary>
+    /// Type classification of the file (image, document, etc.).
+    /// </summary>
     public FileType fileType { get; set; }
+
+    /// <summary>
+    /// MIME content type of the file.
+    /// </summary>
     public string contentType { get; set; } = null!;
+
+    /// <summary>
+    /// File size in bytes.
+    /// </summary>
     public long length { get; set; }
 
+    /// <summary>
+    /// Collection of tags associated with this file.
+    /// </summary>
     public virtual ICollection<FileTag> tags { get; set; } = new List<FileTag>();
 
     public bool AddFill(AddForm form)
@@ -62,12 +104,34 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
         return storageService.GetFullPath(filePath);
     }
 
+    /// <summary>
+    /// Form for creating a new file record.
+    /// </summary>
     public struct AddForm
     {
+        /// <summary>
+        /// Relative storage path in object storage.
+        /// </summary>
         public string filePath { get; set; }
+
+        /// <summary>
+        /// Identifier of the uploading user.
+        /// </summary>
         public int authorUserId { get; set; }
+
+        /// <summary>
+        /// Identifier of the associated product.
+        /// </summary>
         public int productId { get; set; }
+
+        /// <summary>
+        /// MIME content type of the file.
+        /// </summary>
         public string contentType { get; set; }
+
+        /// <summary>
+        /// File size in bytes.
+        /// </summary>
         public long length { get; set; }
 
         public AddForm(string filePath, int authorUserId, int productId, string contentType, long length)

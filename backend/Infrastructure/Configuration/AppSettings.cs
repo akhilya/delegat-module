@@ -17,11 +17,28 @@ public class MySqlSettings
 /// </summary>
 public class MinIOSettings
 {
+    /// <summary>
+    /// Internal endpoint for API calls (e.g., localhost:9002)
+    /// </summary>
     public string Endpoint { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Public endpoint for external URL generation (e.g., files.example.com).
+    /// Used when generating URLs that external services (like Ozon) need to access.
+    /// If not set, falls back to Endpoint.
+    /// </summary>
+    public string? PublicEndpoint { get; set; }
+
     public string AccessKey { get; set; } = string.Empty;
     public string SecretKey { get; set; } = string.Empty;
     public string Bucket { get; set; } = string.Empty;
     public bool Secure { get; set; } = true;
+
+    /// <summary>
+    /// Whether to use HTTPS for public URLs (separate from Secure which is for API calls).
+    /// If not set, uses Secure value.
+    /// </summary>
+    public bool? PublicSecure { get; set; }
 }
 
 /// <summary>

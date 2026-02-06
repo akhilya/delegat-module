@@ -60,7 +60,7 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound("Магазин не найден");
 
         return Ok(store.MapToDTO(_serviceProvider));
     }
@@ -72,13 +72,13 @@ public class StoreController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only admins can create stores");
+            throw ApiException.Forbidden("Только администраторы могут создавать магазины");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var existingStore = await storeRepo.FindAsync(s => s.name == input.name);
 
         if (existingStore != null)
-            throw ApiException.BadRequest("Store with this name already exists");
+            throw ApiException.BadRequest("Магазин с таким именем уже существует");
 
         var newStore = new Store();
         newStore.AddFill(input);
@@ -98,22 +98,22 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only admins can add members");
+            throw ApiException.Forbidden("Только администраторы могут добавлять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound("Магазин не найден");
 
         if (store.members.Any(m => m.Id == input.userId))
-            throw ApiException.BadRequest("User is already a member");
+            throw ApiException.BadRequest("Пользователь уже является участником");
 
         var userRepo = _unitOfWork.Repository<User>();
         var inviteUser = await userRepo.GetByIdTrackingAsync(input.userId);
 
         if (inviteUser == null)
-            throw ApiException.NotFound("User not found");
+            throw ApiException.NotFound("Пользователь не найден");
 
         store.members.Add(inviteUser);
         await _unitOfWork.SaveChangesAsync();
@@ -127,17 +127,17 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only admins can remove members");
+            throw ApiException.Forbidden("Только администраторы могут удалять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound("Магазин не найден");
 
         var memberToRemove = store.members.FirstOrDefault(m => m.Id == userId);
         if (memberToRemove == null)
-            throw ApiException.BadRequest("User is not a member of this store");
+            throw ApiException.BadRequest("Пользователь не является участником этого магазина");
 
         store.members.Remove(memberToRemove);
 
@@ -158,13 +158,13 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only admins can view store details");
+            throw ApiException.Forbidden("Только администраторы могут просматривать детали магазина");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound("Магазин не найден");
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }
@@ -175,7 +175,7 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only admins can view all users");
+            throw ApiException.Forbidden("Только администраторы могут просматривать всех пользователей");
 
         var userRepo = _unitOfWork.Repository<User>();
         var users = await userRepo.GetAllAsync();

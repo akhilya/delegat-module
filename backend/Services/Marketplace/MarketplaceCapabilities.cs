@@ -1,0 +1,112 @@
+namespace PrintO.Services.Marketplace;
+
+/// <summary>
+/// Marketplace adapter capabilities.
+/// Each adapter defines which operations it supports.
+/// </summary>
+[Flags]
+public enum MarketplaceCapabilities
+{
+    None = 0,
+
+    /// <summary>
+    /// Retrieving the list of categories
+    /// </summary>
+    GetCategories = 1 << 0,
+
+    /// <summary>
+    /// Retrieving category fields (required and optional)
+    /// </summary>
+    GetCategoryFields = 1 << 1,
+
+    /// <summary>
+    /// Importing a single product
+    /// </summary>
+    ImportProduct = 1 << 2,
+
+    /// <summary>
+    /// Bulk product import
+    /// </summary>
+    ImportAllProducts = 1 << 3,
+
+    /// <summary>
+    /// Exporting a product to the marketplace
+    /// </summary>
+    ExportProduct = 1 << 4,
+
+    /// <summary>
+    /// Updating product SKU/article
+    /// </summary>
+    UpdateSku = 1 << 5,
+
+    /// <summary>
+    /// Importing prices from the marketplace
+    /// </summary>
+    ImportPrices = 1 << 6,
+
+    /// <summary>
+    /// Exporting prices to the marketplace
+    /// </summary>
+    ExportPrices = 1 << 7,
+
+    /// <summary>
+    /// Importing stock levels from the marketplace
+    /// </summary>
+    ImportStocks = 1 << 8,
+
+    /// <summary>
+    /// Exporting stock levels to the marketplace
+    /// </summary>
+    ExportStocks = 1 << 9,
+
+    /// <summary>
+    /// Retrieving orders
+    /// </summary>
+    GetOrders = 1 << 10,
+
+    /// <summary>
+    /// Updating order status
+    /// </summary>
+    UpdateOrderStatus = 1 << 11,
+
+    #region Product Grouping
+
+    /// <summary>
+    /// Field-based grouping (e.g. Ozon).
+    /// Products are grouped via a special field during export.
+    /// </summary>
+    FieldBasedGrouping = 1 << 12,
+
+    /// <summary>
+    /// Endpoint-based grouping (e.g. Wildberries).
+    /// Products are grouped via separate API calls after export.
+    /// </summary>
+    EndpointBasedGrouping = 1 << 13,
+
+    /// <summary>
+    /// Importing groups from the marketplace
+    /// </summary>
+    ImportGroups = 1 << 14,
+
+    /// <summary>
+    /// Deleting groups on the marketplace
+    /// </summary>
+    DeleteGroups = 1 << 15,
+
+    /// <summary>
+    /// Modifying group membership (adding/removing products)
+    /// </summary>
+    ModifyGroupMembership = 1 << 16,
+
+    #endregion
+
+    /// <summary>
+    /// Basic capability set for most marketplaces
+    /// </summary>
+    Basic = GetCategories | GetCategoryFields | ImportProduct | ExportProduct,
+
+    /// <summary>
+    /// Full product capability set
+    /// </summary>
+    FullProducts = Basic | ImportAllProducts | ImportPrices | ExportPrices | ImportStocks | ExportStocks
+}

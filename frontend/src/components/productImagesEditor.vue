@@ -1,4 +1,5 @@
 <script>
+// ProductImagesEditor - Drag-and-drop editor for reordering product card images and managing unused images.
 import draggableComponent from "vuedraggable";
 import ImageFile from "./imageFile.vue";
 import Separator from "@/components/ui/separator/Separator.vue";

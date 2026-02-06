@@ -1,10 +1,11 @@
-<script lang="ts">
+<script>
 import Page from "@/components/page.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
+import Label from "@/components/ui/label/Label.vue";
 import {
   FormControl,
   FormDescription,
@@ -24,38 +25,37 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import FigurineVariation from "@/components/figurine/figurineVariation.vue";
 import ProductFilesTable from "@/components/productFilesTable.vue";
 import ProductImagesEditor from "@/components/productImagesEditor.vue";
-import GoBackButton from "@/components/goBackButton.vue";
+import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
+import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
+import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
+import { Progress } from "@/components/ui/progress";
 import Separator from "@/components/ui/separator/Separator.vue";
-import HomeButton from "@/components/homeButton.vue";
 import Note from "@/components/note.vue";
-import Switch from "@/components/ui/switch/Switch.vue";
-import IntegrationBlock from "@/components/integrationBlock.vue";
-import ToolsButton from "@/components/toolsButton.vue";
 
 import {
   Loader2,
-  Plus,
   Upload,
   Save,
   Trash2,
   NotebookPen,
-  NotebookText,
+  FolderOpen,
+  Globe,
+  Layers,
+  ExternalLink,
+  Check,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
-import { useRoute, useRouter } from "vue-router";
-import { ref } from "vue";
+import { useRoute } from "vue-router";
+import { ref, computed, watch } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { newFigurineVariation, rawFigurineSchema } from "@/components/figurine";
-import { useFileDialog } from "@vueuse/core";
+import { useFileDialog, useDebounceFn } from "@vueuse/core";
 import { router } from "@/main";
-import { ozonUpdate, wbUpdate } from "@/integrationHelper";
 
 export default {
   components: {
@@ -83,23 +83,25 @@ export default {
     TabsTrigger,
     Input,
     Textarea,
-    FigurineVariation,
+    Label,
     ProductFilesTable,
     ProductImagesEditor,
-    GoBackButton,
-    HomeButton,
+    ProductAttributeForm,
+    StoreAttributeForm,
+    ProductMarketplaceIntegrations,
     Separator,
     Loader2,
-    Plus,
     Upload,
     Save,
     Trash2,
     NotebookPen,
-    NotebookText,
+    FolderOpen,
+    Globe,
     Note,
-    Switch,
-    IntegrationBlock,
-    ToolsButton,
+    Progress,
+    Layers,
+    ExternalLink,
+    Check,
   },
   data() {
     return {
@@ -109,11 +111,9 @@ export default {
   },
   computed: {
     breadcrumbs() {
-      const items = [
-        { label: "Товары", to: PAGE_PRODUCTS },
-      ];
-      if (this.newSKU || this.oldSKU) {
-        items.push({ label: this.newSKU || this.oldSKU });
+      const items = [{ label: "Товары", to: PAGE_PRODUCTS }];
+      if (this.productSKU) {
+        items.push({ label: this.productSKU });
       } else {
         items.push({ label: "Редактирование" });
       }
@@ -131,51 +131,95 @@ export default {
     const isSubmitting = ref(false);
     const isProductLoading = ref(false);
     const isUploading = ref(false);
-    const oldSKU = ref();
-    const newSKU = ref();
+    const uploadProgress = ref({ loaded: 0, total: 0, percent: 0 });
+    const productSKU = ref("");
     const files = ref([]);
     const productId = parseInt(String(route.params.id));
     const images = ref(undefined);
     const isSavingOrder = ref(false);
-    let initialVariations = [];
     const notes = ref([]);
-    const versions = ref({
-      version: undefined,
-      ozon: undefined,
-      wildberries: undefined,
-      yandex: undefined,
-    });
-    const isOzonUpdating = ref(false);
-    const isWbUpdating = ref(false);
+    const category = ref(null);
+    const attributeValues = ref([]);
+    const storeAttributes = ref([]);
+    const storeAttributeValues = ref([]);
+    const isLoadingStoreAttributes = ref(false);
+    const productGroup = ref(null);
+    const isLoadingGroup = ref(false);
+    const categoryAttributeErrors = ref({});
+    const storeAttributeErrors = ref({});
+    const lastSavedAt = ref(null);
+    const hasUnsavedChanges = ref(false);
+    const isInitialLoad = ref(true);
 
-    fetchEditProduct();
-
-    async function fetchEditProduct() {
-      isProductLoading.value = true;
-      await store.dispatch("getFigurine", {
+    // Fetch product group
+    async function fetchProductGroup() {
+      isLoadingGroup.value = true;
+      await store.dispatch("getProductGroup", {
         productId,
         onSuccess: (response) => {
-          let product = response.data.value.product;
-          let variations = (initialVariations = response.data.value.variations);
-          oldSKU.value = product.oldSKU;
-          newSKU.value = product.newSKU;
-          notes.value = product.notes;
-          files.value = product.files.sort((a, b) => {
-            if (a.contentType < b.contentType) {
-              return -1;
-            }
-            if (a.contentType > b.contentType) {
-              return 1;
-            }
+          const data = response.data.value;
+          if (data?.hasGroup === false || !data?.group) {
+            productGroup.value = null;
+          } else {
+            productGroup.value = data.group;
+          }
+        },
+        onError: () => {
+          productGroup.value = null;
+        },
+      });
+      isLoadingGroup.value = false;
+    }
+
+    // Fetch store attributes on mount
+    async function fetchStoreAttributes() {
+      isLoadingStoreAttributes.value = true;
+      await store.dispatch("getAllStoreAttributes", {
+        onSuccess: (response) => {
+          storeAttributes.value = response.data.value || [];
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      isLoadingStoreAttributes.value = false;
+    }
+
+    fetchStoreAttributes();
+    fetchProduct();
+    fetchProductGroup();
+
+    async function fetchProduct() {
+      isProductLoading.value = true;
+      await store.dispatch("getProduct", {
+        productId,
+        onSuccess: (response) => {
+          const product = response.data.value;
+          productSKU.value = product.sku;
+          notes.value = product.notes || [];
+          files.value = (product.files || []).sort((a, b) => {
+            if (a.contentType < b.contentType) return -1;
+            if (a.contentType > b.contentType) return 1;
             return 0;
           });
           images.value = product.images;
-          versions.value = product.versions;
+          category.value = product.category;
+          attributeValues.value = product.attributeValues || [];
+          storeAttributeValues.value = product.storeAttributeValues || [];
 
           form.setValues({
-            product: response.data.value.product,
-            variations: variations,
+            product: {
+              name: product.name,
+              description: product.description,
+              storageQuantity: product.storageQuantity,
+              price: product.price,
+            },
           });
+
+          // Mark initial load as complete after a short delay
+          setTimeout(() => {
+            isInitialLoad.value = false;
+          }, 100);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -187,68 +231,145 @@ export default {
     const formSchema = toTypedSchema(
       z.object({
         product: z.object({
-          name: z.string().min(1).max(100),
-          series: z.string().max(50).optional(),
-          explicitContent: z.boolean().optional(),
+          name: z.string().min(1, "Название обязательно").max(100),
           description: z.string().max(5000).optional(),
-          warehouseStorageNumber: z.number().positive().optional(),
-          storageQuantity: z.number().positive().optional()
+          storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
+          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
         }),
-        variations: z.array(rawFigurineSchema).optional(),
       }),
     );
 
     const form = useForm({
       validationSchema: formSchema,
       initialValues: {
-        variations: [],
+        product: {
+          name: "",
+          description: "",
+          storageQuantity: null,
+          price: null,
+        },
       },
     });
 
-    const onSubmit = form.handleSubmit(async (values) => {
+    // Validate attributes and return true if valid
+    function validateAttributes() {
+      let isValid = true;
+      const catErrors = {};
+      const storeErrors = {};
+
+      // Validate required category attributes
+      if (category.value?.attributes) {
+        const requiredAttrs = category.value.attributes.filter((a) => a.isRequired);
+        for (const attr of requiredAttrs) {
+          const attrValue = attributeValues.value.find((av) => av.attributeId === attr.id);
+          if (!attrValue || !attrValue.value) {
+            catErrors[attr.id] = "Обязательное поле";
+            isValid = false;
+          }
+        }
+      }
+
+      // Validate required store attributes
+      const requiredStoreAttrs = storeAttributes.value.filter((a) => a.isRequired);
+      for (const attr of requiredStoreAttrs) {
+        const attrValue = storeAttributeValues.value.find((av) => av.storeAttributeId === attr.id);
+        if (!attrValue || !attrValue.value) {
+          storeErrors[attr.id] = "Обязательное поле";
+          isValid = false;
+        }
+      }
+
+      categoryAttributeErrors.value = catErrors;
+      storeAttributeErrors.value = storeErrors;
+
+      return isValid;
+    }
+
+    // Save product (used by both manual and auto save)
+    async function saveProduct(showSuccessToast = true) {
+      // First validate the main form
+      const formValid = await form.validate();
+      if (!formValid.valid) {
+        return false;
+      }
+
+      // Then validate attributes
+      if (!validateAttributes()) {
+        if (showSuccessToast) {
+          displaySonnerError("Заполните все обязательные поля");
+        }
+        return false;
+      }
+
       isSubmitting.value = true;
-      const variations = values.variations;
 
-      const removeVariations = [];
-      const updateVariations = [];
-      const addVariations = [];
-
-      for (let oldVariationKey in Object.keys(initialVariations)) {
-        let oldVariation = initialVariations[oldVariationKey];
-        if (variations.findIndex((v) => v.id == oldVariation.id) < 0)
-          removeVariations.push(oldVariation.id);
-      }
-
-      for (let newVariationKey in Object.keys(variations)) {
-        let newVariation = variations[newVariationKey];
-        if (initialVariations.findIndex((v) => v.id == newVariation.id) < 0)
-          addVariations.push(newVariation);
-        else updateVariations.push(newVariation);
-      }
-
+      const values = form.values;
       const input = {
-        product: values.product,
-        updateVariations,
-        addVariations,
-        removeVariations,
+        ...values.product,
+        attributeValues: attributeValues.value,
+        storeAttributeValues: storeAttributeValues.value,
       };
 
-      await store.dispatch("patchFigurine", {
-        productId,
-        input,
-        onSuccess: (response) => {
-          displaySonnerSuccess(`Товар успешно обновлён.`);
-        },
-        onError: (error) => {
-          if (error?.response?.data?.errors)
-            form.setErrors(error.response.data.errors);
-          displaySonnerError(error);
-        },
-      });
-      await fetchEditProduct();
+      try {
+        await store.dispatch("updateProduct", {
+          productId,
+          input,
+          onSuccess: () => {
+            lastSavedAt.value = new Date();
+            hasUnsavedChanges.value = false;
+            if (showSuccessToast) {
+              displaySonnerSuccess("Товар успешно обновлён.");
+            }
+          },
+          onError: (error) => {
+            if (error?.response?.data?.errors)
+              form.setErrors(error.response.data.errors);
+            displaySonnerError(error);
+          },
+        });
+        return true;
+      } catch (error) {
+        displaySonnerError(error);
+        return false;
+      } finally {
+        isSubmitting.value = false;
+      }
+    }
 
-      isSubmitting.value = false;
+    const onSubmit = form.handleSubmit(async () => {
+      await saveProduct(true);
     });
+
+    // Debounced autosave (1.5 second delay)
+    const debouncedAutoSave = useDebounceFn(async () => {
+      if (isInitialLoad.value || isSubmitting.value) return;
+      await saveProduct(false);
+    }, 1500);
+
+    // Watch for form changes and trigger autosave
+    watch(
+      () => form.values,
+      () => {
+        if (isInitialLoad.value) return;
+        hasUnsavedChanges.value = true;
+        debouncedAutoSave();
+      },
+      { deep: true }
+    );
+
+    // Watch for attribute changes and trigger autosave
+    watch(
+      [attributeValues, storeAttributeValues],
+      () => {
+        if (isInitialLoad.value) return;
+        hasUnsavedChanges.value = true;
+        // Clear errors for changed attributes
+        categoryAttributeErrors.value = {};
+        storeAttributeErrors.value = {};
+        debouncedAutoSave();
+      },
+      { deep: true }
+    );
 
     const { open: openFileDialog, onChange } = useFileDialog({
       accept: "/*",
@@ -257,11 +378,15 @@ export default {
 
     onChange(async (newFiles) => {
       isUploading.value = true;
+      uploadProgress.value = { loaded: 0, total: 0, percent: 0 };
       await store.dispatch("putProductFiles", {
         files: newFiles,
         productId,
+        onProgress: (progress) => {
+          uploadProgress.value = progress;
+        },
         onSuccess: (response) => {
-          displaySonnerSuccess(`Файлы успешно загружены.`);
+          displaySonnerSuccess("Файлы успешно загружены.");
           files.value = files.value.concat(response.data.value);
         },
         onError: (error) => {
@@ -269,14 +394,15 @@ export default {
         },
       });
       isUploading.value = false;
+      uploadProgress.value = { loaded: 0, total: 0, percent: 0 };
     });
 
     async function deleteFile(id) {
       await store.dispatch("deleteProductFile", {
         id,
         productId,
-        onSuccess: (response) => {
-          displaySonnerSuccess(`Файл успешно удалён.`);
+        onSuccess: () => {
+          displaySonnerSuccess("Файл успешно удалён.");
           const fileIndex = files.value.findIndex((f) => f.id == id);
           if (fileIndex > -1) {
             files.value.splice(fileIndex, 1);
@@ -288,13 +414,13 @@ export default {
       });
     }
 
-    async function saveImageOrder(files) {
+    async function saveImageOrder(orderedFiles) {
       isSavingOrder.value = true;
       await store.dispatch("postProductImages", {
         productId,
-        files: files.map((f) => f.id),
-        onSuccess: (response) => {
-          displaySonnerSuccess(`Поряд изображений успешно сохранён.`);
+        files: orderedFiles.map((f) => f.id),
+        onSuccess: () => {
+          displaySonnerSuccess("Порядок изображений успешно сохранён.");
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -303,17 +429,26 @@ export default {
       isSavingOrder.value = false;
     }
 
-    async function deleteProduct() {
-      await store.dispatch("deleteFigurine", {
+    async function handleDeleteProduct() {
+      await store.dispatch("deleteProduct", {
         productId,
         onSuccess: (response) => {
           router.push(response.data.value.next);
-          displaySonnerSuccess(`Товар успешно удалён.`);
+          displaySonnerSuccess("Товар успешно удалён.");
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
+    }
+
+    function formatBytes(bytes, decimals = 2) {
+      if (!+bytes) return "0 Bytes";
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
 
     async function addNote() {
@@ -321,11 +456,11 @@ export default {
         productId,
         input: {
           text: "",
-          imortance: "low",
+          importance: "low",
         },
         onSuccess: (response) => {
           notes.value.push(response.data.value);
-          displaySonnerSuccess(`Новая заметка добавлена.`);
+          displaySonnerSuccess("Новая заметка добавлена.");
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -333,77 +468,46 @@ export default {
       });
     }
 
-    function getNewVariation() {
-      let newVariation = {};
-      if (form.values.variations.length > 0)
-        newVariation = {
-          ...form.values.variations[form.values.variations.length - 1],
-          id: undefined,
-          sku: undefined,
-        };
-      else newVariation = newFigurineVariation;
-      return newVariation;
+    function updateAttributeValues(newValues) {
+      attributeValues.value = newValues;
     }
 
-    async function updateOzon() {
-      isOzonUpdating.value = true;
-      await ozonUpdate(
-        productId,
-        (response) => {
-          versions.value = response.data.value.versions;
-          displaySonnerSuccess(
-            `Интеграция Ozon успешна.`,
-          );
-        },
-        (error) => {
-          displaySonnerError(error);
-        },
-      );
-      isOzonUpdating.value = false;
-    }
-
-    async function updateWb() {
-      isWbUpdating.value = true;
-      await wbUpdate(
-        productId,
-        (response) => {
-          versions.value = response.data.value.versions;
-          displaySonnerSuccess(
-            `Интеграция WB успешна.`,
-          );
-        },
-        (error) => {
-          displaySonnerError(error);
-        },
-      );
-      isWbUpdating.value = false;
+    function updateStoreAttributeValues(newValues) {
+      storeAttributeValues.value = newValues;
     }
 
     return {
-      oldSKU,
-      newSKU,
+      productSKU,
       form,
       onSubmit,
       isSubmitting,
       isProductLoading,
-      newVariation: newFigurineVariation,
       files,
       openFileDialog,
       isUploading,
+      uploadProgress,
       deleteFile,
       productId,
       saveImageOrder,
       images,
       isSavingOrder,
-      deleteProduct,
+      handleDeleteProduct,
       notes,
       addNote,
-      getNewVariation,
-      versions,
-      updateOzon,
-      isOzonUpdating,
-      updateWb,
-      isWbUpdating,
+      category,
+      attributeValues,
+      storeAttributes,
+      storeAttributeValues,
+      isLoadingStoreAttributes,
+      formatBytes,
+      updateAttributeValues,
+      updateStoreAttributeValues,
+      productGroup,
+      isLoadingGroup,
+      categoryAttributeErrors,
+      storeAttributeErrors,
+      lastSavedAt,
+      hasUnsavedChanges,
     };
   },
 };
@@ -412,49 +516,84 @@ export default {
 <template>
   <Page class="flex flex-col">
     <NavigationBar>
-      <template #pre-left>
-        <GoBackButton />
-      </template>
-      <template #pro-left>
-        <HomeButton />
-      </template>
       <template #center>
         <Tabs v-model="tab">
           <TabsList>
-            <TabsTrigger value="properties"> Свойства </TabsTrigger>
-            <TabsTrigger value="files"> Файлы </TabsTrigger>
-            <TabsTrigger value="images"> Изображения </TabsTrigger>
-            <TabsTrigger value="integrations"> Интеграции </TabsTrigger>
+            <TabsTrigger value="properties">Свойства</TabsTrigger>
+            <TabsTrigger value="notes">Заметки</TabsTrigger>
+            <TabsTrigger value="files">Файлы</TabsTrigger>
+            <TabsTrigger value="images">Изображения</TabsTrigger>
+            <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
           </TabsList>
         </Tabs>
       </template>
-      <template #pre-right>
-        <ToolsButton />
-      </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="border rounded-lg h-full w-full grow flex flex-col mb-4">
-      <div v-if="!isProductLoading" class="grow flex flex-col">
-        <form
-          v-if="form"
-          v-show="tab == 'properties'"
-          @submit="onSubmit"
-          class="space-y-4 flex flex-col m-4"
-        >
-          <span class="flex w-full space-x-4">
-            <div class="gap-[calc(var(--spacing)*2)] flex flex-col grow">
-              <p class="font-medium text-sm opacity-50 select-none">Старый артикул</p>
-              <Input type="text" disabled :model-value="oldSKU" />
+    <div class="h-full w-full grow flex gap-4 mb-4 overflow-hidden">
+      <!-- Main content -->
+      <div class="border rounded-lg grow flex flex-col overflow-auto">
+        <div v-if="!isProductLoading" class="grow flex flex-col">
+          <form
+            v-if="form"
+            v-show="tab == 'properties'"
+            @submit.prevent="onSubmit"
+            class="space-y-4 flex flex-col m-4"
+          >
+            <!-- SKU (read-only) -->
+            <div class="space-y-2">
+              <Label class="opacity-50">Артикул</Label>
+              <Input type="text" disabled :model-value="productSKU" />
             </div>
-            <div class="gap-[calc(var(--spacing)*2)] flex flex-col grow">
-              <p class="font-medium text-sm opacity-50 select-none">Новый артикул</p>
-              <Input type="text" disabled :model-value="newSKU" />
-            </div>
-          </span>
 
-          <FormField v-slot="{ componentField }" name="product.name">
+            <!-- Category (read-only) -->
+            <div v-if="category" class="space-y-2">
+              <Label class="opacity-50">Категория</Label>
+              <div class="flex items-center gap-2 h-9 px-3 border rounded-md bg-muted/50">
+                <FolderOpen class="size-4" />
+                <span class="text-sm">{{ category.name }}</span>
+              </div>
+            </div>
+
+            <!-- Product Group -->
+            <div v-if="productGroup" class="border rounded-lg p-4 bg-muted/30">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <Layers class="size-4 text-primary" />
+                  <span class="font-medium">{{ productGroup.name }}</span>
+                </div>
+                <router-link
+                  :to="`/product-groups/${productGroup.id}/edit`"
+                  class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  Редактировать
+                  <ExternalLink class="size-3" />
+                </router-link>
+              </div>
+              <div v-if="productGroup.otherMembers && productGroup.otherMembers.length > 0" class="flex gap-2 overflow-x-auto pb-1 thin-scrollbar">
+                <router-link
+                  v-for="member in productGroup.otherMembers"
+                  :key="member.productId"
+                  :to="`/products/${member.productId}/edit`"
+                  class="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-accent/50 transition-colors shrink-0 w-24"
+                >
+                  <img
+                    v-if="member.imageUrl"
+                    :src="member.imageUrl"
+                    class="size-16 rounded-lg object-cover"
+                    :alt="member.productName"
+                  />
+                  <div v-else class="size-16 rounded-lg bg-muted flex items-center justify-center">
+                    <Layers class="size-6 text-muted-foreground" />
+                  </div>
+                  <span class="text-xs text-center text-muted-foreground truncate w-full">{{ member.productSku }}</span>
+                </router-link>
+              </div>
+              <p v-else class="text-sm text-muted-foreground">Нет других товаров в группе</p>
+            </div>
+
+            <FormField v-slot="{ componentField }" name="product.name">
             <FormItem>
-              <FormLabel>Название</FormLabel>
+              <FormLabel>Название *</FormLabel>
               <FormControl>
                 <Input type="text" v-bind="componentField" />
               </FormControl>
@@ -462,190 +601,177 @@ export default {
             </FormItem>
           </FormField>
 
-          <div class="flex flex-row w-full gap-4 items-end">
-            <FormField v-slot="{ componentField }" name="product.series">
-              <FormItem class="grow">
-                <FormLabel>Серия</FormLabel>
-                <FormControl>
-                  <Input type="text" v-bind="componentField" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
-
-            <FormField
-              v-slot="{ value, setValue }"
-              name="product.explicitContent"
-            >
-              <FormItem class="flex flex-row items-center h-10">
-                <FormLabel>Признак 18+</FormLabel>
-                <FormControl>
-                  <Switch
-                    :default-value="value"
-                    @update:model-value="setValue"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
-          </div>
-
           <FormField v-slot="{ componentField }" name="product.description">
             <FormItem>
               <FormLabel>Описание</FormLabel>
               <FormControl>
-                <Textarea class="max-h-96 h-64" v-bind="componentField" />
+                <Textarea class="max-h-96 h-32" v-bind="componentField" />
               </FormControl>
               <FormMessage />
             </FormItem>
           </FormField>
 
-          <FormField
-            v-slot="{ value, setValue }"
-            name="product.warehouseStorageNumber"
-          >
-            <FormItem>
-              <FormLabel>Секция хранения на складе</FormLabel>
-              <FormControl>
-                <Input
-                  :default-value="value"
-                  @update:model-value="
-                    (v) => {
-                      setValue(Number(v));
-                    }
-                  "
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField
-            v-slot="{ value, setValue }"
-            name="product.storageQuantity"
-          >
-            <FormItem>
-              <FormLabel>Количество на складе</FormLabel>
-              <FormControl>
-                <Input
-                  :default-value="value"
-                  @update:model-value="
-                    (v) => {
-                      setValue(Number(v));
-                    }
-                  "
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ value, setValue }" name="variations">
-            <FormItem>
-              <FormLabel>Вариации</FormLabel>
-              <FormControl>
-                <div class="flex flex-row gap-4 overflow-auto">
-                  <FigurineVariation
-                    v-for="(variation, index) in value"
-                    :key="index"
-                    v-model:variation="value[index]"
-                    @onRemove="setValue(value.filter((_, i) => i !== index))"
+          <!-- Price and Quantity in a row -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
+              <FormItem>
+                <FormLabel>Количество на складе</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    :model-value="value"
+                    @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    @click="setValue([...value, getNewVariation()])"
-                    class="w-96 h-full min-h-64"
-                  >
-                    <Plus class="size-8" />
-                  </Button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
-          <div class="flex flex-col ml-auto">
-            <Button
-              type="submit"
-              size="lg"
-              class="mt-4"
-              :disabled="isSubmitting"
-            >
-              <template v-if="!isSubmitting">
-                <Save class="size-4" />
-                Сохранить изменения
-              </template>
-              <Loader2 v-else class="animate-spin" />
-            </Button>
+            <FormField v-slot="{ value, setValue }" name="product.price">
+              <FormItem>
+                <FormLabel>Цена (₽)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    :model-value="value"
+                    @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
           </div>
-        </form>
-        <div v-show="tab == 'properties'">
-          <Separator />
-          <div class="rounded-lg p-4 flex flex-col gap-4">
-            <span v-for="(note, index) in notes">
-              <Note
-                v-model:note="notes[index]"
-                :productId="productId"
-                @onDelete="notes.splice(index, 1)"
+
+          <!-- Category Attributes (collapsible) -->
+          <details v-if="category" class="border rounded-lg" open>
+            <summary class="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors font-medium flex items-center gap-2">
+              <Layers class="size-4" />
+              Атрибуты категории
+              <span v-if="category.attributes?.length" class="text-muted-foreground text-sm font-normal">
+                ({{ category.attributes.length }})
+              </span>
+            </summary>
+            <div class="px-4 pb-4">
+              <p v-if="!category.attributes || category.attributes.length === 0" class="text-sm text-muted-foreground py-2">
+                У этой категории нет атрибутов
+              </p>
+              <ProductAttributeForm
+                v-else
+                :attributes="category.attributes"
+                :model-value="attributeValues"
+                :errors="categoryAttributeErrors"
+                @update:model-value="updateAttributeValues"
               />
-            </span>
-            <div class="flex w-full justify-end gap-2">
-              <Button size="lg" variant="outline" @click="addNote">
-                <NotebookPen class="size-4" />
-                Добавить заметку
-              </Button>
             </div>
-          </div>
-        </div>
-        <div
-          v-show="tab == 'properties'"
-          class="opacity-0 hover:opacity-100 duration-75"
-        >
-          <Separator />
-          <div class="p-4">
+          </details>
+
+          <!-- Store Attributes (collapsible) -->
+          <details v-if="storeAttributes.length > 0" class="border rounded-lg" open>
+            <summary class="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors font-medium flex items-center gap-2">
+              <Globe class="size-4" />
+              Глобальные атрибуты
+              <span class="text-muted-foreground text-sm font-normal">
+                ({{ storeAttributes.length }})
+              </span>
+            </summary>
+            <div class="px-4 pb-4">
+              <StoreAttributeForm
+                :attributes="storeAttributes"
+                :model-value="storeAttributeValues"
+                :errors="storeAttributeErrors"
+                @update:model-value="updateStoreAttributeValues"
+              />
+            </div>
+          </details>
+
+          <!-- Actions row: Delete on left, Save on right -->
+          <div class="flex items-center justify-between mt-6 pt-4 border-t">
             <AlertDialog>
               <AlertDialogTrigger as-child>
-                <Button variant="destructive">
-                  <Trash2 class="size-4" />
+                <Button variant="destructive" type="button">
+                  <Trash2 class="size-4 mr-2" />
                   Удалить
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
-                <AlertDialogHeader
-                  >Вы уверены что хотите удалить товар
-                  {{ form.values.product.name }}?</AlertDialogHeader
-                >
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Вы уверены что хотите удалить товар {{ productSKU }}?
+                  </AlertDialogTitle>
+                </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Назад</AlertDialogCancel>
-                  <AlertDialogAction @click="deleteProduct"
-                    >Подтвержить</AlertDialogAction
-                  >
+                  <AlertDialogAction @click="handleDeleteProduct">
+                    Подтвердить
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            <div class="flex items-center gap-4">
+              <!-- Save status indicator -->
+              <div v-if="lastSavedAt" class="text-sm text-muted-foreground flex items-center gap-2">
+                <Check class="size-4 text-green-500" />
+                <span>Сохранено</span>
+              </div>
+              <div v-else-if="hasUnsavedChanges && !isSubmitting" class="text-sm text-muted-foreground">
+                Несохранённые изменения...
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                :disabled="isSubmitting"
+              >
+                <template v-if="!isSubmitting">
+                  <Save class="size-4 mr-2" />
+                  Сохранить
+                </template>
+                <Loader2 v-else class="animate-spin" />
+              </Button>
+            </div>
           </div>
-        </div>
+        </form>
+
+        <!-- Files tab -->
         <div v-show="tab == 'files'" class="flex flex-col">
           <ProductFilesTable
             :files="files"
             :productId="productId"
             @onDelete="deleteFile"
           />
-          <div class="flex p-4">
-            <Button
-              class="ml-[auto]"
-              @click="openFileDialog"
-              :disabled="isUploading"
-            >
-              <template v-if="!isUploading">
-                <Upload class="size-4" />
-                Загрузить
-              </template>
-              <Loader2 v-else class="animate-spin" />
-            </Button>
+          <div class="flex flex-col gap-3 p-4">
+            <!-- Upload progress -->
+            <div v-if="isUploading" class="space-y-2">
+              <div class="flex justify-between text-sm text-muted-foreground">
+                <span>Загрузка файлов...</span>
+                <span>{{ uploadProgress.percent }}%</span>
+              </div>
+              <Progress :model-value="uploadProgress.percent" />
+              <div class="text-xs text-muted-foreground text-right">
+                {{ formatBytes(uploadProgress.loaded) }} / {{ formatBytes(uploadProgress.total) }}
+              </div>
+            </div>
+            <div class="flex">
+              <Button
+                class="ml-auto"
+                @click="openFileDialog"
+                :disabled="isUploading"
+              >
+                <template v-if="!isUploading">
+                  <Upload class="size-4 mr-2" />
+                  Загрузить
+                </template>
+                <Loader2 v-else class="animate-spin" />
+              </Button>
+            </div>
           </div>
         </div>
+
+        <!-- Images tab -->
         <div v-show="tab == 'images'" class="flex flex-col grow">
           <ProductImagesEditor
             :isSaving="isSavingOrder"
@@ -655,53 +781,46 @@ export default {
             @onOrderSave="saveImageOrder"
           />
         </div>
-        <div
-          v-show="tab == 'integrations'"
-          class="flex flex-col grow p-4 gap-4"
-        >
-          <div class="grow flex flex-col gap-4">
-            <IntegrationBlock
-              headerClass="bg-blue-600"
-              v-model:integration="versions.ozon"
-              :productVersion="versions.version"
-              @onUpdate="updateOzon"
-              @onUpload="updateOzon"
-              :isUpdating="isOzonUpdating"
-              :isUploading="isOzonUpdating"
-            >
-              Ozon
-            </IntegrationBlock>
-            <IntegrationBlock
-              headerClass="bg-purple-500"
-              v-model:integration="versions.wildberries"
-              :productVersion="versions.version"
-              @onUpdate="updateWb"
-              @onUpload="updateWb"
-              :isUpdating="isWbUpdating"
-              :isUploading="isWbUpdating"
-            >
-              Wildberries
-            </IntegrationBlock>
-            <IntegrationBlock
-              headerClass="bg-yellow-400"
-              v-model:integration="versions.yandex"
-              :productVersion="versions.version"
-              disabled
-            >
-              Yandex
-            </IntegrationBlock>
+
+        <!-- Marketplaces tab -->
+        <div v-show="tab == 'marketplaces'" class="flex flex-col grow">
+          <ProductMarketplaceIntegrations :productId="productId" />
+        </div>
+
+        <!-- Notes tab -->
+        <div v-show="tab == 'notes'" class="flex flex-col grow">
+          <div class="p-4 flex flex-col gap-4">
+            <div v-if="notes.length === 0" class="text-center py-8 text-muted-foreground">
+              <NotebookPen class="size-12 mx-auto mb-3 opacity-50" />
+              <p>Нет заметок</p>
+              <p class="text-sm">Добавьте заметку для этого товара</p>
+            </div>
+            <div v-for="(note, index) in notes" :key="note.id || index">
+              <Note
+                v-model:note="notes[index]"
+                :productId="productId"
+                @onDelete="notes.splice(index, 1)"
+              />
+            </div>
           </div>
-          <h class="text-xs text-foreground/80">
-            Версия товара v{{ versions.version }}
-          </h>
+          <div class="mt-auto p-4 border-t">
+            <Button size="lg" variant="outline" class="w-full" @click="addNote">
+              <NotebookPen class="size-4 mr-2" />
+              Добавить заметку
+            </Button>
+          </div>
         </div>
       </div>
-      <div
-        v-else-if="isProductLoading"
-        class="grow flex items-center justify-center"
-      >
-        <Loader2 class="text-primary size-4 animate-spin mx-[auto]" />
+
+        <!-- Loading state -->
+        <div
+          v-else-if="isProductLoading"
+          class="grow flex items-center justify-center"
+        >
+          <Loader2 class="text-primary size-8 animate-spin" />
+        </div>
       </div>
+
     </div>
   </Page>
 </template>

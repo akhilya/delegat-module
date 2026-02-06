@@ -1,55 +1,119 @@
 using PrintO.Infrastructure.Interfaces;
-using PrintO.Models.Integrations;
+using PrintO.Models.Marketplace;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using static PrintO.Models.Products.Product;
 
 namespace PrintO.Models.Products;
 
-public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, IAddable<AddForm>, IUpdateable<UpdateForm>, IUpdateable<UpdateSKU>
+/// <summary>
+/// Represents a product in the store catalog.
+/// </summary>
+public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, IAddable<AddForm>, IUpdateable<UpdateForm>
 {
+    /// <summary>
+    /// Unique product identifier.
+    /// </summary>
     [Key]
     public int Id { get; set; }
 
-    [StringLength(PRODUCT_SKU_MAX_LENGTH, MinimumLength = 1), Column("SKU")]
-    public string? oldSKU { get; set; }
+    /// <summary>
+    /// Stock keeping unit code.
+    /// </summary>
     [StringLength(PRODUCT_SKU_MAX_LENGTH, MinimumLength = 1)]
-    public string newSKU { get; set; } = null!;
+    public string sku { get; set; } = null!;
 
+    /// <summary>
+    /// Product display name.
+    /// </summary>
     [StringLength(PRODUCT_NAME_MAX_LENGTH, MinimumLength = 1)]
     public string name { get; set; } = null!;
-    [StringLength(PRODUCT_SERIES_MAX_LENGTH)]
-    public string? series { get; set; }
+
+    /// <summary>
+    /// Product description text.
+    /// </summary>
     [StringLength(PRODUCT_DESCRIPTION_MAX_LENGTH)]
     public string description { get; set; } = null!;
-    public bool explicitContent { get; set; } = false;
-    public int? warehouseStorageNumber { get; set; }
+
+    /// <summary>
+    /// Current quantity in warehouse storage.
+    /// </summary>
     public int? storageQuantity { get; set; }
 
+    /// <summary>
+    /// Product price.
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? price { get; set; }
+
+    /// <summary>
+    /// Foreign key to the owning store.
+    /// </summary>
     [ForeignKey(nameof(store))]
     public int storeId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the owning store.
+    /// </summary>
     [InverseProperty(nameof(Store.products))]
     public Store store { get; set; } = null!;
 
+    /// <summary>
+    /// Foreign key to the product category.
+    /// </summary>
+    [ForeignKey(nameof(category))]
+    public int? categoryId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the product category.
+    /// </summary>
+    [InverseProperty(nameof(Models.Category.products))]
+    public Category? category { get; set; }
+
+    /// <summary>
+    /// Collection of files attached to this product.
+    /// </summary>
     public virtual ICollection<File> files { get; set; } = new List<File>();
+
+    /// <summary>
+    /// Collection of image references for this product.
+    /// </summary>
     public virtual ICollection<ImageReference> images { get; set; } = new List<ImageReference>();
+
+    /// <summary>
+    /// Collection of notes associated with this product.
+    /// </summary>
     public virtual ICollection<Note> notes { get; set; } = new List<Note>();
 
-    public uint version { get; set; } = 1;
+    /// <summary>
+    /// Collection of category attribute values for this product.
+    /// </summary>
+    public virtual ICollection<ProductAttributeValue> attributeValues { get; set; } = new List<ProductAttributeValue>();
 
-    public virtual ICollection<OzonIntegrationTask> ozonIntegrations { get; set; } = new List<OzonIntegrationTask>();
-    public virtual ICollection<WbIntegrationTask> wbIntegrations { get; set; } = new List<WbIntegrationTask>();
+    /// <summary>
+    /// Collection of store-level attribute values for this product.
+    /// </summary>
+    public virtual ICollection<StoreProductAttributeValue> storeAttributeValues { get; set; } = new List<StoreProductAttributeValue>();
+
+    /// <summary>
+    /// Collection of marketplace links for this product.
+    /// </summary>
+    public virtual ICollection<ProductMarketplaceLink> marketplaceLinks { get; set; } = new List<ProductMarketplaceLink>();
+
+    /// <summary>
+    /// Collection of product group memberships.
+    /// </summary>
+    public virtual ICollection<ProductGroupMember> groupMemberships { get; set; } = new List<ProductGroupMember>();
 
     public bool AddFill(AddForm form)
     {
-        newSKU = form.userAddForm.SKU;
+        sku = form.userAddForm.sku;
         name = form.userAddForm.name;
-        series = form.userAddForm.series;
         description = form.userAddForm.description;
         storeId = form.storeId;
-        explicitContent = form.userAddForm.explicitContent ?? false;
-        warehouseStorageNumber = form.userAddForm.warehouseStorageNumber;
+        categoryId = form.categoryId;
         storageQuantity = form.userAddForm.storageQuantity;
+        price = form.userAddForm.price;
 
         return true;
     }
@@ -58,17 +122,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     {
         if (!string.IsNullOrEmpty(form.name))
             name = form.name;
-        series = form.series;
         if (!string.IsNullOrEmpty(form.description))
             description = form.description;
-        if (form.explicitContent.HasValue)
-            explicitContent = form.explicitContent.Value;
-        if (form.warehouseStorageNumber.HasValue)
-            warehouseStorageNumber = form.warehouseStorageNumber.Value;
         if (form.storageQuantity.HasValue)
             storageQuantity = form.storageQuantity.Value;
-
-        version++;
+        if (form.price.HasValue)
+            price = form.price.Value;
 
         return true;
     }
@@ -83,45 +142,21 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         };
         files = this.files.Select(fileBuilder);
 
-        var ozonLastTask = ozonIntegrations.Count > 0 ?
-            ozonIntegrations.OrderBy(i => i.executionDate).Last()?.MapToDTO(serviceProvider) :
-            null;
-
-        var wbLastTask = wbIntegrations.Count > 0 ?
-            wbIntegrations.OrderBy(i => i.executionDate).Last()?.MapToDTO(serviceProvider) :
-            null;
-
         return new
         {
             Id,
-            oldSKU,
-            newSKU,
+            sku,
             name,
-            series,
             description,
             store = store?.MapToDTO(serviceProvider),
-            explicitContent,
+            category = category != null ? ((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(serviceProvider) : (object?)null,
             files,
             images = images.OrderBy(i => i.index).Select(i => i.MapToDTO(serviceProvider)),
-            versions = new
-            {
-                version,
-                ozon = new
-                {
-                    lastTask = ozonLastTask
-                },
-                wildberries = new
-                {
-                    lastTask = wbLastTask
-                },
-                yandex = new
-                {
-
-                }
-            },
+            attributeValues = attributeValues.Select(av => ((IMapToDTO<ProductAttributeValue.ValueDTO>)av).MapToDTO(serviceProvider)),
+            storeAttributeValues = storeAttributeValues.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
             notes = notes.Select(n => n.MapToDTO(serviceProvider)),
-            warehouseStorageNumber,
-            storageQuantity
+            storageQuantity,
+            price
         };
     }
 
@@ -139,115 +174,198 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             }
         }
 
-        var ozonLastTask = ozonIntegrations.Count > 0 ?
-            ozonIntegrations.OrderBy(i => i.executionDate).Last()?.MapToDTO(serviceProvider) :
-            null;
-
-        var wbLastTask = wbIntegrations.Count > 0 ?
-            wbIntegrations.OrderBy(i => i.executionDate).Last()?.MapToDTO(serviceProvider) :
-            null;
-
         return new ProductReviewDTO()
         {
             id = Id,
-            oldSKU = oldSKU,
-            newSKU = newSKU,
+            sku = sku,
             name = name,
-            series = series,
             primaryImage = primaryImagePath,
-            versions = new
-            {
-                version,
-                ozon = new
-                {
-                    lastTask = ozonLastTask,
-                },
-                wildberries = new
-                {
-                    lastTask = wbLastTask,
-                },
-                yandex = new
-                {
-
-                }
-            },
-            warehouseStorageNumber = warehouseStorageNumber,
+            categoryId = categoryId,
+            categoryName = category?.name,
             storageQuantity = storageQuantity,
+            price = price,
+            storeAttributeValues = storeAttributeValues?.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
         };
     }
 
-    public bool UpdateFill(UpdateSKU form)
-    {
-        newSKU = form.newSKU;
-
-        return true;
-    }
-
+    /// <summary>
+    /// Maximum length for product SKU.
+    /// </summary>
     public const int PRODUCT_SKU_MAX_LENGTH = 20;
-    public const int PRODUCT_NAME_MAX_LENGTH = 100;
-    public const int PRODUCT_DESCRIPTION_MAX_LENGTH = 5000;
-    public const int PRODUCT_SERIES_MAX_LENGTH = 50;
 
+    /// <summary>
+    /// Maximum length for product name.
+    /// </summary>
+    public const int PRODUCT_NAME_MAX_LENGTH = 100;
+
+    /// <summary>
+    /// Maximum length for product description.
+    /// </summary>
+    public const int PRODUCT_DESCRIPTION_MAX_LENGTH = 5000;
+
+    /// <summary>
+    /// Internal form used to create a new product (includes store context).
+    /// </summary>
     public struct AddForm
     {
+        /// <summary>
+        /// User-provided product creation data.
+        /// </summary>
         public UserAddForm userAddForm { get; set; }
+
+        /// <summary>
+        /// Store identifier the product belongs to.
+        /// </summary>
         public int storeId { get; set; }
 
-        public AddForm(UserAddForm userAddForm, int storeId)
+        /// <summary>
+        /// Optional category identifier.
+        /// </summary>
+        public int? categoryId { get; set; }
+
+        public AddForm(UserAddForm userAddForm, int storeId, int? categoryId = null)
         {
             this.userAddForm = userAddForm;
             this.storeId = storeId;
+            this.categoryId = categoryId;
         }
     }
 
+    /// <summary>
+    /// User-facing form for creating a new product.
+    /// </summary>
     public struct UserAddForm
     {
+        /// <summary>
+        /// Stock keeping unit code.
+        /// </summary>
         [StringLength(PRODUCT_SKU_MAX_LENGTH, MinimumLength = 1)]
-        public string SKU { get; set; }
+        public string sku { get; set; }
+
+        /// <summary>
+        /// Product display name.
+        /// </summary>
         [StringLength(PRODUCT_NAME_MAX_LENGTH, MinimumLength = 1)]
         public string name { get; set; }
-        [StringLength(PRODUCT_SERIES_MAX_LENGTH)]
-        public string? series { get; set; }
+
+        /// <summary>
+        /// Product description text.
+        /// </summary>
         [StringLength(PRODUCT_DESCRIPTION_MAX_LENGTH)]
         public string description { get; set; }
-        public bool? explicitContent { get; set; }
-        public int? warehouseStorageNumber { get; set; }
+
+        /// <summary>
+        /// Initial warehouse storage quantity.
+        /// </summary>
         public int? storageQuantity { get; set; }
+
+        /// <summary>
+        /// Product price.
+        /// </summary>
+        public decimal? price { get; set; }
+
+        /// <summary>
+        /// Optional category identifier.
+        /// </summary>
+        public int? categoryId { get; set; }
+
+        /// <summary>
+        /// Category attribute values to set on creation.
+        /// </summary>
+        public List<ProductAttributeValue.UserValueForm>? attributeValues { get; set; }
+
+        /// <summary>
+        /// Store attribute values to set on creation.
+        /// </summary>
+        public List<StoreProductAttributeValue.UserValueForm>? storeAttributeValues { get; set; }
     }
 
+    /// <summary>
+    /// Form for updating an existing product.
+    /// </summary>
     public struct UpdateForm
     {
+        /// <summary>
+        /// Updated product name.
+        /// </summary>
         [StringLength(PRODUCT_NAME_MAX_LENGTH, MinimumLength = 1)]
         public string? name { get; set; }
-        [StringLength(PRODUCT_SERIES_MAX_LENGTH)]
-        public string? series { get; set; }
+
+        /// <summary>
+        /// Updated product description.
+        /// </summary>
         [StringLength(PRODUCT_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
-        public bool? explicitContent { get; set; }
-        public int? warehouseStorageNumber { get; set; }
+
+        /// <summary>
+        /// Updated warehouse storage quantity.
+        /// </summary>
         public int? storageQuantity { get; set; }
+
+        /// <summary>
+        /// Updated product price.
+        /// </summary>
+        public decimal? price { get; set; }
+
+        /// <summary>
+        /// Updated category attribute values.
+        /// </summary>
+        public List<ProductAttributeValue.UserValueForm>? attributeValues { get; set; }
+
+        /// <summary>
+        /// Updated store attribute values.
+        /// </summary>
+        public List<StoreProductAttributeValue.UserValueForm>? storeAttributeValues { get; set; }
     }
 
+    /// <summary>
+    /// Lightweight product DTO used in list/table views.
+    /// </summary>
     public struct ProductReviewDTO
     {
+        /// <summary>
+        /// Unique product identifier.
+        /// </summary>
         public int id { get; set; }
-        public string oldSKU { get; set; }
-        public string newSKU { get; set; }
+
+        /// <summary>
+        /// Stock keeping unit code.
+        /// </summary>
+        public string sku { get; set; }
+
+        /// <summary>
+        /// Product display name.
+        /// </summary>
         public string name { get; set; }
-        public string? series { get; set; }
+
+        /// <summary>
+        /// URL of the primary product image.
+        /// </summary>
         public object? primaryImage { get; set; }
-        public object? versions { get; set; }
-        public int? warehouseStorageNumber { get; set; }
+
+        /// <summary>
+        /// Category identifier.
+        /// </summary>
+        public int? categoryId { get; set; }
+
+        /// <summary>
+        /// Category display name.
+        /// </summary>
+        public string? categoryName { get; set; }
+
+        /// <summary>
+        /// Current quantity in warehouse storage.
+        /// </summary>
         public int? storageQuantity { get; set; }
-    }
 
-    public struct UpdateSKU
-    {
-        public string newSKU { get; set; }
+        /// <summary>
+        /// Product price.
+        /// </summary>
+        public decimal? price { get; set; }
 
-        public UpdateSKU(string newSKU)
-        {
-            this.newSKU = newSKU;
-        }
+        /// <summary>
+        /// Store-level attribute values for table columns.
+        /// </summary>
+        public IEnumerable<StoreProductAttributeValue.ValueDTO>? storeAttributeValues { get; set; }
     }
 }

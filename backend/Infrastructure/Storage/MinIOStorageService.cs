@@ -14,14 +14,25 @@ public class MinIOStorageService : IStorageService
     private readonly string _bucket;
     private readonly string _endpoint;
     private readonly bool _secure;
+    private readonly string _publicEndpoint;
+    private readonly bool _publicSecure;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private bool _bucketExistsVerified;
 
     public string Bucket => _bucket;
 
-    public MinIOStorageService(MinIOSettings settings)
+    public MinIOStorageService(MinIOSettings settings, IHttpClientFactory httpClientFactory)
     {
         _bucket = settings.Bucket;
         _endpoint = settings.Endpoint;
         _secure = settings.Secure;
+        _httpClientFactory = httpClientFactory;
+
+        // Public endpoint for external URL generation (falls back to internal endpoint)
+        _publicEndpoint = !string.IsNullOrEmpty(settings.PublicEndpoint)
+            ? settings.PublicEndpoint
+            : settings.Endpoint;
+        _publicSecure = settings.PublicSecure ?? settings.Secure;
 
         _client = new MinioClient()
             .WithEndpoint(settings.Endpoint)
@@ -86,33 +97,77 @@ public class MinIOStorageService : IStorageService
     /// </summary>
     public async Task<bool> UploadFromUriAsync(string uri, string path, CancellationToken ct = default)
     {
-        try
+        var result = await UploadFromUriWithMetadataAsync(uri, path, ct);
+        return result != null;
+    }
+
+    /// <summary>
+    /// Upload from URI and return metadata.
+    /// Includes retry logic with exponential backoff for rate-limited scenarios.
+    /// </summary>
+    public async Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default)
+    {
+        const int maxRetries = 3;
+        const int baseDelayMs = 1000;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++)
         {
-            await EnsureBucketExistsAsync(ct);
+            try
+            {
+                await EnsureBucketExistsAsync(ct);
 
-            using var httpClient = new HttpClient();
-            using var response = await httpClient.GetAsync(uri, ct);
-            response.EnsureSuccessStatusCode();
+                using var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
 
-            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
-            var contentLength = response.Content.Headers.ContentLength ?? 0;
+                using var response = await httpClient.GetAsync(uri, ct);
 
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
+                // Check for rate limiting (429 Too Many Requests)
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < maxRetries - 1)
+                    {
+                        var delayMs = baseDelayMs * (int)Math.Pow(2, attempt);
+                        await Task.Delay(delayMs, ct);
+                        continue;
+                    }
+                    return null;
+                }
 
-            var request = new PutObjectArgs()
-                .WithBucket(_bucket)
-                .WithObject(path)
-                .WithObjectSize(contentLength)
-                .WithStreamData(stream)
-                .WithContentType(contentType);
+                response.EnsureSuccessStatusCode();
 
-            await _client.PutObjectAsync(request, ct);
-            return true;
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+                var contentLength = response.Content.Headers.ContentLength ?? 0;
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct);
+
+                var request = new PutObjectArgs()
+                    .WithBucket(_bucket)
+                    .WithObject(path)
+                    .WithObjectSize(contentLength)
+                    .WithStreamData(stream)
+                    .WithContentType(contentType);
+
+                await _client.PutObjectAsync(request, ct);
+                return new FileUploadResult(contentType, contentLength);
+            }
+            catch (HttpRequestException) when (attempt < maxRetries - 1)
+            {
+                // Network error - retry with backoff
+                var delayMs = baseDelayMs * (int)Math.Pow(2, attempt);
+                await Task.Delay(delayMs, ct);
+            }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested && attempt < maxRetries - 1)
+            {
+                // Timeout - retry with backoff
+                var delayMs = baseDelayMs * (int)Math.Pow(2, attempt);
+                await Task.Delay(delayMs, ct);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
-        catch (Exception)
-        {
-            return false;
-        }
+
+        return null;
     }
 
     /// <summary>
@@ -156,12 +211,13 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
-    /// Get full public URL for a file
+    /// Get full public URL for a file.
+    /// Uses PublicEndpoint if configured, otherwise falls back to Endpoint.
     /// </summary>
     public string GetFullPath(string path)
     {
-        var protocol = _secure ? "https" : "http";
-        return $"{protocol}://{_endpoint}/{_bucket}/{path}";
+        var protocol = _publicSecure ? "https" : "http";
+        return $"{protocol}://{_publicEndpoint}/{_bucket}/{path}";
     }
 
     /// <summary>
@@ -169,6 +225,9 @@ public class MinIOStorageService : IStorageService
     /// </summary>
     private async Task EnsureBucketExistsAsync(CancellationToken ct = default)
     {
+        if (_bucketExistsVerified)
+            return;
+
         var bucketExistsArgs = new BucketExistsArgs().WithBucket(_bucket);
         var exists = await _client.BucketExistsAsync(bucketExistsArgs, ct);
 
@@ -177,5 +236,7 @@ public class MinIOStorageService : IStorageService
             var makeBucketArgs = new MakeBucketArgs().WithBucket(_bucket);
             await _client.MakeBucketAsync(makeBucketArgs, ct);
         }
+
+        _bucketExistsVerified = true;
     }
 }
