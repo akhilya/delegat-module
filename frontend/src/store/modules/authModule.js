@@ -1,5 +1,5 @@
 import { useAxios } from "@vueuse/integrations/useAxios";
-import { http, router } from "@/main";
+import { http, router, resetAuthCache } from "@/main";
 import { PAGE_SIGN_IN } from "@/router";
 
 export default {
@@ -24,7 +24,10 @@ export default {
           abortPrevious: true,
         },
       )
-        .then((response) => onSuccess(response))
+        .then((response) => {
+          resetAuthCache();
+          onSuccess(response);
+        })
         .catch((error) => onError(error));
     },
 
@@ -47,7 +50,10 @@ export default {
           abortPrevious: true,
         },
       )
-        .then((response) => onSuccess(response))
+        .then((response) => {
+          resetAuthCache();
+          onSuccess(response);
+        })
         .catch((error) => onError(error));
     },
 
@@ -108,8 +114,12 @@ export default {
           abortPrevious: true,
         },
       )
-        .then((response) => router.push(response.data.value.next))
+        .then((response) => {
+          resetAuthCache();
+          router.push(response.data.value.next);
+        })
         .catch((error) => {
+          resetAuthCache();
           router.push(PAGE_SIGN_IN);
           onError(error);
         });

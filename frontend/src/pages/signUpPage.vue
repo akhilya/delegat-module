@@ -42,12 +42,17 @@ export default {
     const isSubmitting = ref(false);
 
     const formSchema = toTypedSchema(
-      z.object({
-        userName: z.string().min(4).max(45),
-        password: z.string().min(8).max(20),
-        confirmPassword: z.string().min(8).max(20),
-        invitationToken: z.string(),
-      }),
+      z
+        .object({
+          userName: z.string().min(4).max(45),
+          password: z.string().min(8).max(128),
+          confirmPassword: z.string().min(8).max(128),
+          invitationToken: z.string(),
+        })
+        .refine((data) => data.password === data.confirmPassword, {
+          message: "Пароли не совпадают",
+          path: ["confirmPassword"],
+        }),
     );
 
     const form = useForm({
@@ -87,12 +92,17 @@ export default {
 </script>
 
 <template>
-  <Page class="flex items-center flex-col">
-    <div
-      class="w-lg flex bg-secondary px-16 grow items-center justify-center flex-col"
-    >
-      <Logo class="mb-16" />
-      <form @submit="onSubmit" class="space-y-4 w-full flex flex-col">
+  <Page class="min-h-screen flex items-center justify-center bg-background">
+    <div class="w-full max-w-md bg-card rounded-xl shadow-lg border p-8 sm:p-10">
+      <div class="flex flex-col items-center mb-6">
+        <Logo class="mb-4" />
+        <h1 class="text-2xl font-semibold text-center">Регистрация</h1>
+        <p class="text-sm text-muted-foreground text-center mt-1">
+          Создайте аккаунт для панели управления
+        </p>
+      </div>
+
+      <form @submit="onSubmit" class="space-y-4">
         <FormField v-slot="{ componentField }" name="userName">
           <FormItem>
             <FormLabel>Имя пользователя</FormLabel>
@@ -115,7 +125,7 @@ export default {
 
         <FormField v-slot="{ componentField }" name="confirmPassword">
           <FormItem>
-            <FormLabel>Подтвержите пароль</FormLabel>
+            <FormLabel>Подтвердите пароль</FormLabel>
             <FormControl>
               <Input type="password" v-bind="componentField" />
             </FormControl>
@@ -136,16 +146,19 @@ export default {
             <FormMessage />
           </FormItem>
         </FormField>
-        <div class="flex flex-col">
-          <Button type="submit" size="lg" class="mt-4" :disabled="isSubmitting">
-            <p v-if="!isSubmitting">Создать аккаунт</p>
-            <Loader2 v-else class="animate-spin" />
-          </Button>
-          <RouterLink :to="PAGE_SIGN_IN" class="hover:underline text-sm"
-            >Есть аккаунт? Войти.</RouterLink
-          >
-        </div>
+
+        <Button type="submit" size="lg" class="w-full mt-6" :disabled="isSubmitting">
+          <p v-if="!isSubmitting">Создать аккаунт</p>
+          <Loader2 v-else class="animate-spin" />
+        </Button>
       </form>
+
+      <p class="text-center text-sm text-muted-foreground mt-4">
+        Есть аккаунт?
+        <RouterLink :to="PAGE_SIGN_IN" class="text-foreground hover:underline">
+          Войти.
+        </RouterLink>
+      </p>
     </div>
   </Page>
 </template>

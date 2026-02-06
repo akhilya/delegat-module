@@ -42,8 +42,8 @@ export const PAGE_MARKETPLACE_CONNECTION = "/marketplace/:connId";
 export const PAGE_MARKETPLACE_FIELD_MAPPING = "/marketplace/:connId/categories/:mappingId";
 
 export const routes = [
-  { path: PAGE_SIGN_UP, component: signUpPage },
-  { path: PAGE_SIGN_IN, component: signInPage },
+  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true } },
+  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true } },
   { path: "/", component: productsPage },
   { path: PAGE_PRODUCTS, component: productsPage },
   { path: PAGE_PRODUCT_CREATION, component: productCreationPage },

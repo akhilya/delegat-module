@@ -46,7 +46,7 @@ export default {
     const formSchema = toTypedSchema(
       z.object({
         userName: z.string().min(4).max(45),
-        password: z.string().min(8).max(20),
+        password: z.string().min(8).max(128),
         rememberMe: z.boolean().default(true).optional(),
       }),
     );
@@ -86,12 +86,17 @@ export default {
 </script>
 
 <template>
-  <Page class="flex items-center flex-col">
-    <div
-      class="w-lg flex bg-secondary px-16 grow justify-center items-center flex-col"
-    >
-      <Logo class="mb-16" />
-      <form @submit="onSubmit" class="space-y-4 w-full flex flex-col">
+  <Page class="min-h-screen flex items-center justify-center bg-background">
+    <div class="w-full max-w-md bg-card rounded-xl shadow-lg border p-8 sm:p-10">
+      <div class="flex flex-col items-center mb-6">
+        <Logo class="mb-4" />
+        <h1 class="text-2xl font-semibold text-center">Вход</h1>
+        <p class="text-sm text-muted-foreground text-center mt-1">
+          Войдите в панель управления
+        </p>
+      </div>
+
+      <form @submit="onSubmit" class="space-y-4">
         <FormField v-slot="{ componentField }" name="userName">
           <FormItem>
             <FormLabel>Имя пользователя</FormLabel>
@@ -117,28 +122,30 @@ export default {
           type="checkbox"
           name="rememberMe"
         >
-          <FormItem class="flex flex-row">
+          <FormItem class="flex flex-row items-center gap-2">
             <FormControl>
               <Checkbox
                 :model-value="value"
                 @update:model-value="handleChange"
               />
             </FormControl>
-            <FormLabel>Запомнить меня</FormLabel>
+            <FormLabel class="!mt-0">Запомнить меня</FormLabel>
             <FormMessage />
           </FormItem>
         </FormField>
 
-        <div class="flex flex-col">
-          <Button type="submit" size="lg" class="mt-4" :disabled="isSubmitting">
-            <p v-if="!isSubmitting">Войти</p>
-            <Loader2 v-else class="animate-spin" />
-          </Button>
-          <RouterLink :to="PAGE_SIGN_UP" class="hover:underline text-sm"
-            >Нету аккаунта? Создать.</RouterLink
-          >
-        </div>
+        <Button type="submit" size="lg" class="w-full mt-6" :disabled="isSubmitting">
+          <p v-if="!isSubmitting">Войти</p>
+          <Loader2 v-else class="animate-spin" />
+        </Button>
       </form>
+
+      <p class="text-center text-sm text-muted-foreground mt-4">
+        Нету аккаунта?
+        <RouterLink :to="PAGE_SIGN_UP" class="text-foreground hover:underline">
+          Создать.
+        </RouterLink>
+      </p>
     </div>
   </Page>
 </template>

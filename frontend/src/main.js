@@ -23,6 +23,32 @@ export const http = setupCache(
 export const router = createRouter();
 export const store = createStore();
 
+let isAuthenticated = null;
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true;
+
+  if (isAuthenticated === null) {
+    try {
+      const response = await http.get("/auth/isAuthenticated", { cache: false });
+      isAuthenticated = response.data?.value === true;
+    } catch {
+      isAuthenticated = false;
+    }
+  }
+
+  if (!isAuthenticated) {
+    isAuthenticated = null;
+    return { path: "/signIn" };
+  }
+
+  return true;
+});
+
+export function resetAuthCache() {
+  isAuthenticated = null;
+}
+
 const app = createApp(App);
 
 app.use(router);
