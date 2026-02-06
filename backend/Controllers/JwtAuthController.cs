@@ -136,7 +136,7 @@ public class JwtAuthController : ControllerBase
     {
         if (Request.Cookies.Any(cookie => cookie.Key == COOKIE_TOKEN_NAME))
         {
-            Response.Cookies.Delete(COOKIE_TOKEN_NAME);
+            Response.Cookies.Delete(COOKIE_TOKEN_NAME, new CookieOptions { Path = "/" });
             return Ok(new { next = "/signIn", success = true });
         }
         else
@@ -153,6 +153,7 @@ public class JwtAuthController : ControllerBase
             HttpOnly = true,
             Secure = isProduction,
             SameSite = SameSiteMode.Lax,
+            Path = "/",
             Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(1)
         };
         Response.Cookies.Append(COOKIE_TOKEN_NAME, token, cookieOptions);
