@@ -33,7 +33,7 @@ var jwtSettings = builder.Configuration.GetJwtSettings();
 
 // Database
 var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";
-var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
+var serverVersion = new MySqlServerVersion(new Version(8, 4, 8));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseMySql(connectionString, serverVersion, mysqlOptions =>
         mysqlOptions.EnableRetryOnFailure(

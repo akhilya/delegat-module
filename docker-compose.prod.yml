@@ -34,6 +34,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+    networks:
+      - printo-network
     restart: unless-stopped
 
   # Frontend (Vue 3 + Vite)
@@ -68,6 +70,8 @@ services:
       timeout: 10s
       retries: 10
       start_period: 300s
+    networks:
+      - printo-network
     restart: unless-stopped
 
   # MinIO Object Storage
@@ -84,6 +88,8 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    networks:
+      - printo-network
     restart: unless-stopped
 
   # MinIO bucket initialization
@@ -104,6 +110,8 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET:-printo}
+    networks:
+      - printo-network
 
 volumes:
   mysql_data:
@@ -112,3 +120,7 @@ volumes:
   minio_data:
     external: true
     name: system-minio-ecslls_minio-data-system-minio-ecslls
+
+networks:
+  printo-network:
+    driver: bridge

@@ -27,8 +27,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<DataContex
         var connectionString = $"Server={server};Port={port};Database={database};User={user};Password={password};AllowPublicKeyRetrieval=True;SslMode=None;";
 
         var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-        // Use explicit MySQL 8.0 version to avoid auto-detection connection
-        var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
+        // Use explicit MySQL 8.4 version to avoid auto-detection connection
+        var serverVersion = new MySqlServerVersion(new Version(8, 4, 8));
         optionsBuilder.UseMySql(connectionString, serverVersion);
 
         return new DataContext(optionsBuilder.Options);
