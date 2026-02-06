@@ -599,6 +599,8 @@ namespace PrintO.Migrations
 
                     b.HasIndex("productId");
 
+                    b.HasIndex("status", "storeId");
+
                     b.ToTable("pendingImageDownloads");
                 });
 

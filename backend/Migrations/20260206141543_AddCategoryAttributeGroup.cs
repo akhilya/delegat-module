@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -17,6 +17,11 @@ namespace PrintO.Migrations
                 maxLength: 100,
                 nullable: true)
                 .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_pendingImageDownloads_status_storeId",
+                table: "pendingImageDownloads",
+                columns: new[] { "status", "storeId" });
         }
 
         /// <inheritdoc />
@@ -25,6 +30,10 @@ namespace PrintO.Migrations
             migrationBuilder.DropColumn(
                 name: "group",
                 table: "categoryAttributes");
+
+            migrationBuilder.DropIndex(
+                name: "IX_pendingImageDownloads_status_storeId",
+                table: "pendingImageDownloads");
         }
     }
 }
