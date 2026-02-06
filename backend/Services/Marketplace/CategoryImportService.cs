@@ -175,6 +175,9 @@ public class CategoryImportService
             await _context.SaveChangesAsync(ct);
 
             attributeMap[field.Key] = attribute.Id;
+            // Also index by sanitized key for consistent lookup
+            if (sanitizedKey != field.Key)
+                attributeMap[sanitizedKey] = attribute.Id;
             attributesCreated++;
         }
 
@@ -185,6 +188,7 @@ public class CategoryImportService
 
         bool reusingMapping = false;
         var existingFieldKeys = new HashSet<string>();
+        int updatedFieldMappings = 0;
 
         if (categoryMapping != null)
         {
@@ -198,6 +202,26 @@ public class CategoryImportService
             {
                 foreach (var fm in categoryMapping.fieldMappings)
                     existingFieldKeys.Add(fm.externalFieldKey);
+
+                // Update existing Static mappings that now have a matching CategoryAttribute.
+                // This happens when a field was mapped as Static in a previous import
+                // (because the user didn't select it for attribute creation), and now the
+                // user imports that attribute — the mapping should auto-link to it.
+                foreach (var fm in categoryMapping.fieldMappings)
+                {
+                    if (fm.sourceType == FieldMappingSourceType.Static
+                        && fm.sourceAttributeId == null)
+                    {
+                        // Try raw key first, then sanitized key as fallback
+                        if (attributeMap.TryGetValue(fm.externalFieldKey, out var attrId)
+                            || attributeMap.TryGetValue(SanitizeKey(fm.externalFieldKey), out attrId))
+                        {
+                            fm.sourceType = FieldMappingSourceType.CategoryAttribute;
+                            fm.sourceAttributeId = attrId;
+                            updatedFieldMappings++;
+                        }
+                    }
+                }
             }
 
             await _context.SaveChangesAsync(ct);
@@ -263,6 +287,7 @@ public class CategoryImportService
 
         var message = reusingMapping
             ? $"В маппинг '{localCategoryName}' добавлено {attributesCreated} атрибутов и {newFieldMappings} полей"
+              + (updatedFieldMappings > 0 ? $", обновлено {updatedFieldMappings} маппингов" : "")
             : isExistingCategory
                 ? $"В категорию '{localCategoryName}' добавлено {attributesCreated} атрибутов (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)"
                 : $"Категория '{localCategoryName}' успешно импортирована с {attributesCreated} атрибутами (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)";
@@ -347,9 +372,10 @@ public class CategoryImportService
         // Ozon attribute 4180 = Название товара
         if (key == "4180") return true;
 
-        // Используем Contains для русских паттернов, чтобы матчилось "Название товара"
+        // Используем Contains для русских паттернов, но только точные — "название товара", не просто "название"
+        // (иначе матчатся "Название цвета" 10097, "Название группы" 22390 и т.д.)
         var exactPatterns = new[] { "name", "title" };
-        var containsPatterns = new[] { "название", "наименование" };
+        var containsPatterns = new[] { "название товара", "наименование" };
 
         return exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
                containsPatterns.Any(p => name.Contains(p));
@@ -441,16 +467,17 @@ public class CategoryImportService
     /// </summary>
     internal static bool IsGroupingField(string key, string name)
     {
-        // Ozon поле 9048 - "Название модели (для объединения в одну карточку)"
-        if (key == "9048")
-            return true;
+        // Ozon 9048 = "Название модели (для объединения в одну карточку)"
+        // Ozon 22390 = "Название группы"
+        if (key == "9048" || key == "22390") return true;
 
         var nameLower = name.ToLowerInvariant();
 
         // Паттерны для определения полей объединения
         if (nameLower.Contains("для объединения") ||
             nameLower.Contains("объединение в карточку") ||
-            nameLower.Contains("группировка товаров"))
+            nameLower.Contains("группировка товаров") ||
+            nameLower.Contains("название группы"))
             return true;
 
         return false;

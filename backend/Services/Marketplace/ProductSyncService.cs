@@ -459,14 +459,17 @@ public class ProductSyncService
     /// Update or create product attribute values from external marketplace data.
     /// Unlike ImportProductAttributesAsync (which only creates), this method
     /// also updates existing attribute values when they differ.
+    /// Returns detailed list of changes made.
     /// </summary>
-    public async Task<int> UpdateProductAttributesFromExternalAsync(
+    public async Task<List<AttributeChangeDetail>> UpdateProductAttributesFromExternalAsync(
         int productId,
         int connectionId,
         int categoryId,
         Dictionary<string, object> externalAttributes,
         CancellationToken ct)
     {
+        var changes = new List<AttributeChangeDetail>();
+
         var categoryMapping = await _context.categoryMappings
             .Include(cm => cm.fieldMappings)
             .FirstOrDefaultAsync(cm =>
@@ -474,9 +477,21 @@ public class ProductSyncService
                 cm.localCategoryId == categoryId, ct);
 
         if (categoryMapping == null)
-            return 0;
+        {
+            _logger.LogWarning(
+                "Нет маппинга категории для connectionId={ConnectionId}, categoryId={CategoryId} — атрибуты не будут обновлены",
+                connectionId, categoryId);
+            return changes;
+        }
 
         var enabledMappings = categoryMapping.fieldMappings.Where(fm => fm.isEnabled).ToList();
+
+        if (enabledMappings.Count == 0)
+        {
+            _logger.LogWarning(
+                "Нет включённых маппингов полей для categoryMappingId={MappingId} — атрибуты не будут обновлены",
+                categoryMapping.Id);
+        }
 
         // Pre-load existing attribute values for this product
         var existingProductAttrs = await _context.productAttributeValues
@@ -497,23 +512,38 @@ public class ProductSyncService
             .Select(sa => sa.Id)
             .ToListAsync(ct)).ToHashSet();
 
-        var changedCount = 0;
+        _logger.LogDebug(
+            "Обновление атрибутов: productId={ProductId}, enabledMappings={Count}, externalKeys=[{Keys}]",
+            productId, enabledMappings.Count,
+            string.Join(", ", externalAttributes.Keys.Take(20)));
 
         foreach (var fieldMapping in enabledMappings)
         {
             if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
+            {
+                _logger.LogDebug(
+                    "  Маппинг '{FieldName}' (key={Key}): ключ не найден в external атрибутах, sourceType={SourceType}",
+                    fieldMapping.externalFieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
                 continue;
+            }
 
             var stringValue = ConvertAttributeValueToString(externalValue);
             if (string.IsNullOrEmpty(stringValue))
                 continue;
+
+            var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
 
             switch (fieldMapping.sourceType)
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
                 {
                     if (!categoryAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                    {
+                        _logger.LogWarning(
+                            "  Маппинг '{FieldName}': sourceAttributeId={AttrId} не найден в атрибутах категории {CategoryId}",
+                            fieldName, fieldMapping.sourceAttributeId.Value, categoryId);
                         continue;
+                    }
 
                     var existing = existingProductAttrs.FirstOrDefault(
                         a => a.attributeId == fieldMapping.sourceAttributeId.Value);
@@ -522,8 +552,8 @@ public class ProductSyncService
                     {
                         if (existing.value != stringValue)
                         {
+                            changes.Add(new AttributeChangeDetail(fieldName, existing.value, stringValue));
                             existing.value = stringValue;
-                            changedCount++;
                         }
                     }
                     else
@@ -536,7 +566,7 @@ public class ProductSyncService
                             value = stringValue
                         });
                         _context.productAttributeValues.Add(productAttrValue);
-                        changedCount++;
+                        changes.Add(new AttributeChangeDetail(fieldName, null, stringValue));
                     }
                     break;
                 }
@@ -553,8 +583,8 @@ public class ProductSyncService
                     {
                         if (existing.value != stringValue)
                         {
+                            changes.Add(new AttributeChangeDetail(fieldName, existing.value, stringValue));
                             existing.value = stringValue;
-                            changedCount++;
                         }
                     }
                     else
@@ -567,29 +597,41 @@ public class ProductSyncService
                             value = stringValue
                         });
                         _context.storeProductAttributeValues.Add(storeAttrValue);
-                        changedCount++;
+                        changes.Add(new AttributeChangeDetail(fieldName, null, stringValue));
                     }
                     break;
                 }
+
+                default:
+                    _logger.LogDebug(
+                        "  Маппинг '{FieldName}' (key={Key}): sourceType={SourceType} — пропущен при импорте атрибутов",
+                        fieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
+                    break;
             }
         }
 
-        if (changedCount > 0)
+        if (changes.Count > 0)
             await _context.SaveChangesAsync(ct);
 
-        return changedCount;
+        _logger.LogInformation(
+            "Обновление атрибутов для productId={ProductId}: {ChangedCount} изменений из {TotalMappings} маппингов",
+            productId, changes.Count, enabledMappings.Count);
+
+        return changes;
     }
 
     /// <summary>
-    /// Read-only version: count how many attribute values would change without saving.
+    /// Read-only: get detailed list of attribute changes (field name, old value, new value).
     /// </summary>
-    public async Task<int> CountAttributeChangesFromExternalAsync(
+    public async Task<List<AttributeChangeDetail>> GetAttributeChangesDetailedAsync(
         int productId,
         int connectionId,
         int categoryId,
         Dictionary<string, object> externalAttributes,
         CancellationToken ct)
     {
+        var result = new List<AttributeChangeDetail>();
+
         var categoryMapping = await _context.categoryMappings
             .AsNoTracking()
             .Include(cm => cm.fieldMappings)
@@ -598,7 +640,7 @@ public class ProductSyncService
                 cm.localCategoryId == categoryId, ct);
 
         if (categoryMapping == null)
-            return 0;
+            return result;
 
         var enabledMappings = categoryMapping.fieldMappings.Where(fm => fm.isEnabled).ToList();
 
@@ -612,8 +654,6 @@ public class ProductSyncService
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
-        var changedCount = 0;
-
         foreach (var fieldMapping in enabledMappings)
         {
             if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
@@ -623,6 +663,8 @@ public class ProductSyncService
             if (string.IsNullOrEmpty(stringValue))
                 continue;
 
+            var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
+
             switch (fieldMapping.sourceType)
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
@@ -630,7 +672,7 @@ public class ProductSyncService
                     var existing = existingProductAttrs.FirstOrDefault(
                         a => a.attributeId == fieldMapping.sourceAttributeId.Value);
                     if (existing == null || existing.value != stringValue)
-                        changedCount++;
+                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue));
                     break;
                 }
 
@@ -639,13 +681,13 @@ public class ProductSyncService
                     var existing = existingStoreAttrs.FirstOrDefault(
                         a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
                     if (existing == null || existing.value != stringValue)
-                        changedCount++;
+                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue));
                     break;
                 }
             }
         }
 
-        return changedCount;
+        return result;
     }
 
     /// <summary>
@@ -1084,5 +1126,10 @@ public class ProductSyncStatus
     public int? LocalStock { get; set; }
     public int? ExternalStock { get; set; }
 }
+
+/// <summary>
+/// Detail of a single attribute change (for import preview).
+/// </summary>
+public record AttributeChangeDetail(string FieldName, string? OldValue, string? NewValue);
 
 #endregion

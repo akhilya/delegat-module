@@ -1202,14 +1202,19 @@ public class ProductSyncController : ControllerBase
         // Обновляем атрибуты на основе маппинга категории
         if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
         {
-            var attrCount = await _productSyncService.UpdateProductAttributesFromExternalAsync(
+            var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
                 product.Id,
                 link.connectionId,
                 product.categoryId.Value,
                 externalProduct.Attributes,
                 ct);
-            if (attrCount > 0)
-                updatedFields.Add($"attributes ({attrCount})");
+            foreach (var change in attrChanges)
+            {
+                var key = $"attr:{change.FieldName}";
+                updatedFields.Add(key);
+                oldValues[key] = change.OldValue;
+                newValues[key] = change.NewValue;
+            }
         }
 
         // Обновляем связь с актуальными данными МП
@@ -1304,14 +1309,19 @@ public class ProductSyncController : ControllerBase
 
         if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
         {
-            var attrCount = await _productSyncService.CountAttributeChangesFromExternalAsync(
+            var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
                 product.Id,
                 link.connectionId,
                 product.categoryId.Value,
                 externalProduct.Attributes,
                 ct);
-            if (attrCount > 0)
-                updatedFields.Add($"attributes ({attrCount})");
+            foreach (var change in attrChanges)
+            {
+                var key = $"attr:{change.FieldName}";
+                updatedFields.Add(key);
+                oldValues[key] = change.OldValue;
+                newValues[key] = change.NewValue;
+            }
         }
 
         return Ok(new
@@ -1434,14 +1444,19 @@ public class ProductSyncController : ControllerBase
 
                 if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
                 {
-                    var attrCount = await _productSyncService.CountAttributeChangesFromExternalAsync(
+                    var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
                         product.Id,
                         link.connectionId,
                         product.categoryId.Value,
                         externalProduct.Attributes,
                         ct);
-                    if (attrCount > 0)
-                        updatedFields.Add($"attributes ({attrCount})");
+                    foreach (var change in attrChanges)
+                    {
+                        var key = $"attr:{change.FieldName}";
+                        updatedFields.Add(key);
+                        oldValues[key] = change.OldValue;
+                        newValues[key] = change.NewValue;
+                    }
                 }
             }
 
@@ -1620,14 +1635,14 @@ public class ProductSyncController : ControllerBase
 
                     if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
                     {
-                        var attrCount = await _productSyncService.UpdateProductAttributesFromExternalAsync(
+                        var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
                             product.Id,
                             link.connectionId,
                             product.categoryId.Value,
                             externalProduct.Attributes,
                             ct);
-                        if (attrCount > 0)
-                            updatedFields.Add($"attributes ({attrCount})");
+                        foreach (var change in attrChanges)
+                            updatedFields.Add($"attr:{change.FieldName}");
                     }
                 }
 

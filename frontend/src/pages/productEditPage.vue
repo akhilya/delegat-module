@@ -784,7 +784,7 @@ export default {
 
         <!-- Marketplaces tab -->
         <div v-show="tab == 'marketplaces'" class="flex flex-col grow">
-          <ProductMarketplaceIntegrations :productId="productId" />
+          <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
         </div>
 
         <!-- Notes tab -->

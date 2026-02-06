@@ -1118,7 +1118,7 @@ export default {
         price: "Цена",
         storageQuantity: "Остаток",
       };
-      if (field.startsWith("attributes")) return "Атрибуты";
+      if (field.startsWith("attr:")) return field.substring(5);
       return labels[field] || field;
     },
 
