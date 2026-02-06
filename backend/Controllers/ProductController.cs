@@ -56,6 +56,9 @@ public class ProductController : ControllerBase
     [Route("/products")]
     public async Task<IActionResult> GetAllProducts(string? searchQuery, int startIndex = 0, int pageSize = 12)
     {
+        if (startIndex < 0) startIndex = 0;
+        if (pageSize < 1) pageSize = 12;
+
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");

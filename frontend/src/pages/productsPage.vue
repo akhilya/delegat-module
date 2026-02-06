@@ -322,7 +322,7 @@ export default {
       return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset);
     },
     lastPossiblePage() {
-      return Math.ceil(this.totalCount / this.pageSize);
+      return Math.max(1, Math.ceil(this.totalCount / this.pageSize));
     },
     page: {
       get() {

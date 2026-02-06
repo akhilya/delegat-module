@@ -175,7 +175,10 @@ builder.Services.Configure<FormOptions>(options =>
 });
 
 // Controllers
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        options.Conventions.Add(new PrintO.Infrastructure.ApiRoutePrefixConvention());
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
