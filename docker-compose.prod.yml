@@ -5,8 +5,8 @@ services:
   # Backend API (ASP.NET Core)
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "5000:5000"
     environment:
@@ -21,6 +21,8 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET:-printo}
       - MINIO_SECURE=false
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-}
+      - MINIO_PUBLIC_SECURE=${MINIO_PUBLIC_SECURE:-false}
       - JWT_KEY=${JWT_KEY}
       - JWT_ISSUER=${JWT_ISSUER:-printo.studio}
       - JWT_AUDIENCE=${JWT_AUDIENCE:-printo.studio}
