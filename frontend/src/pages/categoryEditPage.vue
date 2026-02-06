@@ -660,15 +660,27 @@ export default {
 
           <div v-if="showOptionsField" class="space-y-2">
             <Label>Варианты</Label>
-            <!-- Большой список опций - только информация -->
+            <!-- Большой список опций - информация + кнопка очистки -->
             <div v-if="hasLargeOptions" class="rounded-md border bg-muted/50 p-3">
-              <div class="flex items-center gap-2 text-sm">
-                <span class="font-medium">{{ editingOptionsCount.toLocaleString() }}</span>
-                <span class="text-muted-foreground">вариантов (импортировано с маркетплейса)</span>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="font-medium">{{ editingOptionsCount.toLocaleString() }}</span>
+                    <span class="text-muted-foreground">вариантов (импортировано с маркетплейса)</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground mt-1">
+                    Редактирование большого списка недоступно вручную.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  @click="attributeForm.options = ''; editingAttribute = { ...editingAttribute, options: null }"
+                >
+                  <Trash2 class="size-3.5 mr-1.5" />
+                  Очистить
+                </Button>
               </div>
-              <p class="text-xs text-muted-foreground mt-1">
-                Редактирование большого списка недоступно. Для изменения опций удалите и пересоздайте категорию.
-              </p>
             </div>
             <!-- Небольшой список - редактируемое поле -->
             <Textarea

@@ -73,6 +73,7 @@ public class ProductController : ControllerBase
         var (items, total) = await productRepo.FindPagedAsync(
             predicate,
             query => query
+                .AsSplitQuery()
                 .Include(p => p.files)
                 .Include(p => p.images)
                 .Include(p => p.category)
@@ -113,6 +114,7 @@ public class ProductController : ControllerBase
         var product = await productRepo.FindAsync(
             p => p.Id == productId && p.storeId == selectedStoreId.Value,
             query => query
+                .AsSplitQuery()
                 .Include(p => p.store)
                 .Include(p => p.category)
                     .ThenInclude(c => c!.attributes)
