@@ -508,6 +508,7 @@ export default {
       storeAttributeErrors,
       lastSavedAt,
       hasUnsavedChanges,
+      fetchProduct,
     };
   },
 };
