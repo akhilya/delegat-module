@@ -116,7 +116,7 @@ services:
 volumes:
   mysql_data:
     # New volume - old one was corrupted during MySQL 8.4.7->8.4.8 upgrade
-    name: printo-mysql-data-v2
+    name: printo-mysql-data-v3
   minio_data:
     external: true
     name: system-minio-ecslls_minio-data-system-minio-ecslls
