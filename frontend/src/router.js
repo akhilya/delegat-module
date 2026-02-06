@@ -17,6 +17,7 @@ const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
 const AdminTokensPage = () => import("./pages/admin/tokensPage.vue");
 const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
 const MarketplaceConnectionPage = () => import("./pages/marketplace/connectionPage.vue");
+const MarketplaceCategoryImportPage = () => import("./pages/marketplace/categoryImportPage.vue");
 const MarketplaceFieldMappingPage = () => import("./pages/marketplace/fieldMappingPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
 
@@ -39,6 +40,7 @@ export const PAGE_ADMIN_TOKENS = "/admin/tokens";
 export const PAGE_MARKETPLACE = "/marketplace";
 export const PAGE_MARKETPLACE_PLUGINS = "/marketplace/plugins";
 export const PAGE_MARKETPLACE_CONNECTION = "/marketplace/:connId";
+export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/marketplace/:connId/categories/import";
 export const PAGE_MARKETPLACE_FIELD_MAPPING = "/marketplace/:connId/categories/:mappingId";
 
 export const routes = [
@@ -62,6 +64,7 @@ export const routes = [
   { path: PAGE_MARKETPLACE, component: MarketplacePage },
   { path: PAGE_MARKETPLACE_PLUGINS, component: PluginsPage },
   { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage },
+  { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage },
   { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage },
 ];
 routes.forEach((r) => (r.name = r.path));

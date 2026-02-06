@@ -184,13 +184,8 @@ export default {
       isLoading: false,
       isSaving: false,
       isTesting: false,
-      isImporting: false,
       testResult: null,
-      showImportCategoryDialog: false,
       showCreateMappingDialog: false,
-      importCategoryId: "",
-      importCategoryName: "",
-      importCategoryExternalName: "",
       newMapping: {
         localCategoryId: null,
         externalCategoryId: "",
@@ -550,37 +545,6 @@ export default {
       this.isTesting = false;
     },
 
-    async handleImportCategory() {
-      if (!this.importCategoryId) {
-        displaySonnerError("Введите ID категории");
-        return;
-      }
-
-      this.isImporting = true;
-      await this.importCategory({
-        connectionId: this.connectionId,
-        data: {
-          externalCategoryId: this.importCategoryId,
-          externalCategoryName: this.importCategoryExternalName || null,
-          localCategoryName: this.importCategoryName || null,
-        },
-        onSuccess: (response) => {
-          const result = extractResponseData(response, {});
-          displaySonnerSuccess(result.message || "Категория импортирована");
-          this.showImportCategoryDialog = false;
-          this.importCategoryId = "";
-          this.importCategoryName = "";
-          this.importCategoryExternalName = "";
-          this.fetchMappings();
-          this.fetchLocalCategories();
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      this.isImporting = false;
-    },
-
     async handleCreateMapping() {
       if (!this.newMapping.localCategoryId || !this.newMapping.externalCategoryId) {
         displaySonnerError("Выберите обе категории");
@@ -627,8 +591,6 @@ export default {
     selectExternalCategory(category) {
       this.newMapping.externalCategoryId = category.id;
       this.newMapping.externalCategoryName = category.name;
-      this.importCategoryId = category.id;
-      this.importCategoryExternalName = category.name;
     },
 
     autoSelectExternalCategory(categoryName) {
@@ -1372,109 +1334,10 @@ export default {
               </DialogContent>
             </Dialog>
 
-            <Dialog v-model:open="showImportCategoryDialog" @update:open="$event && onCategoryDialogOpen()">
-              <DialogTrigger as-child>
-                <Button>
-                  <Plus class="size-4 mr-2" />
-                  Импортировать категорию
-                </Button>
-              </DialogTrigger>
-              <DialogContent class="max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Импортировать категорию с маркетплейса</DialogTitle>
-                  <DialogDescription>
-                    Создаст локальную категорию с атрибутами на основе полей маркетплейса
-                  </DialogDescription>
-                </DialogHeader>
-                <div class="py-4 space-y-4">
-                  <div class="space-y-2">
-                    <Label>Категория маркетплейса</Label>
-                    <div class="flex gap-2">
-                      <Input
-                        v-model="externalCategorySearch"
-                        placeholder="Поиск по названию..."
-                        @keyup.enter="searchExternalCategories"
-                      />
-                      <Button variant="outline" size="icon" @click="searchExternalCategories">
-                        <Search class="size-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div v-if="categoryPath.length > 0 && !externalCategorySearch" class="flex items-center gap-1 text-sm flex-wrap">
-                    <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
-                      <Home class="size-3" />
-                    </Button>
-                    <ChevronRight class="size-3 text-muted-foreground" />
-                    <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 px-2 text-xs"
-                        :disabled="index === categoryPath.length - 1"
-                        @click="navigateToPathIndex(index)"
-                      >
-                        {{ pathItem.name }}
-                      </Button>
-                      <ChevronRight v-if="index < categoryPath.length - 1" class="size-3 text-muted-foreground" />
-                    </template>
-                  </div>
-
-                  <Button
-                    v-if="categoryPath.length > 0 && !externalCategorySearch"
-                    variant="outline"
-                    size="sm"
-                    @click="navigateBack"
-                    class="w-full justify-start"
-                  >
-                    <ChevronLeft class="size-4 mr-2" />
-                    Назад
-                  </Button>
-
-                  <div class="border rounded-lg max-h-48 overflow-y-auto">
-                    <div v-if="isLoadingCategories" class="flex justify-center py-8">
-                      <Loader2 class="size-6 animate-spin text-muted-foreground" />
-                    </div>
-                    <div v-else-if="externalCategories.length === 0" class="text-center py-8 text-muted-foreground text-sm">
-                      Категории не найдены
-                    </div>
-                    <div
-                      v-else
-                      v-for="cat in externalCategories"
-                      :key="cat.id"
-                      class="p-2 hover:bg-accent cursor-pointer border-b last:border-b-0 flex items-center justify-between"
-                      :class="{ 'bg-accent': importCategoryId === cat.id }"
-                      @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
-                    >
-                      <div class="flex-1 min-w-0">
-                        <div class="font-medium truncate">{{ cat.name }}</div>
-                        <div v-if="cat.fullPath" class="text-xs text-muted-foreground truncate">{{ cat.fullPath }}</div>
-                      </div>
-                      <ChevronRight v-if="cat.hasChildren && !externalCategorySearch" class="size-4 text-muted-foreground flex-shrink-0 ml-2" />
-                    </div>
-                  </div>
-
-                  <div class="space-y-2">
-                    <Label>ID категории маркетплейса</Label>
-                    <Input v-model="importCategoryId" placeholder="Выберите категорию выше или введите ID" />
-                  </div>
-
-                  <div class="space-y-2">
-                    <Label>Название локальной категории (необязательно)</Label>
-                    <Input v-model="importCategoryName" placeholder="Оставьте пустым для автоматического" />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <DialogClose as-child>
-                    <Button variant="outline">Отмена</Button>
-                  </DialogClose>
-                  <Button @click="handleImportCategory" :disabled="isImporting">
-                    <Loader2 v-if="isImporting" class="size-4 mr-2 animate-spin" />
-                    Импортировать
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button @click="$router.push(`/marketplace/${connectionId}/categories/import`)">
+              <Plus class="size-4 mr-2" />
+              Импортировать категорию
+            </Button>
           </div>
 
           <div v-if="categoryMappings.length === 0" class="text-center py-12 text-muted-foreground border rounded-lg">

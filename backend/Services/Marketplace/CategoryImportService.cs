@@ -41,6 +41,8 @@ public class CategoryImportService
         string externalCategoryId,
         string? localCategoryName = null,
         string? externalCategoryName = null,
+        int? localCategoryId = null,
+        List<string>? selectedFieldKeys = null,
         CancellationToken ct = default)
     {
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
@@ -75,37 +77,78 @@ public class CategoryImportService
 
         // Filter fields - exclude base product fields (sku, name, description, price, stock, images)
         // and grouping fields (e.g. Ozon 9048), since they don't need attribute creation
-        var fieldsForAttributes = fields.Where(f =>
-        {
-            var keyLower = f.Key.ToLowerInvariant();
-            var nameLower = f.Name.ToLowerInvariant();
-            return !IsSkuField(keyLower, nameLower) &&
-                   !IsNameField(keyLower, nameLower) &&
-                   !IsDescriptionField(keyLower, nameLower) &&
-                   !IsPriceField(keyLower, nameLower) &&
-                   !IsStockField(keyLower, nameLower) &&
-                   !IsGroupingField(f.Key, f.Name) &&
-                   !IsImageField(f.Key, f.Name);
-        }).ToList();
+        var fieldsForAttributes = fields.Where(f => !IsBaseOrSpecialField(f)).ToList();
 
-        // Создаём локальную категорию
-        var category = new Category();
-        category.AddFill(new Category.AddForm
+        // Filter by selectedFieldKeys if provided
+        if (selectedFieldKeys != null && selectedFieldKeys.Count > 0)
         {
-            name = localCategoryName,
-            storeId = connection.storeId
-        });
+            fieldsForAttributes = fieldsForAttributes
+                .Where(f => selectedFieldKeys.Contains(f.Key))
+                .ToList();
+        }
 
-        _context.categories.Add(category);
-        await _context.SaveChangesAsync(ct);
+        // Load existing category or create new one
+        Category category;
+        var attributeMap = new Dictionary<string, int>(); // externalFieldKey -> categoryAttributeId
+        int sortOrder = 0;
+        bool isExistingCategory = false;
+
+        if (localCategoryId.HasValue)
+        {
+            // Load existing category with attributes
+            var existingCat = await _context.categories
+                .Include(c => c.attributes)
+                .FirstOrDefaultAsync(c => c.Id == localCategoryId.Value, ct);
+
+            if (existingCat == null)
+                return CategoryImportResult.Failure("Указанная локальная категория не найдена");
+
+            category = existingCat;
+
+            isExistingCategory = true;
+
+            // Pre-populate attributeMap from existing attributes (sanitized key -> attribute ID)
+            if (category.attributes != null)
+            {
+                foreach (var attr in category.attributes)
+                {
+                    var key = attr.key ?? attr.Id.ToString();
+                    if (!attributeMap.ContainsKey(key))
+                        attributeMap[key] = attr.Id;
+                }
+                sortOrder = category.attributes.Any()
+                    ? category.attributes.Max(a => a.sortOrder) + 1
+                    : 0;
+            }
+
+            localCategoryName = category.name;
+        }
+        else
+        {
+            // Создаём локальную категорию
+            category = new Category();
+            category.AddFill(new Category.AddForm
+            {
+                name = localCategoryName,
+                storeId = connection.storeId
+            });
+
+            _context.categories.Add(category);
+            await _context.SaveChangesAsync(ct);
+        }
 
         // Создаём атрибуты категории только из дополнительных полей маркетплейса
         // (без базовых полей товара: sku, name, description, price, stock)
-        var attributeMap = new Dictionary<string, int>(); // externalFieldKey -> categoryAttributeId
-        int sortOrder = 0;
+        int attributesCreated = 0;
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
         {
+            var sanitizedKey = SanitizeKey(field.Key);
+
+            // Skip if attribute with this key already exists
+            if (attributeMap.ContainsKey(sanitizedKey))
+                continue;
+
             // Определяем значение по умолчанию для некоторых типов полей
             string? defaultValue = null;
             if (field.Options != null && field.Options.Count > 0)
@@ -117,7 +160,7 @@ public class CategoryImportService
             attribute.AddFill(new CategoryAttribute.AddForm
             {
                 name = field.Name,
-                key = SanitizeKey(field.Key),
+                key = sanitizedKey,
                 type = MapExternalFieldType(field.Type),
                 isRequired = field.IsRequired,
                 sortOrder = sortOrder++,
@@ -132,25 +175,58 @@ public class CategoryImportService
             await _context.SaveChangesAsync(ct);
 
             attributeMap[field.Key] = attribute.Id;
+            attributesCreated++;
         }
 
-        // Создаём маппинг категории
-        var categoryMapping = new CategoryMapping();
-        categoryMapping.AddFill(new CategoryMapping.AddForm
-        {
-            connectionId = connection.Id,
-            localCategoryId = category.Id,
-            externalCategoryId = externalCategoryId,
-            externalCategoryName = externalCategoryName ?? localCategoryName
-        });
+        // Check for existing mapping (localCategoryId + connectionId is unique)
+        var categoryMapping = await _context.categoryMappings
+            .Include(m => m.fieldMappings)
+            .FirstOrDefaultAsync(m => m.localCategoryId == category.Id && m.connectionId == connection.Id, ct);
 
-        _context.categoryMappings.Add(categoryMapping);
-        await _context.SaveChangesAsync(ct);
+        bool reusingMapping = false;
+        var existingFieldKeys = new HashSet<string>();
+
+        if (categoryMapping != null)
+        {
+            // Existing mapping found — reuse it, update external category info
+            categoryMapping.externalCategoryId = externalCategoryId;
+            categoryMapping.externalCategoryName = externalCategoryName ?? localCategoryName;
+            reusingMapping = true;
+
+            // Collect already-mapped field keys so we skip them below (additive import)
+            if (categoryMapping.fieldMappings != null)
+            {
+                foreach (var fm in categoryMapping.fieldMappings)
+                    existingFieldKeys.Add(fm.externalFieldKey);
+            }
+
+            await _context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            categoryMapping = new CategoryMapping();
+            categoryMapping.AddFill(new CategoryMapping.AddForm
+            {
+                connectionId = connection.Id,
+                localCategoryId = category.Id,
+                externalCategoryId = externalCategoryId,
+                externalCategoryName = externalCategoryName ?? localCategoryName
+            });
+
+            _context.categoryMappings.Add(categoryMapping);
+            await _context.SaveChangesAsync(ct);
+        }
 
         // Создаём маппинги полей с автоматическим сопоставлением
-        int fieldSortOrder = 0;
+        // Start sort order after existing field mappings
+        int fieldSortOrder = categoryMapping.fieldMappings?.Count ?? 0;
+        int newFieldMappings = 0;
         foreach (var field in fields.OrderBy(f => f.SortOrder))
         {
+            // Skip fields that already have a mapping (preserve user-configured mappings)
+            if (existingFieldKeys.Contains(field.Key))
+                continue;
+
             var fieldMapping = new FieldMapping();
 
             // Определяем автоматический источник данных
@@ -180,15 +256,22 @@ public class CategoryImportService
             });
 
             _context.fieldMappings.Add(fieldMapping);
+            newFieldMappings++;
         }
 
         await _context.SaveChangesAsync(ct);
 
+        var message = reusingMapping
+            ? $"В маппинг '{localCategoryName}' добавлено {attributesCreated} атрибутов и {newFieldMappings} полей"
+            : isExistingCategory
+                ? $"В категорию '{localCategoryName}' добавлено {attributesCreated} атрибутов (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)"
+                : $"Категория '{localCategoryName}' успешно импортирована с {attributesCreated} атрибутами (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)";
+
         return CategoryImportResult.Success(
             categoryMapping.Id,
             category.Id,
-            fieldsForAttributes.Count,
-            $"Категория '{localCategoryName}' успешно импортирована с {fieldsForAttributes.Count} атрибутами (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)"
+            attributesCreated,
+            message
         );
     }
 
@@ -233,7 +316,24 @@ public class CategoryImportService
         return (FieldMappingSourceType.Static, null, null);
     }
 
-    private bool IsSkuField(string key, string name)
+    /// <summary>
+    /// Check whether a field is a base product field (SKU, name, description, price, stock, images, grouping).
+    /// These fields don't need attribute creation — they are handled by product fields or special mappings.
+    /// </summary>
+    internal static bool IsBaseOrSpecialField(ExternalField field)
+    {
+        var keyLower = field.Key.ToLowerInvariant();
+        var nameLower = field.Name.ToLowerInvariant();
+        return IsSkuField(keyLower, nameLower) ||
+               IsNameField(keyLower, nameLower) ||
+               IsDescriptionField(keyLower, nameLower) ||
+               IsPriceField(keyLower, nameLower) ||
+               IsStockField(keyLower, nameLower) ||
+               IsGroupingField(field.Key, field.Name) ||
+               IsImageField(field.Key, field.Name);
+    }
+
+    internal static bool IsSkuField(string key, string name)
     {
         // Ozon attribute 9024 = Артикул
         if (key == "9024") return true;
@@ -242,7 +342,7 @@ public class CategoryImportService
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
-    private bool IsNameField(string key, string name)
+    internal static bool IsNameField(string key, string name)
     {
         // Ozon attribute 4180 = Название товара
         if (key == "4180") return true;
@@ -255,7 +355,7 @@ public class CategoryImportService
                containsPatterns.Any(p => name.Contains(p));
     }
 
-    private bool IsDescriptionField(string key, string name)
+    internal static bool IsDescriptionField(string key, string name)
     {
         // Ozon attribute 4191 = Аннотация (Description)
         if (key == "4191") return true;
@@ -265,13 +365,13 @@ public class CategoryImportService
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
-    private bool IsPriceField(string key, string name)
+    internal static bool IsPriceField(string key, string name)
     {
         var patterns = new[] { "price", "цена", "стоимость", "cost" };
         return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
     }
 
-    private bool IsStockField(string key, string name)
+    internal static bool IsStockField(string key, string name)
     {
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
@@ -339,7 +439,7 @@ public class CategoryImportService
     /// Check whether the field is a product grouping field.
     /// Such fields should not create attributes; they map to group name instead.
     /// </summary>
-    private bool IsGroupingField(string key, string name)
+    internal static bool IsGroupingField(string key, string name)
     {
         // Ozon поле 9048 - "Название модели (для объединения в одну карточку)"
         if (key == "9048")
@@ -360,7 +460,7 @@ public class CategoryImportService
     /// Check whether the field is an image field.
     /// Image fields should not create attributes; they are handled separately.
     /// </summary>
-    private bool IsImageField(string key, string name)
+    internal static bool IsImageField(string key, string name)
     {
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
