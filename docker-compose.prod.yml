@@ -36,7 +36,6 @@ services:
         condition: service_started
     networks:
       - printo-network
-      - dokploy-network
     restart: unless-stopped
 
   # Frontend (Vue 3 + Vite)
@@ -50,7 +49,6 @@ services:
       - api
     networks:
       - printo-network
-      - dokploy-network
     restart: unless-stopped
 
   # MySQL Database
@@ -126,5 +124,3 @@ volumes:
 networks:
   printo-network:
     driver: bridge
-  dokploy-network:
-    external: true
