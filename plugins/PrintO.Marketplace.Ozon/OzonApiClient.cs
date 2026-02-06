@@ -99,7 +99,7 @@ public class OzonApiClient : IDisposable
     public async Task<ProductListResponse> GetProductListAsync(
         string lastId = "",
         int limit = 100,
-        List<long>? productIds = null,
+        List<string>? productIds = null,
         List<string>? offerIds = null,
         CancellationToken ct = default)
     {
@@ -121,7 +121,7 @@ public class OzonApiClient : IDisposable
     /// Get product info by IDs
     /// </summary>
     public async Task<ProductInfoListResponse> GetProductInfoAsync(
-        List<long>? productIds = null,
+        List<string>? productIds = null,
         List<string>? offerIds = null,
         CancellationToken ct = default)
     {
@@ -313,7 +313,7 @@ public class OzonApiClient : IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 throw new OzonApiException(
-                    $"Ozon API error: {response.StatusCode}",
+                    $"Ozon API error: {response.StatusCode}: {responseBody}",
                     (int)response.StatusCode,
                     responseBody);
             }

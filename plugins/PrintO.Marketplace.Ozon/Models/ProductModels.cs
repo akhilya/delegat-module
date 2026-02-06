@@ -25,7 +25,7 @@ public class ProductListFilter
     public List<string>? OfferId { get; set; }
 
     [JsonPropertyName("product_id")]
-    public List<long>? ProductId { get; set; }
+    public List<string>? ProductId { get; set; }
 
     [JsonPropertyName("visibility")]
     public string Visibility { get; set; } = "ALL";
@@ -40,10 +40,10 @@ public class ProductInfoListRequest
     public List<string>? OfferId { get; set; }
 
     [JsonPropertyName("product_id")]
-    public List<long>? ProductId { get; set; }
+    public List<string>? ProductId { get; set; }
 
     [JsonPropertyName("sku")]
-    public List<long>? Sku { get; set; }
+    public List<string>? Sku { get; set; }
 }
 
 /// <summary>
