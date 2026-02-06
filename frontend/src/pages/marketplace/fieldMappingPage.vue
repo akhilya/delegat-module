@@ -249,7 +249,7 @@ export default {
     },
 
     onStaticValueChange(fieldMapping, value) {
-      fieldMapping.staticValue = value;
+      fieldMapping.staticValue = value != null ? String(value) : null;
       this.hasChanges = true;
     },
 
