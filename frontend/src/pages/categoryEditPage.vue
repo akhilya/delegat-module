@@ -52,8 +52,10 @@ import {
   Settings2,
   Pencil,
 } from "lucide-vue-next";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { PAGE_CATEGORIES } from "@/router";
 import draggable from "vuedraggable";
+import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
 
 // Threshold for large options lists (above this - show count only, not full list)
 const LARGE_OPTIONS_THRESHOLD = 50;
@@ -80,18 +82,6 @@ const ATTRIBUTE_TYPE_OPTIONS = [
   { label: "Да/Нет", value: 2 },
   { label: "Выбор", value: 3 },
   { label: "Множественный выбор", value: 4 },
-];
-
-// Предустановленные группы атрибутов
-const ATTRIBUTE_GROUP_OPTIONS = [
-  "Бренд",
-  "Страна",
-  "Размеры и вес",
-  "Внешний вид",
-  "Медиа",
-  "Упаковка",
-  "Маркировка",
-  "Прочее",
 ];
 
 export default {
@@ -138,6 +128,7 @@ export default {
     Settings2,
     Pencil,
     draggable,
+    SearchableSelect,
   },
   data() {
     const categoryId = parseInt(this.$route.params.id);
@@ -162,6 +153,7 @@ export default {
         description: "",
         group: "",
       },
+      customGroupMode: false,
       PAGE_CATEGORIES,
       ATTRIBUTE_TYPES,
       ATTRIBUTE_TYPE_OPTIONS,
@@ -200,6 +192,12 @@ export default {
     editingOptionsCount() {
       if (!this.editingAttribute?.options) return 0;
       return this.getOptionsCount(this.editingAttribute.options);
+    },
+    groupSelectOptions() {
+      return [
+        { value: "", label: "Без группы (Прочее)" },
+        ...ATTRIBUTE_GROUP_OPTIONS.map((g) => ({ value: g, label: g })),
+      ];
     },
   },
   methods: {
@@ -251,6 +249,7 @@ export default {
 
     openAddAttributeDialog() {
       this.editingAttribute = null;
+      this.customGroupMode = false;
       this.attributeForm = {
         name: "",
         key: "",
@@ -268,6 +267,9 @@ export default {
       this.editingAttribute = attribute;
       // Нормализуем тип (может прийти как строка "Select" или число 3)
       const normalizedType = ATTRIBUTE_TYPES[attribute.type]?.value ?? attribute.type;
+      const group = attribute.group || "";
+      // If the group is not in the predefined list, switch to custom mode
+      this.customGroupMode = group !== "" && !ATTRIBUTE_GROUP_OPTIONS.includes(group);
       this.attributeForm = {
         name: attribute.name,
         key: attribute.key,
@@ -276,7 +278,7 @@ export default {
         options: this.formatOptionsForEdit(attribute.options),
         defaultValue: attribute.defaultValue || "",
         description: attribute.description || "",
-        group: attribute.group || "",
+        group,
       };
       this.showAttributeDialog = true;
     },
@@ -317,7 +319,11 @@ export default {
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
         isRequired: this.attributeForm.isRequired,
-        options: this.showOptionsField ? this.attributeForm.options.trim() : null,
+        options: this.showOptionsField
+          ? (this.hasLargeOptions && !this.attributeForm.options.trim()
+              ? this.editingAttribute.options
+              : this.serializeOptionsForSave())
+          : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
         group: this.attributeForm.group.trim() || null,
@@ -450,6 +456,18 @@ export default {
       }
 
       return optionsStr;
+    },
+
+    /**
+     * Converts edited comma-separated options back to JSON for saving.
+     * Reverses formatOptionsForEdit() so the DB always stores JSON format.
+     */
+    serializeOptionsForSave() {
+      const raw = this.attributeForm.options.trim();
+      if (!raw) return null;
+      const parsed = this.parseOptions(raw);
+      if (parsed.length === 0) return null;
+      return JSON.stringify(parsed);
     },
 
     /**
@@ -744,26 +762,29 @@ export default {
 
           <div class="space-y-2">
             <Label>Группа атрибута</Label>
-            <Select
-              :model-value="attributeForm.group || '__none__'"
-              @update:model-value="attributeForm.group = $event === '__none__' ? '' : $event"
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите группу..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Без группы (Прочее)</SelectItem>
-                <SelectItem
-                  v-for="groupName in ATTRIBUTE_GROUP_OPTIONS"
-                  :key="groupName"
-                  :value="groupName"
-                >
-                  {{ groupName }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <!-- Custom group mode: free text input -->
+            <Input
+              v-if="customGroupMode"
+              v-model="attributeForm.group"
+              placeholder="Название группы"
+            />
+            <!-- Predefined group mode: searchable dropdown -->
+            <SearchableSelect
+              v-else
+              :model-value="attributeForm.group"
+              @update:model-value="attributeForm.group = $event"
+              :options="groupSelectOptions"
+              placeholder="Выберите группу..."
+            />
             <p class="text-xs text-muted-foreground">
-              Группировка атрибутов для удобного отображения на странице товара
+              Группировка атрибутов для удобного отображения на странице товара.
+              <button
+                type="button"
+                class="text-primary hover:underline"
+                @click="customGroupMode = !customGroupMode; if (!customGroupMode) attributeForm.group = ''"
+              >
+                {{ customGroupMode ? 'Выбрать из списка' : 'Своя группа' }}
+              </button>
             </p>
           </div>
 

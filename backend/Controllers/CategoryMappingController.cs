@@ -244,11 +244,23 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
+        // Validate localCategoryId if provided
+        if (input.localCategoryId.HasValue)
+        {
+            var categoryRepo = _unitOfWork.Repository<Category>();
+            var existingCategory = await categoryRepo.FindAsync(
+                c => c.Id == input.localCategoryId.Value && c.storeId == connection.storeId);
+            if (existingCategory == null)
+                throw ApiException.NotFound("Локальная категория не найдена");
+        }
+
         var result = await _categoryImportService.ImportExternalCategoryAsync(
             connection,
             input.externalCategoryId,
             input.localCategoryName,
             input.externalCategoryName,
+            input.localCategoryId,
+            input.selectedFieldKeys,
             ct);
 
         if (!result.IsSuccess)
@@ -261,6 +273,51 @@ public class CategoryMappingController : ControllerBase
             attributesCreated = result.AttributesCreated,
             message = result.Message
         });
+    }
+
+    /// <summary>
+    /// Preview external category fields before import
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/connections/{connectionId}/external-category-fields")]
+    public async Task<IActionResult> GetExternalCategoryFields(
+        int connectionId,
+        [FromQuery] string externalCategoryId,
+        CancellationToken ct = default)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
+            throw ApiException.BadRequest("Адаптер не поддерживает получение полей категории");
+
+        try
+        {
+            var fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId, ct);
+            var result = fields.OrderBy(f => f.SortOrder).Select(f => new
+            {
+                key = f.Key,
+                name = f.Name,
+                isRequired = f.IsRequired,
+                type = f.Type,
+                optionsCount = f.Options?.Count ?? 0,
+                description = f.Description,
+                group = f.Group,
+                sortOrder = f.SortOrder,
+                isBaseField = CategoryImportService.IsBaseOrSpecialField(f)
+            });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting category fields for connection {ConnectionId}, category {CategoryId}",
+                connectionId, externalCategoryId);
+            throw ApiException.BadRequest($"Не удалось получить поля категории: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -453,6 +510,8 @@ public class CategoryMappingController : ControllerBase
         public string externalCategoryId { get; set; }
         public string? externalCategoryName { get; set; }
         public string? localCategoryName { get; set; }
+        public int? localCategoryId { get; set; }
+        public List<string>? selectedFieldKeys { get; set; }
     }
 
     #endregion

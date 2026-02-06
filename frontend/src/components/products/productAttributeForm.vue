@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-vue-next";
+import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
 
 // Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
 const TYPE_TEXT = [0, "Text", "text"];
@@ -50,17 +51,7 @@ export default {
   emits: ["update:modelValue"],
   data() {
     return {
-      // Fixed group display order
-      groupOrder: [
-        "Бренд",
-        "Страна",
-        "Размеры и вес",
-        "Внешний вид",
-        "Медиа",
-        "Упаковка",
-        "Маркировка",
-        "Прочее",
-      ],
+      groupOrder: ATTRIBUTE_GROUP_OPTIONS,
     };
   },
   computed: {
@@ -86,17 +77,24 @@ export default {
       // Convert to array in fixed order
       const result = [];
 
-      // Add groups in the fixed order first
+      // Add predefined groups in order, SKIP "Прочее" (appended last)
       for (const groupName of this.groupOrder) {
+        if (groupName === "Прочее") continue;
         if (groups[groupName]) {
           result.push({ name: groupName, attributes: groups[groupName] });
           delete groups[groupName];
         }
       }
 
-      // Append any remaining custom groups
+      // Append custom groups (not in predefined list, not "Прочее")
       for (const [groupName, attrs] of Object.entries(groups)) {
+        if (groupName === "Прочее") continue;
         result.push({ name: groupName, attributes: attrs });
+      }
+
+      // Always append "Прочее" last
+      if (groups["Прочее"]) {
+        result.push({ name: "Прочее", attributes: groups["Прочее"] });
       }
 
       return result;

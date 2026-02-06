@@ -440,6 +440,23 @@ export default {
         .catch((error) => onError(error));
     },
 
+    /**
+     * Fetches external category fields for preview before import.
+     */
+    async getExternalCategoryFields(ctx, { connectionId, externalCategoryId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/external-category-fields?externalCategoryId=${encodeURIComponent(externalCategoryId)}`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     // === Field Mappings ===
 
     /**

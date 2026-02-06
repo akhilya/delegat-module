@@ -493,8 +493,8 @@ export default {
             >
               <template #item="{ element: member }">
                 <Card class="group">
-                  <CardContent class="p-4 flex items-center gap-4">
-                    <GripVertical class="drag-handle size-5 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
+                  <CardContent class="flex items-center gap-4">
+                    <GripVertical class="drag-handle size-5 min-w-5 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
 
                     <!-- Product Image -->
                     <div class="w-12 h-12 rounded-md overflow-hidden bg-muted shrink-0">
@@ -579,7 +579,7 @@ export default {
 
             <div v-else class="space-y-3">
               <Card v-for="connection in connections" :key="connection.id">
-                <CardContent class="p-4">
+                <CardContent>
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
                       <div class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
