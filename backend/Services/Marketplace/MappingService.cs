@@ -2,6 +2,7 @@ using PrintO.Enums;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace PrintO.Services.Marketplace;
@@ -32,6 +33,7 @@ public class MappingService
         CancellationToken ct = default)
     {
         var result = new Dictionary<string, object?>();
+        var fieldTypes = new Dictionary<string, string>();
 
         // Get all active field mappings
         var fieldMappings = categoryMapping.fieldMappings
@@ -41,6 +43,10 @@ public class MappingService
 
         foreach (var mapping in fieldMappings)
         {
+            // Track field types so the plugin knows how to handle each value
+            if (!string.IsNullOrEmpty(mapping.externalFieldType))
+                fieldTypes[mapping.externalFieldKey] = mapping.externalFieldType;
+
             var value = GetFieldValue(product, mapping);
 
             // Apply transformation if specified
@@ -49,8 +55,28 @@ public class MappingService
                 value = ApplyTransform(value, mapping.transformExpression);
             }
 
+            // Multiselect values are stored as JSON arrays (e.g. '["123","456"]').
+            // Deserialize to List<string> so the plugin receives a proper list.
+            if (mapping.externalFieldType == "multiselect" && value is string jsonStr
+                && jsonStr.StartsWith('['))
+            {
+                try
+                {
+                    var list = JsonSerializer.Deserialize<List<string>>(jsonStr);
+                    if (list != null)
+                        value = list;
+                }
+                catch (JsonException)
+                {
+                    // Not valid JSON — keep as string
+                }
+            }
+
             result[mapping.externalFieldKey] = value;
         }
+
+        // Attach field type metadata for the plugin
+        result["_fieldTypes"] = fieldTypes;
 
         return Task.FromResult(result);
     }

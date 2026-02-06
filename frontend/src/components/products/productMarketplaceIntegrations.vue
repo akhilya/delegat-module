@@ -27,6 +27,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE_CONNECTION } from "@/router";
 
@@ -49,6 +65,18 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     Separator,
   },
   props: {
@@ -65,6 +93,12 @@ export default {
       exportingConnectionId: null,
       importingLinkId: null,
       PAGE_MARKETPLACE_CONNECTION,
+      // Import preview dialog
+      showImportPreviewDialog: false,
+      importPreviewData: null,
+      isLoadingPreview: false,
+      isApplyingImport: false,
+      previewLinkId: null,
     };
   },
   computed: {
@@ -104,6 +138,7 @@ export default {
       "getAvailableConnectionsForProduct",
       "exportProduct",
       "importFromLink",
+      "importFromLinkPreview",
       "exportFromLink",
     ]),
 
@@ -171,18 +206,41 @@ export default {
       await this.fetchData();
     },
 
-    // Import from a specific marketplace (pull changes)
+    // Import from a specific marketplace (pull changes) — preview first
     async handleImportFromLink(conn) {
       this.importingLinkId = conn.linkId;
-      await this.importFromLink({
+      this.isLoadingPreview = true;
+      await this.importFromLinkPreview({
         linkId: conn.linkId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          if (!result.hasChanges) {
+            displaySonnerSuccess("Изменений не обнаружено");
+          } else {
+            this.importPreviewData = result;
+            this.previewLinkId = conn.linkId;
+            this.showImportPreviewDialog = true;
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isLoadingPreview = false;
+      this.importingLinkId = null;
+    },
+
+    async confirmImport() {
+      if (!this.previewLinkId) return;
+      this.isApplyingImport = true;
+      await this.importFromLink({
+        linkId: this.previewLinkId,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
             displaySonnerSuccess(
               `Обновлено: ${result.updatedFields.join(", ")}`,
             );
-            // Emit event to refresh product data
             this.$emit("product-updated");
           } else {
             displaySonnerSuccess("Изменений не обнаружено");
@@ -193,7 +251,41 @@ export default {
           displaySonnerError(error);
         },
       });
-      this.importingLinkId = null;
+      this.isApplyingImport = false;
+      this.cancelImport();
+    },
+
+    cancelImport() {
+      this.showImportPreviewDialog = false;
+      this.importPreviewData = null;
+      this.previewLinkId = null;
+    },
+
+    getFieldLabel(field) {
+      const labels = {
+        name: "Название",
+        description: "Описание",
+        price: "Цена",
+        storageQuantity: "Остаток",
+      };
+      if (field.startsWith("attributes")) return "Атрибуты";
+      return labels[field] || field;
+    },
+
+    formatFieldValue(field, value) {
+      if (value === null || value === undefined) return "—";
+      if (field === "price") {
+        return new Intl.NumberFormat("ru-RU", {
+          style: "currency",
+          currency: "RUB",
+          minimumFractionDigits: 0,
+        }).format(value);
+      }
+      if (field === "description") {
+        const str = String(value);
+        return str.length > 80 ? str.substring(0, 80) + "..." : str;
+      }
+      return String(value);
     },
 
     // Export to a specific marketplace
@@ -303,6 +395,7 @@ export default {
         </p>
       </div>
       <Button
+        v-if="connections?.allConnections?.length > 1"
         @click="handleExportToAll"
         :disabled="isExportingAll || !canExportToAll || isLoading"
       >
@@ -525,5 +618,51 @@ export default {
         <p>Нет доступных маркетплейсов для экспорта</p>
       </div>
     </div>
+
+    <!-- Import Preview Dialog -->
+    <Dialog v-model:open="showImportPreviewDialog">
+      <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Подтверждение импорта</DialogTitle>
+          <DialogDescription>
+            Следующие поля будут обновлены из маркетплейса
+          </DialogDescription>
+        </DialogHeader>
+        <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+          <table class="w-full table-fixed text-sm">
+            <thead>
+              <tr class="border-b">
+                <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
+                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
+                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="field in importPreviewData.updatedFields"
+                :key="field"
+                class="border-b"
+              >
+                <td class="py-2 px-2 font-medium align-top">{{ getFieldLabel(field) }}</td>
+                <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
+                  {{ formatFieldValue(field, importPreviewData.oldValues[field]) }}
+                </td>
+                <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                  {{ formatFieldValue(field, importPreviewData.newValues[field]) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelImport">Отменить</Button>
+          <Button @click="confirmImport" :disabled="isApplyingImport">
+            <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
+            <Download v-else class="size-4 mr-2" />
+            Подтвердить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

@@ -5,6 +5,7 @@ import { createRouter } from "./router";
 import { createStore } from "./store";
 import axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
+import { startLoading, finishLoading } from "./composables/useLoadingBar";
 
 export const http = setupCache(
   axios.create({
@@ -26,6 +27,7 @@ export const store = createStore();
 let isAuthenticated = null;
 
 router.beforeEach(async (to) => {
+  startLoading();
   if (to.meta.public) return true;
 
   if (isAuthenticated === null) {
@@ -44,6 +46,9 @@ router.beforeEach(async (to) => {
 
   return true;
 });
+
+router.afterEach(() => finishLoading());
+router.onError(() => finishLoading());
 
 export function resetAuthCache() {
   isAuthenticated = null;

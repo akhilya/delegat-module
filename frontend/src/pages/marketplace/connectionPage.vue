@@ -46,6 +46,7 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogScrollContent,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -135,6 +136,7 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
+    DialogScrollContent,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -223,6 +225,20 @@ export default {
       isImportingWithCategories: false,
       existingMappings: [],
       categoryAssignments: {},
+
+      // Single import preview dialog
+      showSingleImportPreviewDialog: false,
+      singleImportPreviewData: null,
+      isLoadingSinglePreview: false,
+      isApplyingSingleImport: false,
+      previewLinkId: null,
+
+      // Bulk import preview dialog
+      showBulkImportPreviewDialog: false,
+      bulkImportPreviewData: null,
+      isLoadingBulkPreview: false,
+      isApplyingBulkImport: false,
+      bulkPreviewLinkIds: [],
 
       // Search debounce
       searchDebounceTimer: null,
@@ -349,8 +365,10 @@ export default {
       // Products actions
       "getExternalProducts",
       "importLinksBulk",
+      "importLinksBulkPreview",
       "exportLinksBulk",
       "importFromLink",
+      "importFromLinkPreview",
       "exportFromLink",
       "importSelectedProducts",
       "getImportBatchStatus",
@@ -683,8 +701,32 @@ export default {
       if (!product.isLinked || !product.linkId) return;
 
       this.importingLinkId = product.linkId;
-      await this.importFromLink({
+      this.isLoadingSinglePreview = true;
+      await this.importFromLinkPreview({
         linkId: product.linkId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          if (!result.hasChanges) {
+            displaySonnerSuccess("Изменений не обнаружено");
+          } else {
+            this.singleImportPreviewData = result;
+            this.previewLinkId = product.linkId;
+            this.showSingleImportPreviewDialog = true;
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isLoadingSinglePreview = false;
+      this.importingLinkId = null;
+    },
+
+    async confirmSingleImport() {
+      if (!this.previewLinkId) return;
+      this.isApplyingSingleImport = true;
+      await this.importFromLink({
+        linkId: this.previewLinkId,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
@@ -698,7 +740,14 @@ export default {
           displaySonnerError(error);
         },
       });
-      this.importingLinkId = null;
+      this.isApplyingSingleImport = false;
+      this.cancelSingleImport();
+    },
+
+    cancelSingleImport() {
+      this.showSingleImportPreviewDialog = false;
+      this.singleImportPreviewData = null;
+      this.previewLinkId = null;
     },
 
     async handleExportSingle(product) {
@@ -932,10 +981,34 @@ export default {
       }
 
       this.isImportingBulk = true;
+      this.isLoadingBulkPreview = true;
       const linkIds = this.selectedLinkedItems.map((p) => p.linkId);
 
-      await this.importLinksBulk({
+      await this.importLinksBulkPreview({
         linkIds,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          if (result.totalWithChanges === 0) {
+            displaySonnerSuccess("Изменений не обнаружено");
+          } else {
+            this.bulkImportPreviewData = result;
+            this.bulkPreviewLinkIds = linkIds;
+            this.showBulkImportPreviewDialog = true;
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isLoadingBulkPreview = false;
+      this.isImportingBulk = false;
+    },
+
+    async confirmBulkImport() {
+      if (this.bulkPreviewLinkIds.length === 0) return;
+      this.isApplyingBulkImport = true;
+      await this.importLinksBulk({
+        linkIds: this.bulkPreviewLinkIds,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
@@ -948,7 +1021,14 @@ export default {
           displaySonnerError(error);
         },
       });
-      this.isImportingBulk = false;
+      this.isApplyingBulkImport = false;
+      this.cancelBulkImport();
+    },
+
+    cancelBulkImport() {
+      this.showBulkImportPreviewDialog = false;
+      this.bulkImportPreviewData = null;
+      this.bulkPreviewLinkIds = [];
     },
 
     async handleExportBulk() {
@@ -1029,6 +1109,27 @@ export default {
         },
       });
       this.isExportingStocks = false;
+    },
+
+    getImportFieldLabel(field) {
+      const labels = {
+        name: "Название",
+        description: "Описание",
+        price: "Цена",
+        storageQuantity: "Остаток",
+      };
+      if (field.startsWith("attributes")) return "Атрибуты";
+      return labels[field] || field;
+    },
+
+    formatImportFieldValue(field, value) {
+      if (value === null || value === undefined) return "—";
+      if (field === "price") return this.formatPrice(value);
+      if (field === "description") {
+        const str = String(value);
+        return str.length > 80 ? str.substring(0, 80) + "..." : str;
+      }
+      return String(value);
     },
 
     getStatusInfo(product) {
@@ -1621,6 +1722,104 @@ export default {
         </TabsContent>
       </Tabs>
     </div>
+
+    <!-- Single Import Preview Dialog -->
+    <Dialog v-model:open="showSingleImportPreviewDialog">
+      <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Подтверждение импорта</DialogTitle>
+          <DialogDescription>
+            Следующие поля будут обновлены из маркетплейса
+          </DialogDescription>
+        </DialogHeader>
+        <div v-if="singleImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+          <table class="w-full table-fixed text-sm">
+            <thead>
+              <tr class="border-b">
+                <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
+                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
+                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="field in singleImportPreviewData.updatedFields"
+                :key="field"
+                class="border-b"
+              >
+                <td class="py-2 px-2 font-medium align-top">{{ getImportFieldLabel(field) }}</td>
+                <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
+                  {{ formatImportFieldValue(field, singleImportPreviewData.oldValues[field]) }}
+                </td>
+                <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                  {{ formatImportFieldValue(field, singleImportPreviewData.newValues[field]) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelSingleImport">Отменить</Button>
+          <Button @click="confirmSingleImport" :disabled="isApplyingSingleImport">
+            <Loader2 v-if="isApplyingSingleImport" class="size-4 mr-2 animate-spin" />
+            <Download v-else class="size-4 mr-2" />
+            Подтвердить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Bulk Import Preview Dialog -->
+    <Dialog v-model:open="showBulkImportPreviewDialog">
+      <DialogScrollContent class="sm:max-w-4xl max-h-[85vh]">
+        <DialogHeader>
+          <DialogTitle>Подтверждение массового импорта</DialogTitle>
+          <DialogDescription v-if="bulkImportPreviewData">
+            Будет обновлено {{ bulkImportPreviewData.totalWithChanges }} из
+            {{ bulkImportPreviewData.totalWithChanges + bulkImportPreviewData.totalWithoutChanges }} товаров
+          </DialogDescription>
+        </DialogHeader>
+        <div v-if="bulkImportPreviewData" class="py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          <template v-for="item in bulkImportPreviewData.items" :key="item.linkId">
+            <div v-if="item.hasChanges" class="border rounded-lg p-3">
+              <div class="font-medium mb-2">{{ item.productName || `Связь #${item.linkId}` }}</div>
+              <table class="w-full table-fixed text-sm">
+                <thead>
+                  <tr class="border-b">
+                    <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
+                    <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
+                    <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="field in item.updatedFields"
+                    :key="field"
+                    class="border-b last:border-b-0"
+                  >
+                    <td class="py-2 px-2 font-medium align-top">{{ getImportFieldLabel(field) }}</td>
+                    <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
+                      {{ formatImportFieldValue(field, item.oldValues[field]) }}
+                    </td>
+                    <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                      {{ formatImportFieldValue(field, item.newValues[field]) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelBulkImport">Отменить</Button>
+          <Button @click="confirmBulkImport" :disabled="isApplyingBulkImport">
+            <Loader2 v-if="isApplyingBulkImport" class="size-4 mr-2 animate-spin" />
+            <Download v-else class="size-4 mr-2" />
+            Подтвердить
+          </Button>
+        </DialogFooter>
+      </DialogScrollContent>
+    </Dialog>
 
     <!-- Import Dialog -->
     <Dialog v-model:open="showImportDialog">

@@ -90,6 +90,14 @@ public interface IMarketplaceAdapter
         CancellationToken ct = default);
 
     /// <summary>
+    /// Import multiple products by IDs in a single batch call.
+    /// </summary>
+    Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        MarketplaceConnection connection,
+        List<string> externalProductIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Import all products from the marketplace (with pagination)
     /// </summary>
     /// <param name="connection">Connection</param>

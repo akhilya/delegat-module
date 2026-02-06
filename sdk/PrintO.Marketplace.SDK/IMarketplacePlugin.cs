@@ -93,6 +93,15 @@ public interface IMarketplacePlugin
         CancellationToken ct = default);
 
     /// <summary>
+    /// Import multiple products by IDs in a single batch call.
+    /// More efficient than calling ImportProductAsync N times.
+    /// </summary>
+    Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        ConnectionContext context,
+        List<string> externalProductIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Import all products from marketplace (paginated)
     /// </summary>
     /// <param name="context">Connection context</param>

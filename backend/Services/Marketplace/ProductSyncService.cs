@@ -456,6 +456,199 @@ public class ProductSyncService
     }
 
     /// <summary>
+    /// Update or create product attribute values from external marketplace data.
+    /// Unlike ImportProductAttributesAsync (which only creates), this method
+    /// also updates existing attribute values when they differ.
+    /// </summary>
+    public async Task<int> UpdateProductAttributesFromExternalAsync(
+        int productId,
+        int connectionId,
+        int categoryId,
+        Dictionary<string, object> externalAttributes,
+        CancellationToken ct)
+    {
+        var categoryMapping = await _context.categoryMappings
+            .Include(cm => cm.fieldMappings)
+            .FirstOrDefaultAsync(cm =>
+                cm.connectionId == connectionId &&
+                cm.localCategoryId == categoryId, ct);
+
+        if (categoryMapping == null)
+            return 0;
+
+        var enabledMappings = categoryMapping.fieldMappings.Where(fm => fm.isEnabled).ToList();
+
+        // Pre-load existing attribute values for this product
+        var existingProductAttrs = await _context.productAttributeValues
+            .Where(pav => pav.productId == productId)
+            .ToListAsync(ct);
+
+        var existingStoreAttrs = await _context.storeProductAttributeValues
+            .Where(sav => sav.productId == productId)
+            .ToListAsync(ct);
+
+        // Pre-load valid IDs
+        var categoryAttributeIds = (await _context.categoryAttributes
+            .Where(ca => ca.categoryId == categoryId)
+            .Select(ca => ca.Id)
+            .ToListAsync(ct)).ToHashSet();
+
+        var storeAttributeIds = (await _context.storeAttributes
+            .Select(sa => sa.Id)
+            .ToListAsync(ct)).ToHashSet();
+
+        var changedCount = 0;
+
+        foreach (var fieldMapping in enabledMappings)
+        {
+            if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
+                continue;
+
+            var stringValue = ConvertAttributeValueToString(externalValue);
+            if (string.IsNullOrEmpty(stringValue))
+                continue;
+
+            switch (fieldMapping.sourceType)
+            {
+                case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
+                {
+                    if (!categoryAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                        continue;
+
+                    var existing = existingProductAttrs.FirstOrDefault(
+                        a => a.attributeId == fieldMapping.sourceAttributeId.Value);
+
+                    if (existing != null)
+                    {
+                        if (existing.value != stringValue)
+                        {
+                            existing.value = stringValue;
+                            changedCount++;
+                        }
+                    }
+                    else
+                    {
+                        var productAttrValue = new ProductAttributeValue();
+                        productAttrValue.AddFill(new ProductAttributeValue.AddForm
+                        {
+                            productId = productId,
+                            attributeId = fieldMapping.sourceAttributeId.Value,
+                            value = stringValue
+                        });
+                        _context.productAttributeValues.Add(productAttrValue);
+                        changedCount++;
+                    }
+                    break;
+                }
+
+                case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
+                {
+                    if (!storeAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                        continue;
+
+                    var existing = existingStoreAttrs.FirstOrDefault(
+                        a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+
+                    if (existing != null)
+                    {
+                        if (existing.value != stringValue)
+                        {
+                            existing.value = stringValue;
+                            changedCount++;
+                        }
+                    }
+                    else
+                    {
+                        var storeAttrValue = new StoreProductAttributeValue();
+                        storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
+                        {
+                            productId = productId,
+                            storeAttributeId = fieldMapping.sourceAttributeId.Value,
+                            value = stringValue
+                        });
+                        _context.storeProductAttributeValues.Add(storeAttrValue);
+                        changedCount++;
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (changedCount > 0)
+            await _context.SaveChangesAsync(ct);
+
+        return changedCount;
+    }
+
+    /// <summary>
+    /// Read-only version: count how many attribute values would change without saving.
+    /// </summary>
+    public async Task<int> CountAttributeChangesFromExternalAsync(
+        int productId,
+        int connectionId,
+        int categoryId,
+        Dictionary<string, object> externalAttributes,
+        CancellationToken ct)
+    {
+        var categoryMapping = await _context.categoryMappings
+            .AsNoTracking()
+            .Include(cm => cm.fieldMappings)
+            .FirstOrDefaultAsync(cm =>
+                cm.connectionId == connectionId &&
+                cm.localCategoryId == categoryId, ct);
+
+        if (categoryMapping == null)
+            return 0;
+
+        var enabledMappings = categoryMapping.fieldMappings.Where(fm => fm.isEnabled).ToList();
+
+        var existingProductAttrs = await _context.productAttributeValues
+            .AsNoTracking()
+            .Where(pav => pav.productId == productId)
+            .ToListAsync(ct);
+
+        var existingStoreAttrs = await _context.storeProductAttributeValues
+            .AsNoTracking()
+            .Where(sav => sav.productId == productId)
+            .ToListAsync(ct);
+
+        var changedCount = 0;
+
+        foreach (var fieldMapping in enabledMappings)
+        {
+            if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
+                continue;
+
+            var stringValue = ConvertAttributeValueToString(externalValue);
+            if (string.IsNullOrEmpty(stringValue))
+                continue;
+
+            switch (fieldMapping.sourceType)
+            {
+                case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
+                {
+                    var existing = existingProductAttrs.FirstOrDefault(
+                        a => a.attributeId == fieldMapping.sourceAttributeId.Value);
+                    if (existing == null || existing.value != stringValue)
+                        changedCount++;
+                    break;
+                }
+
+                case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
+                {
+                    var existing = existingStoreAttrs.FirstOrDefault(
+                        a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+                    if (existing == null || existing.value != stringValue)
+                        changedCount++;
+                    break;
+                }
+            }
+        }
+
+        return changedCount;
+    }
+
+    /// <summary>
     /// Convert an attribute value to its string representation.
     /// </summary>
     private static string? ConvertAttributeValueToString(object value)

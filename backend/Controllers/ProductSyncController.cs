@@ -1127,10 +1127,10 @@ public class ProductSyncController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
-        // Получаем связь с маркетплейсом
+        // Получаем связь с маркетплейсом (с tracking для обновления полей)
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
-        var link = await linkRepo.FindAsync(
-            l => l.Id == linkId,
+        var link = await linkRepo.GetByIdWithIncludesTrackingAsync(
+            linkId,
             q => q.Include(l => l.connection).Include(l => l.product));
 
         if (link == null)
@@ -1163,6 +1163,24 @@ public class ProductSyncController : ControllerBase
         if (product == null)
             throw ApiException.BadRequest("Локальный товар не найден");
 
+        // Обновляем название
+        if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
+        {
+            oldValues["name"] = product.name;
+            newValues["name"] = externalProduct.Name;
+            product.name = externalProduct.Name;
+            updatedFields.Add("name");
+        }
+
+        // Обновляем описание
+        if (externalProduct.Description != null && product.description != externalProduct.Description)
+        {
+            oldValues["description"] = product.description;
+            newValues["description"] = externalProduct.Description;
+            product.description = externalProduct.Description;
+            updatedFields.Add("description");
+        }
+
         // Обновляем цену
         if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
         {
@@ -1179,6 +1197,19 @@ public class ProductSyncController : ControllerBase
             newValues["storageQuantity"] = externalProduct.Quantity.Value;
             product.storageQuantity = externalProduct.Quantity.Value;
             updatedFields.Add("storageQuantity");
+        }
+
+        // Обновляем атрибуты на основе маппинга категории
+        if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+        {
+            var attrCount = await _productSyncService.UpdateProductAttributesFromExternalAsync(
+                product.Id,
+                link.connectionId,
+                product.categoryId.Value,
+                externalProduct.Attributes,
+                ct);
+            if (attrCount > 0)
+                updatedFields.Add($"attributes ({attrCount})");
         }
 
         // Обновляем связь с актуальными данными МП
@@ -1201,6 +1232,242 @@ public class ProductSyncController : ControllerBase
                 : "Изменений не обнаружено"
         });
     }
+
+    /// <summary>
+    /// Preview import changes from the marketplace (read-only, no save)
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/import-preview")]
+    public async Task<IActionResult> ImportFromLinkPreview(int linkId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
+        var link = await linkRepo.FindAsync(
+            l => l.Id == linkId,
+            q => q.Include(l => l.connection).Include(l => l.product));
+
+        if (link == null)
+            throw ApiException.NotFound("Связь не найдена");
+
+        if (link.connection?.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Доступ запрещён");
+
+        var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Адаптер '{link.connection.adapterKey}' не найден");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+            throw ApiException.BadRequest("Адаптер не поддерживает импорт");
+
+        var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
+        if (externalProduct == null)
+            throw ApiException.BadRequest($"Товар с ID '{link.externalProductId}' не найден на маркетплейсе");
+
+        var updatedFields = new List<string>();
+        var oldValues = new Dictionary<string, object?>();
+        var newValues = new Dictionary<string, object?>();
+        var product = link.product;
+
+        if (product == null)
+            throw ApiException.BadRequest("Локальный товар не найден");
+
+        if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
+        {
+            oldValues["name"] = product.name;
+            newValues["name"] = externalProduct.Name;
+            updatedFields.Add("name");
+        }
+
+        if (externalProduct.Description != null && product.description != externalProduct.Description)
+        {
+            oldValues["description"] = product.description;
+            newValues["description"] = externalProduct.Description;
+            updatedFields.Add("description");
+        }
+
+        if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
+        {
+            oldValues["price"] = product.price;
+            newValues["price"] = externalProduct.Price.Value;
+            updatedFields.Add("price");
+        }
+
+        if (externalProduct.Quantity.HasValue && product.storageQuantity != externalProduct.Quantity.Value)
+        {
+            oldValues["storageQuantity"] = product.storageQuantity;
+            newValues["storageQuantity"] = externalProduct.Quantity.Value;
+            updatedFields.Add("storageQuantity");
+        }
+
+        if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+        {
+            var attrCount = await _productSyncService.CountAttributeChangesFromExternalAsync(
+                product.Id,
+                link.connectionId,
+                product.categoryId.Value,
+                externalProduct.Attributes,
+                ct);
+            if (attrCount > 0)
+                updatedFields.Add($"attributes ({attrCount})");
+        }
+
+        return Ok(new
+        {
+            hasChanges = updatedFields.Count > 0,
+            updatedFields,
+            oldValues,
+            newValues
+        });
+    }
+
+    /// <summary>
+    /// Bulk preview import changes from the marketplace for multiple links.
+    /// Groups links by connection and uses batch API for efficiency.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/import-bulk-preview")]
+    public async Task<IActionResult> ImportLinksBulkPreview(
+        [FromBody] LinksBulkInput input,
+        CancellationToken ct)
+    {
+        if (input.linkIds == null || input.linkIds.Count == 0)
+            throw ApiException.BadRequest("Связи не указаны");
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        // Batch-load all links in one query
+        var allLinks = await _context.productMarketplaceLinks
+            .AsNoTracking()
+            .Include(l => l.connection)
+            .Include(l => l.product)
+            .Where(l => input.linkIds.Contains(l.Id))
+            .ToListAsync(ct);
+
+        var linkMap = allLinks.ToDictionary(l => l.Id);
+
+        // Group links by connection for batch API calls
+        var grouped = allLinks
+            .Where(l => l.connection?.storeId == selectedStoreId.Value)
+            .GroupBy(l => l.connectionId)
+            .ToList();
+
+        // Fetch external products in batch per connection
+        var externalProductMap = new Dictionary<string, Models.Marketplace.DTOs.ExternalProduct>();
+
+        foreach (var group in grouped)
+        {
+            var connection = group.First().connection!;
+            var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+            if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+                continue;
+
+            var externalIds = group.Select(l => l.externalProductId).Distinct().ToList();
+            try
+            {
+                var batchResult = await adapter.ImportProductsBatchAsync(connection, externalIds, ct);
+                foreach (var ep in batchResult)
+                    externalProductMap[ep.ExternalId] = ep;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Batch import failed for connection {ConnectionId}, falling back", connection.Id);
+            }
+        }
+
+        // Build preview results per link
+        var results = new List<BulkPreviewItemResult>();
+        var empty = new Dictionary<string, object?>();
+
+        foreach (var linkId in input.linkIds)
+        {
+            if (!linkMap.TryGetValue(linkId, out var link) || link.connection?.storeId != selectedStoreId.Value)
+            {
+                results.Add(new BulkPreviewItemResult(linkId, null, false, [], empty, empty, "Связь не найдена"));
+                continue;
+            }
+
+            if (!externalProductMap.TryGetValue(link.externalProductId, out var externalProduct))
+            {
+                results.Add(new BulkPreviewItemResult(linkId, link.product?.name, false, [], empty, empty, "Товар не найден на маркетплейсе"));
+                continue;
+            }
+
+            var updatedFields = new List<string>();
+            var oldValues = new Dictionary<string, object?>();
+            var newValues = new Dictionary<string, object?>();
+            var product = link.product;
+
+            if (product != null)
+            {
+                if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
+                {
+                    oldValues["name"] = product.name;
+                    newValues["name"] = externalProduct.Name;
+                    updatedFields.Add("name");
+                }
+
+                if (externalProduct.Description != null && product.description != externalProduct.Description)
+                {
+                    oldValues["description"] = product.description;
+                    newValues["description"] = externalProduct.Description;
+                    updatedFields.Add("description");
+                }
+
+                if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
+                {
+                    oldValues["price"] = product.price;
+                    newValues["price"] = externalProduct.Price.Value;
+                    updatedFields.Add("price");
+                }
+
+                if (externalProduct.Quantity.HasValue && product.storageQuantity != externalProduct.Quantity.Value)
+                {
+                    oldValues["storageQuantity"] = product.storageQuantity;
+                    newValues["storageQuantity"] = externalProduct.Quantity.Value;
+                    updatedFields.Add("storageQuantity");
+                }
+
+                if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+                {
+                    var attrCount = await _productSyncService.CountAttributeChangesFromExternalAsync(
+                        product.Id,
+                        link.connectionId,
+                        product.categoryId.Value,
+                        externalProduct.Attributes,
+                        ct);
+                    if (attrCount > 0)
+                        updatedFields.Add($"attributes ({attrCount})");
+                }
+            }
+
+            var hasChanges = updatedFields.Count > 0;
+            results.Add(new BulkPreviewItemResult(linkId, product?.name, hasChanges, updatedFields, oldValues, newValues, null));
+        }
+
+        int totalWithChanges = results.Count(r => r.hasChanges);
+        int totalWithoutChanges = results.Count(r => !r.hasChanges);
+
+        return Ok(new
+        {
+            items = results,
+            totalWithChanges,
+            totalWithoutChanges
+        });
+    }
+
+    private record BulkPreviewItemResult(
+        int linkId,
+        string? productName,
+        bool hasChanges,
+        List<string> updatedFields,
+        Dictionary<string, object?> oldValues,
+        Dictionary<string, object?> newValues,
+        string? error);
 
     /// <summary>
     /// Export local changes to the marketplace
@@ -1243,7 +1510,8 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
-    /// Bulk import changes from the marketplace for multiple linked products
+    /// Bulk import changes from the marketplace for multiple linked products.
+    /// Groups links by connection and uses batch API for efficiency.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/import-bulk")]
@@ -1259,8 +1527,46 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest("Магазин не выбран");
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
-        var productRepo = _unitOfWork.Repository<Product>();
 
+        // Load all links with tracking for updates
+        var allLinks = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .Include(l => l.product)
+            .Where(l => input.linkIds.Contains(l.Id))
+            .ToListAsync(ct);
+
+        var linkMap = allLinks.ToDictionary(l => l.Id);
+
+        // Group links by connection for batch API calls
+        var grouped = allLinks
+            .Where(l => l.connection?.storeId == selectedStoreId.Value)
+            .GroupBy(l => l.connectionId)
+            .ToList();
+
+        // Fetch external products in batch per connection
+        var externalProductMap = new Dictionary<string, Models.Marketplace.DTOs.ExternalProduct>();
+
+        foreach (var group in grouped)
+        {
+            var connection = group.First().connection!;
+            var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+            if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+                continue;
+
+            var externalIds = group.Select(l => l.externalProductId).Distinct().ToList();
+            try
+            {
+                var batchResult = await adapter.ImportProductsBatchAsync(connection, externalIds, ct);
+                foreach (var ep in batchResult)
+                    externalProductMap[ep.ExternalId] = ep;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Batch import failed for connection {ConnectionId}", connection.Id);
+            }
+        }
+
+        // Apply updates per link
         var results = new List<object>();
         int successCount = 0;
         int failedCount = 0;
@@ -1269,27 +1575,14 @@ public class ProductSyncController : ControllerBase
         {
             try
             {
-                var link = await linkRepo.FindAsync(
-                    l => l.Id == linkId,
-                    q => q.Include(l => l.connection).Include(l => l.product));
-
-                if (link == null || link.connection?.storeId != selectedStoreId.Value)
+                if (!linkMap.TryGetValue(linkId, out var link) || link.connection?.storeId != selectedStoreId.Value)
                 {
                     results.Add(new { linkId, success = false, error = "Связь не найдена или доступ запрещён" });
                     failedCount++;
                     continue;
                 }
 
-                var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
-                if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
-                {
-                    results.Add(new { linkId, success = false, error = "Адаптер не найден или не поддерживает импорт" });
-                    failedCount++;
-                    continue;
-                }
-
-                var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
-                if (externalProduct == null)
+                if (!externalProductMap.TryGetValue(link.externalProductId, out var externalProduct))
                 {
                     results.Add(new { linkId, success = false, error = "Товар не найден на маркетплейсе" });
                     failedCount++;
@@ -1301,6 +1594,18 @@ public class ProductSyncController : ControllerBase
 
                 if (product != null)
                 {
+                    if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
+                    {
+                        product.name = externalProduct.Name;
+                        updatedFields.Add("name");
+                    }
+
+                    if (externalProduct.Description != null && product.description != externalProduct.Description)
+                    {
+                        product.description = externalProduct.Description;
+                        updatedFields.Add("description");
+                    }
+
                     if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
                     {
                         product.price = externalProduct.Price.Value;
@@ -1311,6 +1616,18 @@ public class ProductSyncController : ControllerBase
                     {
                         product.storageQuantity = externalProduct.Quantity.Value;
                         updatedFields.Add("storageQuantity");
+                    }
+
+                    if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+                    {
+                        var attrCount = await _productSyncService.UpdateProductAttributesFromExternalAsync(
+                            product.Id,
+                            link.connectionId,
+                            product.categoryId.Value,
+                            externalProduct.Attributes,
+                            ct);
+                        if (attrCount > 0)
+                            updatedFields.Add($"attributes ({attrCount})");
                     }
                 }
 

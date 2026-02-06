@@ -1119,6 +1119,23 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async importFromLinkPreview(ctx, { linkId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/import-preview`,
+        {
+          method: "POST",
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     /**
      * Exports product data to a marketplace using a specific product link.
      * @param {Object} ctx - Vuex action context.
@@ -1192,6 +1209,24 @@ export default {
     async importLinksBulk(ctx, { linkIds, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/links/import-bulk`,
+        {
+          method: "POST",
+          cache: false,
+          data: { linkIds },
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async importLinksBulkPreview(ctx, { linkIds, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/import-bulk-preview`,
         {
           method: "POST",
           cache: false,

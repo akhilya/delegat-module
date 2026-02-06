@@ -68,6 +68,22 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         throw new NotImplementedException($"ImportProductAsync not implemented for {Key}");
     }
 
+    public virtual async Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        MarketplaceConnection connection,
+        List<string> externalProductIds,
+        CancellationToken ct = default)
+    {
+        // Default fallback: call ImportProductAsync for each ID
+        var results = new List<ExternalProduct>();
+        foreach (var id in externalProductIds)
+        {
+            var product = await ImportProductAsync(connection, id, ct);
+            if (product != null)
+                results.Add(product);
+        }
+        return results;
+    }
+
     public virtual Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(
         MarketplaceConnection connection,
         int pageSize = 100,

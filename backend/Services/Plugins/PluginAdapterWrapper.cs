@@ -151,6 +151,33 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         );
     }
 
+    public async Task<List<Models.Marketplace.DTOs.ExternalProduct>> ImportProductsBatchAsync(
+        MarketplaceConnection connection,
+        List<string> externalProductIds,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var products = await _plugin.ImportProductsBatchAsync(context, externalProductIds, ct);
+
+        return products.Select(p => new Models.Marketplace.DTOs.ExternalProduct(
+            p.ExternalId,
+            p.Sku,
+            p.Name,
+            p.Description,
+            p.Price,
+            p.Quantity,
+            p.CategoryId,
+            p.CategoryName,
+            p.Attributes,
+            p.ImageUrls,
+            p.Barcode,
+            p.Brand,
+            p.RawData,
+            p.GroupId,
+            p.GroupName
+        )).ToList();
+    }
+
     public async Task<Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>> ImportAllProductsAsync(
         MarketplaceConnection connection,
         int pageSize = 100,

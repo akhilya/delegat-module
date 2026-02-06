@@ -28,7 +28,8 @@ public class OzonPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ExportPrices |
         MarketplaceCapabilities.ImportStocks |
         MarketplaceCapabilities.ExportStocks |
-        MarketplaceCapabilities.FieldBasedGrouping;
+        MarketplaceCapabilities.FieldBasedGrouping |
+        MarketplaceCapabilities.ImportProductBatch;
 
     // Category name cache (categoryId -> fullPath)
     private Dictionary<string, string>? _categoryNameCache;
@@ -590,6 +591,50 @@ public class OzonPlugin : MarketplacePluginBase
         return product;
     }
 
+    public override async Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        ConnectionContext context,
+        List<string> externalProductIds,
+        CancellationToken ct = default)
+    {
+        if (externalProductIds.Count == 0) return [];
+
+        using var client = CreateClient(context);
+        await EnsureCategoryNameCacheAsync(client, ct);
+
+        // 1. Batch: product info (1 API call)
+        var infoResponse = await client.GetProductInfoAsync(
+            productIds: externalProductIds, ct: ct);
+
+        // 2. Batch: product attributes (1 API call)
+        var attrsResponse = await client.GetProductAttributesAsync(
+            productIds: externalProductIds, limit: externalProductIds.Count, ct: ct);
+        var attrsDict = attrsResponse.Result.ToDictionary(a => a.Id);
+
+        // 3. Batch: stocks (1 API call)
+        var productIdsLong = externalProductIds
+            .Where(id => long.TryParse(id, out _))
+            .Select(long.Parse).ToList();
+        var stocksDict = new Dictionary<long, int>();
+        try
+        {
+            var stocksResponse = await client.GetStocksAsync(
+                productIds: productIdsLong,
+                limit: productIdsLong.Count, ct: ct);
+            foreach (var si in stocksResponse.Items)
+                stocksDict[si.ProductId] = si.Stocks.Sum(s => s.Present);
+        }
+        catch { /* fallback to info stocks */ }
+
+        // 4. Map all
+        return infoResponse.Items.Select(item =>
+        {
+            var product = MapToExternalProduct(item, attrsDict.GetValueOrDefault(item.Id), _categoryNameCache);
+            if (stocksDict.TryGetValue(item.Id, out var stock))
+                product = product with { Quantity = stock };
+            return product;
+        }).ToList();
+    }
+
     public override async Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(
         ConnectionContext context,
         int pageSize = 100,
@@ -1117,6 +1162,14 @@ public class OzonPlugin : MarketplacePluginBase
         // Barcode
         item.Barcode = GetString(productData, "barcode");
 
+        // Extract field type metadata (injected by MappingService)
+        Dictionary<string, string>? fieldTypes = null;
+        if (productData.TryGetValue("_fieldTypes", out var ftObj) && ftObj is Dictionary<string, string> ft)
+        {
+            fieldTypes = ft;
+            productData.Remove("_fieldTypes");
+        }
+
         // Attributes that should NOT be sent as attributes (they are top-level or problematic)
         var skipAttributes = new HashSet<string>
         {
@@ -1142,6 +1195,9 @@ public class OzonPlugin : MarketplacePluginBase
 
             var values = new List<AttributeValue>();
 
+            // Look up the field type from metadata
+            var fieldType = fieldTypes?.GetValueOrDefault(kvp.Key);
+
             if (kvp.Value is string strValue && !string.IsNullOrEmpty(strValue))
             {
                 // Special handling for hashtags - clean invalid characters
@@ -1151,8 +1207,12 @@ public class OzonPlugin : MarketplacePluginBase
                     if (string.IsNullOrEmpty(strValue)) continue; // Skip if empty after cleaning
                 }
 
-                // Check if it's a dictionary value ID (format: "123456" or "0:Text")
-                if (strValue.Contains(':'))
+                if (fieldType == "number")
+                {
+                    // Number attributes: always send as plain value, never as dictionary ID
+                    values.Add(new AttributeValue { Value = strValue.Trim() });
+                }
+                else if (strValue.Contains(':'))
                 {
                     // Format: "dictionaryValueId:displayText" - use dictionary ID
                     var colonIndex = strValue.IndexOf(':');
@@ -1190,7 +1250,14 @@ public class OzonPlugin : MarketplacePluginBase
                 {
                     if (string.IsNullOrEmpty(v)) continue;
 
-                    if (v.Contains(':'))
+                    if (fieldType == "number")
+                    {
+                        // Number attributes: always send as plain value
+                        var trimmed = v.Trim();
+                        if (!string.IsNullOrEmpty(trimmed))
+                            values.Add(new AttributeValue { Value = trimmed });
+                    }
+                    else if (v.Contains(':'))
                     {
                         var colonIndex = v.IndexOf(':');
                         var idPart = v.Substring(0, colonIndex);

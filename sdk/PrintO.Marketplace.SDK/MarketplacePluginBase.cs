@@ -68,6 +68,22 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
     }
 
     /// <inheritdoc />
+    public virtual async Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        ConnectionContext context,
+        List<string> externalProductIds,
+        CancellationToken ct = default)
+    {
+        var results = new List<ExternalProduct>();
+        foreach (var id in externalProductIds)
+        {
+            var product = await ImportProductAsync(context, id, ct);
+            if (product != null)
+                results.Add(product);
+        }
+        return results;
+    }
+
+    /// <inheritdoc />
     public virtual Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(
         ConnectionContext context,
         int pageSize = 100,

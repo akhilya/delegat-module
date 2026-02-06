@@ -98,6 +98,11 @@ public enum MarketplaceCapabilities
     /// </summary>
     ModifyGroupMembership = 1 << 16,
 
+    /// <summary>
+    /// Batch import multiple products in one call
+    /// </summary>
+    ImportProductBatch = 1 << 17,
+
     #endregion
 
     /// <summary>
