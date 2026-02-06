@@ -64,7 +64,7 @@ export default {
         input: values,
         onSuccess: (response) => {
           displaySonnerSuccess("Успешный вход.");
-          router.push(response.data.value.next);
+          router.push("/");
         },
         onError: (error) => {
           if (error?.response?.data?.errors)

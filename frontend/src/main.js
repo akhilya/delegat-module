@@ -31,7 +31,7 @@ router.beforeEach(async (to) => {
   if (isAuthenticated === null) {
     try {
       const response = await http.get("/auth/isAuthenticated", { cache: false });
-      isAuthenticated = response.data?.value === true;
+      isAuthenticated = response.data?.isAuthenticated === true;
     } catch {
       isAuthenticated = false;
     }
