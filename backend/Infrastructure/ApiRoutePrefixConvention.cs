@@ -12,6 +12,10 @@ public class ApiRoutePrefixConvention : IApplicationModelConvention
     {
         foreach (var controller in application.Controllers)
         {
+            var hasControllerRoute = controller.Selectors
+                .Any(s => s.AttributeRouteModel?.Template != null);
+
+            // Prefix controller-level routes
             foreach (var selector in controller.Selectors)
             {
                 if (selector.AttributeRouteModel?.Template != null)
@@ -23,6 +27,7 @@ public class ApiRoutePrefixConvention : IApplicationModelConvention
                 }
             }
 
+            // Prefix action-level routes
             foreach (var action in controller.Actions)
             {
                 foreach (var selector in action.Selectors)
@@ -32,6 +37,8 @@ public class ApiRoutePrefixConvention : IApplicationModelConvention
                         var template = selector.AttributeRouteModel.Template;
                         if (template.StartsWith("/"))
                             selector.AttributeRouteModel.Template = "/api" + template;
+                        else if (!hasControllerRoute)
+                            selector.AttributeRouteModel.Template = "api/" + template;
                     }
                 }
             }
