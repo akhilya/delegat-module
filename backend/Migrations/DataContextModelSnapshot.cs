@@ -344,6 +344,13 @@ namespace PrintO.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<string>("externalFieldOptions")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("externalFieldType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<bool>("isEnabled")
                         .HasColumnType("tinyint(1)");
 

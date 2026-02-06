@@ -7,6 +7,8 @@ import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
+import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
+import MultiSelectDropdown from "@/components/ui/multi-select/MultiSelectDropdown.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
@@ -19,7 +21,6 @@ import {
   Tag,
   FileText,
   Type,
-  RefreshCw,
   Boxes,
   Plus,
   Trash2,
@@ -31,6 +32,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -57,6 +67,8 @@ export default {
     Label,
     Badge,
     Switch,
+    SearchableSelect,
+    MultiSelectDropdown,
     ArrowLeft,
     Save,
     Loader2,
@@ -66,7 +78,6 @@ export default {
     Tag,
     FileText,
     Type,
-    RefreshCw,
     Boxes,
     Plus,
     Trash2,
@@ -75,6 +86,13 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogClose,
     Select,
     SelectContent,
     SelectItem,
@@ -91,7 +109,6 @@ export default {
     return {
       connectionId: null,
       mappingId: null,
-      externalFields: [],
       fieldMappings: [],
       availableSources: {
         productFields: [],
@@ -100,7 +117,6 @@ export default {
       },
       isLoading: false,
       isSaving: false,
-      isLoadingFields: false,
       hasChanges: false,
       mappingInfo: null,
       // Для добавления нового поля
@@ -143,7 +159,6 @@ export default {
   },
   methods: {
     ...mapActions([
-      "getExternalFields",
       "getFieldMappings",
       "saveFieldMappings",
       "toggleFieldMapping",
@@ -154,25 +169,10 @@ export default {
     async fetchData() {
       this.isLoading = true;
       await Promise.all([
-        this.fetchExternalFields(),
         this.fetchFieldMappings(),
         this.fetchAvailableSources(),
       ]);
       this.isLoading = false;
-    },
-
-    async fetchExternalFields() {
-      this.isLoadingFields = true;
-      await this.getExternalFields({
-        mappingId: this.mappingId,
-        onSuccess: (response) => {
-          this.externalFields = extractResponseData(response, []);
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      this.isLoadingFields = false;
     },
 
     async fetchFieldMappings() {
@@ -180,7 +180,13 @@ export default {
         mappingId: this.mappingId,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
-          this.fieldMappings = data.fieldMappings || [];
+          this.fieldMappings = (data.fieldMappings || []).map((fm) => ({
+            ...fm,
+            rawTextMode: false,
+            parsedOptions: fm.externalFieldOptions
+              ? (() => { try { return JSON.parse(fm.externalFieldOptions); } catch { return []; } })()
+              : [],
+          }));
           this.mappingInfo = {
             localCategoryName: data.localCategoryName,
             externalCategoryId: data.externalCategoryId,
@@ -247,6 +253,42 @@ export default {
       this.hasChanges = true;
     },
 
+    onMultiselectChange(fieldMapping, optionValue, checked) {
+      const current = (fieldMapping.staticValue || "")
+        .split(",")
+        .filter((v) => v !== "");
+      if (checked) {
+        if (!current.includes(optionValue)) current.push(optionValue);
+      } else {
+        const idx = current.indexOf(optionValue);
+        if (idx !== -1) current.splice(idx, 1);
+      }
+      fieldMapping.staticValue = current.join(",");
+      this.hasChanges = true;
+    },
+
+    getMultiselectLabels(fm) {
+      if (!fm.staticValue) return [];
+      const values = fm.staticValue.split(",").filter((v) => v !== "");
+      return values.map((val) => {
+        const opt = (fm.parsedOptions || []).find((o) => o.value === val);
+        return opt ? opt.label : val;
+      });
+    },
+
+    onMultiselectDropdownChange(fm, selectedLabels) {
+      const values = selectedLabels.map((label) => {
+        const opt = (fm.parsedOptions || []).find((o) => o.label === label);
+        return opt ? opt.value : label;
+      });
+      fm.staticValue = values.join(",");
+      this.hasChanges = true;
+    },
+
+    toggleRawTextMode(fm) {
+      fm.rawTextMode = !fm.rawTextMode;
+    },
+
     hasValidSource(fieldMapping) {
       switch (fieldMapping.sourceType) {
         case "ProductField":
@@ -265,6 +307,10 @@ export default {
 
     isUnmappedRequired(fieldMapping) {
       return fieldMapping.isRequired && fieldMapping.isEnabled && !this.hasValidSource(fieldMapping);
+    },
+
+    isUnmappedOptional(fieldMapping) {
+      return !fieldMapping.isRequired && fieldMapping.isEnabled && !this.hasValidSource(fieldMapping);
     },
 
     getSourceTypeIcon(sourceType) {
@@ -448,10 +494,6 @@ export default {
           <Plus class="size-4 mr-2" />
           Добавить поле
         </Button>
-        <Button variant="outline" @click="fetchData" :disabled="isLoading">
-          <RefreshCw class="size-4 mr-2" :class="{ 'animate-spin': isLoading }" />
-          Обновить
-        </Button>
         <Button @click="handleSave" :disabled="isSaving || !hasChanges">
           <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
           <Save v-else class="size-4 mr-2" />
@@ -460,78 +502,13 @@ export default {
       </div>
     </div>
 
-    <!-- Форма добавления нового поля -->
-    <Card v-if="showAddField" class="mb-4 border-primary">
-      <CardHeader class="pb-3">
-        <CardTitle class="text-base flex items-center gap-2">
-          <Plus class="size-5" />
-          Добавить новое поле
-        </CardTitle>
-        <CardDescription>
-          Добавьте поле с произвольным ключом для маркетплейса
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <Label>Ключ поля *</Label>
-            <Input
-              v-model="newField.externalFieldKey"
-              placeholder="например: custom_field"
-              class="mt-1"
-            />
-          </div>
-          <div>
-            <Label>Название (опционально)</Label>
-            <Input
-              v-model="newField.externalFieldName"
-              placeholder="Отображаемое название"
-              class="mt-1"
-            />
-          </div>
-          <div>
-            <Label>Тип источника</Label>
-            <Select v-model="newField.sourceType" class="mt-1">
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Static">Статическое значение</SelectItem>
-                <SelectItem value="ProductField">Поле товара</SelectItem>
-                <SelectItem value="CategoryAttribute">Атрибут категории</SelectItem>
-                <SelectItem value="StoreAttribute">Атрибут магазина</SelectItem>
-                <SelectItem value="GroupName">Название группы</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div v-if="newField.sourceType === 'Static'">
-            <Label>Значение</Label>
-            <Input
-              v-model="newField.staticValue"
-              placeholder="Значение поля"
-              class="mt-1"
-            />
-          </div>
-        </div>
-        <div class="flex gap-2 mt-4">
-          <Button @click="addNewField">
-            <Plus class="size-4 mr-2" />
-            Добавить
-          </Button>
-          <Button variant="outline" @click="cancelAddField">
-            Отмена
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-
     <div v-if="isLoading" class="flex justify-center py-12">
       <Loader2 class="size-8 animate-spin text-muted-foreground" />
     </div>
 
     <template v-else>
       <Card class="mb-4">
-        <CardHeader class="pb-3">
+        <CardHeader class="">
           <CardTitle class="text-base flex items-center gap-2">
             <component
               :is="requiredFieldsMapped === totalRequiredFields ? CheckCircle : AlertCircle"
@@ -587,7 +564,8 @@ export default {
               :key="fm.id"
               :class="[
                 { 'opacity-50': !fm.isEnabled },
-                { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) }
+                { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) },
+                { 'bg-amber-500/5 border-l-2 border-l-amber-500': isUnmappedOptional(fm) }
               ]"
             >
               <TableCell>
@@ -724,12 +702,98 @@ export default {
                 </template>
 
                 <template v-else-if="fm.sourceType === 'Static'">
-                  <Input
-                    :model-value="fm.staticValue"
-                    @update:modelValue="(v) => onStaticValueChange(fm, v)"
-                    placeholder="Введите значение"
-                    :disabled="!fm.isEnabled"
-                  />
+                  <!-- Raw text mode: plain input for any field type -->
+                  <template v-if="fm.rawTextMode">
+                    <div class="flex items-center gap-2">
+                      <Input
+                        class="flex-1"
+                        :model-value="fm.staticValue"
+                        @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                        placeholder="Введите значение"
+                        :disabled="!fm.isEnabled"
+                      />
+                      <button
+                        type="button"
+                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                        @click="toggleRawTextMode(fm)"
+                      >Выбрать из списка</button>
+                    </div>
+                  </template>
+
+                  <!-- Select field with SearchableSelect -->
+                  <template v-else-if="fm.externalFieldType === 'select' && fm.parsedOptions?.length">
+                    <div class="flex items-center gap-2">
+                      <SearchableSelect
+                        class="flex-1"
+                        :options="fm.parsedOptions"
+                        :model-value="fm.staticValue || ''"
+                        @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                        placeholder="Выберите значение"
+                        :disabled="!fm.isEnabled"
+                      />
+                      <button
+                        type="button"
+                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                        @click="toggleRawTextMode(fm)"
+                      >Вручную</button>
+                    </div>
+                  </template>
+
+                  <!-- Multiselect field with MultiSelectDropdown -->
+                  <template v-else-if="fm.externalFieldType === 'multiselect' && fm.parsedOptions?.length">
+                    <div class="flex items-center gap-2">
+                      <MultiSelectDropdown
+                        class="flex-1"
+                        :options="fm.parsedOptions.map(o => o.label)"
+                        :model-value="getMultiselectLabels(fm)"
+                        @update:modelValue="(v) => onMultiselectDropdownChange(fm, v)"
+                        placeholder="Выберите значения"
+                        :disabled="!fm.isEnabled"
+                      />
+                      <button
+                        type="button"
+                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                        @click="toggleRawTextMode(fm)"
+                      >Вручную</button>
+                    </div>
+                  </template>
+
+                  <!-- Boolean with raw text toggle -->
+                  <template v-else-if="fm.externalFieldType === 'boolean'">
+                    <div class="flex items-center gap-2">
+                      <Switch
+                        :model-value="fm.staticValue === 'true'"
+                        @update:modelValue="(v) => onStaticValueChange(fm, v ? 'true' : 'false')"
+                        :disabled="!fm.isEnabled"
+                      />
+                      <button
+                        type="button"
+                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                        @click="toggleRawTextMode(fm)"
+                      >Вручную</button>
+                    </div>
+                  </template>
+
+                  <!-- Number field -->
+                  <template v-else-if="fm.externalFieldType === 'number'">
+                    <Input
+                      type="number"
+                      :model-value="fm.staticValue"
+                      @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                      placeholder="Введите число"
+                      :disabled="!fm.isEnabled"
+                    />
+                  </template>
+
+                  <!-- String / default -->
+                  <template v-else>
+                    <Input
+                      :model-value="fm.staticValue"
+                      @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                      placeholder="Введите значение"
+                      :disabled="!fm.isEnabled"
+                    />
+                  </template>
                 </template>
 
                 <template v-else-if="fm.sourceType === 'GroupName'">
@@ -740,14 +804,15 @@ export default {
               </TableCell>
               <TableCell>
                 <Badge
-                  :variant="hasValidSource(fm) && fm.isEnabled ? 'default' : isUnmappedRequired(fm) ? 'destructive' : 'secondary'"
+                  :variant="hasValidSource(fm) && fm.isEnabled ? 'default' : isUnmappedRequired(fm) ? 'destructive' : 'outline'"
+                  :class="isUnmappedOptional(fm) ? 'border-amber-500 text-amber-600' : ''"
                   :title="!fm.isEnabled ? 'Поле отключено' : !hasValidSource(fm) ? 'Выберите источник данных' : getCurrentSourceLabel(fm)"
                 >
                   <component
                     :is="hasValidSource(fm) && fm.isEnabled ? CheckCircle : AlertCircle"
-                    class="size-3 mr-1"
+                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-amber-500' : '']"
                   />
-                  {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : "Не настроено" }}
+                  {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : isUnmappedOptional(fm) ? "Не заполнено" : "Не настроено" }}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -773,5 +838,66 @@ export default {
         </Table>
       </div>
     </template>
+
+    <!-- Диалог добавления нового поля -->
+    <Dialog v-model:open="showAddField">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Добавить поле</DialogTitle>
+          <DialogDescription>
+            Добавьте поле с произвольным ключом для маркетплейса
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label>Ключ поля *</Label>
+            <Input
+              v-model="newField.externalFieldKey"
+              placeholder="например: custom_field"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>Название (опционально)</Label>
+            <Input
+              v-model="newField.externalFieldName"
+              placeholder="Отображаемое название"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>Тип источника</Label>
+            <Select v-model="newField.sourceType">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Static">Статическое значение</SelectItem>
+                <SelectItem value="ProductField">Поле товара</SelectItem>
+                <SelectItem value="CategoryAttribute">Атрибут категории</SelectItem>
+                <SelectItem value="StoreAttribute">Атрибут магазина</SelectItem>
+                <SelectItem value="GroupName">Название группы</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div v-if="newField.sourceType === 'Static'" class="space-y-2">
+            <Label>Значение</Label>
+            <Input
+              v-model="newField.staticValue"
+              placeholder="Значение поля"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">Отмена</Button>
+          </DialogClose>
+          <Button @click="addNewField">
+            <Plus class="size-4 mr-2" />
+            Добавить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </Page>
 </template>

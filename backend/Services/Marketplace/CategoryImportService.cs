@@ -172,6 +172,10 @@ public class CategoryImportService
                 sourceType = sourceType,
                 sourceField = sourceField,
                 sourceAttributeId = sourceAttributeId,
+                externalFieldType = field.Type,
+                externalFieldOptions = field.Options != null && field.Options.Count > 0
+                    ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
+                    : null,
                 sortOrder = fieldSortOrder++
             });
 

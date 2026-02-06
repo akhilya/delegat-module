@@ -80,6 +80,18 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
     public string? transformExpression { get; set; }
 
     /// <summary>
+    /// Cached field type from the marketplace (e.g. "string", "number", "boolean", "select", "multiselect").
+    /// </summary>
+    [StringLength(EXTERNAL_FIELD_TYPE_MAX_LENGTH)]
+    public string? externalFieldType { get; set; }
+
+    /// <summary>
+    /// Cached JSON-serialized options for select/multiselect fields.
+    /// Format: [{"value":"123","label":"Option 1"}, ...].
+    /// </summary>
+    public string? externalFieldOptions { get; set; }
+
+    /// <summary>
     /// Display order for sorting.
     /// </summary>
     public int sortOrder { get; set; } = 0;
@@ -98,6 +110,8 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         sourceAttributeId = form.sourceAttributeId;
         staticValue = form.staticValue;
         transformExpression = form.transformExpression;
+        externalFieldType = form.externalFieldType;
+        externalFieldOptions = form.externalFieldOptions;
         sortOrder = form.sortOrder;
         return true;
     }
@@ -140,6 +154,8 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
             sourceAttributeId = sourceAttributeId,
             staticValue = staticValue,
             transformExpression = transformExpression,
+            externalFieldType = externalFieldType,
+            externalFieldOptions = externalFieldOptions,
             sortOrder = sortOrder
         };
     }
@@ -172,6 +188,16 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
     /// Maximum length for transform expression.
     /// </summary>
     public const int TRANSFORM_MAX_LENGTH = 1000;
+
+    /// <summary>
+    /// Maximum length for external field type.
+    /// </summary>
+    public const int EXTERNAL_FIELD_TYPE_MAX_LENGTH = 50;
+
+    /// <summary>
+    /// Maximum length for serialized external field options JSON (stored as TEXT).
+    /// </summary>
+    public const int EXTERNAL_FIELD_OPTIONS_MAX_LENGTH = 65535;
 
     #endregion
 
@@ -236,6 +262,17 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         /// </summary>
         [StringLength(TRANSFORM_MAX_LENGTH)]
         public string? transformExpression { get; set; }
+
+        /// <summary>
+        /// Cached external field type.
+        /// </summary>
+        [StringLength(EXTERNAL_FIELD_TYPE_MAX_LENGTH)]
+        public string? externalFieldType { get; set; }
+
+        /// <summary>
+        /// Cached JSON-serialized external field options.
+        /// </summary>
+        public string? externalFieldOptions { get; set; }
 
         /// <summary>
         /// Display order.
@@ -385,6 +422,16 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         /// Value transformation expression.
         /// </summary>
         public string? transformExpression { get; set; }
+
+        /// <summary>
+        /// Cached external field type.
+        /// </summary>
+        public string? externalFieldType { get; set; }
+
+        /// <summary>
+        /// Cached JSON-serialized external field options.
+        /// </summary>
+        public string? externalFieldOptions { get; set; }
 
         /// <summary>
         /// Display order.

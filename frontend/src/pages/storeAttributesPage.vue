@@ -66,6 +66,14 @@ const ATTRIBUTE_TYPES = {
   "MultiSelect": { label: "Множественный выбор", value: 4 },
 };
 
+const ATTRIBUTE_TYPE_OPTIONS = [
+  { label: "Текст", value: 0 },
+  { label: "Число", value: 1 },
+  { label: "Да/Нет", value: 2 },
+  { label: "Выбор", value: 3 },
+  { label: "Множественный выбор", value: 4 },
+];
+
 export default {
   components: {
     Page,
@@ -128,6 +136,7 @@ export default {
       },
       PAGE_PRODUCTS,
       ATTRIBUTE_TYPES,
+      ATTRIBUTE_TYPE_OPTIONS,
       breadcrumbs: [
         { label: "Товары", to: PAGE_PRODUCTS },
         { label: "Глобальные атрибуты" },
@@ -180,10 +189,11 @@ export default {
 
     openEditAttributeDialog(attribute) {
       this.editingAttribute = attribute;
+      const normalizedType = ATTRIBUTE_TYPES[attribute.type]?.value ?? attribute.type;
       this.attributeForm = {
         name: attribute.name,
         key: attribute.key,
-        type: attribute.type,
+        type: normalizedType,
         isRequired: attribute.isRequired,
         options: attribute.options || "",
         defaultValue: attribute.defaultValue || "",
@@ -384,7 +394,7 @@ export default {
           >
             <template #item="{ element: attribute }">
               <Card class="group">
-                <CardContent class="p-4 flex items-center gap-4">
+                <CardContent class="flex items-center gap-4">
                   <GripVertical class="drag-handle size-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
                   <div class="grow">
                     <div class="flex items-center gap-2">
@@ -489,8 +499,8 @@ export default {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
-                  v-for="(typeInfo, typeKey) in ATTRIBUTE_TYPES"
-                  :key="typeKey"
+                  v-for="typeInfo in ATTRIBUTE_TYPE_OPTIONS"
+                  :key="typeInfo.value"
                   :value="typeInfo.value"
                 >
                   {{ typeInfo.label }}

@@ -267,7 +267,7 @@ export default {
               {{ group.description }}
             </CardDescription>
           </CardHeader>
-          <CardContent class="flex flex-col gap-3">
+          <CardContent class="flex flex-row gap-3 justify-between">
             <div class="flex items-center gap-4 text-sm text-muted-foreground">
               <span class="flex items-center gap-1">
                 <Package class="size-4" />

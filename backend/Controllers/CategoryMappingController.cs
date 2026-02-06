@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PrintO.Enums;
@@ -182,6 +183,10 @@ public class CategoryMappingController : ControllerBase
                         sourceType = sourceType,
                         sourceField = sourceField,
                         sourceAttributeId = sourceAttributeId,
+                        externalFieldType = field.Type,
+                        externalFieldOptions = field.Options != null && field.Options.Count > 0
+                            ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
+                            : null,
                         sortOrder = sortOrder++
                     });
 

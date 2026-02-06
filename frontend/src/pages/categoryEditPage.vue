@@ -536,8 +536,8 @@ export default {
           >
             <template #item="{ element: attribute }">
               <Card class="group">
-                <CardContent class="p-4 flex items-center gap-4">
-                  <GripVertical class="drag-handle size-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
+                <CardContent class="flex items-center gap-4">
+                  <GripVertical class="drag-handle size-5 min-w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
                   <div class="grow">
                     <div class="flex items-center gap-2">
                       <span class="font-medium">{{ attribute.name }}</span>

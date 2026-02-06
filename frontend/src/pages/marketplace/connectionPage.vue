@@ -1489,7 +1489,7 @@ export default {
               :key="mapping.id"
               class="cursor-pointer hover:bg-accent/50 transition-colors"
             >
-              <CardContent class="p-4">
+              <CardContent>
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-4" @click="openFieldMapping(mapping.id)">
                     <FolderTree class="size-5 text-muted-foreground" />

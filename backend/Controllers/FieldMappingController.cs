@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PrintO.Enums;
@@ -82,7 +83,7 @@ public class FieldMappingController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/marketplace/mappings/{mappingId}/field-mappings")]
-    public async Task<IActionResult> GetFieldMappings(int mappingId)
+    public async Task<IActionResult> GetFieldMappings(int mappingId, CancellationToken ct)
     {
         var mapping = await GetMappingAsync(mappingId);
 
@@ -90,6 +91,12 @@ public class FieldMappingController : ControllerBase
         var fieldMappings = await repo.FindAllAsync(
             fm => fm.categoryMappingId == mappingId,
             query => query.OrderBy(fm => fm.sortOrder));
+
+        // Lazy backfill: if any field mappings are missing type metadata, fetch from marketplace
+        if (fieldMappings.Any(fm => fm.externalFieldType == null))
+        {
+            await BackfillFieldTypeMetadataAsync(mapping, fieldMappings, ct);
+        }
 
         var result = fieldMappings.Select(fm => new
         {
@@ -103,6 +110,8 @@ public class FieldMappingController : ControllerBase
             sourceAttributeId = fm.sourceAttributeId,
             staticValue = fm.staticValue,
             transformExpression = fm.transformExpression,
+            externalFieldType = fm.externalFieldType,
+            externalFieldOptions = fm.externalFieldOptions,
             sortOrder = fm.sortOrder
         }).ToList();
 
@@ -293,6 +302,55 @@ public class FieldMappingController : ControllerBase
     }
 
     #region Helpers
+
+    /// <summary>
+    /// Backfill externalFieldType and externalFieldOptions from the marketplace API
+    /// for field mappings that are missing this data (created before this feature).
+    /// </summary>
+    private async Task BackfillFieldTypeMetadataAsync(
+        CategoryMapping mapping,
+        List<FieldMapping> fieldMappings,
+        CancellationToken ct)
+    {
+        try
+        {
+            var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
+            var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
+            if (connection == null) return;
+
+            var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+            if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
+                return;
+
+            var externalFields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
+            var fieldLookup = externalFields.ToDictionary(f => f.Key);
+
+            var repo = _unitOfWork.Repository<FieldMapping>();
+            foreach (var fm in fieldMappings.Where(fm => fm.externalFieldType == null))
+            {
+                if (fieldLookup.TryGetValue(fm.externalFieldKey, out var extField))
+                {
+                    fm.externalFieldType = extField.Type;
+                    fm.externalFieldOptions = extField.Options != null && extField.Options.Count > 0
+                        ? JsonSerializer.Serialize(extField.Options.Select(o => new { value = o.Value, label = o.Label }))
+                        : null;
+                    repo.UpdateWithoutSave(fm);
+                }
+                else
+                {
+                    // Field not found on marketplace - default to string
+                    fm.externalFieldType = "string";
+                    repo.UpdateWithoutSave(fm);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to backfill field type metadata for mapping {MappingId}", mapping.Id);
+        }
+    }
 
     private async Task<CategoryMapping> GetMappingAsync(int mappingId)
     {
