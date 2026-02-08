@@ -148,8 +148,8 @@ export default {
       <div class="flex items-center justify-start gap-2">
         <template v-if="memberships.length > 0">
           <Select
-            :model-value="me?.selectedStoreId"
-            @update:model-value="selectStore($event)"
+            :model-value="String(me?.selectedStoreId ?? '')"
+            @update:model-value="selectStore(Number($event))"
           >
             <SelectTrigger class="bg-primary-foreground w-48">
               <SelectValue placeholder="Выберите магазин..." />
@@ -161,7 +161,7 @@ export default {
                   as="button"
                   v-for="store in memberships"
                   :key="store.id"
-                  :value="store.id"
+                  :value="String(store.id)"
                 >
                   {{ store.name }}
                 </SelectItem>
