@@ -254,6 +254,7 @@ export default {
       localSearchQuery: "",
       selectedLocalItems: [],
       isExportingNewBulk: false,
+      exportNewBulkProgress: null, // { done, total, success, failed }
       localSearchDebounceTimer: null,
     };
   },
@@ -1225,23 +1226,39 @@ export default {
         return;
       }
 
+      const CHUNK_SIZE = 20;
+      const allIds = [...this.selectedLocalItems];
+      const chunks = [];
+      for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
+        chunks.push(allIds.slice(i, i + CHUNK_SIZE));
+      }
+
       this.isExportingNewBulk = true;
-      await this.exportProductsBulk({
-        connectionId: this.connectionId,
-        productIds: this.selectedLocalItems,
-        onSuccess: (response) => {
-          const result = extractResponseData(response, {});
-          displaySonnerSuccess(
-            `Экспортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`
-          );
-          this.selectedLocalItems = [];
-          this.fetchLocalProducts(true);
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
+      this.exportNewBulkProgress = { done: 0, total: allIds.length, success: 0, failed: 0 };
+
+      for (const chunk of chunks) {
+        await this.exportProductsBulk({
+          connectionId: this.connectionId,
+          productIds: chunk,
+          onSuccess: (response) => {
+            const result = extractResponseData(response, {});
+            this.exportNewBulkProgress.success += result.successCount || 0;
+            this.exportNewBulkProgress.failed += result.failedCount || 0;
+            this.exportNewBulkProgress.done += chunk.length;
+          },
+          onError: () => {
+            this.exportNewBulkProgress.failed += chunk.length;
+            this.exportNewBulkProgress.done += chunk.length;
+          },
+        });
+      }
+
+      const { success, failed } = this.exportNewBulkProgress;
+      displaySonnerSuccess(`Экспортировано: ${success}, ошибок: ${failed}`);
+      this.selectedLocalItems = [];
+      this.exportNewBulkProgress = null;
       this.isExportingNewBulk = false;
+      this.fetchLocalProducts(true);
     },
 
     getImportFieldLabel(field) {
@@ -1969,11 +1986,17 @@ export default {
 
             <!-- Bulk export bar -->
             <div
-              v-if="selectedLocalItems.length > 0"
+              v-if="selectedLocalItems.length > 0 || isExportingNewBulk"
               class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
             >
               <div class="text-sm text-muted-foreground">
-                Выбрано: {{ selectedLocalItems.length }}
+                <template v-if="exportNewBulkProgress">
+                  Экспорт: {{ exportNewBulkProgress.done }} / {{ exportNewBulkProgress.total }}
+                  (ok: {{ exportNewBulkProgress.success }}, ошибок: {{ exportNewBulkProgress.failed }})
+                </template>
+                <template v-else>
+                  Выбрано: {{ selectedLocalItems.length }}
+                </template>
               </div>
               <Button
                 @click="handleExportNewBulk"
