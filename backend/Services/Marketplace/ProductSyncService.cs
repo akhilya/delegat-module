@@ -192,6 +192,29 @@ public class ProductSyncService
                 return ProductExportResult.Failure(result.ErrorMessage ?? "Ошибка экспорта");
             }
 
+            // Валидация ExternalProductId — плагин мог вернуть Success=true, но с невалидным ID
+            if (string.IsNullOrWhiteSpace(result.ExternalProductId) ||
+                result.ExternalProductId == "0")
+            {
+                _logger.LogWarning(
+                    "Плагин вернул Success=true, но ExternalProductId недействителен: '{ExternalProductId}' для товара {ProductId}",
+                    result.ExternalProductId, productId);
+
+                if (existingLink != null)
+                {
+                    existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
+                    {
+                        status = ProductMarketplaceStatus.SyncError,
+                        lastErrorMessage = $"Маркетплейс не вернул ID товара (получено: '{result.ExternalProductId}')",
+                        lastSyncAt = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync(ct);
+                }
+
+                return ProductExportResult.Failure(
+                    $"Маркетплейс не вернул ID товара. Возможно, товар ещё обрабатывается — попробуйте повторить позже.");
+            }
+
             var isNewProduct = existingLink == null;
 
             // Создаём или обновляем связь

@@ -243,6 +243,18 @@ export default {
 
       // Search debounce
       searchDebounceTimer: null,
+
+      // === Local products for export ===
+      productsViewMode: "external",
+      localProducts: [],
+      isLoadingLocalProducts: false,
+      localTotalCount: 0,
+      localStartIndex: 0,
+      localPageSize: 50,
+      localSearchQuery: "",
+      selectedLocalItems: [],
+      isExportingNewBulk: false,
+      localSearchDebounceTimer: null,
     };
   },
   watch: {
@@ -256,6 +268,14 @@ export default {
         this.products = [];
         this.nextCursor = null;
         this.fetchProducts();
+      }, 500);
+    },
+    localSearchQuery(newValue) {
+      if (this.localSearchDebounceTimer) {
+        clearTimeout(this.localSearchDebounceTimer);
+      }
+      this.localSearchDebounceTimer = setTimeout(() => {
+        this.fetchLocalProducts(true);
       }, 500);
     },
     // Обновляем данные после завершения импорта (если импорт был для этого подключения)
@@ -332,6 +352,18 @@ export default {
     hasAnySelected() {
       return this.selectedItems.length > 0;
     },
+    allLocalSelected() {
+      return (
+        this.localProducts.length > 0 &&
+        this.selectedLocalItems.length === this.localProducts.length
+      );
+    },
+    someLocalSelected() {
+      return this.selectedLocalItems.length > 0 && !this.allLocalSelected;
+    },
+    hasMoreLocalProducts() {
+      return this.localStartIndex + this.localPageSize < this.localTotalCount;
+    },
     productsByExternalCategory() {
       const groups = {};
       for (const product of this.selectedUnlinkedItems) {
@@ -376,6 +408,8 @@ export default {
       "retryFailedImports",
       "exportPrices",
       "exportStocks",
+      "getLocalProductsForExport",
+      "exportProductsBulk",
     ]),
 
     async fetchData() {
@@ -1119,6 +1153,97 @@ export default {
       this.isExportingStocks = false;
     },
 
+    // === Local products for export methods ===
+
+    switchProductsView(mode) {
+      if (this.productsViewMode === mode) return;
+      this.productsViewMode = mode;
+      if (mode === "local" && this.localProducts.length === 0) {
+        this.fetchLocalProducts(true);
+      }
+    },
+
+    async fetchLocalProducts(reset = true) {
+      if (reset) {
+        this.localStartIndex = 0;
+        this.localProducts = [];
+        this.selectedLocalItems = [];
+      }
+
+      this.isLoadingLocalProducts = true;
+      await this.getLocalProductsForExport({
+        connectionId: this.connectionId,
+        searchQuery: this.localSearchQuery || null,
+        startIndex: this.localStartIndex,
+        pageSize: this.localPageSize,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          if (reset) {
+            this.localProducts = data.items || [];
+          } else {
+            this.localProducts = [...this.localProducts, ...(data.items || [])];
+          }
+          this.localTotalCount = data.totalCount || 0;
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isLoadingLocalProducts = false;
+    },
+
+    loadMoreLocalProducts() {
+      this.localStartIndex += this.localPageSize;
+      this.fetchLocalProducts(false);
+    },
+
+    toggleSelectAllLocal() {
+      if (this.allLocalSelected) {
+        this.selectedLocalItems = [];
+      } else {
+        this.selectedLocalItems = this.localProducts.map((p) => p.id);
+      }
+    },
+
+    toggleSelectLocal(id) {
+      const index = this.selectedLocalItems.indexOf(id);
+      if (index === -1) {
+        this.selectedLocalItems.push(id);
+      } else {
+        this.selectedLocalItems.splice(index, 1);
+      }
+    },
+
+    isLocalSelected(id) {
+      return this.selectedLocalItems.includes(id);
+    },
+
+    async handleExportNewBulk() {
+      if (this.isExportingNewBulk) return;
+      if (this.selectedLocalItems.length === 0) {
+        displaySonnerError("Выберите товары для экспорта");
+        return;
+      }
+
+      this.isExportingNewBulk = true;
+      await this.exportProductsBulk({
+        connectionId: this.connectionId,
+        productIds: this.selectedLocalItems,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          displaySonnerSuccess(
+            `Экспортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`
+          );
+          this.selectedLocalItems = [];
+          this.fetchLocalProducts(true);
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isExportingNewBulk = false;
+    },
+
     getImportFieldLabel(field) {
       const labels = {
         name: "Название",
@@ -1511,223 +1636,355 @@ export default {
 
         <!-- Products Tab -->
         <TabsContent value="products" class="flex-1 flex flex-col space-y-4">
-          <!-- Search -->
-          <div class="flex items-center gap-4">
-            <div class="relative flex-1">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                v-model="searchQuery"
-                placeholder="Поиск по SKU (точное совпадение)"
-                class="pl-10"
-              />
-            </div>
-          </div>
-
-          <!-- Loading state -->
-          <div v-if="isLoadingProducts" class="flex justify-center py-12">
-            <Loader2 class="size-8 animate-spin text-muted-foreground" />
-          </div>
-
-          <!-- Products table -->
-          <div v-else class="border rounded-lg flex-1 overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead class="w-[50px]">
-                    <Checkbox
-                      :model-value="allSelected"
-                      :indeterminate="someSelected"
-                      @update:model-value="toggleSelectAll"
-                    />
-                  </TableHead>
-                  <TableHead>Название</TableHead>
-                  <TableHead>Внешний ID</TableHead>
-                  <TableHead>Локальный SKU</TableHead>
-                  <TableHead class="text-right">Цена</TableHead>
-                  <TableHead class="text-right">Остаток</TableHead>
-                  <TableHead>Статус</TableHead>
-                  <TableHead class="w-[100px]">Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow
-                  v-for="product in filteredProducts"
-                  :key="product.externalId"
-                  :class="{ 'bg-muted/30': !product.isLinked }"
-                >
-                  <TableCell>
-                    <Checkbox
-                      :model-value="isSelected(product.externalId)"
-                      @update:model-value="toggleSelect(product.externalId)"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div class="font-medium">{{ product.name }}</div>
-                    <div v-if="product.sku" class="text-xs text-muted-foreground">
-                      SKU: {{ product.sku }}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.externalId }}</code>
-                  </TableCell>
-                  <TableCell>
-                    <div v-if="product.isLinked" class="flex items-center gap-1.5">
-                      <Link2 class="size-3 text-green-500" />
-                      <code class="text-sm">{{ product.localProductSku }}</code>
-                    </div>
-                    <span v-else class="text-muted-foreground">—</span>
-                  </TableCell>
-                  <TableCell class="text-right">
-                    <div v-if="product.isLinked" class="space-y-0.5">
-                      <div class="font-medium">{{ formatPrice(product.localPrice) }}</div>
-                      <div v-if="product.externalPrice !== null && product.externalPrice !== product.localPrice" class="text-xs text-muted-foreground">
-                        МП: {{ formatPrice(product.externalPrice) }}
-                      </div>
-                    </div>
-                    <span v-else class="text-muted-foreground">—</span>
-                  </TableCell>
-                  <TableCell class="text-right">
-                    <div v-if="product.isLinked" class="space-y-0.5">
-                      <div class="font-medium">{{ product.localStock ?? '—' }}</div>
-                      <div v-if="product.externalStock !== null && product.externalStock !== product.localStock" class="text-xs text-muted-foreground">
-                        МП: {{ product.externalStock }}
-                      </div>
-                    </div>
-                    <span v-else class="text-muted-foreground">—</span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge :variant="getStatusInfo(product).variant">
-                      <component :is="getStatusInfo(product).icon" class="size-3 mr-1" />
-                      {{ getStatusInfo(product).label }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div v-if="product.isLinked" class="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        @click="handleImportSingle(product)"
-                        :disabled="importingLinkId === product.linkId"
-                        title="Импорт с маркетплейса"
-                      >
-                        <Loader2 v-if="importingLinkId === product.linkId" class="size-4 animate-spin" />
-                        <Download v-else class="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        @click="handleExportSingle(product)"
-                        :disabled="exportingLinkId === product.linkId"
-                        title="Экспорт на маркетплейс"
-                      >
-                        <Loader2 v-if="exportingLinkId === product.linkId" class="size-4 animate-spin" />
-                        <Upload v-else class="size-4" />
-                      </Button>
-                    </div>
-                    <span v-else class="text-muted-foreground">—</span>
-                  </TableCell>
-                </TableRow>
-
-                <TableRow v-if="filteredProducts.length === 0">
-                  <TableCell colspan="8" class="text-center py-8 text-muted-foreground">
-                    <Package class="size-12 mx-auto mb-4 opacity-50" />
-                    <p>Нет товаров для отображения</p>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-
-          <!-- Load more -->
-          <div v-if="hasMore && !isLoadingProducts" class="flex justify-center">
+          <!-- View toggle -->
+          <div class="flex items-center gap-2">
             <Button
-              variant="outline"
-              @click="fetchProducts(nextCursor)"
-              :disabled="isLoadingMore"
+              :variant="productsViewMode === 'external' ? 'default' : 'outline'"
+              size="sm"
+              @click="switchProductsView('external')"
             >
-              <Loader2 v-if="isLoadingMore" class="size-4 mr-2 animate-spin" />
-              Загрузить ещё
+              МП товары
+            </Button>
+            <Button
+              :variant="productsViewMode === 'local' ? 'default' : 'outline'"
+              size="sm"
+              @click="switchProductsView('local')"
+            >
+              Локальные для экспорта
             </Button>
           </div>
 
-          <!-- Bulk actions bar -->
-          <div
-            v-if="hasAnySelected"
-            class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
-          >
-            <div class="text-sm text-muted-foreground">
-              Выбрано: {{ selectedItems.length }}
-              <span v-if="hasSelectedLinked && hasSelectedUnlinked">
-                ({{ selectedLinkedItems.length }} связанных, {{ selectedUnlinkedItems.length }} несвязанных)
-              </span>
-              <span v-else-if="hasSelectedLinked">
-                ({{ selectedLinkedItems.length }} связанных)
-              </span>
-              <span v-else-if="hasSelectedUnlinked">
-                ({{ selectedUnlinkedItems.length }} несвязанных)
-              </span>
+          <!-- ==================== EXTERNAL VIEW ==================== -->
+          <template v-if="productsViewMode === 'external'">
+            <!-- Search -->
+            <div class="flex items-center gap-4">
+              <div class="relative flex-1">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  v-model="searchQuery"
+                  placeholder="Поиск по SKU (точное совпадение)"
+                  class="pl-10"
+                />
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <!-- Create local products from unlinked -->
-              <Button
-                v-if="hasSelectedUnlinked"
-                variant="outline"
-                @click="openImportDialog"
-                :disabled="isCreatingLocal"
-              >
-                <Loader2 v-if="isCreatingLocal" class="size-4 mr-2 animate-spin" />
-                <Plus v-else class="size-4 mr-2" />
-                Создать локальные ({{ selectedUnlinkedItems.length }})
-              </Button>
 
-              <!-- Import from marketplace for linked -->
-              <Button
-                v-if="hasSelectedLinked"
-                variant="outline"
-                @click="handleImportBulk"
-                :disabled="isImportingBulk"
-              >
-                <Loader2 v-if="isImportingBulk" class="size-4 mr-2 animate-spin" />
-                <Download v-else class="size-4 mr-2" />
-                Импорт ({{ selectedLinkedItems.length }})
-              </Button>
+            <!-- Loading state -->
+            <div v-if="isLoadingProducts" class="flex justify-center py-12">
+              <Loader2 class="size-8 animate-spin text-muted-foreground" />
+            </div>
 
-              <!-- Export to marketplace for linked -->
+            <!-- Products table -->
+            <div v-else class="border rounded-lg flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="w-[50px]">
+                      <Checkbox
+                        :model-value="allSelected"
+                        :indeterminate="someSelected"
+                        @update:model-value="toggleSelectAll"
+                      />
+                    </TableHead>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Внешний ID</TableHead>
+                    <TableHead>Локальный SKU</TableHead>
+                    <TableHead class="text-right">Цена</TableHead>
+                    <TableHead class="text-right">Остаток</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead class="w-[100px]">Действия</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="product in filteredProducts"
+                    :key="product.externalId"
+                    :class="{ 'bg-muted/30': !product.isLinked }"
+                  >
+                    <TableCell>
+                      <Checkbox
+                        :model-value="isSelected(product.externalId)"
+                        @update:model-value="toggleSelect(product.externalId)"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div class="font-medium">{{ product.name }}</div>
+                      <div v-if="product.sku" class="text-xs text-muted-foreground">
+                        SKU: {{ product.sku }}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.externalId }}</code>
+                    </TableCell>
+                    <TableCell>
+                      <div v-if="product.isLinked" class="flex items-center gap-1.5">
+                        <Link2 class="size-3 text-green-500" />
+                        <code class="text-sm">{{ product.localProductSku }}</code>
+                      </div>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <div v-if="product.isLinked" class="space-y-0.5">
+                        <div class="font-medium">{{ formatPrice(product.localPrice) }}</div>
+                        <div v-if="product.externalPrice !== null && product.externalPrice !== product.localPrice" class="text-xs text-muted-foreground">
+                          МП: {{ formatPrice(product.externalPrice) }}
+                        </div>
+                      </div>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <div v-if="product.isLinked" class="space-y-0.5">
+                        <div class="font-medium">{{ product.localStock ?? '—' }}</div>
+                        <div v-if="product.externalStock !== null && product.externalStock !== product.localStock" class="text-xs text-muted-foreground">
+                          МП: {{ product.externalStock }}
+                        </div>
+                      </div>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge :variant="getStatusInfo(product).variant">
+                        <component :is="getStatusInfo(product).icon" class="size-3 mr-1" />
+                        {{ getStatusInfo(product).label }}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div v-if="product.isLinked" class="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          @click="handleImportSingle(product)"
+                          :disabled="importingLinkId === product.linkId"
+                          title="Импорт с маркетплейса"
+                        >
+                          <Loader2 v-if="importingLinkId === product.linkId" class="size-4 animate-spin" />
+                          <Download v-else class="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          @click="handleExportSingle(product)"
+                          :disabled="exportingLinkId === product.linkId"
+                          title="Экспорт на маркетплейс"
+                        >
+                          <Loader2 v-if="exportingLinkId === product.linkId" class="size-4 animate-spin" />
+                          <Upload v-else class="size-4" />
+                        </Button>
+                      </div>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                  </TableRow>
+
+                  <TableRow v-if="filteredProducts.length === 0">
+                    <TableCell colspan="8" class="text-center py-8 text-muted-foreground">
+                      <Package class="size-12 mx-auto mb-4 opacity-50" />
+                      <p>Нет товаров для отображения</p>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <!-- Load more -->
+            <div v-if="hasMore && !isLoadingProducts" class="flex justify-center">
               <Button
-                v-if="hasSelectedLinked"
                 variant="outline"
-                @click="handleExportBulk"
-                :disabled="isExportingBulk"
+                @click="fetchProducts(nextCursor)"
+                :disabled="isLoadingMore"
               >
-                <Loader2 v-if="isExportingBulk" class="size-4 mr-2 animate-spin" />
+                <Loader2 v-if="isLoadingMore" class="size-4 mr-2 animate-spin" />
+                Загрузить ещё
+              </Button>
+            </div>
+
+            <!-- Bulk actions bar -->
+            <div
+              v-if="hasAnySelected"
+              class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+            >
+              <div class="text-sm text-muted-foreground">
+                Выбрано: {{ selectedItems.length }}
+                <span v-if="hasSelectedLinked && hasSelectedUnlinked">
+                  ({{ selectedLinkedItems.length }} связанных, {{ selectedUnlinkedItems.length }} несвязанных)
+                </span>
+                <span v-else-if="hasSelectedLinked">
+                  ({{ selectedLinkedItems.length }} связанных)
+                </span>
+                <span v-else-if="hasSelectedUnlinked">
+                  ({{ selectedUnlinkedItems.length }} несвязанных)
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <!-- Create local products from unlinked -->
+                <Button
+                  v-if="hasSelectedUnlinked"
+                  variant="outline"
+                  @click="openImportDialog"
+                  :disabled="isCreatingLocal"
+                >
+                  <Loader2 v-if="isCreatingLocal" class="size-4 mr-2 animate-spin" />
+                  <Plus v-else class="size-4 mr-2" />
+                  Создать локальные ({{ selectedUnlinkedItems.length }})
+                </Button>
+
+                <!-- Import from marketplace for linked -->
+                <Button
+                  v-if="hasSelectedLinked"
+                  variant="outline"
+                  @click="handleImportBulk"
+                  :disabled="isImportingBulk"
+                >
+                  <Loader2 v-if="isImportingBulk" class="size-4 mr-2 animate-spin" />
+                  <Download v-else class="size-4 mr-2" />
+                  Импорт ({{ selectedLinkedItems.length }})
+                </Button>
+
+                <!-- Export to marketplace for linked -->
+                <Button
+                  v-if="hasSelectedLinked"
+                  variant="outline"
+                  @click="handleExportBulk"
+                  :disabled="isExportingBulk"
+                >
+                  <Loader2 v-if="isExportingBulk" class="size-4 mr-2 animate-spin" />
+                  <Upload v-else class="size-4 mr-2" />
+                  Экспорт ({{ selectedLinkedItems.length }})
+                </Button>
+
+                <!-- Export prices -->
+                <Button
+                  v-if="hasSelectedLinked"
+                  variant="outline"
+                  @click="handleExportPricesBulk"
+                  :disabled="isExportingPrices"
+                >
+                  <Loader2 v-if="isExportingPrices" class="size-4 mr-2 animate-spin" />
+                  <DollarSign v-else class="size-4 mr-2" />
+                  Экспорт цен
+                </Button>
+
+                <!-- Export stocks -->
+                <Button
+                  v-if="hasSelectedLinked"
+                  @click="handleExportStocksBulk"
+                  :disabled="isExportingStocks"
+                >
+                  <Loader2 v-if="isExportingStocks" class="size-4 mr-2 animate-spin" />
+                  <Boxes v-else class="size-4 mr-2" />
+                  Экспорт остатков
+                </Button>
+              </div>
+            </div>
+          </template>
+
+          <!-- ==================== LOCAL VIEW ==================== -->
+          <template v-if="productsViewMode === 'local'">
+            <!-- Search -->
+            <div class="flex items-center gap-4">
+              <div class="relative flex-1">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  v-model="localSearchQuery"
+                  placeholder="Поиск по названию или SKU..."
+                  class="pl-10"
+                />
+              </div>
+              <div class="text-sm text-muted-foreground whitespace-nowrap">
+                Найдено: {{ localTotalCount }}
+              </div>
+            </div>
+
+            <!-- Loading state -->
+            <div v-if="isLoadingLocalProducts && localProducts.length === 0" class="flex justify-center py-12">
+              <Loader2 class="size-8 animate-spin text-muted-foreground" />
+            </div>
+
+            <!-- Local products table -->
+            <div v-else class="border rounded-lg flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="w-[50px]">
+                      <Checkbox
+                        :model-value="allLocalSelected"
+                        :indeterminate="someLocalSelected"
+                        @update:model-value="toggleSelectAllLocal"
+                      />
+                    </TableHead>
+                    <TableHead>Название</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead class="text-right">Цена</TableHead>
+                    <TableHead class="text-right">Остаток</TableHead>
+                    <TableHead>Категория</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="product in localProducts"
+                    :key="product.id"
+                  >
+                    <TableCell>
+                      <Checkbox
+                        :model-value="isLocalSelected(product.id)"
+                        @update:model-value="toggleSelectLocal(product.id)"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div class="font-medium">{{ product.name }}</div>
+                    </TableCell>
+                    <TableCell>
+                      <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.sku }}</code>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      {{ formatPrice(product.price) }}
+                    </TableCell>
+                    <TableCell class="text-right">
+                      {{ product.storageQuantity ?? '—' }}
+                    </TableCell>
+                    <TableCell>
+                      <span class="text-sm text-muted-foreground">{{ product.categoryName || '—' }}</span>
+                    </TableCell>
+                  </TableRow>
+
+                  <TableRow v-if="localProducts.length === 0">
+                    <TableCell colspan="6" class="text-center py-8 text-muted-foreground">
+                      <Package class="size-12 mx-auto mb-4 opacity-50" />
+                      <p>Нет товаров для экспорта</p>
+                      <p class="text-sm">Все товары из связанных категорий уже экспортированы, или нет маппингов категорий</p>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <!-- Load more -->
+            <div v-if="hasMoreLocalProducts && !isLoadingLocalProducts" class="flex justify-center">
+              <Button
+                variant="outline"
+                @click="loadMoreLocalProducts"
+                :disabled="isLoadingLocalProducts"
+              >
+                <Loader2 v-if="isLoadingLocalProducts" class="size-4 mr-2 animate-spin" />
+                Загрузить ещё
+              </Button>
+            </div>
+
+            <!-- Bulk export bar -->
+            <div
+              v-if="selectedLocalItems.length > 0"
+              class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+            >
+              <div class="text-sm text-muted-foreground">
+                Выбрано: {{ selectedLocalItems.length }}
+              </div>
+              <Button
+                @click="handleExportNewBulk"
+                :disabled="isExportingNewBulk"
+              >
+                <Loader2 v-if="isExportingNewBulk" class="size-4 mr-2 animate-spin" />
                 <Upload v-else class="size-4 mr-2" />
-                Экспорт ({{ selectedLinkedItems.length }})
-              </Button>
-
-              <!-- Export prices -->
-              <Button
-                v-if="hasSelectedLinked"
-                variant="outline"
-                @click="handleExportPricesBulk"
-                :disabled="isExportingPrices"
-              >
-                <Loader2 v-if="isExportingPrices" class="size-4 mr-2 animate-spin" />
-                <DollarSign v-else class="size-4 mr-2" />
-                Экспорт цен
-              </Button>
-
-              <!-- Export stocks -->
-              <Button
-                v-if="hasSelectedLinked"
-                @click="handleExportStocksBulk"
-                :disabled="isExportingStocks"
-              >
-                <Loader2 v-if="isExportingStocks" class="size-4 mr-2 animate-spin" />
-                <Boxes v-else class="size-4 mr-2" />
-                Экспорт остатков
+                Экспортировать на МП ({{ selectedLocalItems.length }})
               </Button>
             </div>
-          </div>
+          </template>
         </TabsContent>
       </Tabs>
     </div>

@@ -931,11 +931,18 @@ public class OzonPlugin : MarketplacePluginBase
                 );
             }
 
-            if (resultItem.Status == "failed" || resultItem.Errors?.Any() == true)
+            if (resultItem.Status == "failed" || resultItem.Errors?.Any() == true || resultItem.ProductId <= 0)
             {
-                Console.WriteLine($"[OzonPlugin.Export] FAILED! Status={resultItem.Status}, Errors count={resultItem.Errors?.Count ?? 0}");
+                Console.WriteLine($"[OzonPlugin.Export] FAILED! Status={resultItem.Status}, ProductId={resultItem.ProductId}, Errors count={resultItem.Errors?.Count ?? 0}");
 
                 var errors = new List<string>();
+
+                // If ProductId is 0 but no other errors, add a specific message
+                if (resultItem.ProductId <= 0 && (resultItem.Errors == null || !resultItem.Errors.Any()))
+                {
+                    errors.Add("Ozon не вернул ID товара (product_id=0). Возможно, товар ещё обрабатывается. Попробуйте повторить экспорт позже.");
+                }
+
                 if (resultItem.Errors != null)
                 {
                     foreach (var e in resultItem.Errors)

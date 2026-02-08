@@ -108,6 +108,79 @@ public class ProductSyncController : ControllerBase
 
     #endregion
 
+    #region Local Products for Export
+
+    /// <summary>
+    /// Get local products available for export (not yet linked to this connection)
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/connections/{connectionId}/local-products-for-export")]
+    public async Task<IActionResult> GetLocalProductsForExport(
+        int connectionId,
+        string? searchQuery = null,
+        int startIndex = 0,
+        int pageSize = 50)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+
+        // Get local category IDs that have mappings for this connection
+        var mappedLocalCategoryIds = await _context.categoryMappings
+            .AsNoTracking()
+            .Where(m => m.connectionId == connectionId)
+            .Select(m => m.localCategoryId)
+            .Distinct()
+            .ToListAsync();
+
+        if (mappedLocalCategoryIds.Count == 0)
+            return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
+
+        // Get product IDs already linked to this connection
+        var linkedProductIds = await _context.productMarketplaceLinks
+            .AsNoTracking()
+            .Where(l => l.connectionId == connectionId)
+            .Select(l => l.productId)
+            .ToListAsync();
+
+        // Query local products: in mapped categories, not yet linked
+        var query = _context.products
+            .AsNoTracking()
+            .Include(p => p.category)
+            .Where(p => p.storeId == connection.storeId
+                && p.categoryId.HasValue
+                && mappedLocalCategoryIds.Contains(p.categoryId.Value)
+                && !linkedProductIds.Contains(p.Id));
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var search = searchQuery.Trim().ToLower();
+            query = query.Where(p =>
+                p.name.ToLower().Contains(search) ||
+                p.sku.ToLower().Contains(search));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(p => p.name)
+            .Skip(startIndex)
+            .Take(pageSize)
+            .Select(p => new
+            {
+                id = p.Id,
+                name = p.name,
+                sku = p.sku,
+                price = p.price,
+                storageQuantity = p.storageQuantity,
+                categoryName = p.category != null ? p.category.name : null,
+                categoryId = p.categoryId
+            })
+            .ToListAsync();
+
+        return Ok(new { items, totalCount });
+    }
+
+    #endregion
+
     #region Export
 
     /// <summary>

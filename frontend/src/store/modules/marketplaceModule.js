@@ -696,6 +696,27 @@ export default {
         http,
         {
           immediate: true,
+          abortPrevious: false,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    // === Local Products for Export ===
+
+    async getLocalProductsForExport(ctx, { connectionId, searchQuery, startIndex, pageSize, onSuccess, onError }) {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("searchQuery", searchQuery);
+      if (startIndex !== undefined) params.append("startIndex", startIndex);
+      if (pageSize !== undefined) params.append("pageSize", pageSize);
+
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/local-products-for-export?${params.toString()}`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
           abortPrevious: true,
         },
       )
