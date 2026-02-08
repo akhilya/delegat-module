@@ -382,6 +382,7 @@ export default {
           method: "POST",
           cache: false,
           data,
+          timeout: 5 * 60 * 1000,
         },
         http,
         {

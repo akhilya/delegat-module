@@ -188,6 +188,7 @@ export default {
       isTesting: false,
       testResult: null,
       showCreateMappingDialog: false,
+      isCreatingMapping: false,
       newMapping: {
         localCategoryId: null,
         externalCategoryId: "",
@@ -569,6 +570,7 @@ export default {
         return;
       }
 
+      this.isCreatingMapping = true;
       await this.createCategoryMapping({
         connectionId: this.connectionId,
         data: this.newMapping,
@@ -586,6 +588,7 @@ export default {
           displaySonnerError(error);
         },
       });
+      this.isCreatingMapping = false;
     },
 
     async handleDeleteMapping(mappingId) {
@@ -1428,8 +1431,9 @@ export default {
                   <DialogClose as-child>
                     <Button variant="outline">Отмена</Button>
                   </DialogClose>
-                  <Button @click="handleCreateMapping">
-                    Связать
+                  <Button @click="handleCreateMapping" :disabled="isCreatingMapping">
+                    <Loader2 v-if="isCreatingMapping" class="size-4 mr-2 animate-spin" />
+                    {{ isCreatingMapping ? 'Связывание...' : 'Связать' }}
                   </Button>
                 </DialogFooter>
               </DialogContent>
