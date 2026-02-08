@@ -26,6 +26,11 @@ import {
   Pencil,
   Trash2,
   X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  Check,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -37,6 +42,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +79,11 @@ export default {
     Pencil,
     Trash2,
     X,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
+    Filter,
+    Check,
     Input,
     Select,
     SelectContent,
@@ -77,6 +92,9 @@ export default {
     SelectLabel,
     SelectTrigger,
     SelectValue,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -95,28 +113,70 @@ export default {
       "bulkDeleteProducts",
       "getAllStoreAttributes",
       "getCategoryAttributes",
+      "getAllCategories",
     ]),
 
     async fetchProducts() {
       this.isProductsLoading = true;
       this.products = [];
-      // Clear selection when fetching new data
-      this.rowSelection = {};
 
       await this.getAllProducts({
         startIndex: this.startIndex,
         pageSize: this.pageSize,
         searchQuery: this.searchQuery,
+        categoryId: this.filterCategoryId,
+        sortBy: this.sortBy,
+        sortDesc: this.sortDesc,
         onSuccess: (response) => {
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
           this.totalCount = response.data.value.totalCount;
+          // Sync cross-page selection cache with fresh product data
+          for (const p of this.products) {
+            if (this.rowSelection[String(p.id)]) {
+              this.selectedProductsMap[p.id] = p;
+            }
+          }
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isProductsLoading = false;
+    },
+
+    async fetchCategories() {
+      await this.getAllCategories({
+        onSuccess: (response) => {
+          this.categories = response.data.value || [];
+        },
+        onError: () => {
+          this.categories = [];
+        },
+      });
+    },
+
+    toggleSort(columnId) {
+      if (this.sortBy === columnId) {
+        if (this.sortDesc) {
+          this.sortDesc = false;
+        } else {
+          this.sortBy = null;
+          this.sortDesc = true;
+        }
+      } else {
+        this.sortBy = columnId;
+        this.sortDesc = true;
+      }
+      this.$router.replace({
+        query: {
+          ...this.$route.query,
+          sortBy: this.sortBy ?? undefined,
+          sortDesc: this.sortBy ? String(this.sortDesc) : undefined,
+        },
+      });
+      if (this.page !== 1) this.page = 1;
+      else this.fetchProducts();
     },
 
     async fetchStoreAttributes() {
@@ -132,6 +192,7 @@ export default {
 
     clearSelection() {
       this.rowSelection = {};
+      this.selectedProductsMap = {};
     },
 
     openBulkEditDialog() {
@@ -168,6 +229,7 @@ export default {
           toast.success(`Удалено товаров: ${deletedCount}`);
           this.isBulkDeleteDialogOpen = false;
           this.rowSelection = {};
+          this.selectedProductsMap = {};
           this.fetchProducts();
         },
         onError: (error) => {
@@ -182,6 +244,7 @@ export default {
 
     handleBulkEditSaved() {
       this.rowSelection = {};
+      this.selectedProductsMap = {};
       this.fetchProducts();
     },
 
@@ -251,6 +314,18 @@ export default {
       prevSearchQuery: searchQuery,
       breadcrumbs: [{ label: "Товары" }],
 
+      // Categories for filter (restore from query)
+      categories: [],
+      filterCategoryId: this.$route.query.categoryId != null
+        ? Number(this.$route.query.categoryId)
+        : null,
+
+      // Sorting (restore from query)
+      sortBy: this.$route.query.sortBy || null,
+      sortDesc: this.$route.query.sortDesc != null
+        ? this.$route.query.sortDesc === "true"
+        : true,
+
       // Row selection
       rowSelection: {},
 
@@ -271,8 +346,11 @@ export default {
       isBulkDeleteDialogOpen: false,
       isDeleting: false,
 
+      // Cross-page selection cache: { productId: productObject }
+      selectedProductsMap: {},
+
       // Column preset and order
-      selectedPreset: localStorage.getItem(COLUMN_PRESET_KEY) || "none",
+      selectedPreset: localStorage.getItem(COLUMN_PRESET_KEY) || "product",
       columnOrder: this.loadColumnOrder ? this.loadColumnOrder() : [],
     };
   },
@@ -294,6 +372,32 @@ export default {
         query: { ...this.$route.query, pageSize: newVal },
       });
       if (this.page != 1) this.page = 1;
+      else this.fetchProducts();
+    },
+    rowSelection: {
+      handler(sel) {
+        // Add newly selected current-page products to cache
+        for (const p of this.products) {
+          if (sel[String(p.id)]) {
+            this.selectedProductsMap[p.id] = p;
+          } else {
+            delete this.selectedProductsMap[p.id];
+          }
+        }
+        // Remove deselected products from other pages
+        for (const id of Object.keys(this.selectedProductsMap)) {
+          if (!sel[id]) {
+            delete this.selectedProductsMap[id];
+          }
+        }
+      },
+      deep: true,
+    },
+    filterCategoryId(newVal) {
+      this.$router.replace({
+        query: { ...this.$route.query, categoryId: newVal ?? undefined },
+      });
+      if (this.page !== 1) this.page = 1;
       else this.fetchProducts();
     },
     // Watch selected products to fetch category attributes
@@ -342,9 +446,9 @@ export default {
         .map((id) => parseInt(id, 10));
     },
     selectedProducts() {
-      return this.products.filter((p) =>
-        this.selectedProductIds.includes(p.id),
-      );
+      return this.selectedProductIds
+        .map((id) => this.selectedProductsMap[id])
+        .filter(Boolean);
     },
     hasSelection() {
       return this.selectedProductIds.length > 0;
@@ -361,8 +465,11 @@ export default {
     },
   },
   async mounted() {
-    // Fetch store attributes first, then load column visibility (depends on attributes)
-    await this.fetchStoreAttributes();
+    // Fetch store attributes and categories in parallel
+    await Promise.all([
+      this.fetchStoreAttributes(),
+      this.fetchCategories(),
+    ]);
 
     // Load column visibility from localStorage (now includes store attributes)
     this.columnVisibility = this.loadColumnVisibility();
@@ -378,20 +485,65 @@ export default {
   <Page class="flex flex-col h-screen">
     <NavigationBar>
       <template #center>
-        <div class="relative w-full h-9">
-          <Input
-            class="absolute w-full h-full"
-            placeholder="Поиск..."
-            v-model="searchQuery"
-            @keypress.enter="fetchProducts"
-          />
-          <Button
-            class="absolute top-1/2 -translate-y-1/2 right-0.5 size-8"
-            variant="link"
-            @click="fetchProducts"
-          >
-            <Search class="size-4" />
-          </Button>
+        <div class="flex items-center gap-2 w-full">
+          <div class="relative flex-1 h-9">
+            <Input
+              class="absolute w-full h-full"
+              placeholder="Поиск..."
+              v-model="searchQuery"
+              @keypress.enter="fetchProducts"
+            />
+            <Button
+              class="absolute top-1/2 -translate-y-1/2 right-0.5 size-8"
+              variant="link"
+              @click="fetchProducts"
+            >
+              <Search class="size-4" />
+            </Button>
+          </div>
+          <Popover>
+            <PopoverTrigger as-child>
+              <Button
+                variant="outline"
+                size="icon"
+                class="h-9 w-9 shrink-0"
+                :class="filterCategoryId != null ? 'border-primary text-primary' : ''"
+              >
+                <Filter class="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" class="w-56 p-1">
+              <div class="max-h-64 overflow-y-auto">
+                <button
+                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between"
+                  :class="filterCategoryId == null ? 'bg-accent font-medium' : ''"
+                  @click="filterCategoryId = null"
+                >
+                  Все категории
+                  <Check v-if="filterCategoryId == null" class="size-4 shrink-0" />
+                </button>
+                <button
+                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between"
+                  :class="filterCategoryId === -1 ? 'bg-accent font-medium' : ''"
+                  @click="filterCategoryId = -1"
+                >
+                  Без категории
+                  <Check v-if="filterCategoryId === -1" class="size-4 shrink-0" />
+                </button>
+                <div class="h-px bg-border my-1" />
+                <button
+                  v-for="cat in categories"
+                  :key="cat.id"
+                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between gap-2"
+                  :class="filterCategoryId === cat.id ? 'bg-accent font-medium' : ''"
+                  @click="filterCategoryId = cat.id"
+                >
+                  <span class="truncate">{{ cat.name }}</span>
+                  <Check v-if="filterCategoryId === cat.id" class="size-4 shrink-0" />
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </template>
     </NavigationBar>
@@ -407,9 +559,14 @@ export default {
         :column-visibility="columnVisibility"
         :column-order="columnOrder"
         :row-selection="rowSelection"
+        :start-index="startIndex"
+        :sort-by="sortBy"
+        :sort-desc="sortDesc"
+        :sortable-columns="['name', 'sku', 'price', 'storageQuantity', 'category', 'createdAt', 'updatedAt']"
         @update:row-selection="rowSelection = $event"
         @update:column-visibility="onColumnVisibilityChange"
         @update:column-order="onColumnOrderChange"
+        @sort="toggleSort"
         class="flex-1 min-h-0"
       >
         <template #headerActions>
@@ -435,7 +592,7 @@ export default {
               :model-value="String(pageSize)"
               @update:model-value="(val) => pageSize = Number(val)"
             >
-              <SelectTrigger class="h-8 w-[70px] bg-primary-foreground">
+              <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -444,6 +601,7 @@ export default {
                   <SelectItem as="button" value="25">25</SelectItem>
                   <SelectItem as="button" value="50">50</SelectItem>
                   <SelectItem as="button" value="100">100</SelectItem>
+                  <SelectItem as="button" value="250">250</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>

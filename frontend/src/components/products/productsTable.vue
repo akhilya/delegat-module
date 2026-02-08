@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, GripVertical } from "lucide-vue-next";
+import { Loader2, GripVertical, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-vue-next";
 
 export default {
   components: {
@@ -23,6 +23,9 @@ export default {
     FlexRender,
     Loader2,
     GripVertical,
+    ArrowUp,
+    ArrowDown,
+    ArrowUpDown,
   },
   props: {
     columns: {
@@ -46,8 +49,24 @@ export default {
       type: Array,
       default: () => [],
     },
+    sortBy: {
+      type: String,
+      default: null,
+    },
+    sortDesc: {
+      type: Boolean,
+      default: true,
+    },
+    sortableColumns: {
+      type: Array,
+      default: () => [],
+    },
+    startIndex: {
+      type: Number,
+      default: 0,
+    },
   },
-  emits: ["update:rowSelection", "update:columnVisibility", "update:columnOrder"],
+  emits: ["update:rowSelection", "update:columnVisibility", "update:columnOrder", "sort"],
   setup(props, { emit }) {
     const localRowSelection = ref(props.rowSelection);
     const localColumnVisibility = ref(props.columnVisibility);
@@ -91,6 +110,11 @@ export default {
       },
       getCoreRowModel: getCoreRowModel(),
       enableRowSelection: true,
+      meta: {
+        get startIndex() {
+          return props.startIndex;
+        },
+      },
       state: {
         get rowSelection() {
           return localRowSelection.value;
@@ -139,6 +163,17 @@ export default {
     // Check if a column can be dragged (not select or editAction)
     const canDragColumn = (columnId) => {
       return columnId !== "select" && columnId !== "editAction";
+    };
+
+    // Check if a column is sortable
+    const isSortable = (columnId) => {
+      return props.sortableColumns.includes(columnId);
+    };
+
+    const onHeaderClick = (columnId) => {
+      if (isSortable(columnId)) {
+        emit("sort", columnId);
+      }
     };
 
     // Native drag & drop handlers
@@ -194,6 +229,8 @@ export default {
       table,
       selectedIds,
       canDragColumn,
+      isSortable,
+      onHeaderClick,
       draggedColumnId,
       dragOverColumnId,
       onDragStart,
@@ -224,6 +261,7 @@ export default {
                 'h-9 px-2 font-medium text-muted-foreground bg-background',
                 canDragColumn(header.column.id) ? 'cursor-grab active:cursor-grabbing' : '',
                 dragOverColumnId === header.column.id ? 'bg-muted/50' : '',
+                isSortable(header.column.id) ? 'select-none' : '',
               ]"
               @dragstart="onDragStart($event, header.column.id)"
               @dragover="onDragOver($event, header.column.id)"
@@ -231,7 +269,11 @@ export default {
               @drop="onDrop($event, header.column.id)"
               @dragend="onDragEnd"
             >
-              <div class="flex items-center gap-1">
+              <div
+                class="flex items-center gap-1"
+                :class="isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : ''"
+                @click="onHeaderClick(header.column.id)"
+              >
                 <GripVertical
                   v-if="canDragColumn(header.column.id)"
                   class="size-3 shrink-0 text-muted-foreground/50 hover:text-muted-foreground"
@@ -241,6 +283,11 @@ export default {
                   :render="header.column.columnDef.header"
                   :props="header.getContext()"
                 />
+                <template v-if="isSortable(header.column.id)">
+                  <ArrowDown v-if="sortBy === header.column.id && sortDesc" class="size-3.5 shrink-0 text-foreground" />
+                  <ArrowUp v-else-if="sortBy === header.column.id && !sortDesc" class="size-3.5 shrink-0 text-foreground" />
+                  <ArrowUpDown v-else class="size-3.5 shrink-0 opacity-30" />
+                </template>
                 <!-- Slot for header actions (Column selector button) -->
                 <slot v-if="header.column.id === 'editAction'" name="headerActions" />
               </div>

@@ -46,15 +46,18 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a paginated list of products for the current store, with optional search filtering.
+    /// Retrieves a paginated list of products for the current store, with optional search, category filtering, and sorting.
     /// </summary>
     /// <param name="searchQuery">Optional search string to filter by name or SKU.</param>
+    /// <param name="categoryId">Optional category ID to filter products by.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
+    /// <param name="sortBy">Column to sort by (name, sku, price, storageQuantity, category). Default: id.</param>
+    /// <param name="sortDesc">Whether to sort descending. Default: true.</param>
     /// <returns>A paged result containing product review DTOs, total count, and last-page indicator.</returns>
     [HttpGet]
     [Route("/products")]
-    public async Task<IActionResult> GetAllProducts(string? searchQuery, int startIndex = 0, int pageSize = 12)
+    public async Task<IActionResult> GetAllProducts(string? searchQuery, int? categoryId = null, int startIndex = 0, int pageSize = 12, string? sortBy = null, bool sortDesc = true)
     {
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 12;
@@ -65,10 +68,64 @@ public class ProductController : ControllerBase
 
         var productRepo = _unitOfWork.Repository<Product>();
 
-        Expression<Func<Product, bool>> predicate = string.IsNullOrEmpty(searchQuery)
-            ? p => p.storeId == selectedStoreId.Value
-            : p => p.storeId == selectedStoreId.Value &&
-                   (p.name.Contains(searchQuery) || p.sku.Contains(searchQuery));
+        // Build predicate combining all filters
+        var hasSearch = !string.IsNullOrEmpty(searchQuery);
+        var hasCategoryFilter = categoryId.HasValue;
+        var isNoCategoryFilter = categoryId == -1;
+
+        Expression<Func<Product, bool>> predicate = (hasSearch, hasCategoryFilter, isNoCategoryFilter) switch
+        {
+            (false, false, _) => p => p.storeId == selectedStoreId.Value,
+            (true, false, _) => p => p.storeId == selectedStoreId.Value &&
+                                     (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)),
+            (false, _, true) => p => p.storeId == selectedStoreId.Value && p.categoryId == null,
+            (false, true, false) => p => p.storeId == selectedStoreId.Value && p.categoryId == categoryId.Value,
+            (true, _, true) => p => p.storeId == selectedStoreId.Value &&
+                                    (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
+                                    p.categoryId == null,
+            (true, true, false) => p => p.storeId == selectedStoreId.Value &&
+                                        (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
+                                        p.categoryId == categoryId.Value,
+        };
+
+        // Build sort expression
+        // When searching, prioritize exact matches (name == query or sku == query) first
+        Func<IQueryable<Product>, IOrderedQueryable<Product>> secondarySort = sortBy?.ToLower() switch
+        {
+            "name" => sortDesc ? q => q.OrderByDescending(p => p.name) : q => q.OrderBy(p => p.name),
+            "sku" => sortDesc ? q => q.OrderByDescending(p => p.sku) : q => q.OrderBy(p => p.sku),
+            "price" => sortDesc ? q => q.OrderByDescending(p => p.price) : q => q.OrderBy(p => p.price),
+            "storagequantity" => sortDesc ? q => q.OrderByDescending(p => p.storageQuantity) : q => q.OrderBy(p => p.storageQuantity),
+            "category" => sortDesc ? q => q.OrderByDescending(p => p.category!.name) : q => q.OrderBy(p => p.category!.name),
+            "createdat" => sortDesc ? q => q.OrderByDescending(p => p.createdAt) : q => q.OrderBy(p => p.createdAt),
+            "updatedat" => sortDesc ? q => q.OrderByDescending(p => p.updatedAt) : q => q.OrderBy(p => p.updatedAt),
+            _ => sortDesc ? q => q.OrderByDescending(p => p.Id) : q => q.OrderBy(p => p.Id),
+        };
+
+        Func<IQueryable<Product>, IOrderedQueryable<Product>> orderBy;
+        if (hasSearch)
+        {
+            orderBy = q =>
+            {
+                var ordered = q.OrderByDescending(p => p.name == searchQuery || p.sku == searchQuery)
+                               .ThenByDescending(p => p.name.StartsWith(searchQuery!) || p.sku.StartsWith(searchQuery!));
+                return sortBy?.ToLower() switch
+                {
+                    "name" => sortDesc ? ordered.ThenByDescending(p => p.name) : ordered.ThenBy(p => p.name),
+                    "sku" => sortDesc ? ordered.ThenByDescending(p => p.sku) : ordered.ThenBy(p => p.sku),
+                    "price" => sortDesc ? ordered.ThenByDescending(p => p.price) : ordered.ThenBy(p => p.price),
+                    "storagequantity" => sortDesc ? ordered.ThenByDescending(p => p.storageQuantity) : ordered.ThenBy(p => p.storageQuantity),
+                    "category" => sortDesc ? ordered.ThenByDescending(p => p.category!.name) : ordered.ThenBy(p => p.category!.name),
+                    "createdat" => sortDesc ? ordered.ThenByDescending(p => p.createdAt) : ordered.ThenBy(p => p.createdAt),
+                    "updatedat" => sortDesc ? ordered.ThenByDescending(p => p.updatedAt) : ordered.ThenBy(p => p.updatedAt),
+                    _ => sortDesc ? ordered.ThenByDescending(p => p.Id) : ordered.ThenBy(p => p.Id),
+                };
+            };
+        }
+        else
+        {
+            orderBy = secondarySort;
+        }
 
         var (items, total) = await productRepo.FindPagedAsync(
             predicate,
@@ -79,7 +136,7 @@ public class ProductController : ControllerBase
                 .Include(p => p.category)
                 .Include(p => p.storeAttributeValues)
                     .ThenInclude(sav => sav.storeAttribute),
-            q => q.OrderByDescending(p => p.Id),
+            orderBy,
             startIndex,
             pageSize);
 

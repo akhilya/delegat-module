@@ -1075,7 +1075,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано цен: ${result.successCount || 0}, ошибок: ${result.errorCount || 0}`
+            `Экспортировано цен: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
           );
           this.selectedItems = [];
           this.fetchProducts();
@@ -1102,7 +1102,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано остатков: ${result.successCount || 0}, ошибок: ${result.errorCount || 0}`
+            `Экспортировано остатков: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
           );
           this.selectedItems = [];
           this.fetchProducts();
@@ -1326,7 +1326,7 @@ export default {
                   Связать категории
                 </Button>
               </DialogTrigger>
-              <DialogContent class="max-w-lg">
+              <DialogContent class="sm:max-w-4xl md:max-w-6xl">
                 <DialogHeader>
                   <DialogTitle>Связать категории</DialogTitle>
                   <DialogDescription>

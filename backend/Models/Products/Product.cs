@@ -47,6 +47,16 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public decimal? price { get; set; }
 
     /// <summary>
+    /// Timestamp when the product was created.
+    /// </summary>
+    public DateTime createdAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Timestamp when the product was last updated.
+    /// </summary>
+    public DateTime updatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
     /// Foreign key to the owning store.
     /// </summary>
     [ForeignKey(nameof(store))]
@@ -129,6 +139,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         if (form.price.HasValue)
             price = form.price.Value;
 
+        updatedAt = DateTime.UtcNow;
         return true;
     }
 
@@ -184,6 +195,8 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             categoryName = category?.name,
             storageQuantity = storageQuantity,
             price = price,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
             storeAttributeValues = storeAttributeValues?.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
         };
     }
@@ -362,6 +375,16 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Product price.
         /// </summary>
         public decimal? price { get; set; }
+
+        /// <summary>
+        /// Timestamp when the product was created.
+        /// </summary>
+        public DateTime createdAt { get; set; }
+
+        /// <summary>
+        /// Timestamp when the product was last updated.
+        /// </summary>
+        public DateTime updatedAt { get; set; }
 
         /// <summary>
         /// Store-level attribute values for table columns.

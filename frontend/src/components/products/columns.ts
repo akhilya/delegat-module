@@ -35,6 +35,8 @@ export interface Product {
   categoryName: string | null;
   storageQuantity: number | null;
   price: number | null;
+  createdAt: string;
+  updatedAt: string;
   storeAttributeValues?: StoreAttributeValue[];
 }
 
@@ -76,12 +78,13 @@ export const columns: ProductColumnDef[] = [
     label: "№",
     hideable: true,
     header: "№",
-    size: 30,
-    cell: ({ row }) => {
+    size: 45,
+    cell: ({ row, table }) => {
+      const startIndex = (table.options.meta as any)?.startIndex ?? 0;
       return h(
         "span",
         { class: "content-center text-xs text-foreground/60" },
-        row.index + 1,
+        startIndex + row.index + 1,
       );
     },
   },
@@ -164,6 +167,32 @@ export const columns: ProductColumnDef[] = [
     },
   },
   {
+    id: "createdAt",
+    label: "Создан",
+    hideable: true,
+    header: "Создан",
+    size: 130,
+    cell: ({ row }) => {
+      const val = row.original.createdAt;
+      if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
+      const d = new Date(val);
+      return h("span", { class: "text-sm tabular-nums" }, d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+    },
+  },
+  {
+    id: "updatedAt",
+    label: "Изменён",
+    hideable: true,
+    header: "Изменён",
+    size: 130,
+    cell: ({ row }) => {
+      const val = row.original.updatedAt;
+      if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
+      const d = new Date(val);
+      return h("span", { class: "text-sm tabular-nums" }, d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+    },
+  },
+  {
     id: "editAction",
     enableHiding: false,
     cell: ({ row }) => {
@@ -182,6 +211,8 @@ export const defaultVisibleColumns: Record<string, boolean> = {
   storageQuantity: true,
   price: false, // hidden by default
   name: true,
+  createdAt: false, // hidden by default
+  updatedAt: false, // hidden by default
   editAction: true,
 };
 

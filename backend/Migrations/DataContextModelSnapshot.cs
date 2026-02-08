@@ -778,6 +778,9 @@ namespace PrintO.Migrations
                     b.Property<int?>("categoryId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("description")
                         .IsRequired()
                         .HasMaxLength(5000)
@@ -801,6 +804,9 @@ namespace PrintO.Migrations
 
                     b.Property<int>("storeId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
