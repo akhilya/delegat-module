@@ -978,6 +978,7 @@ export default {
 
     // Bulk actions
     async handleImportBulk() {
+      if (this.isImportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError("Выберите связанные товары");
         return;
@@ -1008,6 +1009,7 @@ export default {
     },
 
     async confirmBulkImport() {
+      if (this.isApplyingBulkImport) return;
       if (this.bulkPreviewLinkIds.length === 0) return;
       this.isApplyingBulkImport = true;
       await this.importLinksBulk({
@@ -1018,7 +1020,6 @@ export default {
             `Импортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`
           );
           this.selectedItems = [];
-          this.fetchProducts();
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1026,6 +1027,7 @@ export default {
       });
       this.isApplyingBulkImport = false;
       this.cancelBulkImport();
+      this.fetchProducts();
     },
 
     cancelBulkImport() {
@@ -1035,6 +1037,7 @@ export default {
     },
 
     async handleExportBulk() {
+      if (this.isExportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError("Выберите связанные товары");
         return;
@@ -1061,6 +1064,7 @@ export default {
     },
 
     async handleExportPricesBulk() {
+      if (this.isExportingPrices) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError("Выберите связанные товары");
         return;
@@ -1088,6 +1092,7 @@ export default {
     },
 
     async handleExportStocksBulk() {
+      if (this.isExportingStocks) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError("Выберите связанные товары");
         return;
