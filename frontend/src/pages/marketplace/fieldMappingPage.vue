@@ -253,23 +253,33 @@ export default {
       this.hasChanges = true;
     },
 
+    _parseMultiselectValue(value) {
+      if (!value) return [];
+      if (value.startsWith("[")) {
+        try {
+          const arr = JSON.parse(value);
+          return Array.isArray(arr) ? arr : [];
+        } catch {
+          return [];
+        }
+      }
+      return value.split(",").filter((v) => v !== "");
+    },
+
     onMultiselectChange(fieldMapping, optionValue, checked) {
-      const current = (fieldMapping.staticValue || "")
-        .split(",")
-        .filter((v) => v !== "");
+      const current = this._parseMultiselectValue(fieldMapping.staticValue);
       if (checked) {
         if (!current.includes(optionValue)) current.push(optionValue);
       } else {
         const idx = current.indexOf(optionValue);
         if (idx !== -1) current.splice(idx, 1);
       }
-      fieldMapping.staticValue = current.join(",");
+      fieldMapping.staticValue = JSON.stringify(current);
       this.hasChanges = true;
     },
 
     getMultiselectLabels(fm) {
-      if (!fm.staticValue) return [];
-      const values = fm.staticValue.split(",").filter((v) => v !== "");
+      const values = this._parseMultiselectValue(fm.staticValue);
       return values.map((val) => {
         const opt = (fm.parsedOptions || []).find((o) => o.value === val);
         return opt ? opt.label : val;
@@ -281,7 +291,7 @@ export default {
         const opt = (fm.parsedOptions || []).find((o) => o.label === label);
         return opt ? opt.value : label;
       });
-      fm.staticValue = values.join(",");
+      fm.staticValue = JSON.stringify(values);
       this.hasChanges = true;
     },
 

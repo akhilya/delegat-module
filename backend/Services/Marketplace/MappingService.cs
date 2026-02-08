@@ -55,20 +55,27 @@ public class MappingService
                 value = ApplyTransform(value, mapping.transformExpression);
             }
 
-            // Multiselect values are stored as JSON arrays (e.g. '["123","456"]').
+            // Multiselect values may be stored as JSON arrays '["123","456"]'
+            // or as comma-separated strings "123,456" (legacy format from field mapping page).
             // Deserialize to List<string> so the plugin receives a proper list.
-            if (mapping.externalFieldType == "multiselect" && value is string jsonStr
-                && jsonStr.StartsWith('['))
+            if (mapping.externalFieldType == "multiselect" && value is string multiStr
+                && !string.IsNullOrEmpty(multiStr))
             {
-                try
+                if (multiStr.StartsWith('['))
                 {
-                    var list = JsonSerializer.Deserialize<List<string>>(jsonStr);
-                    if (list != null)
-                        value = list;
+                    try
+                    {
+                        var list = JsonSerializer.Deserialize<List<string>>(multiStr);
+                        if (list != null && list.Count > 0)
+                            value = list;
+                    }
+                    catch (JsonException) { }
                 }
-                catch (JsonException)
+                else if (multiStr.Contains(','))
                 {
-                    // Not valid JSON — keep as string
+                    var parts = multiStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (parts.Length > 1)
+                        value = parts.ToList();
                 }
             }
 
