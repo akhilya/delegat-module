@@ -1213,6 +1213,7 @@ export default {
           method: "POST",
           cache: false,
           data: { linkIds },
+          timeout: 5 * 60 * 1000,
         },
         http,
         {
@@ -1231,6 +1232,7 @@ export default {
           method: "POST",
           cache: false,
           data: { linkIds },
+          timeout: 5 * 60 * 1000,
         },
         http,
         {
@@ -1258,6 +1260,7 @@ export default {
           method: "POST",
           cache: false,
           data: { linkIds },
+          timeout: 5 * 60 * 1000,
         },
         http,
         {
