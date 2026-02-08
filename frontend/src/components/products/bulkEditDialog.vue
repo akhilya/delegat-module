@@ -160,7 +160,54 @@
                   >
                     {{ attr.name }}
                   </Label>
+
+                  <!-- Number -->
                   <Input
+                    v-if="isType(attr.type, 'number')"
+                    :id="`cat-${attr.id}`"
+                    type="number"
+                    v-model="categoryAttributeValues[attr.id]"
+                    :disabled="!enabledCategoryAttributes[attr.id]"
+                    :placeholder="attr.name"
+                  />
+
+                  <!-- Boolean -->
+                  <div
+                    v-else-if="isType(attr.type, 'boolean')"
+                    class="flex items-center gap-2"
+                  >
+                    <Switch
+                      :model-value="categoryAttributeValues[attr.id] === 'true'"
+                      @update:model-value="categoryAttributeValues[attr.id] = $event ? 'true' : 'false'"
+                      :disabled="!enabledCategoryAttributes[attr.id]"
+                    />
+                    <span class="text-sm text-muted-foreground">
+                      {{ categoryAttributeValues[attr.id] === 'true' ? 'Да' : 'Нет' }}
+                    </span>
+                  </div>
+
+                  <!-- Select -->
+                  <SearchableSelect
+                    v-else-if="isType(attr.type, 'select')"
+                    v-model="categoryAttributeValues[attr.id]"
+                    :options="getSelectOptions(attr)"
+                    :placeholder="attr.name"
+                    :disabled="!enabledCategoryAttributes[attr.id]"
+                  />
+
+                  <!-- MultiSelect -->
+                  <MultiSelectDropdown
+                    v-else-if="isType(attr.type, 'multiselect')"
+                    :options="getSelectOptions(attr).map(o => o.label)"
+                    :model-value="parseMultiSelect(categoryAttributeValues[attr.id])"
+                    @update:model-value="categoryAttributeValues[attr.id] = JSON.stringify($event)"
+                    :placeholder="attr.name"
+                    :disabled="!enabledCategoryAttributes[attr.id]"
+                  />
+
+                  <!-- Text (default) -->
+                  <Input
+                    v-else
                     :id="`cat-${attr.id}`"
                     v-model="categoryAttributeValues[attr.id]"
                     :disabled="!enabledCategoryAttributes[attr.id]"
@@ -196,7 +243,54 @@
                   >
                     {{ attr.name }}
                   </Label>
+
+                  <!-- Number -->
                   <Input
+                    v-if="isType(attr.type, 'number')"
+                    :id="`store-${attr.id}`"
+                    type="number"
+                    v-model="storeAttributeValues[attr.id]"
+                    :disabled="!enabledStoreAttributes[attr.id]"
+                    :placeholder="attr.name"
+                  />
+
+                  <!-- Boolean -->
+                  <div
+                    v-else-if="isType(attr.type, 'boolean')"
+                    class="flex items-center gap-2"
+                  >
+                    <Switch
+                      :model-value="storeAttributeValues[attr.id] === 'true'"
+                      @update:model-value="storeAttributeValues[attr.id] = $event ? 'true' : 'false'"
+                      :disabled="!enabledStoreAttributes[attr.id]"
+                    />
+                    <span class="text-sm text-muted-foreground">
+                      {{ storeAttributeValues[attr.id] === 'true' ? 'Да' : 'Нет' }}
+                    </span>
+                  </div>
+
+                  <!-- Select -->
+                  <SearchableSelect
+                    v-else-if="isType(attr.type, 'select')"
+                    v-model="storeAttributeValues[attr.id]"
+                    :options="getSelectOptions(attr)"
+                    :placeholder="attr.name"
+                    :disabled="!enabledStoreAttributes[attr.id]"
+                  />
+
+                  <!-- MultiSelect -->
+                  <MultiSelectDropdown
+                    v-else-if="isType(attr.type, 'multiselect')"
+                    :options="getSelectOptions(attr).map(o => o.label)"
+                    :model-value="parseMultiSelect(storeAttributeValues[attr.id])"
+                    @update:model-value="storeAttributeValues[attr.id] = JSON.stringify($event)"
+                    :placeholder="attr.name"
+                    :disabled="!enabledStoreAttributes[attr.id]"
+                  />
+
+                  <!-- Text (default) -->
+                  <Input
+                    v-else
                     :id="`store-${attr.id}`"
                     v-model="storeAttributeValues[attr.id]"
                     :disabled="!enabledStoreAttributes[attr.id]"
@@ -245,7 +339,58 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { toast } from "vue-sonner";
+
+// Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
+const TYPE_TEXT = [0, "Text", "text"];
+const TYPE_NUMBER = [1, "Number", "number"];
+const TYPE_BOOLEAN = [2, "Boolean", "boolean"];
+const TYPE_SELECT = [3, "Select", "select"];
+const TYPE_MULTISELECT = [4, "MultiSelect", "multiSelect", "multiselect"];
+
+function isType(attrType, typeName) {
+  const typeMap = {
+    text: TYPE_TEXT,
+    number: TYPE_NUMBER,
+    boolean: TYPE_BOOLEAN,
+    select: TYPE_SELECT,
+    multiselect: TYPE_MULTISELECT,
+  };
+  return typeMap[typeName]?.includes(attrType) ?? false;
+}
+
+function getSelectOptions(attribute) {
+  if (!attribute.options) return [];
+  try {
+    const parsed = JSON.parse(attribute.options);
+    if (Array.isArray(parsed)) {
+      return parsed.map((o) => ({
+        value: String(o.value || o.label || o),
+        label: o.label || o.value || String(o),
+      }));
+    }
+  } catch {
+    // Not JSON
+  }
+  return attribute.options
+    .split(",")
+    .map((opt) => opt.trim())
+    .filter(Boolean)
+    .map((label) => ({ value: label, label }));
+}
+
+function parseMultiSelect(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [String(parsed)];
+  } catch {
+    return value ? [value] : [];
+  }
+}
 
 const props = defineProps({
   modelValue: Boolean,

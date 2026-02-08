@@ -435,7 +435,7 @@ export default {
               :model-value="String(pageSize)"
               @update:model-value="(val) => pageSize = Number(val)"
             >
-              <SelectTrigger class="h-8 w-16 bg-primary-foreground">
+              <SelectTrigger class="h-8 w-[70px] bg-primary-foreground">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
