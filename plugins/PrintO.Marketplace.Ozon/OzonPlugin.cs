@@ -931,17 +931,11 @@ public class OzonPlugin : MarketplacePluginBase
                 );
             }
 
-            if (resultItem.Status == "failed" || resultItem.Errors?.Any() == true || resultItem.ProductId <= 0)
+            if (resultItem.Status == "failed" || resultItem.Errors?.Any() == true)
             {
                 Console.WriteLine($"[OzonPlugin.Export] FAILED! Status={resultItem.Status}, ProductId={resultItem.ProductId}, Errors count={resultItem.Errors?.Count ?? 0}");
 
                 var errors = new List<string>();
-
-                // If ProductId is 0 but no other errors, add a specific message
-                if (resultItem.ProductId <= 0 && (resultItem.Errors == null || !resultItem.Errors.Any()))
-                {
-                    errors.Add("Ozon не вернул ID товара (product_id=0). Возможно, товар ещё обрабатывается. Попробуйте повторить экспорт позже.");
-                }
 
                 if (resultItem.Errors != null)
                 {
@@ -985,6 +979,51 @@ public class OzonPlugin : MarketplacePluginBase
                         ["taskId"] = taskId,
                         ["errors"] = resultItem.Errors ?? new List<ImportItemError>(),
                         ["sentAttributes"] = importItem.Attributes.Select(a => new { a.Id, Value = a.Values.FirstOrDefault()?.Value, DictId = a.Values.FirstOrDefault()?.DictionaryValueId }).ToList()
+                    }
+                );
+            }
+
+            // ProductId=0 but no errors — try SKU-based fallback lookup
+            if (resultItem.ProductId <= 0)
+            {
+                Console.WriteLine($"[OzonPlugin.Export] ProductId=0 with no errors. Attempting SKU fallback lookup for OfferId={importItem.OfferId}...");
+                await Task.Delay(5000, ct);
+
+                try
+                {
+                    var infoResponse = await client.GetProductInfoAsync(
+                        offerIds: new List<string> { importItem.OfferId },
+                        ct: ct);
+
+                    var foundItem = infoResponse.Items.FirstOrDefault(i => i.Id > 0);
+                    if (foundItem != null)
+                    {
+                        Console.WriteLine($"[OzonPlugin.Export] SKU fallback found ProductId={foundItem.Id} for OfferId={importItem.OfferId}");
+                        return new ExportResult(
+                            Success: true,
+                            ExternalProductId: foundItem.Id.ToString(),
+                            Details: new Dictionary<string, object>
+                            {
+                                ["taskId"] = taskId,
+                                ["offerId"] = importItem.OfferId,
+                                ["status"] = resultItem.Status,
+                                ["skuFallback"] = true
+                            }
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[OzonPlugin.Export] SKU fallback lookup failed: {ex.Message}");
+                }
+
+                Console.WriteLine($"[OzonPlugin.Export] SKU fallback did not find product for OfferId={importItem.OfferId}");
+                return new ExportResult(
+                    Success: false,
+                    ErrorMessage: "Ozon не вернул ID товара (product_id=0). Возможно, товар ещё обрабатывается. Попробуйте повторить экспорт позже.",
+                    Details: new Dictionary<string, object>
+                    {
+                        ["taskId"] = taskId
                     }
                 );
             }
