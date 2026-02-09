@@ -1205,6 +1205,9 @@ public class OzonPlugin : MarketplacePluginBase
             // Look up the field type from metadata
             var fieldType = fieldTypes?.GetValueOrDefault(kvp.Key);
 
+            // Determine if this attribute is a dictionary type (select/multiselect)
+            var isDictType = fieldType == "select" || fieldType == "multiselect";
+
             if (kvp.Value is string strValue && !string.IsNullOrEmpty(strValue))
             {
                 // Special handling for hashtags - clean invalid characters
@@ -1214,10 +1217,12 @@ public class OzonPlugin : MarketplacePluginBase
                     if (string.IsNullOrEmpty(strValue)) continue; // Skip if empty after cleaning
                 }
 
-                if (fieldType == "number")
+                if (!isDictType)
                 {
-                    // Number attributes: always send as plain value, never as dictionary ID
-                    values.Add(new AttributeValue { Value = strValue.Trim() });
+                    // Non-dictionary attributes: always send as plain text value
+                    var trimmed = strValue.Trim();
+                    if (!string.IsNullOrEmpty(trimmed))
+                        values.Add(new AttributeValue { Value = trimmed });
                 }
                 else if (strValue.Contains(':'))
                 {
@@ -1238,12 +1243,12 @@ public class OzonPlugin : MarketplacePluginBase
                 }
                 else if (long.TryParse(strValue, out var dictValueId) && dictValueId > 0)
                 {
-                    // Pure numeric - dictionary value ID
+                    // Pure numeric + dictionary type - dictionary value ID
                     values.Add(new AttributeValue { DictionaryValueId = dictValueId, Value = "" });
                 }
                 else
                 {
-                    // Plain text value - skip if it's just whitespace
+                    // Plain text value for dictionary field - skip if it's just whitespace
                     var trimmed = strValue.Trim();
                     if (!string.IsNullOrEmpty(trimmed))
                     {
@@ -1257,9 +1262,9 @@ public class OzonPlugin : MarketplacePluginBase
                 {
                     if (string.IsNullOrEmpty(v)) continue;
 
-                    if (fieldType == "number")
+                    if (!isDictType)
                     {
-                        // Number attributes: always send as plain value
+                        // Non-dictionary attributes: always send as plain text
                         var trimmed = v.Trim();
                         if (!string.IsNullOrEmpty(trimmed))
                             values.Add(new AttributeValue { Value = trimmed });

@@ -109,10 +109,12 @@ public class ProductSyncService
             // Добавляем externalCategoryId
             exportData["_categoryId"] = categoryMapping.externalCategoryId;
 
-            // Добавляем group_id для field-based группировки
+            // Добавляем group_id для field-based группировки,
+            // но только если пользователь НЕ настроил маппинг для этого поля
             var fieldGroupingConfig = adapter.GetFieldBasedGroupingConfig();
             if (fieldGroupingConfig != null &&
-                adapter.Capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping))
+                adapter.Capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping) &&
+                !exportData.ContainsKey(fieldGroupingConfig.GroupFieldKey))
             {
                 var groupId = await GetProductGroupIdAsync(productId, connectionId, ct);
                 if (groupId != null)
