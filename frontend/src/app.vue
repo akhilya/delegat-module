@@ -3,6 +3,7 @@ import { RouterView } from "vue-router";
 import { Toaster } from "vue-sonner";
 import "vue-sonner/style.css";
 import ImportProgressPanel from "@/components/ImportProgressPanel.vue";
+import ExportProgressPanel from "@/components/ExportProgressPanel.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 
 export default {
@@ -10,6 +11,7 @@ export default {
     RouterView,
     Toaster,
     ImportProgressPanel,
+    ExportProgressPanel,
     LoadingBar,
   },
 };
@@ -22,4 +24,5 @@ export default {
   </RouterView>
   <Toaster />
   <ImportProgressPanel />
+  <ExportProgressPanel />
 </template>

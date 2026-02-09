@@ -13,6 +13,7 @@ import storeAttributeModule from "./modules/storeAttributeModule";
 import tokenModule from "./modules/tokenModule";
 import marketplaceModule from "./modules/marketplaceModule";
 import importProgress from "./modules/importProgressModule";
+import exportProgress from "./modules/exportProgressModule";
 
 /**
  * Creates and configures the Vuex store with all registered modules.
@@ -34,6 +35,7 @@ export function createStore() {
       tokenModule,
       marketplaceModule,
       importProgress,
+      exportProgress,
     },
   });
 }

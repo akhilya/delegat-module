@@ -254,6 +254,140 @@ public class ProductSyncController : ControllerBase
 
     #endregion
 
+    #region Export Batch (async background)
+
+    /// <summary>
+    /// Create a batch of products to export in background
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/products/export-batch")]
+    public async Task<IActionResult> CreateExportBatch(
+        int connectionId,
+        [FromBody] ExportBulkInput input,
+        CancellationToken ct)
+    {
+        if (input.productIds == null || input.productIds.Count == 0)
+            throw ApiException.BadRequest("Не выбраны товары для экспорта");
+
+        var connection = await GetConnectionAsync(connectionId);
+
+        var batchId = Guid.NewGuid().ToString("N");
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+
+        // Batch-load product names
+        var productNames = await _context.products
+            .AsNoTracking()
+            .Where(p => input.productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.name, ct);
+
+        foreach (var productId in input.productIds)
+        {
+            var pending = new PendingProductExport
+            {
+                connectionId = connectionId,
+                productId = productId,
+                productName = productNames.GetValueOrDefault(productId),
+                authorUserId = userId,
+                storeId = storeId,
+                batchId = batchId,
+                status = ProductExportStatus.Pending,
+                createdAt = DateTime.UtcNow
+            };
+
+            _context.pendingProductExports.Add(pending);
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            batchId,
+            queued = input.productIds.Count,
+            message = $"Добавлено {input.productIds.Count} товаров в очередь экспорта"
+        });
+    }
+
+    /// <summary>
+    /// Get batch export status
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/export-batches/{batchId}/status")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> GetExportBatchStatus(string batchId, CancellationToken ct)
+    {
+        // Запрет кэширования - критически важно для polling
+        Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
+
+        var entities = await _context.pendingProductExports
+            .AsNoTracking()
+            .Where(p => p.batchId == batchId)
+            .OrderBy(p => p.Id)
+            .ToListAsync(ct);
+
+        if (entities.Count == 0)
+            throw ApiException.NotFound("Пакет не найден");
+
+        var items = entities.Select(p => new
+        {
+            id = p.Id,
+            productId = p.productId,
+            productName = p.productName,
+            status = p.status,
+            externalProductId = p.externalProductId,
+            linkId = p.linkId,
+            lastError = p.lastError,
+            retryCount = p.retryCount
+        }).ToList();
+
+        var pendingCount = entities.Count(e => e.status == ProductExportStatus.Pending);
+        var inProgressCount = entities.Count(e => e.status == ProductExportStatus.InProgress);
+        var completedCount = entities.Count(e => e.status == ProductExportStatus.Completed);
+        var failedCount = entities.Count(e => e.status == ProductExportStatus.Failed);
+
+        return Ok(new
+        {
+            batchId,
+            total = items.Count,
+            pending = pendingCount,
+            inProgress = inProgressCount,
+            completed = completedCount,
+            failed = failedCount,
+            isFinished = pendingCount == 0 && inProgressCount == 0,
+            products = items
+        });
+    }
+
+    /// <summary>
+    /// Retry failed product exports in a batch
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/export-batches/{batchId}/retry-failed")]
+    public async Task<IActionResult> RetryFailedExports(string batchId, CancellationToken ct)
+    {
+        var failedItems = await _context.pendingProductExports
+            .Where(p => p.batchId == batchId && p.status == ProductExportStatus.Failed)
+            .ToListAsync(ct);
+
+        if (failedItems.Count == 0)
+            return Ok(new { message = "Нет неудавшихся экспортов для повтора", retried = 0 });
+
+        foreach (var item in failedItems)
+        {
+            item.status = ProductExportStatus.Pending;
+            item.retryCount = 0;
+            item.lastError = null;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { message = $"Поставлено в очередь на повтор: {failedItems.Count} товаров", retried = failedItems.Count });
+    }
+
+    #endregion
+
     #region External Products
 
     /// <summary>

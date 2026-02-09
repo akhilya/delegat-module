@@ -128,6 +128,7 @@ builder.Services.AddScoped<PriceSyncService>();
 // Background services
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
+builder.Services.AddHostedService<ProductExportBackgroundService>();
 
 // Marketplace adapters are now loaded as DLL plugins from ./plugins/ directory
 // See: PrintO.Marketplace.SDK for plugin development

@@ -8,6 +8,7 @@ import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
+import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
   Plus,
@@ -1226,39 +1227,36 @@ export default {
         return;
       }
 
-      const CHUNK_SIZE = 20;
-      const allIds = [...this.selectedLocalItems];
-      const chunks = [];
-      for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
-        chunks.push(allIds.slice(i, i + CHUNK_SIZE));
-      }
-
       this.isExportingNewBulk = true;
-      this.exportNewBulkProgress = { done: 0, total: allIds.length, success: 0, failed: 0 };
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${this.connectionId}/products/export-batch`,
+          { productIds: this.selectedLocalItems }
+        );
+        const result = response.data;
 
-      for (const chunk of chunks) {
-        await this.exportProductsBulk({
+        this.$store.dispatch("exportProgress/startExportProgress", {
+          batchId: result.batchId,
           connectionId: this.connectionId,
-          productIds: chunk,
-          onSuccess: (response) => {
-            const result = extractResponseData(response, {});
-            this.exportNewBulkProgress.success += result.successCount || 0;
-            this.exportNewBulkProgress.failed += result.failedCount || 0;
-            this.exportNewBulkProgress.done += chunk.length;
-          },
-          onError: () => {
-            this.exportNewBulkProgress.failed += chunk.length;
-            this.exportNewBulkProgress.done += chunk.length;
+          initialProgress: {
+            total: result.queued,
+            pending: result.queued,
+            inProgress: 0,
+            completed: 0,
+            failed: 0,
+            isFinished: false,
+            products: [],
           },
         });
-      }
 
-      const { success, failed } = this.exportNewBulkProgress;
-      displaySonnerSuccess(`Экспортировано: ${success}, ошибок: ${failed}`);
-      this.selectedLocalItems = [];
-      this.exportNewBulkProgress = null;
-      this.isExportingNewBulk = false;
-      this.fetchLocalProducts(true);
+        displaySonnerSuccess(result.message);
+        this.selectedLocalItems = [];
+      } catch (error) {
+        displaySonnerError(error.response?.data?.message || "Ошибка создания пакета экспорта");
+      } finally {
+        this.isExportingNewBulk = false;
+        this.exportNewBulkProgress = null;
+      }
     },
 
     getImportFieldLabel(field) {
@@ -1990,13 +1988,7 @@ export default {
               class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
             >
               <div class="text-sm text-muted-foreground">
-                <template v-if="exportNewBulkProgress">
-                  Экспорт: {{ exportNewBulkProgress.done }} / {{ exportNewBulkProgress.total }}
-                  (ok: {{ exportNewBulkProgress.success }}, ошибок: {{ exportNewBulkProgress.failed }})
-                </template>
-                <template v-else>
-                  Выбрано: {{ selectedLocalItems.length }}
-                </template>
+                Выбрано: {{ selectedLocalItems.length }}
               </div>
               <Button
                 @click="handleExportNewBulk"

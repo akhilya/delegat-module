@@ -611,6 +611,65 @@ namespace PrintO.Migrations
                     b.ToTable("pendingImageDownloads");
                 });
 
+            modelBuilder.Entity("PrintO.Models.PendingProductExport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchId")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("externalProductId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("linkId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("productName")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("retryCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("batchId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.ToTable("pendingProductExports");
+                });
+
             modelBuilder.Entity("PrintO.Models.PendingProductImport", b =>
                 {
                     b.Property<int>("Id")
