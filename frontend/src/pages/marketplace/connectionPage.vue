@@ -1080,23 +1080,35 @@ export default {
       }
 
       this.isExportingBulk = true;
-      const linkIds = this.selectedLinkedItems.map((p) => p.linkId);
+      try {
+        const productIds = this.selectedLinkedItems.map((p) => p.localProductId);
+        const response = await http.post(
+          `/marketplace/connections/${this.connectionId}/products/export-batch`,
+          { productIds }
+        );
+        const result = response.data;
 
-      await this.exportLinksBulk({
-        linkIds,
-        onSuccess: (response) => {
-          const result = extractResponseData(response, {});
-          displaySonnerSuccess(
-            `Экспортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`
-          );
-          this.selectedItems = [];
-          this.fetchProducts();
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      this.isExportingBulk = false;
+        this.$store.dispatch("exportProgress/startExportProgress", {
+          batchId: result.batchId,
+          connectionId: this.connectionId,
+          initialProgress: {
+            total: result.queued,
+            pending: result.queued,
+            inProgress: 0,
+            completed: 0,
+            failed: 0,
+            isFinished: false,
+            products: [],
+          },
+        });
+
+        displaySonnerSuccess(result.message);
+        this.selectedItems = [];
+      } catch (error) {
+        displaySonnerError(error.response?.data?.message || "Ошибка создания пакета экспорта");
+      } finally {
+        this.isExportingBulk = false;
+      }
     },
 
     async handleExportPricesBulk() {
