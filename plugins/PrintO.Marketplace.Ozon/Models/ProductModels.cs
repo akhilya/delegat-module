@@ -96,6 +96,9 @@ public class ProductImportItem
     [JsonPropertyName("description_category_id")]
     public long DescriptionCategoryId { get; set; }
 
+    [JsonPropertyName("new_description_category_id")]
+    public long NewDescriptionCategoryId { get; set; }
+
     [JsonPropertyName("type_id")]
     public long TypeId { get; set; }
 

@@ -907,6 +907,40 @@ public class OzonPlugin : MarketplacePluginBase
                 Console.WriteLine($"[OzonPlugin.Export]   - Attr {attr.Id}: {valueDesc} (total values: {attr.Values.Count})");
             }
 
+            // If product already exists on Ozon, check if category has changed
+            if (existingExternalId != null && long.TryParse(existingExternalId, out var existingProductId))
+            {
+                try
+                {
+                    var infoResponse = await client.GetProductInfoAsync(
+                        productIds: new List<string> { existingExternalId },
+                        ct: ct);
+
+                    var ozonProduct = infoResponse.Items.FirstOrDefault();
+                    if (ozonProduct != null && ozonProduct.DescriptionCategoryId > 0)
+                    {
+                        var desiredCategoryId = importItem.DescriptionCategoryId;
+                        var ozonCategoryId = ozonProduct.DescriptionCategoryId;
+
+                        if (desiredCategoryId > 0 && desiredCategoryId != ozonCategoryId)
+                        {
+                            importItem.NewDescriptionCategoryId = desiredCategoryId;
+                            importItem.DescriptionCategoryId = ozonCategoryId;
+
+                            Console.WriteLine(
+                                $"[OzonPlugin.Export] Category change detected: " +
+                                $"Ozon={ozonCategoryId} -> New={desiredCategoryId}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Don't block export if we can't fetch product info
+                    Console.WriteLine(
+                        $"[OzonPlugin.Export] Could not fetch product info for category check: {ex.Message}");
+                }
+            }
+
             // Submit import request
             var importResponse = await client.ImportProductsAsync(
                 new List<ProductImportItem> { importItem },
