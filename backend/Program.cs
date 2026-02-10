@@ -18,6 +18,10 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Suppress EF Core SQL command logging (noisy in console)
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+
 // Configure Kestrel for large file uploads
 builder.WebHost.ConfigureKestrel(options =>
 {

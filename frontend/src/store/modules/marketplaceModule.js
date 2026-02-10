@@ -664,6 +664,7 @@ export default {
         {
           method: "POST",
           cache: false,
+          timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
         },
         http,
         {
@@ -1178,6 +1179,7 @@ export default {
         {
           method: "POST",
           cache: false,
+          timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
         },
         http,
         {

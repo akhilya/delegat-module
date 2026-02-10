@@ -373,8 +373,9 @@ public class OzonApiClient : IDisposable
             var response = await GetImportInfoAsync(taskId, ct);
 
             // Check if all items are processed (not pending)
-            var allProcessed = response.Result.Items.All(item =>
-                item.Status != "pending");
+            // Items.All() returns true on empty collection — guard with Count > 0
+            var allProcessed = response.Result.Items.Count > 0
+                && response.Result.Items.All(item => item.Status != "pending");
 
             if (allProcessed)
             {

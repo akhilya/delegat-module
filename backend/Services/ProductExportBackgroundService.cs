@@ -89,14 +89,46 @@ public class ProductExportBackgroundService : BackgroundService
             if (ct.IsCancellationRequested)
                 break;
 
+            bool isPermanent;
             try
             {
-                await ProcessSingleExportAsync(context, productSyncService, pending, ct);
+                isPermanent = await ProcessSingleExportAsync(context, productSyncService, pending, ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Критическая ошибка при обработке экспорта товара {Id}:{ProductId}",
                     pending.Id, pending.productId);
+                isPermanent = IsPermanentError(ex.Message);
+            }
+
+            // Permanent error (e.g. account limit) — fail all remaining exports for same connection
+            if (isPermanent)
+            {
+                _logger.LogWarning(
+                    "Обнаружена постоянная ошибка для подключения {ConnectionId}, отменяю оставшиеся экспорты",
+                    pending.connectionId);
+
+                var remaining = await context.pendingProductExports
+                    .Where(p => p.connectionId == pending.connectionId
+                        && p.Id != pending.Id
+                        && (p.status == ProductExportStatus.Pending || p.status == ProductExportStatus.InProgress))
+                    .ToListAsync(ct);
+
+                foreach (var r in remaining)
+                {
+                    r.status = ProductExportStatus.Failed;
+                    r.lastError = pending.lastError;
+                    r.retryCount = PendingProductExport.MAX_RETRIES;
+                }
+
+                if (remaining.Count > 0)
+                {
+                    await context.SaveChangesAsync(ct);
+                    _logger.LogWarning("Отменено {Count} оставшихся экспортов для подключения {ConnectionId}",
+                        remaining.Count, pending.connectionId);
+                }
+
+                break;
             }
 
             // Задержка между товарами чтобы не перегружать API маркетплейса
@@ -105,7 +137,17 @@ public class ProductExportBackgroundService : BackgroundService
         }
     }
 
-    private async Task ProcessSingleExportAsync(
+    /// <summary>
+    /// Returns true if the error is permanent (account-level) and retrying won't help.
+    /// </summary>
+    private static bool IsPermanentError(string? errorMessage)
+    {
+        if (string.IsNullOrEmpty(errorMessage)) return false;
+        return errorMessage.Contains("исчерпали лимит", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <returns>true if a permanent (non-retryable) error was encountered.</returns>
+    private async Task<bool> ProcessSingleExportAsync(
         DataContext context,
         ProductSyncService productSyncService,
         PendingProductExport pending,
@@ -151,6 +193,9 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.status = ProductExportStatus.Failed;
                 pending.lastError = result.ErrorMessage ?? "Неизвестная ошибка";
 
+                if (IsPermanentError(pending.lastError))
+                    pending.retryCount = PendingProductExport.MAX_RETRIES;
+
                 _logger.LogWarning(
                     "Не удалось экспортировать товар {ProductId}: {Error} (попытка {Retry})",
                     pending.productId, pending.lastError, pending.retryCount);
@@ -161,16 +206,25 @@ public class ProductExportBackgroundService : BackgroundService
             _logger.LogInformation(
                 "Товар {Id}:{ProductId} обработан, финальный статус: {Status}",
                 pending.Id, pending.productId, pending.status);
+
+            return IsPermanentError(pending.lastError);
         }
         catch (Exception ex)
         {
             pending.status = ProductExportStatus.Failed;
             pending.lastError = ex.Message;
+
+            var permanent = IsPermanentError(ex.Message);
+            if (permanent)
+                pending.retryCount = PendingProductExport.MAX_RETRIES;
+
             await context.SaveChangesAsync(CancellationToken.None); // Сохраняем даже если отмена
 
             _logger.LogError(ex,
                 "Ошибка экспорта товара {Id}:{ProductId} (попытка {Retry})",
                 pending.Id, pending.productId, pending.retryCount);
+
+            return permanent;
         }
     }
 }
