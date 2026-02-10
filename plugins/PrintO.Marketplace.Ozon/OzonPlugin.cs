@@ -1545,6 +1545,7 @@ public class OzonPlugin : MarketplacePluginBase
 
                 item.Images = images;
                 item.PrimaryImage = images[0];
+                item.ColorImage = images[0];
             }
         }
         else
