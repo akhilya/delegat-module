@@ -105,6 +105,43 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         throw new NotImplementedException($"ExportProductAsync not implemented for {Key}");
     }
 
+    public virtual async Task<BulkExportResult> ExportProductsBulkAsync(
+        MarketplaceConnection connection,
+        List<BulkExportItem> items,
+        CancellationToken ct = default)
+    {
+        // Default fallback: call ExportProductAsync for each item sequentially
+        var results = new List<ExportItemResult>();
+        int successCount = 0;
+        int failedCount = 0;
+
+        foreach (var item in items)
+        {
+            try
+            {
+                var result = await ExportProductAsync(connection, item.ProductData, item.ExistingExternalId, ct);
+                results.Add(new ExportItemResult(
+                    item.LocalProductId,
+                    result.Success,
+                    result.ExternalProductId,
+                    result.ErrorMessage));
+
+                if (result.Success) successCount++;
+                else failedCount++;
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ExportItemResult(
+                    item.LocalProductId,
+                    false,
+                    ErrorMessage: ex.Message));
+                failedCount++;
+            }
+        }
+
+        return new BulkExportResult(items.Count, successCount, failedCount, results);
+    }
+
     public virtual Task<ExportResult> UpdateSkuAsync(
         MarketplaceConnection connection,
         string externalProductId,

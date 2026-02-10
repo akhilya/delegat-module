@@ -158,6 +158,26 @@ public record ExportItemResult(
 );
 
 /// <summary>
+/// Input item for bulk export
+/// </summary>
+public record BulkExportItem(
+    /// <summary>
+    /// Local product ID in the system.
+    /// </summary>
+    int LocalProductId,
+
+    /// <summary>
+    /// Product data according to field mapping.
+    /// </summary>
+    Dictionary<string, object> ProductData,
+
+    /// <summary>
+    /// Existing external product ID (null to create new).
+    /// </summary>
+    string? ExistingExternalId = null
+);
+
+/// <summary>
 /// Paginated result
 /// </summary>
 public record PagedResult<T>(

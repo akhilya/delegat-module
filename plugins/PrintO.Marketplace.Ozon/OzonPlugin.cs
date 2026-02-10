@@ -29,7 +29,8 @@ public class OzonPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ImportStocks |
         MarketplaceCapabilities.ExportStocks |
         MarketplaceCapabilities.FieldBasedGrouping |
-        MarketplaceCapabilities.ImportProductBatch;
+        MarketplaceCapabilities.ImportProductBatch |
+        MarketplaceCapabilities.ExportProductBulk;
 
     // Category name cache (categoryId -> fullPath)
     private Dictionary<string, string>? _categoryNameCache;
@@ -940,6 +941,43 @@ public class OzonPlugin : MarketplacePluginBase
                         $"[OzonPlugin.Export] Could not fetch product info for category check: {ex.Message}");
                 }
             }
+            else
+            {
+                // No link — check if product already exists on Ozon by SKU
+                try
+                {
+                    var skuLookup = await client.GetProductInfoAsync(
+                        offerIds: new List<string> { importItem.OfferId }, ct: ct);
+
+                    var existingByOffer = skuLookup.Items.FirstOrDefault(i => i.Id > 0);
+                    if (existingByOffer != null)
+                    {
+                        Console.WriteLine(
+                            $"[OzonPlugin.Export] Found existing product by SKU: " +
+                            $"OfferId={importItem.OfferId}, ProductId={existingByOffer.Id}");
+
+                        if (existingByOffer.DescriptionCategoryId > 0)
+                        {
+                            var desiredCategoryId = importItem.DescriptionCategoryId;
+                            var ozonCategoryId = existingByOffer.DescriptionCategoryId;
+
+                            if (desiredCategoryId > 0 && desiredCategoryId != ozonCategoryId)
+                            {
+                                importItem.NewDescriptionCategoryId = desiredCategoryId;
+                                importItem.DescriptionCategoryId = ozonCategoryId;
+                                Console.WriteLine(
+                                    $"[OzonPlugin.Export] Category change (SKU lookup): " +
+                                    $"Ozon={ozonCategoryId} -> New={desiredCategoryId}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(
+                        $"[OzonPlugin.Export] SKU pre-check failed: {ex.Message}");
+                }
+            }
 
             // Submit import request
             var importResponse = await client.ImportProductsAsync(
@@ -1120,6 +1158,281 @@ public class OzonPlugin : MarketplacePluginBase
                 ErrorMessage: ex.Message
             );
         }
+    }
+
+    private const int OZON_BULK_BATCH_SIZE = 50;
+
+    public override async Task<BulkExportResult> ExportProductsBulkAsync(
+        ConnectionContext context,
+        List<BulkExportItem> items,
+        CancellationToken ct = default)
+    {
+        if (items.Count == 0)
+            return new BulkExportResult(0, 0, 0, new List<ExportItemResult>());
+
+        var allResults = new List<ExportItemResult>();
+
+        // Sub-batch by OZON_BULK_BATCH_SIZE
+        for (int batchStart = 0; batchStart < items.Count; batchStart += OZON_BULK_BATCH_SIZE)
+        {
+            var batch = items.Skip(batchStart).Take(OZON_BULK_BATCH_SIZE).ToList();
+            var batchResults = await ExportBatchInternalAsync(context, batch, ct);
+            allResults.AddRange(batchResults);
+        }
+
+        var successCount = allResults.Count(r => r.Success);
+        var failedCount = allResults.Count(r => !r.Success);
+        return new BulkExportResult(allResults.Count, successCount, failedCount, allResults);
+    }
+
+    private async Task<List<ExportItemResult>> ExportBatchInternalAsync(
+        ConnectionContext context,
+        List<BulkExportItem> items,
+        CancellationToken ct)
+    {
+        using var client = CreateClient(context);
+        var results = new List<ExportItemResult>();
+
+        // 1. Build all ProductImportItems, track OfferId → LocalProductId
+        var importItems = new List<ProductImportItem>();
+        var offerIdToLocalId = new Dictionary<string, int>();
+
+        foreach (var item in items)
+        {
+            try
+            {
+                var importItem = BuildImportItem(item.ProductData, item.ExistingExternalId);
+                importItems.Add(importItem);
+                offerIdToLocalId[importItem.OfferId] = item.LocalProductId;
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: $"Build failed: {ex.Message}"));
+            }
+        }
+
+        if (importItems.Count == 0)
+            return results;
+
+        // 2. Batch category check: one GetProductInfoAsync call for all existing products
+        var existingExternalIds = items
+            .Where(i => !string.IsNullOrEmpty(i.ExistingExternalId))
+            .Select(i => i.ExistingExternalId!)
+            .Distinct()
+            .ToList();
+
+        if (existingExternalIds.Count > 0)
+        {
+            try
+            {
+                var infoResponse = await client.GetProductInfoAsync(
+                    productIds: existingExternalIds,
+                    ct: ct);
+
+                var ozonProductsById = infoResponse.Items.ToDictionary(p => p.Id.ToString());
+
+                foreach (var importItem in importItems)
+                {
+                    // Find the matching item to get existingExternalId
+                    var sourceItem = items.FirstOrDefault(i =>
+                        offerIdToLocalId.TryGetValue(importItem.OfferId, out var lid) &&
+                        lid == i.LocalProductId);
+
+                    if (sourceItem?.ExistingExternalId != null &&
+                        ozonProductsById.TryGetValue(sourceItem.ExistingExternalId, out var ozonProduct) &&
+                        ozonProduct.DescriptionCategoryId > 0)
+                    {
+                        var desiredCategoryId = importItem.DescriptionCategoryId;
+                        var ozonCategoryId = ozonProduct.DescriptionCategoryId;
+
+                        if (desiredCategoryId > 0 && desiredCategoryId != ozonCategoryId)
+                        {
+                            importItem.NewDescriptionCategoryId = desiredCategoryId;
+                            importItem.DescriptionCategoryId = ozonCategoryId;
+
+                            Console.WriteLine(
+                                $"[OzonPlugin.BulkExport] Category change for OfferId={importItem.OfferId}: " +
+                                $"Ozon={ozonCategoryId} -> New={desiredCategoryId}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[OzonPlugin.BulkExport] Batch category check failed: {ex.Message}");
+            }
+        }
+
+        // 2b. SKU-based category check for items WITHOUT existing link
+        var newItemOfferIds = importItems
+            .Where(ii =>
+            {
+                var src = items.FirstOrDefault(i =>
+                    offerIdToLocalId.TryGetValue(ii.OfferId, out var lid) && lid == i.LocalProductId);
+                return src != null && string.IsNullOrEmpty(src.ExistingExternalId);
+            })
+            .Select(ii => ii.OfferId)
+            .ToList();
+
+        if (newItemOfferIds.Count > 0)
+        {
+            try
+            {
+                var skuLookup = await client.GetProductInfoAsync(offerIds: newItemOfferIds, ct: ct);
+                var ozonByOfferId = skuLookup.Items
+                    .Where(i => i.Id > 0 && !string.IsNullOrEmpty(i.OfferId))
+                    .ToDictionary(i => i.OfferId, i => i);
+
+                foreach (var importItem in importItems)
+                {
+                    if (ozonByOfferId.TryGetValue(importItem.OfferId, out var ozonProduct)
+                        && ozonProduct.DescriptionCategoryId > 0)
+                    {
+                        var desiredCategoryId = importItem.DescriptionCategoryId;
+                        var ozonCategoryId = ozonProduct.DescriptionCategoryId;
+
+                        if (desiredCategoryId > 0 && desiredCategoryId != ozonCategoryId)
+                        {
+                            importItem.NewDescriptionCategoryId = desiredCategoryId;
+                            importItem.DescriptionCategoryId = ozonCategoryId;
+                            Console.WriteLine(
+                                $"[OzonPlugin.BulkExport] Category change (SKU lookup) " +
+                                $"OfferId={importItem.OfferId}: Ozon={ozonCategoryId} -> New={desiredCategoryId}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[OzonPlugin.BulkExport] SKU-based category check failed: {ex.Message}");
+            }
+        }
+
+        // 3. One ImportProductsAsync call with all items
+        long taskId;
+        try
+        {
+            Console.WriteLine($"[OzonPlugin.BulkExport] Sending {importItems.Count} items to ImportProductsAsync");
+            var importResponse = await client.ImportProductsAsync(importItems, ct);
+            taskId = importResponse.Result.TaskId;
+            Console.WriteLine($"[OzonPlugin.BulkExport] Got taskId={taskId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OzonPlugin.BulkExport] ImportProductsAsync failed: {ex.Message}");
+            // All items in this batch fail
+            foreach (var importItem in importItems)
+            {
+                if (offerIdToLocalId.TryGetValue(importItem.OfferId, out var localId))
+                    results.Add(new ExportItemResult(localId, false, ErrorMessage: $"Import API error: {ex.Message}"));
+            }
+            return results;
+        }
+
+        // 4. One PollImportStatusAsync call (timeout 3min, interval 5s for bulk)
+        ImportInfoResponse statusResponse;
+        try
+        {
+            statusResponse = await client.PollImportStatusAsync(
+                taskId,
+                TimeSpan.FromMinutes(3),
+                TimeSpan.FromSeconds(5),
+                ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OzonPlugin.BulkExport] PollImportStatusAsync failed: {ex.Message}");
+            foreach (var importItem in importItems)
+            {
+                if (offerIdToLocalId.TryGetValue(importItem.OfferId, out var localId))
+                    results.Add(new ExportItemResult(localId, false, ErrorMessage: $"Poll timeout: {ex.Message}"));
+            }
+            return results;
+        }
+
+        // 5. Map results back via OfferId
+        var statusItemsByOfferId = statusResponse.Result.Items
+            .Where(i => !string.IsNullOrEmpty(i.OfferId))
+            .GroupBy(i => i.OfferId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var failedOfferIds = new List<string>(); // OfferIds with ProductId=0
+
+        foreach (var importItem in importItems)
+        {
+            if (!offerIdToLocalId.TryGetValue(importItem.OfferId, out var localProductId))
+                continue;
+
+            if (!statusItemsByOfferId.TryGetValue(importItem.OfferId, out var resultItem))
+            {
+                results.Add(new ExportItemResult(localProductId, false, ErrorMessage: "Не получен результат импорта"));
+                continue;
+            }
+
+            if (resultItem.Status == "failed" || resultItem.Errors?.Any() == true)
+            {
+                var errors = resultItem.Errors?.Select(e => $"{e.Field}: {e.Message}") ?? Array.Empty<string>();
+                results.Add(new ExportItemResult(localProductId, false, ErrorMessage: string.Join("; ", errors)));
+                continue;
+            }
+
+            if (resultItem.ProductId > 0)
+            {
+                results.Add(new ExportItemResult(localProductId, true, ExternalProductId: resultItem.ProductId.ToString()));
+            }
+            else
+            {
+                // ProductId=0 — need SKU fallback
+                failedOfferIds.Add(importItem.OfferId);
+            }
+        }
+
+        // 6. Batch SKU fallback for ProductId=0 items
+        if (failedOfferIds.Count > 0)
+        {
+            Console.WriteLine($"[OzonPlugin.BulkExport] SKU fallback for {failedOfferIds.Count} items");
+            await Task.Delay(5000, ct);
+
+            try
+            {
+                var skuInfoResponse = await client.GetProductInfoAsync(
+                    offerIds: failedOfferIds,
+                    ct: ct);
+
+                var foundByOfferId = skuInfoResponse.Items
+                    .Where(i => i.Id > 0 && !string.IsNullOrEmpty(i.OfferId))
+                    .ToDictionary(i => i.OfferId, i => i.Id);
+
+                foreach (var offerId in failedOfferIds)
+                {
+                    if (!offerIdToLocalId.TryGetValue(offerId, out var localProductId))
+                        continue;
+
+                    if (foundByOfferId.TryGetValue(offerId, out var productId))
+                    {
+                        Console.WriteLine($"[OzonPlugin.BulkExport] SKU fallback found ProductId={productId} for OfferId={offerId}");
+                        results.Add(new ExportItemResult(localProductId, true, ExternalProductId: productId.ToString()));
+                    }
+                    else
+                    {
+                        results.Add(new ExportItemResult(localProductId, false,
+                            ErrorMessage: "Ozon не вернул ID товара (product_id=0). Возможно, товар ещё обрабатывается."));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[OzonPlugin.BulkExport] SKU fallback failed: {ex.Message}");
+                foreach (var offerId in failedOfferIds)
+                {
+                    if (offerIdToLocalId.TryGetValue(offerId, out var localProductId))
+                        results.Add(new ExportItemResult(localProductId, false,
+                            ErrorMessage: $"SKU fallback failed: {ex.Message}"));
+                }
+            }
+        }
+
+        return results;
     }
 
     // Known Ozon attribute IDs for standard fields

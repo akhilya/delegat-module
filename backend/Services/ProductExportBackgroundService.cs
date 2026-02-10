@@ -7,6 +7,7 @@ namespace PrintO.Services;
 /// <summary>
 /// Background service that processes the pending product export queue.
 /// Exports products to marketplaces via the ProductSyncService.
+/// Uses bulk export when the adapter supports it.
 /// </summary>
 public class ProductExportBackgroundService : BackgroundService
 {
@@ -14,8 +15,7 @@ public class ProductExportBackgroundService : BackgroundService
     private readonly ILogger<ProductExportBackgroundService> _logger;
 
     // Settings
-    private const int BATCH_SIZE = 5;                 // Products to process per batch
-    private const int DELAY_BETWEEN_PRODUCTS_MS = 300;   // Delay between products (ms)
+    private const int BATCH_SIZE = 50;                // Products to process per batch
     private const int POLL_INTERVAL_MS = 1000;        // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 5000;          // Delay after error (ms)
 
@@ -67,6 +67,7 @@ public class ProductExportBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
         var productSyncService = scope.ServiceProvider.GetRequiredService<ProductSyncService>();
+        var adapterRegistry = scope.ServiceProvider.GetRequiredService<IMarketplaceAdapterRegistry>();
 
         // Получаем пачку pending экспортов
         var pendingExports = await context.pendingProductExports
@@ -84,56 +85,167 @@ public class ProductExportBackgroundService : BackgroundService
             pendingExports.Count,
             string.Join(", ", pendingExports.Select(p => $"{p.Id}:{p.productId}")));
 
-        foreach (var pending in pendingExports)
+        // Group pending items by connectionId
+        var grouped = pendingExports.GroupBy(p => p.connectionId).ToList();
+
+        foreach (var group in grouped)
         {
             if (ct.IsCancellationRequested)
                 break;
 
-            bool isPermanent;
-            try
+            var connectionId = group.Key;
+            var groupItems = group.ToList();
+
+            // Check if adapter supports bulk export
+            var connection = await context.marketplaceConnections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
+
+            var adapter = connection != null ? adapterRegistry.GetByKey(connection.adapterKey) : null;
+            var supportsBulk = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProductBulk) == true;
+
+            if (supportsBulk && groupItems.Count > 1)
             {
-                isPermanent = await ProcessSingleExportAsync(context, productSyncService, pending, ct);
+                // Bulk export path
+                await ProcessBulkExportAsync(context, productSyncService, groupItems, connectionId, ct);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Критическая ошибка при обработке экспорта товара {Id}:{ProductId}",
-                    pending.Id, pending.productId);
-                isPermanent = IsPermanentError(ex.Message);
+                // Sequential fallback for non-bulk adapters or single items
+                foreach (var pending in groupItems)
+                {
+                    if (ct.IsCancellationRequested)
+                        break;
+
+                    bool isPermanent;
+                    try
+                    {
+                        isPermanent = await ProcessSingleExportAsync(context, productSyncService, pending, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Критическая ошибка при обработке экспорта товара {Id}:{ProductId}",
+                            pending.Id, pending.productId);
+                        isPermanent = IsPermanentError(ex.Message);
+                    }
+
+                    if (isPermanent)
+                    {
+                        await CancelRemainingExportsAsync(context, pending, ct);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task ProcessBulkExportAsync(
+        DataContext context,
+        ProductSyncService productSyncService,
+        List<PendingProductExport> pendingItems,
+        int connectionId,
+        CancellationToken ct)
+    {
+        // Mark all as InProgress
+        foreach (var pending in pendingItems)
+        {
+            pending.status = ProductExportStatus.InProgress;
+            pending.lastAttemptAt = DateTime.UtcNow;
+            pending.retryCount++;
+        }
+        await context.SaveChangesAsync(ct);
+
+        var productIds = pendingItems.Select(p => p.productId).ToList();
+        var pendingByProductId = pendingItems.ToDictionary(p => p.productId, p => p);
+
+        _logger.LogInformation(
+            "Запуск bulk экспорта {Count} товаров для connectionId={ConnectionId}",
+            productIds.Count, connectionId);
+
+        try
+        {
+            var result = await productSyncService.ExportProductsBulkAsync(productIds, connectionId, ct);
+
+            foreach (var itemResult in result.Items)
+            {
+                if (!pendingByProductId.TryGetValue(itemResult.ProductId, out var pending))
+                    continue;
+
+                if (itemResult.IsSuccess)
+                {
+                    pending.status = ProductExportStatus.Completed;
+                    pending.completedAt = DateTime.UtcNow;
+                    pending.externalProductId = itemResult.ExternalProductId;
+                    pending.lastError = null;
+
+                    _logger.LogInformation(
+                        "Bulk: экспортирован товар {ProductId} -> External={ExternalId}",
+                        pending.productId, itemResult.ExternalProductId);
+                }
+                else
+                {
+                    pending.status = ProductExportStatus.Failed;
+                    pending.lastError = itemResult.ErrorMessage ?? "Неизвестная ошибка";
+
+                    if (IsPermanentError(pending.lastError))
+                    {
+                        pending.retryCount = PendingProductExport.MAX_RETRIES;
+                        await CancelRemainingExportsAsync(context, pending, ct);
+                    }
+
+                    _logger.LogWarning(
+                        "Bulk: не удалось экспортировать товар {ProductId}: {Error}",
+                        pending.productId, pending.lastError);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Bulk export failed for connectionId={ConnectionId}", connectionId);
+
+            var isPermanent = IsPermanentError(ex.Message);
+            foreach (var pending in pendingItems.Where(p => p.status == ProductExportStatus.InProgress))
+            {
+                pending.status = ProductExportStatus.Failed;
+                pending.lastError = ex.Message;
+                if (isPermanent)
+                    pending.retryCount = PendingProductExport.MAX_RETRIES;
             }
 
-            // Permanent error (e.g. account limit) — fail all remaining exports for same connection
             if (isPermanent)
-            {
-                _logger.LogWarning(
-                    "Обнаружена постоянная ошибка для подключения {ConnectionId}, отменяю оставшиеся экспорты",
-                    pending.connectionId);
+                await CancelRemainingExportsAsync(context, pendingItems.First(), ct);
+        }
 
-                var remaining = await context.pendingProductExports
-                    .Where(p => p.connectionId == pending.connectionId
-                        && p.Id != pending.Id
-                        && (p.status == ProductExportStatus.Pending || p.status == ProductExportStatus.InProgress))
-                    .ToListAsync(ct);
+        await context.SaveChangesAsync(ct);
+    }
 
-                foreach (var r in remaining)
-                {
-                    r.status = ProductExportStatus.Failed;
-                    r.lastError = pending.lastError;
-                    r.retryCount = PendingProductExport.MAX_RETRIES;
-                }
+    private async Task CancelRemainingExportsAsync(
+        DataContext context,
+        PendingProductExport triggerItem,
+        CancellationToken ct)
+    {
+        _logger.LogWarning(
+            "Обнаружена постоянная ошибка для подключения {ConnectionId}, отменяю оставшиеся экспорты",
+            triggerItem.connectionId);
 
-                if (remaining.Count > 0)
-                {
-                    await context.SaveChangesAsync(ct);
-                    _logger.LogWarning("Отменено {Count} оставшихся экспортов для подключения {ConnectionId}",
-                        remaining.Count, pending.connectionId);
-                }
+        var remaining = await context.pendingProductExports
+            .Where(p => p.connectionId == triggerItem.connectionId
+                && p.Id != triggerItem.Id
+                && (p.status == ProductExportStatus.Pending || p.status == ProductExportStatus.InProgress))
+            .ToListAsync(ct);
 
-                break;
-            }
+        foreach (var r in remaining)
+        {
+            r.status = ProductExportStatus.Failed;
+            r.lastError = triggerItem.lastError;
+            r.retryCount = PendingProductExport.MAX_RETRIES;
+        }
 
-            // Задержка между товарами чтобы не перегружать API маркетплейса
-            if (!ct.IsCancellationRequested)
-                await Task.Delay(DELAY_BETWEEN_PRODUCTS_MS, ct);
+        if (remaining.Count > 0)
+        {
+            await context.SaveChangesAsync(ct);
+            _logger.LogWarning("Отменено {Count} оставшихся экспортов для подключения {ConnectionId}",
+                remaining.Count, triggerItem.connectionId);
         }
     }
 

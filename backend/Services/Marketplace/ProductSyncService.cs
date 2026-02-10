@@ -280,6 +280,278 @@ public class ProductSyncService
     }
 
     /// <summary>
+    /// Export multiple products to a marketplace in a single bulk operation.
+    /// Uses batched DB queries and a single adapter call for efficiency.
+    /// </summary>
+    public async Task<BulkProductExportResult> ExportProductsBulkAsync(
+        List<int> productIds,
+        int connectionId,
+        CancellationToken ct = default)
+    {
+        var itemResults = new List<BulkProductExportItemResult>();
+
+        // Load connection
+        var connection = await _context.marketplaceConnections
+            .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
+
+        if (connection == null)
+            return new BulkProductExportResult(0, 0, productIds.Count,
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Подключение не найдено")).ToList());
+
+        if (!connection.isActive)
+            return new BulkProductExportResult(0, 0, productIds.Count,
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Подключение неактивно")).ToList());
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            return new BulkProductExportResult(0, 0, productIds.Count,
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: $"Адаптер '{connection.adapterKey}' не найден")).ToList());
+
+        // One query: load all products with includes
+        var products = await _context.products
+            .Include(p => p.category)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.attribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.files)
+            .Include(p => p.images)
+                .ThenInclude(i => i.file)
+            .Include(p => p.groupMemberships)
+                .ThenInclude(gm => gm.group)
+            .Where(p => productIds.Contains(p.Id))
+            .ToListAsync(ct);
+
+        var productDict = products.ToDictionary(p => p.Id);
+
+        // One query: load all existing links
+        var existingLinks = await _context.productMarketplaceLinks
+            .Where(l => productIds.Contains(l.productId) && l.connectionId == connectionId)
+            .ToListAsync(ct);
+        var linkByProductId = existingLinks.ToDictionary(l => l.productId, l => l);
+
+        // One query: load all category mappings
+        var categoryIds = products
+            .Where(p => p.categoryId.HasValue)
+            .Select(p => p.categoryId!.Value)
+            .Distinct()
+            .ToList();
+
+        var categoryMappings = await _context.categoryMappings
+            .Include(cm => cm.fieldMappings)
+            .Where(cm => cm.connectionId == connectionId && categoryIds.Contains(cm.localCategoryId))
+            .ToListAsync(ct);
+        var mappingByCategoryId = categoryMappings.ToDictionary(cm => cm.localCategoryId, cm => cm);
+
+        // One query: load all group links (for field-based grouping)
+        var fieldGroupingConfig = adapter.GetFieldBasedGroupingConfig();
+        Dictionary<int, string?> groupIdByProductId = new();
+
+        if (fieldGroupingConfig != null && adapter.Capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping))
+        {
+            var groupLinks = await _context.productGroupMarketplaceLinks
+                .Include(gl => gl.productGroup)
+                    .ThenInclude(g => g.members)
+                .Where(gl => gl.connectionId == connectionId)
+                .ToListAsync(ct);
+
+            foreach (var gl in groupLinks)
+            {
+                foreach (var member in gl.productGroup.members)
+                {
+                    if (productIds.Contains(member.productId))
+                        groupIdByProductId[member.productId] = gl.externalGroupId;
+                }
+            }
+        }
+
+        // Build BulkExportItem list
+        var bulkItems = new List<BulkExportItem>();
+        var failedProductIds = new HashSet<int>();
+
+        foreach (var productId in productIds)
+        {
+            if (!productDict.TryGetValue(productId, out var product))
+            {
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Товар с ID {productId} не найден"));
+                failedProductIds.Add(productId);
+                continue;
+            }
+
+            if (!product.categoryId.HasValue)
+            {
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: "Товар не привязан к категории"));
+                failedProductIds.Add(productId);
+                continue;
+            }
+
+            if (!mappingByCategoryId.TryGetValue(product.categoryId.Value, out var categoryMapping))
+            {
+                itemResults.Add(new BulkProductExportItemResult(productId, false,
+                    ErrorMessage: $"Не найден маппинг категории для '{product.category?.name}'"));
+                failedProductIds.Add(productId);
+                continue;
+            }
+
+            try
+            {
+                var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
+                exportData["_categoryId"] = categoryMapping.externalCategoryId;
+
+                // Add group_id for field-based grouping
+                if (fieldGroupingConfig != null && !exportData.ContainsKey(fieldGroupingConfig.GroupFieldKey))
+                {
+                    if (groupIdByProductId.TryGetValue(productId, out var groupId) && groupId != null)
+                        exportData[fieldGroupingConfig.GroupFieldKey] = groupId;
+                }
+
+                // Validate required fields
+                var requiredMappings = categoryMapping.fieldMappings
+                    .Where(fm => fm.isRequired && fm.isEnabled)
+                    .ToList();
+
+                var missingFields = new List<string>();
+                foreach (var mapping in requiredMappings)
+                {
+                    if (!exportData.TryGetValue(mapping.externalFieldKey, out var value) ||
+                        value == null ||
+                        (value is string strValue && string.IsNullOrWhiteSpace(strValue)))
+                    {
+                        missingFields.Add(mapping.externalFieldName ?? mapping.externalFieldKey);
+                    }
+                }
+
+                if (missingFields.Count > 0)
+                {
+                    itemResults.Add(new BulkProductExportItemResult(productId, false,
+                        ErrorMessage: $"Не заполнены обязательные поля: {string.Join(", ", missingFields)}"));
+                    failedProductIds.Add(productId);
+                    continue;
+                }
+
+                var exportDataNonNull = exportData
+                    .Where(kv => kv.Value != null)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value!);
+
+                var existingExternalId = linkByProductId.TryGetValue(productId, out var link)
+                    ? link.externalProductId
+                    : null;
+
+                bulkItems.Add(new BulkExportItem(productId, exportDataNonNull, existingExternalId));
+            }
+            catch (Exception ex)
+            {
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Ошибка подготовки: {ex.Message}"));
+                failedProductIds.Add(productId);
+            }
+        }
+
+        // Call adapter bulk export
+        if (bulkItems.Count > 0)
+        {
+            try
+            {
+                var bulkResult = await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
+
+                if (bulkResult.Items != null)
+                {
+                    foreach (var exportItemResult in bulkResult.Items)
+                    {
+                        if (!exportItemResult.Success)
+                        {
+                            itemResults.Add(new BulkProductExportItemResult(
+                                exportItemResult.LocalProductId, false,
+                                ErrorMessage: exportItemResult.ErrorMessage ?? "Ошибка экспорта"));
+                            continue;
+                        }
+
+                        // Validate ExternalProductId
+                        if (string.IsNullOrWhiteSpace(exportItemResult.ExternalProductId) ||
+                            exportItemResult.ExternalProductId == "0")
+                        {
+                            itemResults.Add(new BulkProductExportItemResult(
+                                exportItemResult.LocalProductId, false,
+                                ErrorMessage: "Маркетплейс не вернул ID товара"));
+                            continue;
+                        }
+
+                        // Create/update ProductMarketplaceLink
+                        var pid = exportItemResult.LocalProductId;
+                        var isNew = !linkByProductId.ContainsKey(pid);
+
+                        if (linkByProductId.TryGetValue(pid, out var existingLink))
+                        {
+                            existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
+                            {
+                                externalProductId = exportItemResult.ExternalProductId,
+                                status = ProductMarketplaceStatus.Synced,
+                                lastErrorMessage = null,
+                                lastSyncAt = DateTime.UtcNow
+                            });
+                        }
+                        else
+                        {
+                            // Check for existing link by externalProductId
+                            var dupLink = await _context.productMarketplaceLinks
+                                .FirstOrDefaultAsync(l =>
+                                    l.externalProductId == exportItemResult.ExternalProductId &&
+                                    l.connectionId == connectionId, ct);
+
+                            if (dupLink != null)
+                            {
+                                dupLink.productId = pid;
+                                dupLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
+                                {
+                                    externalProductId = exportItemResult.ExternalProductId,
+                                    status = ProductMarketplaceStatus.Synced,
+                                    lastErrorMessage = null,
+                                    lastSyncAt = DateTime.UtcNow
+                                });
+                                linkByProductId[pid] = dupLink;
+                                isNew = false;
+                            }
+                            else
+                            {
+                                var newLink = new ProductMarketplaceLink();
+                                newLink.AddFill(new ProductMarketplaceLink.AddForm
+                                {
+                                    productId = pid,
+                                    connectionId = connectionId,
+                                    externalProductId = exportItemResult.ExternalProductId!,
+                                    status = ProductMarketplaceStatus.Synced
+                                });
+                                _context.productMarketplaceLinks.Add(newLink);
+                                linkByProductId[pid] = newLink;
+                            }
+                        }
+
+                        itemResults.Add(new BulkProductExportItemResult(
+                            pid, true,
+                            ExternalProductId: exportItemResult.ExternalProductId,
+                            IsNewProduct: isNew));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Bulk export failed for connectionId={ConnectionId}", connectionId);
+                foreach (var item in bulkItems)
+                {
+                    if (!failedProductIds.Contains(item.LocalProductId))
+                        itemResults.Add(new BulkProductExportItemResult(item.LocalProductId, false, ErrorMessage: $"Ошибка экспорта: {ex.Message}"));
+                }
+            }
+
+            // One SaveChangesAsync at the end
+            await _context.SaveChangesAsync(ct);
+        }
+
+        var successCount = itemResults.Count(r => r.IsSuccess);
+        var failedCount = itemResults.Count(r => !r.IsSuccess);
+        return new BulkProductExportResult(successCount, failedCount, productIds.Count, itemResults);
+    }
+
+    /// <summary>
     /// Import a product from a marketplace and create a local product with a link.
     /// </summary>
     public async Task<ProductImportResult> ImportProductAsync(
@@ -1177,5 +1449,35 @@ public class ProductSyncStatus
 /// Detail of a single attribute change (for import preview).
 /// </summary>
 public record AttributeChangeDetail(string FieldName, string? OldValue, string? NewValue);
+
+/// <summary>
+/// Result of a bulk product export operation.
+/// </summary>
+public class BulkProductExportResult
+{
+    public int SuccessCount { get; }
+    public int FailedCount { get; }
+    public int TotalCount { get; }
+    public List<BulkProductExportItemResult> Items { get; }
+
+    public BulkProductExportResult(int successCount, int failedCount, int totalCount, List<BulkProductExportItemResult> items)
+    {
+        SuccessCount = successCount;
+        FailedCount = failedCount;
+        TotalCount = totalCount;
+        Items = items;
+    }
+}
+
+/// <summary>
+/// Per-product result in a bulk export.
+/// </summary>
+public record BulkProductExportItemResult(
+    int ProductId,
+    bool IsSuccess,
+    string? ExternalProductId = null,
+    string? ErrorMessage = null,
+    bool IsNewProduct = false
+);
 
 #endregion

@@ -66,6 +66,15 @@ public record ExportItemResult(
 );
 
 /// <summary>
+/// Input item for bulk export
+/// </summary>
+public record BulkExportItem(
+    int LocalProductId,
+    Dictionary<string, object> ProductData,
+    string? ExistingExternalId = null
+);
+
+/// <summary>
 /// Paginated query result
 /// </summary>
 /// <typeparam name="T">Type of items</typeparam>

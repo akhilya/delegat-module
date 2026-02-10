@@ -231,6 +231,36 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         );
     }
 
+    public async Task<Models.Marketplace.DTOs.BulkExportResult> ExportProductsBulkAsync(
+        MarketplaceConnection connection,
+        List<Models.Marketplace.DTOs.BulkExportItem> items,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+
+        // Convert backend BulkExportItem → SDK BulkExportItem
+        var sdkItems = items.Select(i => new PrintO.Marketplace.SDK.DTOs.BulkExportItem(
+            i.LocalProductId,
+            i.ProductData,
+            i.ExistingExternalId
+        )).ToList();
+
+        var result = await _plugin.ExportProductsBulkAsync(context, sdkItems, ct);
+
+        // Convert SDK BulkExportResult → backend BulkExportResult
+        return new Models.Marketplace.DTOs.BulkExportResult(
+            result.TotalCount,
+            result.SuccessCount,
+            result.FailedCount,
+            result.Items?.Select(i => new Models.Marketplace.DTOs.ExportItemResult(
+                i.LocalProductId,
+                i.Success,
+                i.ExternalProductId,
+                i.ErrorMessage
+            )).ToList()
+        );
+    }
+
     public async Task<Models.Marketplace.DTOs.ExportResult> UpdateSkuAsync(
         MarketplaceConnection connection,
         string externalProductId,

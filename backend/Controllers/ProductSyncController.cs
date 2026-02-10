@@ -221,34 +221,22 @@ public class ProductSyncController : ControllerBase
     {
         await GetConnectionAsync(connectionId);
 
-        var results = new List<object>();
-        int successCount = 0;
-        int failedCount = 0;
+        var bulkResult = await _productSyncService.ExportProductsBulkAsync(
+            input.productIds, connectionId, ct);
 
-        foreach (var productId in input.productIds)
+        var results = bulkResult.Items.Select(r => new
         {
-            var result = await _productSyncService.ExportProductAsync(productId, connectionId, ct);
-
-            results.Add(new
-            {
-                productId,
-                success = result.IsSuccess,
-                linkId = result.LinkId,
-                externalProductId = result.ExternalProductId,
-                errorMessage = result.ErrorMessage
-            });
-
-            if (result.IsSuccess)
-                successCount++;
-            else
-                failedCount++;
-        }
+            productId = r.ProductId,
+            success = r.IsSuccess,
+            externalProductId = r.ExternalProductId,
+            errorMessage = r.ErrorMessage
+        }).ToList();
 
         return Ok(new
         {
             results,
-            successCount,
-            failedCount
+            successCount = bulkResult.SuccessCount,
+            failedCount = bulkResult.FailedCount
         });
     }
 

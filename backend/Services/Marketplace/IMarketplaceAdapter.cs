@@ -126,6 +126,14 @@ public interface IMarketplaceAdapter
         CancellationToken ct = default);
 
     /// <summary>
+    /// Export multiple products to the marketplace in a single bulk operation.
+    /// </summary>
+    Task<BulkExportResult> ExportProductsBulkAsync(
+        MarketplaceConnection connection,
+        List<BulkExportItem> items,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Update product SKU/article on the marketplace.
     /// Throws NotSupportedException if the adapter does not support this operation.
     /// </summary>

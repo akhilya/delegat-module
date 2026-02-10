@@ -105,6 +105,44 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
     }
 
     /// <inheritdoc />
+    public virtual async Task<BulkExportResult> ExportProductsBulkAsync(
+        ConnectionContext context,
+        List<BulkExportItem> items,
+        CancellationToken ct = default)
+    {
+        // Default fallback: call ExportProductAsync for each item sequentially
+        var results = new List<ExportItemResult>();
+        int successCount = 0;
+        int failedCount = 0;
+
+        foreach (var item in items)
+        {
+            try
+            {
+                var result = await ExportProductAsync(context, item.ProductData, item.ExistingExternalId, ct);
+                results.Add(new ExportItemResult(
+                    item.LocalProductId,
+                    result.Success,
+                    result.ExternalProductId,
+                    result.ErrorMessage));
+
+                if (result.Success) successCount++;
+                else failedCount++;
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ExportItemResult(
+                    item.LocalProductId,
+                    false,
+                    ErrorMessage: ex.Message));
+                failedCount++;
+            }
+        }
+
+        return new BulkExportResult(items.Count, successCount, failedCount, results);
+    }
+
+    /// <inheritdoc />
     public virtual Task<ExportResult> UpdateSkuAsync(
         ConnectionContext context,
         string externalProductId,

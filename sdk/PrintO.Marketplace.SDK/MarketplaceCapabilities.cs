@@ -106,6 +106,11 @@ public enum MarketplaceCapabilities
     /// </summary>
     ImportProductBatch = 1 << 17,
 
+    /// <summary>
+    /// Bulk export multiple products in one call
+    /// </summary>
+    ExportProductBulk = 1 << 18,
+
     #endregion
 
     /// <summary>

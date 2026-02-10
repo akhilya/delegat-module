@@ -130,6 +130,15 @@ public interface IMarketplacePlugin
         CancellationToken ct = default);
 
     /// <summary>
+    /// Export multiple products to marketplace in a single bulk operation.
+    /// More efficient than calling ExportProductAsync N times.
+    /// </summary>
+    Task<BulkExportResult> ExportProductsBulkAsync(
+        ConnectionContext context,
+        List<BulkExportItem> items,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Update product SKU on marketplace
     /// Throws NotSupportedException if not supported
     /// </summary>
