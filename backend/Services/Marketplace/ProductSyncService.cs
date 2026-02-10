@@ -222,6 +222,27 @@ public class ProductSyncService
             // Создаём или обновляем связь
             if (existingLink == null)
             {
+                // Проверяем, нет ли уже связи для этого externalProductId + connectionId
+                // (уникальный индекс IX_productMarketplaceLinks_externalProductId_connectionId)
+                existingLink = await _context.productMarketplaceLinks
+                    .FirstOrDefaultAsync(l =>
+                        l.externalProductId == result.ExternalProductId &&
+                        l.connectionId == connectionId, ct);
+
+                if (existingLink != null)
+                {
+                    _logger.LogWarning(
+                        "Найдена существующая связь (Id={LinkId}) для externalProductId={ExtId} + connectionId={ConnId}, " +
+                        "привязана к productId={OldProductId}. Переназначаю на productId={NewProductId}",
+                        existingLink.Id, result.ExternalProductId, connectionId,
+                        existingLink.productId, productId);
+                    existingLink.productId = productId;
+                    isNewProduct = false;
+                }
+            }
+
+            if (existingLink == null)
+            {
                 existingLink = new ProductMarketplaceLink();
                 existingLink.AddFill(new ProductMarketplaceLink.AddForm
                 {
