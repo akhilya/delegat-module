@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PrintO.Marketplace.SDK;
 using PrintO.Marketplace.SDK.DTOs;
+using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Models.Marketplace;
 using PrintO.Services.Marketplace;
 
@@ -51,6 +52,21 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 }).ToList()
             }).ToList()
         };
+    }
+
+    public RateLimitConfig? GetRateLimitConfig() => _plugin.GetRateLimitConfig();
+
+    public async Task<List<QuotaInfo>> GetQuotasAsync(
+        MarketplaceConnection connection, CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        return await _plugin.GetQuotasAsync(context, ct);
+    }
+
+    public MarketplaceRateLimiter? GetRateLimiterForConnection(MarketplaceConnection connection)
+    {
+        var context = CreateContext(connection);
+        return _plugin.GetRateLimiterForConnection(context);
     }
 
     #endregion

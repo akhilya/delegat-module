@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
+using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Models.Marketplace;
 using PrintO.Services.Marketplace;
 
@@ -297,6 +298,65 @@ public class MarketplaceConnectionController : ControllerBase
                 exportPrices = capabilities.HasFlag(MarketplaceCapabilities.ExportPrices),
                 exportStocks = capabilities.HasFlag(MarketplaceCapabilities.ExportStocks)
             }
+        });
+    }
+
+    /// <summary>
+    /// Get API rate limits and quotas for a connection
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/connections/{connectionId}/limits")]
+    public async Task<IActionResult> GetLimits(int connectionId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var repo = _unitOfWork.Repository<MarketplaceConnection>();
+
+        var connection = await repo.FindAsync(
+            c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
+
+        if (connection == null)
+            throw ApiException.NotFound("Подключение не найдено");
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+
+        var rateLimitConfig = adapter.GetRateLimitConfig();
+
+        // No rate limiting support
+        if (rateLimitConfig == null)
+        {
+            return Ok(new
+            {
+                supported = false
+            });
+        }
+
+        // Get quotas from marketplace API
+        var quotas = await adapter.GetQuotasAsync(connection, ct);
+
+        // Get rate limiter status
+        var rateLimiter = adapter.GetRateLimiterForConnection(connection);
+        var currentWindowRequests = rateLimiter?.GetCurrentWindowCount() ?? 0;
+        var totalRequestsSinceStart = rateLimiter?.TotalRequests ?? 0;
+
+        return Ok(new
+        {
+            supported = true,
+            maxRequestsPerSecond = rateLimitConfig.MaxRequestsPerSecond,
+            currentWindowRequests,
+            totalRequestsSinceStart,
+            quotas = quotas.Select(q => new
+            {
+                key = q.Key,
+                displayName = q.DisplayName,
+                limit = q.Limit,
+                usage = q.Usage,
+                resetsAt = q.ResetsAt
+            })
         });
     }
 }

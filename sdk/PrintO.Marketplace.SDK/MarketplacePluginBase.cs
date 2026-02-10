@@ -1,4 +1,5 @@
 using PrintO.Marketplace.SDK.DTOs;
+using PrintO.Marketplace.SDK.RateLimit;
 
 namespace PrintO.Marketplace.SDK;
 
@@ -28,6 +29,20 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
 
     /// <inheritdoc />
     public abstract Task<ConnectionTestResult> TestConnectionAsync(ConnectionContext context, CancellationToken ct = default);
+
+    #endregion
+
+    #region Rate Limiting
+
+    /// <inheritdoc />
+    public virtual RateLimitConfig? GetRateLimitConfig() => null;
+
+    /// <inheritdoc />
+    public virtual Task<List<QuotaInfo>> GetQuotasAsync(ConnectionContext context, CancellationToken ct = default)
+        => Task.FromResult(new List<QuotaInfo>());
+
+    /// <inheritdoc />
+    public virtual MarketplaceRateLimiter? GetRateLimiterForConnection(ConnectionContext context) => null;
 
     #endregion
 

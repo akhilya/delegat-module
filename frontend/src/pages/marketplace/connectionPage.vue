@@ -37,6 +37,8 @@ import {
   Ban,
   DollarSign,
   Boxes,
+  Activity,
+  Gauge,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -129,6 +131,8 @@ export default {
     Ban,
     DollarSign,
     Boxes,
+    Activity,
+    Gauge,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -257,6 +261,11 @@ export default {
       isExportingNewBulk: false,
       exportNewBulkProgress: null, // { done, total, success, failed }
       localSearchDebounceTimer: null,
+
+      // === API Limits ===
+      limitsData: null,
+      isLoadingLimits: false,
+      limitsRefreshTimer: null,
     };
   },
   watch: {
@@ -412,6 +421,7 @@ export default {
       "exportStocks",
       "getLocalProductsForExport",
       "exportProductsBulk",
+      "getConnectionLimits",
     ]),
 
     async fetchData() {
@@ -422,8 +432,10 @@ export default {
         this.fetchCapabilities(),
         this.fetchMappings(),
         this.fetchLocalCategories(),
+        this.fetchLimits(),
       ]);
       this.isLoading = false;
+      this.startLimitsAutoRefresh();
     },
 
     async fetchConnection() {
@@ -459,6 +471,57 @@ export default {
         },
         onError: () => {},
       });
+    },
+
+    async fetchLimits() {
+      this.isLoadingLimits = true;
+      await this.getConnectionLimits({
+        connectionId: this.connectionId,
+        onSuccess: (response) => {
+          this.limitsData = extractResponseData(response);
+        },
+        onError: () => {
+          this.limitsData = null;
+        },
+      });
+      this.isLoadingLimits = false;
+    },
+
+    startLimitsAutoRefresh() {
+      this.stopLimitsAutoRefresh();
+      this.limitsRefreshTimer = setInterval(() => {
+        if (document.visibilityState === "visible") {
+          this.fetchLimits();
+        }
+      }, 30000);
+    },
+
+    stopLimitsAutoRefresh() {
+      if (this.limitsRefreshTimer) {
+        clearInterval(this.limitsRefreshTimer);
+        this.limitsRefreshTimer = null;
+      }
+    },
+
+    getRpsColor(current, max) {
+      const ratio = current / max;
+      if (ratio < 0.5) return "bg-green-500";
+      if (ratio < 0.8) return "bg-yellow-500";
+      return "bg-red-500";
+    },
+
+    getQuotaColor(usage, limit) {
+      if (limit <= 0) return "bg-green-500";
+      const ratio = usage / limit;
+      if (ratio < 0.5) return "bg-green-500";
+      if (ratio < 0.8) return "bg-yellow-500";
+      return "bg-red-500";
+    },
+
+    formatQuotaResetTime(resetsAt) {
+      if (!resetsAt) return null;
+      const date = new Date(resetsAt);
+      return date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     },
 
     async fetchMappings() {
@@ -1356,6 +1419,9 @@ export default {
       setTimeout(() => clearInterval(waitForData), 5000);
     }
   },
+  beforeUnmount() {
+    this.stopLimitsAutoRefresh();
+  },
 };
 </script>
 
@@ -1467,6 +1533,73 @@ export default {
                   <CheckCircle v-if="value" class="size-4 text-green-600" />
                   <XCircle v-else class="size-4 text-gray-300" />
                   <span class="text-sm">{{ key }}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- API Limits Card -->
+          <Card v-if="limitsData">
+            <CardHeader>
+              <CardTitle class="flex items-center gap-2">
+                <Activity class="size-5" />
+                API Лимиты
+              </CardTitle>
+              <CardDescription v-if="!limitsData.supported">
+                Маркетплейс не поддерживает отслеживание лимитов
+              </CardDescription>
+            </CardHeader>
+            <CardContent v-if="limitsData.supported" class="space-y-6">
+              <!-- RPS Gauge -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-2">
+                    <Gauge class="size-4 text-muted-foreground" />
+                    <span class="font-medium">Запросов в секунду</span>
+                  </div>
+                  <span class="text-muted-foreground">
+                    {{ limitsData.currentWindowRequests }} / {{ limitsData.maxRequestsPerSecond }} RPS
+                  </span>
+                </div>
+                <div class="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :class="getRpsColor(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond)"
+                    :style="{ width: Math.min(100, (limitsData.currentWindowRequests / limitsData.maxRequestsPerSecond) * 100) + '%' }"
+                  />
+                </div>
+                <div class="text-xs text-muted-foreground">
+                  Всего запросов с момента запуска: {{ limitsData.totalRequestsSinceStart.toLocaleString('ru-RU') }}
+                </div>
+              </div>
+
+              <!-- Quota Bars -->
+              <div v-if="limitsData.quotas?.length > 0" class="space-y-4">
+                <Separator />
+                <div
+                  v-for="quota in limitsData.quotas"
+                  :key="quota.key"
+                  class="space-y-2"
+                >
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="font-medium">{{ quota.displayName }}</span>
+                    <span v-if="quota.limit < 0" class="text-muted-foreground">
+                      {{ quota.usage.toLocaleString('ru-RU') }} (безлимитный)
+                    </span>
+                    <span v-else class="text-muted-foreground">
+                      {{ quota.usage.toLocaleString('ru-RU') }} / {{ quota.limit.toLocaleString('ru-RU') }}
+                    </span>
+                  </div>
+                  <div v-if="quota.limit > 0" class="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      class="h-full rounded-full transition-all duration-300"
+                      :class="getQuotaColor(quota.usage, quota.limit)"
+                      :style="{ width: Math.min(100, (quota.usage / quota.limit) * 100) + '%' }"
+                    />
+                  </div>
+                  <div v-if="quota.resetsAt" class="text-xs text-muted-foreground">
+                    Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                  </div>
                 </div>
               </div>
             </CardContent>

@@ -1,3 +1,4 @@
+using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Marketplace.DTOs;
 
@@ -42,6 +43,22 @@ public interface IMarketplaceAdapter
     /// Defines which fields are required for connection (apiKey, clientId, etc.).
     /// </summary>
     CredentialsSchema GetCredentialsSchema();
+
+    /// <summary>
+    /// Get rate limit configuration, or null if not supported.
+    /// </summary>
+    RateLimitConfig? GetRateLimitConfig();
+
+    /// <summary>
+    /// Get current API quota usage from the marketplace.
+    /// </summary>
+    Task<List<QuotaInfo>> GetQuotasAsync(MarketplaceConnection connection, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the rate limiter instance for a specific connection.
+    /// Returns null if rate limiting is not tracked.
+    /// </summary>
+    MarketplaceRateLimiter? GetRateLimiterForConnection(MarketplaceConnection connection);
 
     #endregion
 

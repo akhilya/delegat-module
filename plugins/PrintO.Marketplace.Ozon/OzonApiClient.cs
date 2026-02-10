@@ -1,20 +1,33 @@
+using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using PrintO.Marketplace.Ozon.Models;
+using PrintO.Marketplace.SDK.RateLimit;
 
 namespace PrintO.Marketplace.Ozon;
 
 /// <summary>
-/// HTTP client for Ozon Seller API
+/// HTTP client for Ozon Seller API.
+/// Uses a shared static HttpClient and per-ClientId rate limiter.
 /// </summary>
-public class OzonApiClient : IDisposable
+public class OzonApiClient
 {
     private const string BaseUrl = "https://api-seller.ozon.ru";
-    private readonly HttpClient _httpClient;
+    private const int MaxRetries = 3;
+
+    private static readonly HttpClient SharedHttpClient = new()
+    {
+        BaseAddress = new Uri(BaseUrl),
+        Timeout = TimeSpan.FromSeconds(60)
+    };
+
+    private static readonly ConcurrentDictionary<string, MarketplaceRateLimiter> RateLimiters = new();
+
     private readonly string _clientId;
     private readonly string _apiKey;
-    private bool _disposed;
+    private readonly MarketplaceRateLimiter _rateLimiter;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,14 +41,16 @@ public class OzonApiClient : IDisposable
         _clientId = clientId ?? throw new ArgumentNullException(nameof(clientId));
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
 
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(BaseUrl),
-            Timeout = TimeSpan.FromSeconds(60)
-        };
+        _rateLimiter = RateLimiters.GetOrAdd(clientId,
+            _ => new MarketplaceRateLimiter(maxRequestsPerSecond: 50));
+    }
 
-        _httpClient.DefaultRequestHeaders.Add("Client-Id", _clientId);
-        _httpClient.DefaultRequestHeaders.Add("Api-Key", _apiKey);
+    /// <summary>
+    /// Get the rate limiter for a specific Client ID.
+    /// </summary>
+    public static MarketplaceRateLimiter? GetRateLimiterForClientId(string clientId)
+    {
+        return RateLimiters.TryGetValue(clientId, out var limiter) ? limiter : null;
     }
 
     #region Category Methods
@@ -284,10 +299,23 @@ public class OzonApiClient : IDisposable
 
     #endregion
 
+    #region Quota Methods
+
+    /// <summary>
+    /// Get upload quota (daily create/update limits and total product count).
+    /// Uses Ozon API: POST /v4/product/info/limit
+    /// </summary>
+    public async Task<UploadQuotaResponse> GetUploadQuotaAsync(CancellationToken ct = default)
+    {
+        return await PostAsync<object, UploadQuotaResponse>("/v4/product/info/limit", new { }, ct);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
-    /// Generic POST request method
+    /// Generic POST request method with rate limiting and 429 retry.
     /// </summary>
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string endpoint,
@@ -295,43 +323,80 @@ public class OzonApiClient : IDisposable
         CancellationToken ct)
         where TResponse : new()
     {
-        try
+        var json = JsonSerializer.Serialize(request, JsonOptions);
+        var retryCount = 0;
+
+        while (true)
         {
-            var json = JsonSerializer.Serialize(request, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            ct.ThrowIfCancellationRequested();
 
-            var response = await _httpClient.PostAsync(endpoint, content, ct);
-            var responseBody = await response.Content.ReadAsStringAsync(ct);
-
-            // Debug logging for product attributes endpoint
-            if (endpoint.Contains("/v4/product/info/attributes"))
+            try
             {
-                Console.WriteLine($"[OzonApiClient] Raw JSON response from {endpoint} (first 2000 chars):");
-                Console.WriteLine(responseBody.Length > 2000 ? responseBody.Substring(0, 2000) + "..." : responseBody);
-            }
+                // Wait for rate limiter
+                await _rateLimiter.AcquireAsync(ct);
 
-            if (!response.IsSuccessStatusCode)
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                httpRequest.Headers.Add("Client-Id", _clientId);
+                httpRequest.Headers.Add("Api-Key", _apiKey);
+                httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await SharedHttpClient.SendAsync(httpRequest, ct);
+
+                // Handle 429 Too Many Requests
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    retryCount++;
+                    if (retryCount > MaxRetries)
+                    {
+                        var body429 = await response.Content.ReadAsStringAsync(ct);
+                        throw new OzonApiException(
+                            $"Ozon API rate limited after {MaxRetries} retries: {body429}",
+                            429,
+                            body429);
+                    }
+
+                    var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1);
+                    Console.WriteLine($"[OzonApiClient] 429 rate limited on {endpoint}, retry {retryCount}/{MaxRetries}, waiting {retryAfter.TotalSeconds:F1}s");
+                    await Task.Delay(retryAfter, ct);
+                    continue;
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync(ct);
+
+                // Debug logging for product attributes endpoint
+                if (endpoint.Contains("/v4/product/info/attributes"))
+                {
+                    Console.WriteLine($"[OzonApiClient] Raw JSON response from {endpoint} (first 2000 chars):");
+                    Console.WriteLine(responseBody.Length > 2000 ? responseBody.Substring(0, 2000) + "..." : responseBody);
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new OzonApiException(
+                        $"Ozon API error: {response.StatusCode}: {responseBody}",
+                        (int)response.StatusCode,
+                        responseBody);
+                }
+
+                var result = JsonSerializer.Deserialize<TResponse>(responseBody, JsonOptions);
+                return result ?? new TResponse();
+            }
+            catch (OzonApiException)
             {
-                throw new OzonApiException(
-                    $"Ozon API error: {response.StatusCode}: {responseBody}",
-                    (int)response.StatusCode,
-                    responseBody);
+                throw;
             }
-
-            var result = JsonSerializer.Deserialize<TResponse>(responseBody, JsonOptions);
-            return result ?? new TResponse();
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new OzonApiException($"Network error: {ex.Message}", 0, null, ex);
-        }
-        catch (TaskCanceledException ex) when (ex.CancellationToken != ct)
-        {
-            throw new OzonApiException("Request timeout", 408, null, ex);
-        }
-        catch (JsonException ex)
-        {
-            throw new OzonApiException($"JSON parsing error: {ex.Message}", 0, null, ex);
+            catch (HttpRequestException ex)
+            {
+                throw new OzonApiException($"Network error: {ex.Message}", 0, null, ex);
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken != ct)
+            {
+                throw new OzonApiException("Request timeout", 408, null, ex);
+            }
+            catch (JsonException ex)
+            {
+                throw new OzonApiException($"JSON parsing error: {ex.Message}", 0, null, ex);
+            }
         }
     }
 
@@ -386,28 +451,6 @@ public class OzonApiClient : IDisposable
         }
 
         throw new OzonApiException("Import task timeout", 408, null);
-    }
-
-    #endregion
-
-    #region IDisposable
-
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing)
-            {
-                _httpClient.Dispose();
-            }
-            _disposed = true;
-        }
     }
 
     #endregion

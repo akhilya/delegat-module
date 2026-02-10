@@ -1,6 +1,7 @@
 using System.Globalization;
 using PrintO.Marketplace.SDK;
 using PrintO.Marketplace.SDK.DTOs;
+using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Marketplace.Ozon.Models;
 
 namespace PrintO.Marketplace.Ozon;
@@ -34,6 +35,73 @@ public class OzonPlugin : MarketplacePluginBase
 
     // Category name cache (categoryId -> fullPath)
     private Dictionary<string, string>? _categoryNameCache;
+
+    #endregion
+
+    #region Rate Limiting
+
+    public override RateLimitConfig? GetRateLimitConfig()
+        => new RateLimitConfig { MaxRequestsPerSecond = 50 };
+
+    public override async Task<List<QuotaInfo>> GetQuotasAsync(ConnectionContext context, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        try
+        {
+            var quota = await client.GetUploadQuotaAsync(ct);
+            var result = new List<QuotaInfo>();
+
+            if (quota.DailyCreate != null)
+            {
+                result.Add(new QuotaInfo(
+                    "daily_create",
+                    "Создание товаров в день",
+                    quota.DailyCreate.Limit,
+                    quota.DailyCreate.Usage,
+                    quota.DailyCreate.ResetAt
+                ));
+            }
+
+            if (quota.DailyUpdate != null)
+            {
+                result.Add(new QuotaInfo(
+                    "daily_update",
+                    "Обновление товаров в день",
+                    quota.DailyUpdate.Limit,
+                    quota.DailyUpdate.Usage,
+                    quota.DailyUpdate.ResetAt
+                ));
+            }
+
+            if (quota.Total != null)
+            {
+                result.Add(new QuotaInfo(
+                    "total",
+                    "Всего товаров",
+                    quota.Total.Limit,
+                    quota.Total.Usage,
+                    null
+                ));
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OzonPlugin] GetQuotasAsync failed: {ex.Message}");
+            return new List<QuotaInfo>();
+        }
+    }
+
+    /// <summary>
+    /// Get the static rate limiter for a specific connection's Client ID.
+    /// </summary>
+    public override MarketplaceRateLimiter? GetRateLimiterForConnection(ConnectionContext context)
+    {
+        var clientId = context.GetCredential("clientId");
+        if (string.IsNullOrEmpty(clientId)) return null;
+        return OzonApiClient.GetRateLimiterForClientId(clientId);
+    }
 
     #endregion
 
@@ -79,7 +147,7 @@ public class OzonPlugin : MarketplacePluginBase
     {
         try
         {
-            using var client = CreateClient(context);
+            var client = CreateClient(context);
             var warehouses = await client.GetWarehousesAsync(ct);
 
             return new ConnectionTestResult(
@@ -120,7 +188,7 @@ public class OzonPlugin : MarketplacePluginBase
         string? searchQuery = null,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
         var response = await client.GetCategoryTreeAsync(ct);
 
         var result = new List<ExternalCategory>();
@@ -303,7 +371,7 @@ public class OzonPlugin : MarketplacePluginBase
             return new List<ExternalField>();
         }
 
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         // Если descriptionCategoryId = 0, пытаемся найти его по typeId в дереве категорий
         if (descriptionCategoryId <= 0)
@@ -550,7 +618,7 @@ public class OzonPlugin : MarketplacePluginBase
             return null;
         }
 
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         // Get product info
         var infoResponse = await client.GetProductInfoAsync(
@@ -599,7 +667,7 @@ public class OzonPlugin : MarketplacePluginBase
     {
         if (externalProductIds.Count == 0) return [];
 
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
         await EnsureCategoryNameCacheAsync(client, ct);
 
         // 1. Batch: product info (1 API call)
@@ -643,7 +711,7 @@ public class OzonPlugin : MarketplacePluginBase
         string? offerIdFilter = null,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         // Загружаем кэш категорий для получения названий
         await EnsureCategoryNameCacheAsync(client, ct);
@@ -889,7 +957,7 @@ public class OzonPlugin : MarketplacePluginBase
     {
         try
         {
-            using var client = CreateClient(context);
+            var client = CreateClient(context);
 
             Console.WriteLine($"[OzonPlugin.Export] Building import item from {productData.Count} keys");
             var importItem = BuildImportItem(productData, existingExternalId);
@@ -1190,7 +1258,7 @@ public class OzonPlugin : MarketplacePluginBase
         List<BulkExportItem> items,
         CancellationToken ct)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
         var results = new List<ExportItemResult>();
 
         // 1. Build all ProductImportItems, track OfferId → LocalProductId
@@ -1725,7 +1793,7 @@ public class OzonPlugin : MarketplacePluginBase
         List<string>? externalProductIds = null,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         List<long>? productIds = null;
         if (externalProductIds != null && externalProductIds.Count > 0)
@@ -1778,7 +1846,7 @@ public class OzonPlugin : MarketplacePluginBase
         List<PriceInfo> prices,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         var items = prices.Select(p => new PriceImportItem
         {
@@ -1819,7 +1887,7 @@ public class OzonPlugin : MarketplacePluginBase
         List<string>? externalProductIds = null,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         List<long>? productIds = null;
         if (externalProductIds != null && externalProductIds.Count > 0)
@@ -1872,7 +1940,7 @@ public class OzonPlugin : MarketplacePluginBase
         List<StockInfo> stocks,
         CancellationToken ct = default)
     {
-        using var client = CreateClient(context);
+        var client = CreateClient(context);
 
         // Get warehouse list to find default warehouse
         var warehouses = await client.GetWarehousesAsync(ct);

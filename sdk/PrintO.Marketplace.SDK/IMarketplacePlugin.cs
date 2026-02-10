@@ -1,4 +1,5 @@
 using PrintO.Marketplace.SDK.DTOs;
+using PrintO.Marketplace.SDK.RateLimit;
 
 namespace PrintO.Marketplace.SDK;
 
@@ -45,6 +46,22 @@ public interface IMarketplacePlugin
     /// Get the schema for connection credentials
     /// </summary>
     CredentialsSchema GetCredentialsSchema();
+
+    /// <summary>
+    /// Get rate limit configuration for this marketplace, or null if not supported.
+    /// </summary>
+    RateLimitConfig? GetRateLimitConfig();
+
+    /// <summary>
+    /// Get current API quota usage from the marketplace.
+    /// </summary>
+    Task<List<QuotaInfo>> GetQuotasAsync(ConnectionContext context, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the rate limiter instance for a specific connection.
+    /// Returns null if rate limiting is not tracked for this connection.
+    /// </summary>
+    MarketplaceRateLimiter? GetRateLimiterForConnection(ConnectionContext context);
 
     #endregion
 

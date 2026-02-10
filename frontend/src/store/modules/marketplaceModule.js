@@ -286,6 +286,31 @@ export default {
         .catch((error) => onError(error));
     },
 
+    // === Rate Limits & Quotas ===
+
+    /**
+     * Fetches API rate limits and quotas for a connection.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.connectionId - The connection ID.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async getConnectionLimits(ctx, { connectionId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/limits`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     // === External Categories ===
 
     /**

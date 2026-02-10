@@ -33,6 +33,7 @@ RUN mkdir -p /app/plugins && cp /plugins-out/PrintO.Marketplace.Ozon.dll /app/pl
 
 # Stage 3: Final image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 EXPOSE 5000
 WORKDIR /app
 COPY --from=build /app .

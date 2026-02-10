@@ -1,3 +1,4 @@
+using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Marketplace.DTOs;
 
@@ -27,6 +28,15 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
     public virtual string? LogoUrl => null;
     public abstract MarketplaceCapabilities Capabilities { get; }
     public abstract CredentialsSchema GetCredentialsSchema();
+
+    public virtual RateLimitConfig? GetRateLimitConfig() => null;
+
+    public virtual Task<List<QuotaInfo>> GetQuotasAsync(
+        MarketplaceConnection connection, CancellationToken ct = default)
+        => Task.FromResult(new List<QuotaInfo>());
+
+    public virtual MarketplaceRateLimiter? GetRateLimiterForConnection(MarketplaceConnection connection)
+        => null;
 
     #endregion
 
