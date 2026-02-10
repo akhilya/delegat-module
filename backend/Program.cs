@@ -238,5 +238,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapFallbackToFile("index.html");
+app.MapGet("/api/health", () => Results.Ok("healthy"));
 
 await app.RunAsync("http://0.0.0.0:5000");
