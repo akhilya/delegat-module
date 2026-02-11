@@ -1296,7 +1296,8 @@ public class ProductSyncController : ControllerBase
                     externalProductId = link?.externalProductId,
                     // Возможности
                     canExport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct) ?? false,
-                    canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false
+                    canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false,
+                    canArchive = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct) ?? false
                 };
             })
             .ToList();
@@ -1717,6 +1718,157 @@ public class ProductSyncController : ControllerBase
             externalProductId = result.ExternalProductId,
             message = result.Message ?? "Товар успешно экспортирован"
         });
+    }
+
+    public struct RecreateInput { public string newSku { get; set; } }
+
+    /// <summary>
+    /// Recreate product on marketplace with a new SKU: export as new, archive old
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/recreate")]
+    public async Task<IActionResult> RecreateProductOnMarketplace(int linkId, [FromBody] RecreateInput input, CancellationToken ct)
+    {
+        // 1. Validate
+        if (string.IsNullOrWhiteSpace(input.newSku) || input.newSku.Length > 50)
+            throw ApiException.BadRequest("Новый артикул обязателен (макс. 50 символов)");
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        // 2. Load link with connection and product (tracking)
+        var link = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .Include(l => l.product)
+            .FirstOrDefaultAsync(l => l.Id == linkId, ct);
+
+        if (link == null)
+            throw ApiException.NotFound("Связь не найдена");
+        if (link.connection?.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Доступ запрещён");
+        if (link.product == null)
+            throw ApiException.BadRequest("Локальный товар не найден");
+
+        // 3. Check adapter capabilities
+        var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest("Адаптер маркетплейса не найден");
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct))
+            throw ApiException.BadRequest("Адаптер не поддерживает экспорт товаров");
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct))
+            throw ApiException.BadRequest("Адаптер не поддерживает архивацию товаров");
+
+        // 4. Save old data
+        var oldExternalProductId = link.externalProductId;
+        var oldExternalSku = link.externalSku;
+        var originalSku = link.product.sku;
+        var productId = link.productId;
+        var connectionId = link.connectionId;
+
+        // 5. Transaction: remove old link + temporarily set product.sku = newSku
+        try
+        {
+            // Remove the old link so ExportProductAsync creates a new product
+            _context.productMarketplaceLinks.Remove(link);
+            // Temporarily change product SKU for export
+            link.product.sku = input.newSku;
+            await _context.SaveChangesAsync(ct);
+
+            // 6. Export as new product
+            var exportResult = await _productSyncService.ExportProductAsync(productId, connectionId, ct);
+
+            if (!exportResult.IsSuccess)
+            {
+                // Rollback: restore product SKU and re-create old link
+                link.product.sku = originalSku;
+                _context.productMarketplaceLinks.Add(new ProductMarketplaceLink
+                {
+                    productId = productId,
+                    connectionId = connectionId,
+                    externalProductId = oldExternalProductId,
+                    externalSku = oldExternalSku,
+                    status = ProductMarketplaceStatus.SyncError
+                });
+                await _context.SaveChangesAsync(ct);
+                throw ApiException.BadRequest(exportResult.ErrorMessage ?? "Ошибка экспорта нового товара");
+            }
+
+            // 7. Success: restore product.sku + update new link
+            link.product.sku = originalSku;
+            await _context.SaveChangesAsync(ct);
+
+            // Update the newly created link's externalSku
+            var newLink = await _context.productMarketplaceLinks
+                .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+            if (newLink != null)
+            {
+                newLink.externalSku = input.newSku;
+                await _context.SaveChangesAsync(ct);
+            }
+
+            // 8. Archive old product (best effort — don't fail the operation)
+            string? archiveError = null;
+            try
+            {
+                var archiveResult = await adapter.ArchiveProductAsync(link.connection, oldExternalProductId, ct);
+                if (!archiveResult.Success)
+                    archiveError = archiveResult.ErrorMessage;
+            }
+            catch (Exception ex)
+            {
+                archiveError = ex.Message;
+                _logger.LogWarning(ex, "Failed to archive old product {ExternalId} on {Adapter}",
+                    oldExternalProductId, link.connection.adapterKey);
+            }
+
+            return Ok(new
+            {
+                success = true,
+                newExternalProductId = exportResult.ExternalProductId,
+                newExternalSku = input.newSku,
+                archiveError
+            });
+        }
+        catch (ApiException)
+        {
+            throw; // re-throw API exceptions
+        }
+        catch (Exception ex)
+        {
+            // Critical failure — try to restore
+            _logger.LogError(ex, "Recreate product failed for link {LinkId}", linkId);
+
+            try
+            {
+                var product = await _context.products.FindAsync(new object[] { productId }, ct);
+                if (product != null && product.sku != originalSku)
+                {
+                    product.sku = originalSku;
+                }
+                // Check if the old link was lost
+                var existingLink = await _context.productMarketplaceLinks
+                    .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+                if (!existingLink)
+                {
+                    _context.productMarketplaceLinks.Add(new ProductMarketplaceLink
+                    {
+                        productId = productId,
+                        connectionId = connectionId,
+                        externalProductId = oldExternalProductId,
+                        externalSku = oldExternalSku,
+                        status = ProductMarketplaceStatus.SyncError
+                    });
+                }
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (Exception rollbackEx)
+            {
+                _logger.LogError(rollbackEx, "Rollback also failed for link {LinkId}", linkId);
+            }
+
+            throw ApiException.BadRequest($"Ошибка пересоздания: {ex.Message}");
+        }
     }
 
     /// <summary>

@@ -111,6 +111,11 @@ public enum MarketplaceCapabilities
     /// </summary>
     ExportProductBulk = 1 << 18,
 
+    /// <summary>
+    /// Archive product on marketplace
+    /// </summary>
+    ArchiveProduct = 1 << 19,
+
     #endregion
 
     /// <summary>

@@ -8,6 +8,7 @@ import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Label from "@/components/ui/label/Label.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
+import { BarcodeInput } from "@/components/ui/barcode";
 import {
   FormControl,
   FormDescription,
@@ -57,6 +58,7 @@ export default {
     Label,
     ProductAttributeForm,
     StoreAttributeForm,
+    BarcodeInput,
     Loader2,
     FolderOpen,
     Globe,
@@ -181,6 +183,7 @@ export default {
       z.object({
         product: z.object({
           sku: z.string().min(1, "Артикул обязателен").max(20),
+          barcode: z.string().max(13).optional().nullable(),
           name: z.string().min(1, "Название обязательно").max(100),
           description: z.string().max(5000).default(""),
           storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
@@ -193,6 +196,7 @@ export default {
       initialValues: {
         product: {
           sku: "",
+          barcode: "",
           name: "",
           description: "",
         },
@@ -368,6 +372,19 @@ export default {
             <FormLabel>Артикул *</FormLabel>
             <FormControl>
               <Input type="text" v-bind="componentField" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ value, setValue }" name="product.barcode">
+          <FormItem>
+            <FormLabel>Штрихкод (EAN)</FormLabel>
+            <FormControl>
+              <BarcodeInput
+                :model-value="value || ''"
+                @update:model-value="setValue($event)"
+              />
             </FormControl>
             <FormMessage />
           </FormItem>

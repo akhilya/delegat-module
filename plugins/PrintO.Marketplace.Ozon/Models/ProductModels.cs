@@ -799,3 +799,19 @@ public class UpdateOfferIdResult
 }
 
 #endregion
+
+#region Archive
+
+public class ArchiveProductRequest
+{
+    [JsonPropertyName("product_id")]
+    public List<long> ProductId { get; set; } = new();
+}
+
+public class ArchiveProductResponse
+{
+    [JsonPropertyName("result")]
+    public bool Result { get; set; }
+}
+
+#endregion

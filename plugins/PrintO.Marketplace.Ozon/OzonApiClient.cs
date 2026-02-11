@@ -210,6 +210,16 @@ public class OzonApiClient
         return await PostAsync<UpdateOfferIdRequest, UpdateOfferIdResponse>("/v1/product/update/offer-id", request, ct);
     }
 
+    /// <summary>
+    /// Archive products on Ozon
+    /// </summary>
+    public async Task<bool> ArchiveProductAsync(List<long> productIds, CancellationToken ct = default)
+    {
+        var request = new ArchiveProductRequest { ProductId = productIds };
+        var response = await PostAsync<ArchiveProductRequest, ArchiveProductResponse>("/v1/product/archive", request, ct);
+        return response.Result;
+    }
+
     #endregion
 
     #region Price Methods

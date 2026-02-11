@@ -130,6 +130,41 @@
                   />
                 </div>
               </div>
+
+              <!-- Barcode -->
+              <div class="flex items-start gap-3">
+                <Checkbox
+                  v-model="enabledFields.barcode"
+                  id="enable-barcode"
+                  class="mt-2"
+                />
+                <div class="flex-1 space-y-1">
+                  <Label
+                    for="barcode"
+                    :class="{ 'text-muted-foreground': !enabledFields.barcode && !generateBarcodes }"
+                  >
+                    Штрихкод
+                  </Label>
+                  <BarcodeInput
+                    v-model="formData.barcode"
+                    :show-preview="false"
+                    :disabled="!enabledFields.barcode"
+                    :class="{ 'opacity-50 pointer-events-none': !enabledFields.barcode }"
+                  />
+                  <div class="flex items-center gap-2 pt-1">
+                    <Checkbox
+                      v-model="generateBarcodes"
+                      id="generate-barcodes"
+                    />
+                    <Label
+                      for="generate-barcodes"
+                      class="text-sm font-normal cursor-pointer"
+                    >
+                      Сгенерировать всем у кого нет штрихкода
+                    </Label>
+                  </div>
+                </div>
+              </div>
             </div>
           </TabsContent>
 
@@ -342,6 +377,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
+import { BarcodeInput } from "@/components/ui/barcode";
 import { toast } from "vue-sonner";
 
 // Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
@@ -426,6 +462,7 @@ const formData = reactive({
   description: "",
   storageQuantity: null,
   price: null,
+  barcode: "",
 });
 
 // Which fields are enabled for editing
@@ -434,7 +471,11 @@ const enabledFields = reactive({
   description: false,
   storageQuantity: false,
   price: false,
+  barcode: false,
 });
+
+// Generate barcodes for products that don't have one
+const generateBarcodes = ref(false);
 
 // Category attributes
 const enabledCategoryAttributes = reactive({});
@@ -459,6 +500,8 @@ const hasAnyEnabled = computed(() => {
     enabledFields.description ||
     enabledFields.storageQuantity ||
     enabledFields.price ||
+    enabledFields.barcode ||
+    generateBarcodes.value ||
     Object.values(enabledCategoryAttributes).some((v) => v) ||
     Object.values(enabledStoreAttributes).some((v) => v)
   );
@@ -499,10 +542,13 @@ watch(isOpen, (open) => {
     formData.description = "";
     formData.storageQuantity = null;
     formData.price = null;
+    formData.barcode = "";
     enabledFields.name = false;
     enabledFields.description = false;
     enabledFields.storageQuantity = false;
     enabledFields.price = false;
+    enabledFields.barcode = false;
+    generateBarcodes.value = false;
 
     // Reset category attributes
     Object.keys(enabledCategoryAttributes).forEach((key) => {
@@ -537,6 +583,12 @@ async function handleSubmit() {
   }
   if (enabledFields.price && formData.price !== null) {
     updates.price = formData.price;
+  }
+  if (enabledFields.barcode) {
+    updates.barcode = formData.barcode || "";
+  }
+  if (generateBarcodes.value) {
+    updates.generateBarcodes = true;
   }
 
   // Category attribute values

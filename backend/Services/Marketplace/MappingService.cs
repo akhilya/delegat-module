@@ -117,6 +117,7 @@ public class MappingService
         return fieldName.ToLowerInvariant() switch
         {
             "sku" => product.sku,
+            "barcode" => product.barcode,
             "name" => product.name,
             "description" => product.description,
             "price" => product.price,
@@ -292,6 +293,7 @@ public class MappingService
         return new List<ProductFieldInfo>
         {
             new("sku", "SKU / Артикул", "string"),
+            new("barcode", "Штрихкод (EAN)", "string"),
             new("name", "Название", "string"),
             new("description", "Описание", "string"),
             new("price", "Цена", "number"),

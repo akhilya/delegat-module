@@ -156,6 +156,7 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         MarketplaceConnection connection,
         string externalProductId,
         string newSku,
+        string? currentSku = null,
         CancellationToken ct = default)
     {
         if (!Capabilities.HasFlag(MarketplaceCapabilities.UpdateSku))
@@ -163,6 +164,16 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
             throw new NotSupportedException($"Marketplace {DisplayName} does not support SKU updates");
         }
         throw new NotImplementedException($"UpdateSkuAsync not implemented for {Key}");
+    }
+
+    public virtual Task<ExportResult> ArchiveProductAsync(
+        MarketplaceConnection connection,
+        string externalProductId,
+        CancellationToken ct = default)
+    {
+        if (!Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct))
+            throw new NotSupportedException($"Marketplace {DisplayName} does not support product archiving");
+        throw new NotImplementedException($"ArchiveProductAsync not implemented for {Key}");
     }
 
     public virtual Task<List<PriceInfo>> ImportPricesAsync(

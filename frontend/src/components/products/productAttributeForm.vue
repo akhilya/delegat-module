@@ -5,6 +5,7 @@ import Switch from "@/components/ui/switch/Switch.vue";
 import Label from "@/components/ui/label/Label.vue";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
+import { BarcodeInput } from "@/components/ui/barcode";
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +21,7 @@ const TYPE_NUMBER = [1, "Number", "number"];
 const TYPE_BOOLEAN = [2, "Boolean", "boolean"];
 const TYPE_SELECT = [3, "Select", "select"];
 const TYPE_MULTISELECT = [4, "MultiSelect", "multiSelect", "multiselect"];
+const TYPE_BARCODE = [5, "Barcode", "barcode"];
 
 export default {
   components: {
@@ -28,6 +30,7 @@ export default {
     Label,
     SearchableSelect,
     MultiSelectDropdown,
+    BarcodeInput,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -115,6 +118,7 @@ export default {
         boolean: TYPE_BOOLEAN,
         select: TYPE_SELECT,
         multiselect: TYPE_MULTISELECT,
+        barcode: TYPE_BARCODE,
       };
       return typeMap[typeName]?.includes(attrType) ?? false;
     },
@@ -328,6 +332,13 @@ export default {
             @update:model-value="setMultiSelectByLabels(attribute, $event)"
             placeholder="Выберите..."
             :class="{ 'border-red-500': hasError(attribute.id) }"
+          />
+
+          <!-- Barcode (type 5) -->
+          <BarcodeInput
+            v-else-if="isType(attribute.type, 'barcode')"
+            :model-value="getValue(attribute.id)"
+            @update:model-value="setValue(attribute.id, $event)"
           />
 
           <!-- Fallback for unknown types -->

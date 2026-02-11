@@ -834,6 +834,10 @@ namespace PrintO.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("barcode")
+                        .HasMaxLength(13)
+                        .HasColumnType("varchar(13)");
+
                     b.Property<int?>("categoryId")
                         .HasColumnType("int");
 

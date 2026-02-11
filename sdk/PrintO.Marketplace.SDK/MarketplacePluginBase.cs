@@ -162,9 +162,19 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
         ConnectionContext context,
         string externalProductId,
         string newSku,
+        string? currentSku = null,
         CancellationToken ct = default)
     {
         throw new NotSupportedException($"Plugin '{Key}' does not support UpdateSku");
+    }
+
+    /// <inheritdoc />
+    public virtual Task<ExportResult> ArchiveProductAsync(
+        ConnectionContext context,
+        string externalProductId,
+        CancellationToken ct = default)
+    {
+        throw new NotSupportedException($"Plugin '{Key}' does not support ArchiveProduct");
     }
 
     /// <inheritdoc />

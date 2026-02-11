@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
+  AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProductFilesTable from "@/components/productFilesTable.vue";
@@ -30,6 +31,7 @@ import ProductImagesEditor from "@/components/productImagesEditor.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
+import { BarcodeInput } from "@/components/ui/barcode";
 import { Progress } from "@/components/ui/progress";
 import Separator from "@/components/ui/separator/Separator.vue";
 import Note from "@/components/note.vue";
@@ -45,6 +47,7 @@ import {
   Layers,
   ExternalLink,
   Check,
+  Pencil,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
@@ -77,6 +80,7 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
+    AlertDialogDescription,
     Tabs,
     TabsContent,
     TabsList,
@@ -89,6 +93,7 @@ export default {
     ProductAttributeForm,
     StoreAttributeForm,
     ProductMarketplaceIntegrations,
+    BarcodeInput,
     Separator,
     Loader2,
     Upload,
@@ -97,6 +102,7 @@ export default {
     NotebookPen,
     FolderOpen,
     Globe,
+    Pencil,
     Note,
     Progress,
     Layers,
@@ -150,6 +156,9 @@ export default {
     const lastSavedAt = ref(null);
     const hasUnsavedChanges = ref(false);
     const isInitialLoad = ref(true);
+    const showSkuDialog = ref(false);
+    const newSkuValue = ref("");
+    const isUpdatingSku = ref(false);
 
     // Fetch product group
     async function fetchProductGroup() {
@@ -211,6 +220,7 @@ export default {
             product: {
               name: product.name,
               description: product.description,
+              barcode: product.barcode || "",
               storageQuantity: product.storageQuantity,
               price: product.price,
             },
@@ -233,6 +243,7 @@ export default {
         product: z.object({
           name: z.string().min(1, "Название обязательно").max(100),
           description: z.string().max(5000).optional(),
+          barcode: z.string().max(13).optional().nullable(),
           storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
           price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
         }),
@@ -245,6 +256,7 @@ export default {
         product: {
           name: "",
           description: "",
+          barcode: "",
           storageQuantity: null,
           price: null,
         },
@@ -476,6 +488,48 @@ export default {
       storeAttributeValues.value = newValues;
     }
 
+    function openSkuDialog() {
+      newSkuValue.value = "";
+      showSkuDialog.value = true;
+    }
+
+    async function submitSkuChange() {
+      const trimmed = newSkuValue.value.trim();
+      if (!trimmed || trimmed === productSKU.value) return;
+
+      isUpdatingSku.value = true;
+      await store.dispatch("updateProductSku", {
+        productId,
+        newSku: trimmed,
+        onSuccess: (response) => {
+          const data = response.data.value;
+          productSKU.value = data.newSku;
+          showSkuDialog.value = false;
+
+          // Show marketplace results
+          const mpResults = data.marketplaceResults || [];
+          const failed = mpResults.filter((r) => !r.success);
+
+          if (failed.length > 0) {
+            const details = failed.map((r) => `${r.name}: ${r.error}`).join("\n");
+            displaySonnerSuccess(
+              `Артикул изменён локально. Ошибки на маркетплейсах (${failed.length}):\n${details}`,
+            );
+          } else if (mpResults.length > 0) {
+            displaySonnerSuccess(
+              `Артикул изменён локально и на ${mpResults.length} маркетплейс(ах)`,
+            );
+          } else {
+            displaySonnerSuccess("Артикул изменён");
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      isUpdatingSku.value = false;
+    }
+
     return {
       productSKU,
       form,
@@ -509,6 +563,11 @@ export default {
       lastSavedAt,
       hasUnsavedChanges,
       fetchProduct,
+      showSkuDialog,
+      newSkuValue,
+      isUpdatingSku,
+      openSkuDialog,
+      submitSkuChange,
     };
   },
 };
@@ -540,11 +599,75 @@ export default {
             @submit.prevent="onSubmit"
             class="space-y-4 flex flex-col m-4"
           >
-            <!-- SKU (read-only) -->
+            <!-- SKU with edit button -->
             <div class="space-y-2">
               <Label class="opacity-50">Артикул</Label>
-              <Input type="text" disabled :model-value="productSKU" />
+              <div class="flex items-center gap-1.5">
+                <Input type="text" disabled :model-value="productSKU" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  class="shrink-0 size-9"
+                  title="Изменить артикул"
+                  type="button"
+                  @click="openSkuDialog"
+                >
+                  <Pencil class="size-4" />
+                </Button>
+              </div>
             </div>
+
+            <!-- SKU change dialog -->
+            <AlertDialog :open="showSkuDialog" @update:open="showSkuDialog = $event">
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Изменить артикул</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Артикул будет изменён локально и на всех привязанных маркетплейсах.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div class="space-y-3 py-2">
+                  <div class="space-y-1">
+                    <Label class="text-sm opacity-60">Текущий артикул</Label>
+                    <Input type="text" disabled :model-value="productSKU" />
+                  </div>
+                  <div class="space-y-1">
+                    <Label class="text-sm">Новый артикул</Label>
+                    <Input
+                      type="text"
+                      v-model="newSkuValue"
+                      maxlength="50"
+                      placeholder="Введите новый артикул"
+                      @keydown.enter.prevent="submitSkuChange"
+                    />
+                  </div>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel :disabled="isUpdatingSku">Отмена</AlertDialogCancel>
+                  <Button
+                    @click="submitSkuChange"
+                    :disabled="isUpdatingSku || !newSkuValue.trim() || newSkuValue.trim() === productSKU"
+                  >
+                    <Loader2 v-if="isUpdatingSku" class="size-4 mr-2 animate-spin" />
+                    Изменить
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <!-- Barcode -->
+            <FormField v-slot="{ value, setValue }" name="product.barcode">
+              <FormItem>
+                <FormLabel>Штрихкод (EAN)</FormLabel>
+                <FormControl>
+                  <BarcodeInput
+                    :model-value="value || ''"
+                    @update:model-value="setValue($event)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
             <!-- Category (read-only) -->
             <div v-if="category" class="space-y-2">

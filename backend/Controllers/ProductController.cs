@@ -7,6 +7,7 @@ using PrintO.Infrastructure.Middleware;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
+using PrintO.Services.Marketplace;
 
 namespace PrintO.Controllers;
 
@@ -211,6 +212,10 @@ public class ProductController : ControllerBase
         if (existingProduct != null)
             throw ApiException.BadRequest("Товар с таким артикулом уже существует");
 
+        // Validate barcode if provided
+        if (!string.IsNullOrEmpty(input.barcode) && !IsValidEanBarcode(input.barcode))
+            throw ApiException.BadRequest("Невалидный штрихкод. Допустимы EAN-8 (8 цифр) или EAN-13 (13 цифр)");
+
         var product = new Product();
         product.AddFill(new Product.AddForm(input, selectedStoreId.Value, input.categoryId));
 
@@ -285,6 +290,10 @@ public class ProductController : ControllerBase
         if (product == null || product.storeId != selectedStoreId.Value)
             throw ApiException.NotFound("Товар не найден");
 
+        // Validate barcode if provided
+        if (input.barcode != null && input.barcode != "" && !IsValidEanBarcode(input.barcode))
+            throw ApiException.BadRequest("Невалидный штрихкод. Допустимы EAN-8 (8 цифр) или EAN-13 (13 цифр)");
+
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             product.UpdateFill(input);
@@ -331,6 +340,102 @@ public class ProductController : ControllerBase
         });
 
         return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Updates the product SKU locally and cascades the change to all linked marketplaces.
+    /// </summary>
+    /// <param name="productId">The product identifier.</param>
+    /// <param name="input">The new SKU value.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Result with local update status and per-marketplace results.</returns>
+    [HttpPost]
+    [Route("/products/{productId}/update-sku")]
+    public async Task<IActionResult> UpdateProductSku(int productId, [FromBody] UpdateSkuInput input, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        // Validate input
+        if (string.IsNullOrWhiteSpace(input.newSku))
+            throw ApiException.BadRequest("Новый артикул не может быть пустым");
+
+        var newSku = input.newSku.Trim();
+        if (newSku.Length > 50)
+            throw ApiException.BadRequest("Артикул не может быть длиннее 50 символов");
+
+        // Load product
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.sku == newSku)
+            throw ApiException.BadRequest("Новый артикул совпадает с текущим");
+
+        // Check uniqueness within the store
+        var duplicate = await _context.products
+            .AnyAsync(p => p.storeId == selectedStoreId.Value && p.sku == newSku && p.Id != productId, ct);
+
+        if (duplicate)
+            throw ApiException.BadRequest($"Артикул '{newSku}' уже используется другим товаром");
+
+        // Update locally
+        product.sku = newSku;
+        await _context.SaveChangesAsync(ct);
+
+        // Cascade to marketplaces
+        var links = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .Where(l => l.productId == productId)
+            .ToListAsync(ct);
+
+        var marketplaceResults = new List<object>();
+
+        if (links.Count > 0)
+        {
+            var syncService = _serviceProvider.GetRequiredService<ProductSyncService>();
+
+            foreach (var link in links)
+            {
+                try
+                {
+                    var result = await syncService.UpdateSkuAsync(link.Id, newSku, ct);
+                    marketplaceResults.Add(new
+                    {
+                        connectionId = link.connectionId,
+                        name = link.connection.name ?? link.connection.adapterKey,
+                        success = result.IsSuccess,
+                        error = result.ErrorMessage
+                    });
+                }
+                catch (Exception ex)
+                {
+                    marketplaceResults.Add(new
+                    {
+                        connectionId = link.connectionId,
+                        name = link.connection.name ?? link.connection.adapterKey,
+                        success = false,
+                        error = ex.Message
+                    });
+                }
+            }
+        }
+
+        return Ok(new
+        {
+            success = true,
+            updatedLocal = true,
+            newSku,
+            marketplaceResults
+        });
+    }
+
+    public struct UpdateSkuInput
+    {
+        public string newSku { get; set; }
     }
 
     /// <summary>
@@ -461,6 +566,21 @@ public class ProductController : ControllerBase
                     hasChanges = true;
                 }
 
+                if (request.updates.barcode != null)
+                {
+                    var newBarcode = request.updates.barcode == "" ? null : request.updates.barcode;
+                    if (newBarcode != null && !IsValidEanBarcode(newBarcode))
+                        throw ApiException.BadRequest($"Невалидный штрихкод: {newBarcode}");
+                    product.barcode = newBarcode;
+                    hasChanges = true;
+                }
+
+                if (request.updates.generateBarcodes == true && string.IsNullOrEmpty(product.barcode))
+                {
+                    product.barcode = GenerateEan13();
+                    hasChanges = true;
+                }
+
                 if (hasChanges)
                 {
                     productRepo.UpdateWithoutSave(product);
@@ -537,6 +657,10 @@ public class ProductController : ControllerBase
         public List<ProductAttributeValue.UserValueForm>? attributeValues { get; set; }
         /// <summary>Store attribute values to replace, or null to leave unchanged.</summary>
         public List<StoreProductAttributeValue.UserValueForm>? storeAttributeValues { get; set; }
+        /// <summary>New barcode (EAN-8/EAN-13), or null to leave unchanged. Empty string clears barcode.</summary>
+        public string? barcode { get; set; }
+        /// <summary>When true, generates a unique EAN-13 barcode for each product that doesn't already have one.</summary>
+        public bool? generateBarcodes { get; set; }
     }
 
     /// <summary>
@@ -689,5 +813,52 @@ public class ProductController : ControllerBase
     {
         /// <summary>The list of product IDs to delete.</summary>
         public List<int> productIds { get; set; }
+    }
+
+    /// <summary>
+    /// Validates an EAN-8 or EAN-13 barcode string (digits only, correct check digit).
+    /// </summary>
+    private static readonly Random _random = new();
+
+    /// <summary>Generates a random valid EAN-13 barcode with prefix 200-299 (internal use).</summary>
+    public static string GenerateEan13()
+    {
+        var body = "20";
+        for (int i = 0; i < 10; i++)
+            body += _random.Next(0, 10).ToString();
+
+        int sum = 0;
+        for (int i = 0; i < body.Length; i++)
+        {
+            int digit = body[i] - '0';
+            sum += (i % 2 == 0) ? digit : digit * 3;
+        }
+        int check = (10 - (sum % 10)) % 10;
+        return body + check;
+    }
+
+    public static bool IsValidEanBarcode(string barcode)
+    {
+        if (string.IsNullOrEmpty(barcode))
+            return false;
+
+        if (barcode.Length != 8 && barcode.Length != 13)
+            return false;
+
+        if (!barcode.All(char.IsDigit))
+            return false;
+
+        // Verify check digit (modulo 10 algorithm)
+        int sum = 0;
+        for (int i = 0; i < barcode.Length - 1; i++)
+        {
+            int digit = barcode[i] - '0';
+            // For EAN-13: positions 0,2,4,... weight 1; positions 1,3,5,... weight 3
+            // For EAN-8: same pattern
+            sum += (i % 2 == 0) ? digit : digit * 3;
+        }
+
+        int checkDigit = (10 - (sum % 10)) % 10;
+        return checkDigit == (barcode[^1] - '0');
     }
 }

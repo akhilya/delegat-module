@@ -58,12 +58,14 @@ const ATTRIBUTE_TYPES = {
   2: { label: "Да/Нет", value: 2 },
   3: { label: "Выбор", value: 3 },
   4: { label: "Множественный выбор", value: 4 },
+  5: { label: "Штрихкод (Barcode)", value: 5 },
   // String keys for JSON enum serialization (JsonStringEnumConverter)
   "Text": { label: "Текст", value: 0 },
   "Number": { label: "Число", value: 1 },
   "Boolean": { label: "Да/Нет", value: 2 },
   "Select": { label: "Выбор", value: 3 },
   "MultiSelect": { label: "Множественный выбор", value: 4 },
+  "Barcode": { label: "Штрихкод (Barcode)", value: 5 },
 };
 
 const ATTRIBUTE_TYPE_OPTIONS = [
@@ -72,6 +74,7 @@ const ATTRIBUTE_TYPE_OPTIONS = [
   { label: "Да/Нет", value: 2 },
   { label: "Выбор", value: 3 },
   { label: "Множественный выбор", value: 4 },
+  { label: "Штрихкод (Barcode)", value: 5 },
 ];
 
 export default {

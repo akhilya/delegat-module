@@ -6,6 +6,7 @@ import { h } from "vue";
 
 import ImageFile from "../imageFile.vue";
 import ProductRowActionButtons from "./productRowActionButtons.vue";
+import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 
 /** A single store attribute value assigned to a product. */
@@ -29,6 +30,7 @@ export interface StoreAttribute {
 export interface Product {
   id: number;
   sku: string;
+  barcode: string | null;
   name: string;
   primaryImage: any;
   categoryId: number | null;
@@ -108,6 +110,20 @@ export const columns: ProductColumnDef[] = [
     size: 80,
     cell: ({ row }) =>
       h("span", { class: "font-mono text-sm" }, row.original.sku),
+  },
+  {
+    id: "barcode",
+    label: "Штрихкод",
+    hideable: true,
+    header: "Штрихкод",
+    size: 110,
+    cell: ({ row }) => {
+      const barcode = row.original.barcode;
+      if (!barcode) {
+        return h("span", { class: "text-muted-foreground text-sm" }, "—");
+      }
+      return h(BarcodeCell, { barcode });
+    },
   },
   {
     id: "category",
@@ -207,6 +223,7 @@ export const defaultVisibleColumns: Record<string, boolean> = {
   position: true,
   image: true,
   sku: true,
+  barcode: false, // hidden by default, can be enabled in column selector
   category: true,
   storageQuantity: true,
   price: false, // hidden by default

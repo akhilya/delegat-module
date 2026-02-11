@@ -281,10 +281,11 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         MarketplaceConnection connection,
         string externalProductId,
         string newSku,
+        string? currentSku = null,
         CancellationToken ct = default)
     {
         var context = CreateContext(connection);
-        var result = await _plugin.UpdateSkuAsync(context, externalProductId, newSku, ct);
+        var result = await _plugin.UpdateSkuAsync(context, externalProductId, newSku, currentSku, ct);
 
         return new Models.Marketplace.DTOs.ExportResult(
             result.Success,
@@ -292,6 +293,17 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             result.ErrorMessage,
             result.Details
         );
+    }
+
+    public async Task<Models.Marketplace.DTOs.ExportResult> ArchiveProductAsync(
+        MarketplaceConnection connection,
+        string externalProductId,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var result = await _plugin.ArchiveProductAsync(context, externalProductId, ct);
+        return new Models.Marketplace.DTOs.ExportResult(
+            result.Success, result.ExternalProductId, result.ErrorMessage, result.Details);
     }
 
     #endregion

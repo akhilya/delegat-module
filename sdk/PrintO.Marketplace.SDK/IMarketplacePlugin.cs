@@ -163,6 +163,15 @@ public interface IMarketplacePlugin
         ConnectionContext context,
         string externalProductId,
         string newSku,
+        string? currentSku = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Archive a product on the marketplace
+    /// </summary>
+    Task<ExportResult> ArchiveProductAsync(
+        ConnectionContext context,
+        string externalProductId,
         CancellationToken ct = default);
 
     #endregion

@@ -1198,6 +1198,25 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
+    async recreateProductOnMarketplace(ctx, { linkId, newSku, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/recreate`,
+        {
+          method: "POST",
+          cache: false,
+          data: { newSku },
+          timeout: 5 * 60 * 1000,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     async exportFromLink(ctx, { linkId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/links/${linkId}/export`,

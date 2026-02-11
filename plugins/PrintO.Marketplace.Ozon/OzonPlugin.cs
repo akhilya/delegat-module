@@ -31,7 +31,9 @@ public class OzonPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ExportStocks |
         MarketplaceCapabilities.FieldBasedGrouping |
         MarketplaceCapabilities.ImportProductBatch |
-        MarketplaceCapabilities.ExportProductBulk;
+        MarketplaceCapabilities.ExportProductBulk |
+        MarketplaceCapabilities.UpdateSku |
+        MarketplaceCapabilities.ArchiveProduct;
 
     // Category name cache (categoryId -> fullPath)
     private Dictionary<string, string>? _categoryNameCache;
@@ -1782,6 +1784,60 @@ public class OzonPlugin : MarketplacePluginBase
         }
 
         return item;
+    }
+
+    public override async Task<ExportResult> UpdateSkuAsync(
+        ConnectionContext context,
+        string externalProductId,
+        string newSku,
+        string? currentSku = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(currentSku))
+            return new ExportResult(false, ErrorMessage: "Текущий артикул (offer_id) неизвестен");
+
+        try
+        {
+            var client = CreateClient(context);
+            var response = await client.UpdateOfferIdAsync(currentSku, newSku, ct);
+
+            var resultItem = response.Result.FirstOrDefault();
+            if (resultItem?.Errors?.Count > 0)
+                return new ExportResult(false, ErrorMessage: string.Join("; ", resultItem.Errors));
+
+            return new ExportResult(true, ExternalProductId: externalProductId);
+        }
+        catch (OzonApiException ex)
+        {
+            return new ExportResult(false, ErrorMessage: $"Ошибка Ozon API ({ex.StatusCode}): {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return new ExportResult(false, ErrorMessage: ex.Message);
+        }
+    }
+
+    public override async Task<ExportResult> ArchiveProductAsync(
+        ConnectionContext context,
+        string externalProductId,
+        CancellationToken ct = default)
+    {
+        if (!long.TryParse(externalProductId, out var productId))
+            return new ExportResult(false, ErrorMessage: $"Некорректный product_id: {externalProductId}");
+        try
+        {
+            var client = CreateClient(context);
+            await client.ArchiveProductAsync(new List<long> { productId }, ct);
+            return new ExportResult(true, ExternalProductId: externalProductId);
+        }
+        catch (OzonApiException ex)
+        {
+            return new ExportResult(false, ErrorMessage: $"Ошибка Ozon API ({ex.StatusCode}): {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return new ExportResult(false, ErrorMessage: ex.Message);
+        }
     }
 
     #endregion

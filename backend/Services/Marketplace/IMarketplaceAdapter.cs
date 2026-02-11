@@ -158,6 +158,15 @@ public interface IMarketplaceAdapter
         MarketplaceConnection connection,
         string externalProductId,
         string newSku,
+        string? currentSku = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Archive a product on the marketplace.
+    /// </summary>
+    Task<ExportResult> ArchiveProductAsync(
+        MarketplaceConnection connection,
+        string externalProductId,
         CancellationToken ct = default);
 
     #endregion

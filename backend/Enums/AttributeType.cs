@@ -6,5 +6,6 @@ public enum AttributeType
     Number = 1,
     Boolean = 2,
     Select = 3,
-    MultiSelect = 4
+    MultiSelect = 4,
+    Barcode = 5
 }

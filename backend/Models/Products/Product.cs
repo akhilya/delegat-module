@@ -24,6 +24,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public string sku { get; set; } = null!;
 
     /// <summary>
+    /// EAN barcode (EAN-8 or EAN-13).
+    /// </summary>
+    [StringLength(PRODUCT_BARCODE_MAX_LENGTH)]
+    public string? barcode { get; set; }
+
+    /// <summary>
     /// Product display name.
     /// </summary>
     [StringLength(PRODUCT_NAME_MAX_LENGTH, MinimumLength = 1)]
@@ -118,6 +124,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public bool AddFill(AddForm form)
     {
         sku = form.userAddForm.sku;
+        barcode = form.userAddForm.barcode;
         name = form.userAddForm.name;
         description = form.userAddForm.description;
         storeId = form.storeId;
@@ -134,6 +141,8 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             name = form.name;
         if (!string.IsNullOrEmpty(form.description))
             description = form.description;
+        if (form.barcode != null)
+            barcode = form.barcode == "" ? null : form.barcode;
         if (form.storageQuantity.HasValue)
             storageQuantity = form.storageQuantity.Value;
         if (form.price.HasValue)
@@ -157,6 +166,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         {
             Id,
             sku,
+            barcode,
             name,
             description,
             store = store?.MapToDTO(serviceProvider),
@@ -189,6 +199,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         {
             id = Id,
             sku = sku,
+            barcode = barcode,
             name = name,
             primaryImage = primaryImagePath,
             categoryId = categoryId,
@@ -205,6 +216,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     /// Maximum length for product SKU.
     /// </summary>
     public const int PRODUCT_SKU_MAX_LENGTH = 20;
+
+    /// <summary>
+    /// Maximum length for product barcode (EAN-13).
+    /// </summary>
+    public const int PRODUCT_BARCODE_MAX_LENGTH = 13;
 
     /// <summary>
     /// Maximum length for product name.
@@ -256,6 +272,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         public string sku { get; set; }
 
         /// <summary>
+        /// EAN barcode (EAN-8 or EAN-13).
+        /// </summary>
+        [StringLength(PRODUCT_BARCODE_MAX_LENGTH)]
+        public string? barcode { get; set; }
+
+        /// <summary>
         /// Product display name.
         /// </summary>
         [StringLength(PRODUCT_NAME_MAX_LENGTH, MinimumLength = 1)]
@@ -305,6 +327,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         public string? name { get; set; }
 
         /// <summary>
+        /// Updated EAN barcode.
+        /// </summary>
+        [StringLength(PRODUCT_BARCODE_MAX_LENGTH)]
+        public string? barcode { get; set; }
+
+        /// <summary>
         /// Updated product description.
         /// </summary>
         [StringLength(PRODUCT_DESCRIPTION_MAX_LENGTH)]
@@ -345,6 +373,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Stock keeping unit code.
         /// </summary>
         public string sku { get; set; }
+
+        /// <summary>
+        /// EAN barcode (EAN-8 or EAN-13).
+        /// </summary>
+        public string? barcode { get; set; }
 
         /// <summary>
         /// Product display name.

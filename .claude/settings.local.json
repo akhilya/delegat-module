@@ -89,7 +89,15 @@
       "Bash(npx vite build)",
       "Bash(test:*)",
       "Bash(git status:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(git checkout:*)",
+      "Bash(Select-String -Pattern \"error CS|Build succeeded|Error\\\\\\(s\\\\\\)|Warning\\\\\\(s\\\\\\)\")",
+      "Bash(Select-Object -First 10)",
+      "Bash(Select-String \"error CS\")",
+      "Bash(git log:*)",
+      "Bash(npm install:*)",
+      "Bash(pwsh -Command:*)"
     ]
   }
 }

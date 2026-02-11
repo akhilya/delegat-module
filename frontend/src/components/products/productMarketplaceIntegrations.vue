@@ -19,7 +19,10 @@ import {
   Settings,
   ExternalLink,
   Plus,
+  RefreshCw,
 } from "lucide-vue-next";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
 import {
   Card,
   CardContent,
@@ -60,6 +63,9 @@ export default {
     Settings,
     ExternalLink,
     Plus,
+    RefreshCw,
+    Input,
+    Label,
     Card,
     CardContent,
     CardDescription,
@@ -93,6 +99,11 @@ export default {
       exportingConnectionId: null,
       importingLinkId: null,
       PAGE_MARKETPLACE_CONNECTION,
+      // Recreate dialog
+      showRecreateDialog: false,
+      recreateConn: null,
+      recreateNewSku: "",
+      isRecreating: false,
       // Import preview dialog
       showImportPreviewDialog: false,
       importPreviewData: null,
@@ -140,6 +151,7 @@ export default {
       "importFromLink",
       "importFromLinkPreview",
       "exportFromLink",
+      "recreateProductOnMarketplace",
     ]),
 
     async fetchData() {
@@ -322,6 +334,37 @@ export default {
       this.exportingConnectionId = null;
     },
 
+    openRecreateDialog(conn) {
+      this.recreateConn = conn;
+      this.recreateNewSku = "";
+      this.showRecreateDialog = true;
+    },
+
+    async submitRecreate() {
+      if (!this.recreateConn || !this.recreateNewSku.trim()) return;
+      this.isRecreating = true;
+      await this.recreateProductOnMarketplace({
+        linkId: this.recreateConn.linkId,
+        newSku: this.recreateNewSku.trim(),
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          let msg = "Товар пересоздан на маркетплейсе";
+          if (result.archiveError) {
+            msg += ` (архивация старого: ${result.archiveError})`;
+          }
+          displaySonnerSuccess(msg);
+          this.showRecreateDialog = false;
+          this.recreateConn = null;
+          this.fetchData();
+          this.$emit("product-updated");
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isRecreating = false;
+    },
+
     getStatusInfo(status) {
       switch (status) {
         case "Synced":
@@ -502,6 +545,15 @@ export default {
               <Upload v-else class="size-4 mr-2" />
               Экспорт
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              v-if="conn.canArchive && conn.canExport"
+              @click="openRecreateDialog(conn)"
+            >
+              <RefreshCw class="size-4 mr-2" />
+              Пересоздать
+            </Button>
           </div>
         </div>
       </div>
@@ -660,6 +712,40 @@ export default {
             <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
             Подтвердить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Recreate Product Dialog -->
+    <Dialog v-model:open="showRecreateDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Пересоздать товар</DialogTitle>
+          <DialogDescription>
+            Товар будет создан заново на {{ recreateConn?.adapterName }} с новым артикулом. Старый товар будет архивирован.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-4">
+          <div class="space-y-2">
+            <Label for="recreate-sku">Новый артикул</Label>
+            <Input
+              id="recreate-sku"
+              v-model="recreateNewSku"
+              maxlength="50"
+              placeholder="Введите новый артикул"
+              @keyup.enter="submitRecreate"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="showRecreateDialog = false" :disabled="isRecreating">
+            Отмена
+          </Button>
+          <Button @click="submitRecreate" :disabled="isRecreating || !recreateNewSku.trim()">
+            <Loader2 v-if="isRecreating" class="size-4 mr-2 animate-spin" />
+            <RefreshCw v-else class="size-4 mr-2" />
+            Пересоздать
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1071,6 +1071,7 @@ public class ProductSyncService
                 link.connection,
                 link.externalProductId,
                 newSku,
+                link.externalSku,
                 ct);
 
             if (result.Success)

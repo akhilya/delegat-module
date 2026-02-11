@@ -262,6 +262,19 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
+    async updateProductSku(ctx, { productId, newSku, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/update-sku`,
+        { method: "POST", data: { newSku } },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     async getProductGroup(ctx, { productId, onSuccess, onError }) {
       try {
         const response = await http.get(`/products/${productId}/group`);
