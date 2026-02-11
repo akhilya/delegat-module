@@ -194,21 +194,6 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async postProductImages(ctx, { productId, files, onSuccess, onError }) {
-      return await useAxios(
-        `/products/${productId}/images`,
-        { method: "POST", data: { files } },
-        http,
-        {
-          immediate: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    // postNote removed - use noteModule.postNote instead to avoid duplicate API calls
-
     /**
      * Fetches the product group that a product belongs to.
      * @param {Object} ctx - Vuex action context.

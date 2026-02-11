@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Separator from "@/components/ui/separator/Separator.vue";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Loader2, FolderOpen, Globe, Layers } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
@@ -64,6 +65,10 @@ export default {
     Globe,
     Layers,
     Separator,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
   },
   data() {
     return {
@@ -310,126 +315,140 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="border rounded-lg h-full w-full grow mb-4 overflow-auto">
-      <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col m-4">
-        <!-- Category Selection -->
-        <div class="space-y-2">
-          <Label>Категория <span class="text-red-500">*</span></Label>
-          <Select v-model="selectedCategoryId" :disabled="isLoadingCategories">
-            <SelectTrigger>
-              <SelectValue placeholder="Выберите категорию товара..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="category in categories"
-                :key="category.id"
-                :value="category.id"
-              >
-                <span class="flex items-center gap-2">
-                  <FolderOpen class="size-4" />
-                  {{ category.name }}
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <p v-if="categories.length === 0 && !isLoadingCategories" class="text-sm text-muted-foreground">
-            Сначала создайте категорию товаров
-          </p>
-        </div>
+    <div class="h-full w-full grow mb-4 overflow-auto">
+      <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
+        <!-- Card 1: Main fields -->
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-base">Основные поля</CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-4">
+            <!-- Category Selection -->
+            <div class="space-y-2">
+              <Label>Категория <span class="text-destructive">*</span></Label>
+              <Select v-model="selectedCategoryId" :disabled="isLoadingCategories">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите категорию товара..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="category in categories"
+                    :key="category.id"
+                    :value="category.id"
+                  >
+                    <span class="flex items-center gap-2">
+                      <FolderOpen class="size-4" />
+                      {{ category.name }}
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p v-if="categories.length === 0 && !isLoadingCategories" class="text-sm text-muted-foreground">
+                Сначала создайте категорию товаров
+              </p>
+            </div>
 
-        <!-- Product Group Selection (optional) -->
-        <div v-if="productGroups.length > 0" class="space-y-2">
-          <Label>Группа товаров <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
-          <Select v-model="selectedGroupId" :disabled="isLoadingGroups">
-            <SelectTrigger>
-              <SelectValue placeholder="Не выбрана" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="null">
-                <span class="text-muted-foreground">Без группы</span>
-              </SelectItem>
-              <SelectItem
-                v-for="group in productGroups"
-                :key="group.id"
-                :value="group.id"
-              >
-                <span class="flex items-center gap-2">
-                  <Layers class="size-4" />
-                  {{ group.name }}
-                  <span v-if="group.memberCount" class="text-muted-foreground text-xs">
-                    ({{ group.memberCount }})
-                  </span>
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            <!-- Product Group Selection (optional) -->
+            <div v-if="productGroups.length > 0" class="space-y-2">
+              <Label>Группа товаров <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
+              <Select v-model="selectedGroupId" :disabled="isLoadingGroups">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Не выбрана" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="null">
+                    <span class="text-muted-foreground">Без группы</span>
+                  </SelectItem>
+                  <SelectItem
+                    v-for="group in productGroups"
+                    :key="group.id"
+                    :value="group.id"
+                  >
+                    <span class="flex items-center gap-2">
+                      <Layers class="size-4" />
+                      {{ group.name }}
+                      <span v-if="group.memberCount" class="text-muted-foreground text-xs">
+                        ({{ group.memberCount }})
+                      </span>
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <Separator />
+            <FormField v-slot="{ componentField }" name="product.sku">
+              <FormItem>
+                <FormLabel>Артикул <span class="text-destructive">*</span></FormLabel>
+                <FormControl>
+                  <Input type="text" v-bind="componentField" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
-        <FormField v-slot="{ componentField }" name="product.sku">
-          <FormItem>
-            <FormLabel>Артикул *</FormLabel>
-            <FormControl>
-              <Input type="text" v-bind="componentField" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+            <FormField v-slot="{ value, setValue }" name="product.barcode">
+              <FormItem>
+                <FormLabel>Штрихкод (EAN)</FormLabel>
+                <FormControl>
+                  <BarcodeInput
+                    :model-value="value || ''"
+                    @update:model-value="setValue($event)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
-        <FormField v-slot="{ value, setValue }" name="product.barcode">
-          <FormItem>
-            <FormLabel>Штрихкод (EAN)</FormLabel>
-            <FormControl>
-              <BarcodeInput
-                :model-value="value || ''"
-                @update:model-value="setValue($event)"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+            <FormField v-slot="{ componentField }" name="product.name">
+              <FormItem>
+                <FormLabel>Название <span class="text-destructive">*</span></FormLabel>
+                <FormControl>
+                  <Input type="text" v-bind="componentField" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
-        <FormField v-slot="{ componentField }" name="product.name">
-          <FormItem>
-            <FormLabel>Название *</FormLabel>
-            <FormControl>
-              <Input type="text" v-bind="componentField" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+            <FormField v-slot="{ componentField }" name="product.description">
+              <FormItem>
+                <FormLabel>Описание</FormLabel>
+                <FormControl>
+                  <Textarea v-bind="componentField" class="overflow-hidden resize-none" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
-        <FormField v-slot="{ componentField }" name="product.description">
-          <FormItem>
-            <FormLabel>Описание</FormLabel>
-            <FormControl>
-              <Textarea class="max-h-96 h-32" v-bind="componentField" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+            <!-- Quantity -->
+            <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
+              <FormItem>
+                <FormLabel>Количество на складе</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    :model-value="value"
+                    @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+          </CardContent>
+        </Card>
 
-        <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
-          <FormItem>
-            <FormLabel>Количество на складе</FormLabel>
-            <FormControl>
-              <Input
-                type="number"
-                :model-value="value"
-                @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
-
-        <!-- Category Attributes -->
-        <div v-if="selectedCategory">
-          <Separator class="my-4" />
-          <div class="space-y-4">
-            <h3 class="font-medium">Атрибуты категории</h3>
-            <p v-if="!selectedCategory.attributes || selectedCategory.attributes.length === 0" class="text-sm text-muted-foreground">
+        <!-- Card 2: Category Attributes -->
+        <Card v-if="selectedCategory">
+          <CardHeader>
+            <CardTitle class="text-base flex items-center gap-2">
+              <Layers class="size-4" />
+              Атрибуты категории
+              <span v-if="selectedCategory.attributes?.length" class="text-muted-foreground text-sm font-normal">
+                ({{ selectedCategory.attributes.length }})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p v-if="!selectedCategory.attributes || selectedCategory.attributes.length === 0" class="text-sm text-muted-foreground py-2">
               У этой категории нет атрибутов
             </p>
             <ProductAttributeForm
@@ -438,30 +457,33 @@ export default {
               :model-value="attributeValues"
               @update:model-value="updateAttributeValues"
             />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <!-- Store Attributes -->
-        <div v-if="storeAttributes.length > 0">
-          <Separator class="my-4" />
-          <div class="space-y-4">
-            <h3 class="font-medium flex items-center gap-2">
+        <!-- Card 3: Store Attributes -->
+        <Card v-if="storeAttributes.length > 0">
+          <CardHeader>
+            <CardTitle class="text-base flex items-center gap-2">
               <Globe class="size-4" />
               Глобальные атрибуты
-            </h3>
+              <span class="text-muted-foreground text-sm font-normal">
+                ({{ storeAttributes.length }})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <StoreAttributeForm
               :attributes="storeAttributes"
               :model-value="storeAttributeValues"
               @update:model-value="updateStoreAttributeValues"
             />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div class="flex flex-col ml-auto">
+        <div class="flex justify-end">
           <Button
             type="submit"
             size="lg"
-            class="mt-4"
             :disabled="isSubmitting || !selectedCategoryId"
           >
             <Loader2 v-if="isSubmitting" class="animate-spin mr-2" />

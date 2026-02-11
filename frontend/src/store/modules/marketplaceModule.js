@@ -897,32 +897,6 @@ export default {
         .catch((error) => onError(error));
     },
 
-    /**
-     * Retries all failed imports in a batch.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string} params.batchId - The import batch ID.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async retryFailedImports(ctx, { batchId, onSuccess, onError }) {
-      return await useAxios(
-        `/marketplace/import-batches/${batchId}/retry-failed`,
-        {
-          method: "POST",
-          cache: false,
-        },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
     // === SKU Update ===
 
     /**

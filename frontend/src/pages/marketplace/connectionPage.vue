@@ -453,7 +453,6 @@ export default {
       "exportFromLink",
       "importSelectedProducts",
       "getImportBatchStatus",
-      "retryFailedImports",
       "exportPrices",
       "exportStocks",
       "getLocalProductsForExport",

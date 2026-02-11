@@ -515,9 +515,6 @@ public class ProductController : ControllerBase
         if (request.productIds == null || request.productIds.Count == 0)
             throw ApiException.BadRequest("Товары не указаны");
 
-        if (request.productIds.Count > 100)
-            throw ApiException.BadRequest("Невозможно обновить более 100 товаров за раз");
-
         var productRepo = _unitOfWork.Repository<Product>();
         var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
         var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
@@ -745,8 +742,6 @@ public class ProductController : ControllerBase
         if (request.productIds == null || request.productIds.Count == 0)
             throw ApiException.BadRequest("Товары не указаны");
 
-        if (request.productIds.Count > 100)
-            throw ApiException.BadRequest("Невозможно удалить более 100 товаров за раз");
 
         // Verify all products belong to the current store
         var productRepo = _unitOfWork.Repository<Product>();
