@@ -184,50 +184,6 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async putProductFiles(ctx, { files, productId, onSuccess, onError }) {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
-      }
-      return await useAxios(
-        `/products/${productId}/files`,
-        {
-          method: "PUT",
-          data: formData,
-          headers: { "Content-Type": "multipart/form-data" },
-        },
-        http,
-        {
-          immediate: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    /**
-     * Deletes a file attached to a product.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.id - The file ID to delete.
-     * @param {string|number} params.productId - The product ID the file belongs to.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async deleteProductFile(ctx, { id, productId, onSuccess, onError }) {
-      return await useAxios(
-        `/products/${productId}/files/${id}`,
-        { method: "DELETE" },
-        http,
-        {
-          immediate: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
     /**
      * Adds image references to a product.
      * @param {Object} ctx - Vuex action context.

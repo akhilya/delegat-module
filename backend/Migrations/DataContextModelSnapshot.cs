@@ -186,6 +186,9 @@ namespace PrintO.Migrations
                     b.Property<int>("fileType")
                         .HasColumnType("int");
 
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
                     b.Property<long>("length")
                         .HasColumnType("bigint");
 
@@ -198,6 +201,8 @@ namespace PrintO.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("authorUserId");
+
+                    b.HasIndex("folderId");
 
                     b.HasIndex("productId");
 
@@ -228,6 +233,37 @@ namespace PrintO.Migrations
                     b.HasIndex("fileId");
 
                     b.ToTable("tags");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("parentFolderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("parentFolderId");
+
+                    b.HasIndex("productId");
+
+                    b.ToTable("productFolders");
                 });
 
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>
@@ -1109,6 +1145,11 @@ namespace PrintO.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PrintO.Models.ProductFolder", "folder")
+                        .WithMany("files")
+                        .HasForeignKey("folderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PrintO.Models.Products.Product", "product")
                         .WithMany("files")
                         .HasForeignKey("productId")
@@ -1116,6 +1157,8 @@ namespace PrintO.Migrations
                         .IsRequired();
 
                     b.Navigation("authorUser");
+
+                    b.Navigation("folder");
 
                     b.Navigation("product");
                 });
@@ -1129,6 +1172,24 @@ namespace PrintO.Migrations
                         .IsRequired();
 
                     b.Navigation("file");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+                {
+                    b.HasOne("PrintO.Models.ProductFolder", "parentFolder")
+                        .WithMany("childFolders")
+                        .HasForeignKey("parentFolderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("folders")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("parentFolder");
+
+                    b.Navigation("product");
                 });
 
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>
@@ -1427,11 +1488,20 @@ namespace PrintO.Migrations
                     b.Navigation("members");
                 });
 
+            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+                {
+                    b.Navigation("childFolders");
+
+                    b.Navigation("files");
+                });
+
             modelBuilder.Entity("PrintO.Models.Products.Product", b =>
                 {
                     b.Navigation("attributeValues");
 
                     b.Navigation("files");
+
+                    b.Navigation("folders");
 
                     b.Navigation("groupMemberships");
 

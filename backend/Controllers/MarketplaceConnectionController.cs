@@ -290,13 +290,24 @@ public class MarketplaceConnectionController : ControllerBase
             {
                 getCategories = capabilities.HasFlag(MarketplaceCapabilities.GetCategories),
                 getCategoryFields = capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields),
-                exportProduct = capabilities.HasFlag(MarketplaceCapabilities.ExportProduct),
                 importProduct = capabilities.HasFlag(MarketplaceCapabilities.ImportProduct),
                 importAllProducts = capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts),
+                importProductBatch = capabilities.HasFlag(MarketplaceCapabilities.ImportProductBatch),
+                exportProduct = capabilities.HasFlag(MarketplaceCapabilities.ExportProduct),
+                exportProductBulk = capabilities.HasFlag(MarketplaceCapabilities.ExportProductBulk),
                 updateSku = capabilities.HasFlag(MarketplaceCapabilities.UpdateSku),
                 importPrices = capabilities.HasFlag(MarketplaceCapabilities.ImportPrices),
                 exportPrices = capabilities.HasFlag(MarketplaceCapabilities.ExportPrices),
-                exportStocks = capabilities.HasFlag(MarketplaceCapabilities.ExportStocks)
+                importStocks = capabilities.HasFlag(MarketplaceCapabilities.ImportStocks),
+                exportStocks = capabilities.HasFlag(MarketplaceCapabilities.ExportStocks),
+                getOrders = capabilities.HasFlag(MarketplaceCapabilities.GetOrders),
+                updateOrderStatus = capabilities.HasFlag(MarketplaceCapabilities.UpdateOrderStatus),
+                fieldBasedGrouping = capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping),
+                endpointBasedGrouping = capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping),
+                importGroups = capabilities.HasFlag(MarketplaceCapabilities.ImportGroups),
+                deleteGroups = capabilities.HasFlag(MarketplaceCapabilities.DeleteGroups),
+                modifyGroupMembership = capabilities.HasFlag(MarketplaceCapabilities.ModifyGroupMembership),
+                archiveProduct = capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct),
             }
         });
     }

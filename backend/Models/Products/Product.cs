@@ -92,6 +92,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public virtual ICollection<File> files { get; set; } = new List<File>();
 
     /// <summary>
+    /// Collection of virtual folders for organizing product files.
+    /// </summary>
+    public virtual ICollection<ProductFolder> folders { get; set; } = new List<ProductFolder>();
+
+    /// <summary>
     /// Collection of image references for this product.
     /// </summary>
     public virtual ICollection<ImageReference> images { get; set; } = new List<ImageReference>();

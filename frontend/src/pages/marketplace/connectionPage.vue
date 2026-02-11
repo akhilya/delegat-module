@@ -16,6 +16,8 @@ import {
   Loader2,
   ChevronRight,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Package,
   Trash2,
   FolderTree,
@@ -110,6 +112,8 @@ export default {
     Loader2,
     ChevronRight,
     ChevronLeft,
+    ChevronsLeft,
+    ChevronsRight,
     Package,
     Trash2,
     FolderTree,
@@ -212,7 +216,6 @@ export default {
       selectedItems: [],
       searchQuery: "",
       isLoadingProducts: false,
-      isLoadingMore: false,
       isCreatingLocal: false,
       isImportingBulk: false,
       isExportingBulk: false,
@@ -222,8 +225,10 @@ export default {
       exportingLinkId: null,
       totalCount: 0,
       linkedCount: 0,
-      hasMore: false,
-      nextCursor: null,
+      hasMoreProducts: false,
+      externalPage: 1,
+      pageCursors: [null],
+      productsPageCache: {}, // { pageNum: { items, hasMore, total, linkedCount } }
 
       // Import dialog state
       showImportDialog: false,
@@ -254,7 +259,7 @@ export default {
       localProducts: [],
       isLoadingLocalProducts: false,
       localTotalCount: 0,
-      localStartIndex: 0,
+      localPage: 1,
       localPageSize: 50,
       localSearchQuery: "",
       selectedLocalItems: [],
@@ -266,9 +271,36 @@ export default {
       limitsData: null,
       isLoadingLimits: false,
       limitsRefreshTimer: null,
+      showLimitsDialog: false,
+
+      capabilityLabels: {
+        getCategories: "Получение категорий",
+        getCategoryFields: "Поля категорий",
+        importProduct: "Импорт товара",
+        importAllProducts: "Импорт всех товаров",
+        importProductBatch: "Пакетный импорт",
+        exportProduct: "Экспорт товара",
+        exportProductBulk: "Массовый экспорт",
+        updateSku: "Обновление артикула",
+        importPrices: "Импорт цен",
+        exportPrices: "Экспорт цен",
+        importStocks: "Импорт остатков",
+        exportStocks: "Экспорт остатков",
+        getOrders: "Получение заказов",
+        updateOrderStatus: "Обновление статуса заказа",
+        fieldBasedGrouping: "Группировка через поле",
+        endpointBasedGrouping: "Группировка через API",
+        importGroups: "Импорт групп",
+        deleteGroups: "Удаление групп",
+        modifyGroupMembership: "Изменение состава групп",
+        archiveProduct: "Архивирование товара",
+      },
     };
   },
   watch: {
+    activeTab(newVal) {
+      this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
+    },
     searchQuery(newValue) {
       // Debounce search: wait 500ms after user stops typing
       if (this.searchDebounceTimer) {
@@ -277,7 +309,8 @@ export default {
       this.searchDebounceTimer = setTimeout(() => {
         // Reset products and fetch with search
         this.products = [];
-        this.nextCursor = null;
+        this.externalPage = 1;
+        this.clearProductsCache();
         this.fetchProducts();
       }, 500);
     },
@@ -286,7 +319,8 @@ export default {
         clearTimeout(this.localSearchDebounceTimer);
       }
       this.localSearchDebounceTimer = setTimeout(() => {
-        this.fetchLocalProducts(true);
+        this.localPage = 1;
+        this.fetchLocalProducts();
       }, 500);
     },
     // Обновляем данные после завершения импорта (если импорт был для этого подключения)
@@ -297,7 +331,7 @@ export default {
           !oldVal?.isFinished &&
           this.$store.state.importProgress.connectionId === this.connectionId
         ) {
-          this.fetchProducts();
+          this.fetchProducts(true);
           this.fetchMappings();
           this.fetchLocalCategories();
         }
@@ -372,8 +406,11 @@ export default {
     someLocalSelected() {
       return this.selectedLocalItems.length > 0 && !this.allLocalSelected;
     },
-    hasMoreLocalProducts() {
-      return this.localStartIndex + this.localPageSize < this.localTotalCount;
+    canGoNextExternal() {
+      return this.hasMoreProducts;
+    },
+    localLastPage() {
+      return Math.max(1, Math.ceil(this.localTotalCount / this.localPageSize));
     },
     productsByExternalCategory() {
       const groups = {};
@@ -436,6 +473,15 @@ export default {
       ]);
       this.isLoading = false;
       this.startLimitsAutoRefresh();
+
+      // If products tab was restored from URL, fetch products now
+      if (this.activeTab === "products") {
+        if (this.externalPage > 1) {
+          await this.restoreExternalPage(this.externalPage);
+        } else {
+          this.onProductsTabActivated();
+        }
+      }
     },
 
     async fetchConnection() {
@@ -739,12 +785,25 @@ export default {
 
     // === Products tab methods ===
 
-    async fetchProducts(cursor = null) {
-      if (cursor) {
-        this.isLoadingMore = true;
-      } else {
-        this.isLoadingProducts = true;
+    async fetchProducts(forceRefresh = false) {
+      this.syncPageQuery();
+
+      if (forceRefresh) {
+        this.clearProductsCache();
       }
+
+      // Use cache if available
+      const cached = this.productsPageCache[this.externalPage];
+      if (cached) {
+        this.products = cached.items;
+        this.totalCount = cached.total;
+        this.linkedCount = cached.linkedCount;
+        this.hasMoreProducts = cached.hasMore;
+        return;
+      }
+
+      this.isLoadingProducts = true;
+      const cursor = this.pageCursors[this.externalPage - 1] ?? null;
 
       await this.getExternalProducts({
         connectionId: this.connectionId,
@@ -753,15 +812,21 @@ export default {
         offerIdSearch: this.searchQuery || null,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
-          if (cursor) {
-            this.products = [...this.products, ...(data.items || [])];
-          } else {
-            this.products = data.items || [];
-          }
+          this.products = data.items || [];
           this.totalCount = data.total || 0;
           this.linkedCount = data.linkedCount || 0;
-          this.hasMore = data.hasMore || false;
-          this.nextCursor = data.nextCursor;
+          this.hasMoreProducts = !!data.hasMore;
+          // Store cursor for next page
+          if (data.nextCursor && this.pageCursors.length <= this.externalPage) {
+            this.pageCursors.push(data.nextCursor);
+          }
+          // Cache page results
+          this.productsPageCache[this.externalPage] = {
+            items: this.products,
+            total: this.totalCount,
+            linkedCount: this.linkedCount,
+            hasMore: this.hasMoreProducts,
+          };
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -769,7 +834,47 @@ export default {
       });
 
       this.isLoadingProducts = false;
-      this.isLoadingMore = false;
+    },
+
+    async restoreExternalPage(targetPage) {
+      this.isLoadingProducts = true;
+      // Sequentially load pages to rebuild cursor chain + cache
+      for (let p = 1; p <= targetPage; p++) {
+        this.externalPage = p;
+        await this.fetchProducts();
+        if (!this.hasMoreProducts && p < targetPage) {
+          break; // not enough pages exist
+        }
+      }
+      this.isLoadingProducts = false;
+    },
+
+    clearProductsCache() {
+      this.productsPageCache = {};
+      this.pageCursors = [null];
+      this.hasMoreProducts = false;
+    },
+
+    syncPageQuery() {
+      const query = { ...this.$route.query };
+      let changed = false;
+      if (this.externalPage > 1 && query.ePage !== String(this.externalPage)) {
+        query.ePage = String(this.externalPage);
+        changed = true;
+      } else if (this.externalPage <= 1 && query.ePage) {
+        delete query.ePage;
+        changed = true;
+      }
+      if (this.localPage > 1 && query.lPage !== String(this.localPage)) {
+        query.lPage = String(this.localPage);
+        changed = true;
+      } else if (this.localPage <= 1 && query.lPage) {
+        delete query.lPage;
+        changed = true;
+      }
+      if (changed) {
+        this.$router.replace({ query });
+      }
     },
 
     onProductsTabActivated() {
@@ -836,7 +941,7 @@ export default {
           } else {
             displaySonnerSuccess("Изменений не обнаружено");
           }
-          this.fetchProducts();
+          this.fetchProducts(true);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -860,7 +965,7 @@ export default {
         linkId: product.linkId,
         onSuccess: () => {
           displaySonnerSuccess("Товар экспортирован на маркетплейс");
-          this.fetchProducts();
+          this.fetchProducts(true);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1061,7 +1166,7 @@ export default {
               );
               this.showImportDialog = false;
               this.selectedItems = [];
-              this.fetchProducts();
+              this.fetchProducts(true);
               this.fetchMappings();
               this.fetchLocalCategories();
             }
@@ -1126,7 +1231,7 @@ export default {
       });
       this.isApplyingBulkImport = false;
       this.cancelBulkImport();
-      this.fetchProducts();
+      this.fetchProducts(true);
     },
 
     cancelBulkImport() {
@@ -1193,7 +1298,7 @@ export default {
             `Экспортировано цен: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
           );
           this.selectedItems = [];
-          this.fetchProducts();
+          this.fetchProducts(true);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1221,7 +1326,7 @@ export default {
             `Экспортировано остатков: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
           );
           this.selectedItems = [];
-          this.fetchProducts();
+          this.fetchProducts(true);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1236,30 +1341,23 @@ export default {
       if (this.productsViewMode === mode) return;
       this.productsViewMode = mode;
       if (mode === "local" && this.localProducts.length === 0) {
-        this.fetchLocalProducts(true);
+        this.fetchLocalProducts();
       }
     },
 
-    async fetchLocalProducts(reset = true) {
-      if (reset) {
-        this.localStartIndex = 0;
-        this.localProducts = [];
-        this.selectedLocalItems = [];
-      }
-
+    async fetchLocalProducts() {
+      this.syncPageQuery();
       this.isLoadingLocalProducts = true;
+      this.selectedLocalItems = [];
+
       await this.getLocalProductsForExport({
         connectionId: this.connectionId,
         searchQuery: this.localSearchQuery || null,
-        startIndex: this.localStartIndex,
+        startIndex: (this.localPage - 1) * this.localPageSize,
         pageSize: this.localPageSize,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
-          if (reset) {
-            this.localProducts = data.items || [];
-          } else {
-            this.localProducts = [...this.localProducts, ...(data.items || [])];
-          }
+          this.localProducts = data.items || [];
           this.localTotalCount = data.totalCount || 0;
         },
         onError: (error) => {
@@ -1267,11 +1365,6 @@ export default {
         },
       });
       this.isLoadingLocalProducts = false;
-    },
-
-    loadMoreLocalProducts() {
-      this.localStartIndex += this.localPageSize;
-      this.fetchLocalProducts(false);
     },
 
     toggleSelectAllLocal() {
@@ -1385,11 +1478,17 @@ export default {
   mounted() {
     this.fetchData();
 
-    // Handle query params for auto-opening create mapping dialog
-    const { tab, createMapping, localCategoryId, localCategoryName } = this.$route.query;
+    // Handle query params
+    const { tab, ePage, lPage, createMapping, localCategoryId, localCategoryName } = this.$route.query;
 
     if (tab) {
       this.activeTab = tab;
+    }
+    if (ePage) {
+      this.externalPage = parseInt(ePage) || 1;
+    }
+    if (lPage) {
+      this.localPage = parseInt(lPage) || 1;
     }
 
     if (createMapping === "true" && localCategoryId) {
@@ -1412,7 +1511,14 @@ export default {
           }
 
           // Clear query params after handling
-          this.$router.replace({ query: {} });
+          this.$router.replace({
+            query: {
+              ...this.$route.query,
+              createMapping: undefined,
+              localCategoryId: undefined,
+              localCategoryName: undefined
+            }
+          });
         }
       }, 100);
       // Timeout after 5 seconds
@@ -1509,6 +1615,79 @@ export default {
                   <TestTube v-else class="size-4 mr-2" />
                   Тест соединения
                 </Button>
+                <Dialog v-model:open="showLimitsDialog">
+                  <DialogTrigger as-child>
+                    <Button variant="outline" :disabled="!limitsData">
+                      <Activity class="size-4 mr-2" />
+                      API Лимиты
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent class="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle class="flex items-center gap-2">
+                        <Activity class="size-5" />
+                        API Лимиты
+                      </DialogTitle>
+                      <DialogDescription v-if="limitsData && !limitsData.supported">
+                        Маркетплейс не поддерживает отслеживание лимитов
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div v-if="limitsData && limitsData.supported" class="space-y-6">
+                      <!-- RPS Gauge -->
+                      <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                          <div class="flex items-center gap-2">
+                            <Gauge class="size-4 text-muted-foreground" />
+                            <span class="font-medium">Запросов в секунду</span>
+                          </div>
+                          <span class="text-muted-foreground">
+                            {{ limitsData.currentWindowRequests }} / {{ limitsData.maxRequestsPerSecond }} RPS
+                          </span>
+                        </div>
+                        <div class="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            class="h-full rounded-full transition-all duration-300"
+                            :class="getRpsColor(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond)"
+                            :style="{ width: Math.min(100, (limitsData.currentWindowRequests / limitsData.maxRequestsPerSecond) * 100) + '%' }"
+                          />
+                        </div>
+                        <div class="text-xs text-muted-foreground">
+                          Всего запросов с момента запуска: {{ limitsData.totalRequestsSinceStart.toLocaleString('ru-RU') }}
+                        </div>
+                      </div>
+
+                      <!-- Quota Bars -->
+                      <div v-if="limitsData.quotas?.length > 0" class="space-y-4">
+                        <Separator />
+                        <div
+                          v-for="quota in limitsData.quotas"
+                          :key="quota.key"
+                          class="space-y-2"
+                        >
+                          <div class="flex items-center justify-between text-sm">
+                            <span class="font-medium">{{ quota.displayName }}</span>
+                            <span v-if="quota.limit < 0" class="text-muted-foreground">
+                              {{ quota.usage.toLocaleString('ru-RU') }} (безлимитный)
+                            </span>
+                            <span v-else class="text-muted-foreground">
+                              {{ quota.usage.toLocaleString('ru-RU') }} / {{ quota.limit.toLocaleString('ru-RU') }}
+                            </span>
+                          </div>
+                          <div v-if="quota.limit > 0" class="h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              class="h-full rounded-full transition-all duration-300"
+                              :class="getQuotaColor(quota.usage, quota.limit)"
+                              :style="{ width: Math.min(100, (quota.usage / quota.limit) * 100) + '%' }"
+                            />
+                          </div>
+                          <div v-if="quota.resetsAt" class="text-xs text-muted-foreground">
+                            Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <div v-if="testResult" class="mt-4 p-4 rounded-lg" :class="testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'">
@@ -1532,74 +1711,7 @@ export default {
                 <div v-for="(value, key) in capabilities.capabilities" :key="key" class="flex items-center gap-2">
                   <CheckCircle v-if="value" class="size-4 text-green-600" />
                   <XCircle v-else class="size-4 text-gray-300" />
-                  <span class="text-sm">{{ key }}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <!-- API Limits Card -->
-          <Card v-if="limitsData">
-            <CardHeader>
-              <CardTitle class="flex items-center gap-2">
-                <Activity class="size-5" />
-                API Лимиты
-              </CardTitle>
-              <CardDescription v-if="!limitsData.supported">
-                Маркетплейс не поддерживает отслеживание лимитов
-              </CardDescription>
-            </CardHeader>
-            <CardContent v-if="limitsData.supported" class="space-y-6">
-              <!-- RPS Gauge -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between text-sm">
-                  <div class="flex items-center gap-2">
-                    <Gauge class="size-4 text-muted-foreground" />
-                    <span class="font-medium">Запросов в секунду</span>
-                  </div>
-                  <span class="text-muted-foreground">
-                    {{ limitsData.currentWindowRequests }} / {{ limitsData.maxRequestsPerSecond }} RPS
-                  </span>
-                </div>
-                <div class="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    class="h-full rounded-full transition-all duration-300"
-                    :class="getRpsColor(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond)"
-                    :style="{ width: Math.min(100, (limitsData.currentWindowRequests / limitsData.maxRequestsPerSecond) * 100) + '%' }"
-                  />
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  Всего запросов с момента запуска: {{ limitsData.totalRequestsSinceStart.toLocaleString('ru-RU') }}
-                </div>
-              </div>
-
-              <!-- Quota Bars -->
-              <div v-if="limitsData.quotas?.length > 0" class="space-y-4">
-                <Separator />
-                <div
-                  v-for="quota in limitsData.quotas"
-                  :key="quota.key"
-                  class="space-y-2"
-                >
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="font-medium">{{ quota.displayName }}</span>
-                    <span v-if="quota.limit < 0" class="text-muted-foreground">
-                      {{ quota.usage.toLocaleString('ru-RU') }} (безлимитный)
-                    </span>
-                    <span v-else class="text-muted-foreground">
-                      {{ quota.usage.toLocaleString('ru-RU') }} / {{ quota.limit.toLocaleString('ru-RU') }}
-                    </span>
-                  </div>
-                  <div v-if="quota.limit > 0" class="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      class="h-full rounded-full transition-all duration-300"
-                      :class="getQuotaColor(quota.usage, quota.limit)"
-                      :style="{ width: Math.min(100, (quota.usage / quota.limit) * 100) + '%' }"
-                    />
-                  </div>
-                  <div v-if="quota.resetsAt" class="text-xs text-muted-foreground">
-                    Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
-                  </div>
+                  <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
                 </div>
               </div>
             </CardContent>
@@ -1943,16 +2055,40 @@ export default {
               </Table>
             </div>
 
-            <!-- Load more -->
-            <div v-if="hasMore && !isLoadingProducts" class="flex justify-center">
-              <Button
-                variant="outline"
-                @click="fetchProducts(nextCursor)"
-                :disabled="isLoadingMore"
-              >
-                <Loader2 v-if="isLoadingMore" class="size-4 mr-2 animate-spin" />
-                Загрузить ещё
-              </Button>
+            <!-- Pagination -->
+            <div v-if="products.length > 0" class="flex items-center justify-between py-3">
+              <p class="text-sm text-muted-foreground">
+                Страница {{ externalPage }}, показано: {{ products.length }}
+              </p>
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="externalPage <= 1"
+                  @click="externalPage = 1; clearProductsCache(); fetchProducts()"
+                >
+                  <ChevronsLeft class="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="externalPage <= 1"
+                  @click="externalPage--; fetchProducts()"
+                >
+                  <ChevronLeft class="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="!canGoNextExternal"
+                  @click="externalPage++; fetchProducts()"
+                >
+                  <ChevronRight class="size-4" />
+                </Button>
+              </div>
             </div>
 
             <!-- Bulk actions bar -->
@@ -2115,16 +2251,52 @@ export default {
               </Table>
             </div>
 
-            <!-- Load more -->
-            <div v-if="hasMoreLocalProducts && !isLoadingLocalProducts" class="flex justify-center">
-              <Button
-                variant="outline"
-                @click="loadMoreLocalProducts"
-                :disabled="isLoadingLocalProducts"
-              >
-                <Loader2 v-if="isLoadingLocalProducts" class="size-4 mr-2 animate-spin" />
-                Загрузить ещё
-              </Button>
+            <!-- Pagination -->
+            <div v-if="localTotalCount > 0" class="flex items-center justify-between py-3">
+              <p class="text-sm text-muted-foreground">
+                Всего: {{ localTotalCount }}
+              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm text-muted-foreground mr-2">
+                  {{ localPage }} / {{ localLastPage }}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="localPage <= 1"
+                  @click="localPage = 1; fetchLocalProducts()"
+                >
+                  <ChevronsLeft class="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="localPage <= 1"
+                  @click="localPage--; fetchLocalProducts()"
+                >
+                  <ChevronLeft class="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="localPage >= localLastPage"
+                  @click="localPage++; fetchLocalProducts()"
+                >
+                  <ChevronRight class="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8 w-8 p-0"
+                  :disabled="localPage >= localLastPage"
+                  @click="localPage = localLastPage; fetchLocalProducts()"
+                >
+                  <ChevronsRight class="size-4" />
+                </Button>
+              </div>
             </div>
 
             <!-- Bulk export bar -->

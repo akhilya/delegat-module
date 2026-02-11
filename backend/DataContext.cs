@@ -19,6 +19,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }
+    public DbSet<ProductFolder> productFolders { get; set; }
 
     public DbSet<Category> categories { get; set; }
     public DbSet<CategoryAttribute> categoryAttributes { get; set; }
@@ -119,6 +120,29 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<Models.File>()
             .HasIndex(f => f.productId);
+
+        builder.Entity<Models.File>()
+            .HasIndex(f => f.folderId);
+
+        // ProductFolder self-referencing relationship
+        builder.Entity<ProductFolder>()
+            .HasOne(f => f.parentFolder)
+            .WithMany(f => f.childFolders)
+            .HasForeignKey(f => f.parentFolderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // File -> ProductFolder relationship
+        builder.Entity<Models.File>()
+            .HasOne(f => f.folder)
+            .WithMany(f => f.files)
+            .HasForeignKey(f => f.folderId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<ProductFolder>()
+            .HasIndex(pf => pf.productId);
+
+        builder.Entity<ProductFolder>()
+            .HasIndex(pf => pf.parentFolderId);
 
         builder.Entity<ImageReference>()
             .HasIndex(i => i.productId);

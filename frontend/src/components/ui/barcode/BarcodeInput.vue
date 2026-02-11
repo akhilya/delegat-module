@@ -258,7 +258,7 @@ export default {
         <PopoverTrigger as-child>
           <button
             type="button"
-            class="shrink-0 bg-white border rounded px-1.5 py-0.5 cursor-pointer hover:border-foreground/30 transition-colors"
+            class="shrink-0 h-9 bg-white border rounded px-1.5 flex items-center cursor-pointer hover:border-foreground/30 transition-colors"
             title="Нажмите для увеличения"
           >
             <svg ref="svgRef" class="h-6 block"></svg>

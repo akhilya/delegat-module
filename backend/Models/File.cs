@@ -66,6 +66,17 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public long length { get; set; }
 
     /// <summary>
+    /// Optional folder this file belongs to (null = root level).
+    /// </summary>
+    [ForeignKey(nameof(folder))]
+    public int? folderId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the containing folder.
+    /// </summary>
+    public ProductFolder? folder { get; set; }
+
+    /// <summary>
     /// Collection of tags associated with this file.
     /// </summary>
     public virtual ICollection<FileTag> tags { get; set; } = new List<FileTag>();
@@ -94,6 +105,7 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
             fullPath,
             contentType,
             length,
+            folderId,
             tags = tags.Select(t => t.MapToDTO(serviceProvider)),
         };
     }

@@ -3,23 +3,16 @@ import { http } from "@/main";
 
 export default {
   actions: {
-    /**
-     * Uploads files and attaches them to a product, with upload progress tracking.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.productId - The product ID to attach files to.
-     * @param {FileList|Array<File>} params.files - Files to upload.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @param {Function} [params.onProgress] - Callback for upload progress updates.
-     * @returns {Promise<void>}
-     */
-    async putProductFiles(ctx, { productId, files, onSuccess, onError, onProgress }) {
+    async putProductFiles(ctx, { productId, files, folderId, onSuccess, onError, onProgress }) {
       let formData = new FormData();
 
       for (let i = 0; i < files.length; i++) {
         formData.append("files", files[i]);
       }
+
+      const url = folderId != null
+        ? `/products/${productId}/files?folderId=${folderId}`
+        : `/products/${productId}/files`;
 
       const config = {
         method: "PUT",
@@ -27,7 +20,7 @@ export default {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-        timeout: 60 * 60 * 1000, // 1 hour for large files
+        timeout: 60 * 60 * 1000,
         cache: false,
         onUploadProgress: (progressEvent) => {
           if (onProgress && progressEvent.total) {
@@ -41,7 +34,7 @@ export default {
         },
       };
 
-      return await useAxios(`/products/${productId}/files`, config, http, {
+      return await useAxios(url, config, http, {
         immediate: true,
         abortPrevious: true,
       })
@@ -49,16 +42,6 @@ export default {
         .catch((error) => onError(error));
     },
 
-    /**
-     * Deletes a file attached to a product.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.productId - The product ID the file belongs to.
-     * @param {string|number} params.id - The file ID to delete.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
     async deleteProductFile(ctx, { productId, id, onSuccess, onError }) {
       return await useAxios(
         `/products/${productId}/files/${id}`,
@@ -68,6 +51,72 @@ export default {
           immediate: true,
           abortPrevious: true,
         },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async moveProductFile(ctx, { productId, fileId, folderId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/files/${fileId}/move`,
+        { method: "PATCH", data: { folderId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async getProductFolders(ctx, { productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/folders`,
+        { method: "GET", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async createProductFolder(ctx, { productId, name, parentFolderId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/folders`,
+        { method: "POST", data: { name, parentFolderId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async renameProductFolder(ctx, { productId, folderId, name, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/folders/${folderId}`,
+        { method: "PUT", data: { name }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async deleteProductFolder(ctx, { productId, folderId, recursive, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/folders/${folderId}?recursive=${!!recursive}`,
+        { method: "DELETE", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async moveProductFolder(ctx, { productId, folderId, newParentFolderId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/folders/${folderId}/move`,
+        { method: "PATCH", data: { newParentFolderId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
       )
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));

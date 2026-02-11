@@ -263,7 +263,7 @@ export default {
           <div class="flex items-center gap-1.5">
             <Label class="leading-none">
               {{ attribute.name }}
-              <span v-if="attribute.isRequired" class="text-red-500">*</span>
+              <span v-if="attribute.isRequired" class="text-destructive">*</span>
             </Label>
             <TooltipProvider v-if="attribute.description">
               <Tooltip>
@@ -284,7 +284,7 @@ export default {
             @update:model-value="setValue(attribute.id, $event)"
             :placeholder="attribute.defaultValue || ''"
             :required="attribute.isRequired"
-            :class="{ 'border-red-500 focus-visible:ring-red-500': hasError(attribute.id) }"
+            :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
           />
 
           <!-- Number (type 1) -->
@@ -295,7 +295,7 @@ export default {
             @update:model-value="setValue(attribute.id, $event)"
             :placeholder="attribute.defaultValue || ''"
             :required="attribute.isRequired"
-            :class="{ 'border-red-500 focus-visible:ring-red-500': hasError(attribute.id) }"
+            :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
           />
 
           <!-- Boolean (type 2) -->
@@ -321,7 +321,7 @@ export default {
             @update:model-value="setValue(attribute.id, $event)"
             :options="getSelectOptions(attribute)"
             :placeholder="attribute.defaultValue || 'Выберите...'"
-            :class="{ 'border-red-500': hasError(attribute.id) }"
+            :class="{ 'border-destructive': hasError(attribute.id) }"
           />
 
           <!-- MultiSelect (type 4) -->
@@ -331,7 +331,7 @@ export default {
             :model-value="getMultiSelectLabels(attribute)"
             @update:model-value="setMultiSelectByLabels(attribute, $event)"
             placeholder="Выберите..."
-            :class="{ 'border-red-500': hasError(attribute.id) }"
+            :class="{ 'border-destructive': hasError(attribute.id) }"
           />
 
           <!-- Barcode (type 5) -->
@@ -347,11 +347,11 @@ export default {
             :model-value="getValue(attribute.id)"
             @update:model-value="setValue(attribute.id, $event)"
             :placeholder="`Неизвестный тип: ${attribute.type}`"
-            :class="{ 'border-red-500 focus-visible:ring-red-500': hasError(attribute.id) }"
+            :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
           />
 
           <!-- Error message -->
-          <p v-if="getError(attribute.id)" class="text-sm text-red-500 mt-1">
+          <p v-if="getError(attribute.id)" class="text-sm text-destructive mt-1">
             {{ getError(attribute.id) }}
           </p>
         </div>

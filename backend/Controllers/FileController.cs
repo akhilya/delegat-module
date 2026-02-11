@@ -52,7 +52,7 @@ public class FileController : ControllerBase
     [Route("/products/{productId}/files")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)] // 10GB
-    public async Task<IActionResult> PutProductFiles(int productId, IFormFile[] files)
+    public async Task<IActionResult> PutProductFiles(int productId, IFormFile[] files, [FromQuery] int? folderId = null)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -67,32 +67,40 @@ public class FileController : ControllerBase
         if (product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
 
+        if (folderId.HasValue)
+        {
+            var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
+            var folder = await folderRepo.GetByIdAsync(folderId.Value);
+            if (folder == null || folder.productId != productId)
+                throw ApiException.NotFound("Папка не найдена");
+        }
+
         var user = await _currentUserService.GetUserAsync();
         if (user == null)
             throw ApiException.Unauthorized();
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
-        var results = new List<object>();
+        var fileEntities = new List<Models.File>();
 
         foreach (var file in files)
         {
-            var fileId = await fileRepo.GenerateNextIdAsync();
-            var filePath = $"{selectedStoreId}/{productId}/{fileId}/{file.FileName}";
+            var uniqueKey = Guid.NewGuid().ToString("N");
+            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{file.FileName}";
 
             var fileEntity = new Models.File();
             fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, file.ContentType, file.Length));
-            fileEntity.Id = fileId;
+            fileEntity.folderId = folderId;
 
             // Stream directly to storage without buffering entire file in memory
             using var stream = file.OpenReadStream();
             await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
-            await fileRepo.AddAsync(fileEntity);
-
-            results.Add(fileEntity.MapToDTO(_serviceProvider));
+            await fileRepo.AddWithoutSaveAsync(fileEntity);
+            fileEntities.Add(fileEntity);
         }
 
         await _unitOfWork.SaveChangesAsync();
-        return Ok(results);
+
+        return Ok(fileEntities.Select(e => e.MapToDTO(_serviceProvider)).ToList());
     }
 
     /// <summary>
@@ -103,7 +111,7 @@ public class FileController : ControllerBase
     [HttpPost]
     [Route("/products/{productId}/files/stream")]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> StreamUploadFiles(int productId)
+    public async Task<IActionResult> StreamUploadFiles(int productId, [FromQuery] int? folderId = null)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -117,6 +125,14 @@ public class FileController : ControllerBase
 
         if (product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        if (folderId.HasValue)
+        {
+            var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
+            var folder = await folderRepo.GetByIdAsync(folderId.Value);
+            if (folder == null || folder.productId != productId)
+                throw ApiException.NotFound("Папка не найдена");
+        }
 
         var user = await _currentUserService.GetUserAsync();
         if (user == null)
@@ -130,7 +146,7 @@ public class FileController : ControllerBase
             throw ApiException.BadRequest("Отсутствует boundary в заголовке content-type");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
-        var results = new List<object>();
+        var fileEntities = new List<Models.File>();
 
         var reader = new MultipartReader(boundary, Request.Body);
         MultipartSection? section;
@@ -145,8 +161,8 @@ public class FileController : ControllerBase
             var fileName = contentDisposition.FileName.Value ?? "unknown";
             var contentType = section.ContentType ?? "application/octet-stream";
 
-            var fileId = await fileRepo.GenerateNextIdAsync();
-            var filePath = $"{selectedStoreId}/{productId}/{fileId}/{fileName}";
+            var uniqueKey = Guid.NewGuid().ToString("N");
+            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{fileName}";
 
             // Get content length from headers if available
             long contentLength = 0;
@@ -185,14 +201,13 @@ public class FileController : ControllerBase
 
             var fileEntity = new Models.File();
             fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, contentType, contentLength));
-            fileEntity.Id = fileId;
-            await fileRepo.AddAsync(fileEntity);
-
-            results.Add(fileEntity.MapToDTO(_serviceProvider));
+            fileEntity.folderId = folderId;
+            await fileRepo.AddWithoutSaveAsync(fileEntity);
+            fileEntities.Add(fileEntity);
         }
 
         await _unitOfWork.SaveChangesAsync();
-        return Ok(results);
+        return Ok(fileEntities.Select(e => e.MapToDTO(_serviceProvider)).ToList());
     }
 
     /// <summary>
@@ -201,6 +216,45 @@ public class FileController : ControllerBase
     /// <param name="productId">The product identifier.</param>
     /// <param name="id">The file identifier.</param>
     /// <returns>200 OK on success.</returns>
+    public record MoveFileRequest(int? folderId);
+
+    [HttpPatch]
+    [Route("/products/{productId}/files/{id}/move")]
+    public async Task<IActionResult> MoveFile(int productId, int id, [FromBody] MoveFileRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdAsync(productId);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var file = await fileRepo.GetByIdTrackingAsync(id);
+
+        if (file == null || file.productId != productId)
+            throw ApiException.NotFound("Файл не найден");
+
+        if (request.folderId.HasValue)
+        {
+            var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
+            var folder = await folderRepo.GetByIdAsync(request.folderId.Value);
+            if (folder == null || folder.productId != productId)
+                throw ApiException.NotFound("Папка не найдена");
+        }
+
+        file.folderId = request.folderId;
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(file.MapToDTO(_serviceProvider));
+    }
+
     [HttpDelete]
     [Route("/products/{productId}/files/{id}")]
     public async Task<IActionResult> DeleteProductFile(int productId, int id)
