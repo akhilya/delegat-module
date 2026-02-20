@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Minio;
 using Minio.DataModel.Args;
 using PrintO.Infrastructure.Configuration;
@@ -17,16 +18,18 @@ public class MinIOStorageService : IStorageService
     private readonly string _publicEndpoint;
     private readonly bool _publicSecure;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<MinIOStorageService> _logger;
     private bool _bucketExistsVerified;
 
     public string Bucket => _bucket;
 
-    public MinIOStorageService(MinIOSettings settings, IHttpClientFactory httpClientFactory)
+    public MinIOStorageService(MinIOSettings settings, IHttpClientFactory httpClientFactory, ILogger<MinIOStorageService> logger)
     {
         _bucket = settings.Bucket;
         _endpoint = settings.Endpoint;
         _secure = settings.Secure;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
 
         // Public endpoint for external URL generation (falls back to internal endpoint)
         _publicEndpoint = !string.IsNullOrEmpty(settings.PublicEndpoint)
@@ -61,8 +64,9 @@ public class MinIOStorageService : IStorageService
             await _client.PutObjectAsync(request, ct);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to upload file to MinIO: {Path}", path);
             return false;
         }
     }
@@ -86,8 +90,9 @@ public class MinIOStorageService : IStorageService
             await _client.PutObjectAsync(request, ct);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to upload stream to MinIO: {Path}, ContentLength: {ContentLength}", path, contentLength);
             return false;
         }
     }

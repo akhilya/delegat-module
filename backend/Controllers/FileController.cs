@@ -93,7 +93,9 @@ public class FileController : ControllerBase
 
             // Stream directly to storage without buffering entire file in memory
             using var stream = file.OpenReadStream();
-            await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
+            var uploaded = await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
+            if (!uploaded)
+                throw ApiException.InternalServerError($"Не удалось загрузить файл {file.FileName} в хранилище");
             await fileRepo.AddWithoutSaveAsync(fileEntity);
             fileEntities.Add(fileEntity);
         }
@@ -185,7 +187,9 @@ public class FileController : ControllerBase
                     }
 
                     using var fileStream = System.IO.File.OpenRead(tempPath);
-                    await _storageService.UploadAsync(fileStream, filePath, contentLength, contentType);
+                    var uploaded = await _storageService.UploadAsync(fileStream, filePath, contentLength, contentType);
+                    if (!uploaded)
+                        throw ApiException.InternalServerError($"Не удалось загрузить файл {fileName} в хранилище");
                 }
                 finally
                 {
@@ -196,7 +200,9 @@ public class FileController : ControllerBase
             else
             {
                 // Direct stream upload when size is known
-                await _storageService.UploadAsync(section.Body, filePath, contentLength, contentType);
+                var uploaded = await _storageService.UploadAsync(section.Body, filePath, contentLength, contentType);
+                if (!uploaded)
+                    throw ApiException.InternalServerError($"Не удалось загрузить файл {fileName} в хранилище");
             }
 
             var fileEntity = new Models.File();

@@ -103,7 +103,8 @@ builder.Services.AddHttpClient("MinIOStorage", client =>
 builder.Services.AddSingleton<IStorageService>(sp =>
 {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-    return new MinIOStorageService(minioSettings, httpClientFactory);
+    var logger = sp.GetRequiredService<ILogger<MinIOStorageService>>();
+    return new MinIOStorageService(minioSettings, httpClientFactory, logger);
 });
 
 // Settings as singletons for DI
