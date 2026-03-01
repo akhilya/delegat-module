@@ -1,0 +1,438 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using static PrintO.Services.Marketplace.Modifiers.ModifierHelpers;
+
+namespace PrintO.Services.Marketplace.Modifiers;
+
+// ===== Text Modifiers =====
+
+public class TruncateModifier : IFieldModifier
+{
+    public string Type => "truncate";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var maxLength = GetInt(parameters, "maxLength", str.Length);
+        return str.Length <= maxLength ? str : str[..maxLength];
+    }
+}
+
+public class SplitModifier : IFieldModifier
+{
+    public string Type => "split";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var delimiter = GetString(parameters, "delimiter", ",");
+        var index = GetInt(parameters, "index", 0);
+        var parts = str.Split(delimiter);
+        return index >= 0 && index < parts.Length ? parts[index] : null;
+    }
+}
+
+public class ReplaceModifier : IFieldModifier
+{
+    public string Type => "replace";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var search = GetString(parameters, "search", "");
+        var replacement = GetString(parameters, "replacement", "");
+        return string.IsNullOrEmpty(search) ? str : str.Replace(search, replacement);
+    }
+}
+
+public class AppendModifier : IFieldModifier
+{
+    public string Type => "append";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var suffix = GetString(parameters, "suffix", "");
+        return str + suffix;
+    }
+}
+
+public class PrependModifier : IFieldModifier
+{
+    public string Type => "prepend";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var prefix = GetString(parameters, "prefix", "");
+        return prefix + str;
+    }
+}
+
+public class UppercaseModifier : IFieldModifier
+{
+    public string Type => "uppercase";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        return value?.ToString()?.ToUpperInvariant();
+    }
+}
+
+public class LowercaseModifier : IFieldModifier
+{
+    public string Type => "lowercase";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        return value?.ToString()?.ToLowerInvariant();
+    }
+}
+
+public class TrimModifier : IFieldModifier
+{
+    public string Type => "trim";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        return value?.ToString()?.Trim();
+    }
+}
+
+// ===== Number Modifiers =====
+
+public class MultiplyModifier : IFieldModifier
+{
+    public string Type => "multiply";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var factor = GetDecimal(parameters, "factor", 1);
+        return num.Value * factor;
+    }
+}
+
+public class DivideModifier : IFieldModifier
+{
+    public string Type => "divide";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var divisor = GetDecimal(parameters, "divisor", 1);
+        return divisor == 0 ? value : num.Value / divisor;
+    }
+}
+
+public class AddModifier : IFieldModifier
+{
+    public string Type => "add";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var addend = GetDecimal(parameters, "addend", 0);
+        return num.Value + addend;
+    }
+}
+
+public class RoundModifier : IFieldModifier
+{
+    public string Type => "round";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var decimals = GetInt(parameters, "decimals", 0);
+        return Math.Round(num.Value, decimals);
+    }
+}
+
+public class FloorModifier : IFieldModifier
+{
+    public string Type => "floor";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        return Math.Floor(num.Value);
+    }
+}
+
+public class CeilingModifier : IFieldModifier
+{
+    public string Type => "ceiling";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        return Math.Ceiling(num.Value);
+    }
+}
+
+public class ClampModifier : IFieldModifier
+{
+    public string Type => "clamp";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var min = GetDecimal(parameters, "min", decimal.MinValue);
+        var max = GetDecimal(parameters, "max", decimal.MaxValue);
+        return Math.Clamp(num.Value, min, max);
+    }
+}
+
+// ===== Select / Other Modifiers =====
+
+public class ValueMapModifier : IFieldModifier
+{
+    public string Type => "valueMap";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        // Handle list/array values: map each element individually
+        var elements = TryParseList(value);
+        if (elements != null)
+        {
+            var mappings = GetMappingsList(parameters);
+            var defaultValue = GetString(parameters, "default", null);
+            var mapped = elements
+                .Select(el => MapSingle(el, mappings, defaultValue))
+                .ToList();
+            return JsonSerializer.Serialize(mapped);
+        }
+
+        var str = value?.ToString();
+        if (str == null) return GetString(parameters, "default", null);
+
+        return MapSingle(str, GetMappingsList(parameters), GetString(parameters, "default", null));
+    }
+
+    private static string MapSingle(string str, List<(string from, string to)> mappings, string? defaultValue)
+    {
+        foreach (var mapping in mappings)
+        {
+            if (string.Equals(mapping.from, str, StringComparison.OrdinalIgnoreCase))
+                return mapping.to;
+        }
+        return defaultValue ?? str;
+    }
+
+    /// <summary>
+    /// Try to parse value as a list of strings (List&lt;string&gt;, JsonElement array, or JSON array string).
+    /// Returns null if value is not a list.
+    /// </summary>
+    internal static List<string>? TryParseList(object? value)
+    {
+        if (value is List<string> list)
+            return list;
+
+        if (value is JsonElement je && je.ValueKind == JsonValueKind.Array)
+        {
+            var result = new List<string>();
+            foreach (var item in je.EnumerateArray())
+                result.Add(item.GetString() ?? item.ToString());
+            return result;
+        }
+
+        var str = value?.ToString();
+        if (str != null && str.StartsWith('['))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<List<string>>(str);
+                if (parsed != null)
+                    return parsed;
+            }
+            catch (JsonException) { }
+        }
+
+        return null;
+    }
+
+    private static List<(string from, string to)> GetMappingsList(Dictionary<string, object> parameters)
+    {
+        if (!parameters.TryGetValue("mappings", out var mappingsObj))
+            return new List<(string, string)>();
+
+        if (mappingsObj is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+        {
+            var result = new List<(string, string)>();
+            foreach (var item in jsonElement.EnumerateArray())
+            {
+                var from = item.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
+                var to = item.TryGetProperty("to", out var toProp) ? toProp.GetString() : null;
+                if (from != null && to != null)
+                    result.Add((from, to));
+            }
+            return result;
+        }
+
+        return new List<(string, string)>();
+    }
+}
+
+/// <summary>
+/// Same logic as ValueMapModifier but registered under "optionMap" type.
+/// UI uses this to map source values to marketplace option values.
+/// </summary>
+public class OptionMapModifier : IFieldModifier
+{
+    public string Type => "optionMap";
+
+    private static readonly ValueMapModifier _inner = new();
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+        => _inner.Apply(value, parameters);
+}
+
+public class DefaultValueModifier : IFieldModifier
+{
+    public string Type => "defaultValue";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        if (value == null || (value is string s && string.IsNullOrEmpty(s)))
+            return GetString(parameters, "value", null);
+        return value;
+    }
+}
+
+public class TakeFirstModifier : IFieldModifier
+{
+    public string Type => "takeFirst";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        if (value is List<string> list && list.Count > 0)
+            return list[0];
+        if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+        {
+            var enumerator = jsonElement.EnumerateArray();
+            if (enumerator.MoveNext())
+                return enumerator.Current.GetString();
+        }
+        var str = value?.ToString();
+        if (str != null && str.StartsWith('['))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<List<string>>(str);
+                if (parsed != null && parsed.Count > 0)
+                    return parsed[0];
+            }
+            catch { }
+        }
+        return value;
+    }
+}
+
+// ===== Context-Aware Modifiers =====
+
+public class TemplateModifier : IContextAwareModifier
+{
+    private static readonly Regex PlaceholderRegex = new(@"\{\{(.+?)\}\}", RegexOptions.Compiled);
+
+    public string Type => "template";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        // Without context, just do {{value}} replacement
+        var template = GetString(parameters, "template", null);
+        if (string.IsNullOrEmpty(template)) return value;
+
+        return PlaceholderRegex.Replace(template, match =>
+        {
+            var key = match.Groups[1].Value.Trim();
+            if (key.Equals("value", StringComparison.OrdinalIgnoreCase))
+                return value?.ToString() ?? "";
+            return match.Value; // leave unresolved
+        });
+    }
+
+    public object? ApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+    {
+        var template = GetString(parameters, "template", null);
+        if (string.IsNullOrEmpty(template)) return value;
+
+        return PlaceholderRegex.Replace(template, match =>
+        {
+            var key = match.Groups[1].Value.Trim();
+            if (key.Equals("value", StringComparison.OrdinalIgnoreCase))
+                return value?.ToString() ?? "";
+
+            var resolved = context.ResolveReference?.Invoke(key);
+            return resolved?.ToString() ?? "";
+        });
+    }
+}
+
+/// <summary>
+/// Shared helper methods for extracting typed parameters from the modifier params dictionary.
+/// </summary>
+internal static class ModifierHelpers
+{
+    public static string? GetString(Dictionary<string, object> parameters, string key, string? defaultValue)
+    {
+        if (parameters.TryGetValue(key, out var val))
+        {
+            if (val is JsonElement je)
+                return je.ValueKind == JsonValueKind.String ? je.GetString() : je.ToString();
+            return val?.ToString();
+        }
+        return defaultValue;
+    }
+
+    public static int GetInt(Dictionary<string, object> parameters, string key, int defaultValue)
+    {
+        if (parameters.TryGetValue(key, out var val))
+        {
+            if (val is JsonElement je)
+            {
+                if (je.ValueKind == JsonValueKind.Number && je.TryGetInt32(out var i)) return i;
+                if (int.TryParse(je.ToString(), out var parsed)) return parsed;
+            }
+            if (val is int i2) return i2;
+            if (int.TryParse(val?.ToString(), out var p)) return p;
+        }
+        return defaultValue;
+    }
+
+    public static decimal GetDecimal(Dictionary<string, object> parameters, string key, decimal defaultValue)
+    {
+        if (parameters.TryGetValue(key, out var val))
+        {
+            if (val is JsonElement je)
+            {
+                if (je.ValueKind == JsonValueKind.Number && je.TryGetDecimal(out var d)) return d;
+                if (decimal.TryParse(je.ToString(), out var parsed)) return parsed;
+            }
+            if (val is decimal d2) return d2;
+            if (decimal.TryParse(val?.ToString(), out var p)) return p;
+        }
+        return defaultValue;
+    }
+
+    public static decimal? ToDecimal(object? value)
+    {
+        if (value == null) return null;
+        if (value is decimal d) return d;
+        if (value is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetDecimal(out var jd)) return jd;
+        if (decimal.TryParse(value.ToString(), out var parsed)) return parsed;
+        return null;
+    }
+}

@@ -9,6 +9,7 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import MultiSelectDropdown from "@/components/ui/multi-select/MultiSelectDropdown.vue";
+import ModifierStack from "@/components/marketplace/ModifierStack.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
@@ -24,6 +25,9 @@ import {
   Boxes,
   Plus,
   Trash2,
+  Eye,
+  Settings2,
+  ArrowRight,
 } from "lucide-vue-next";
 import {
   Card,
@@ -41,6 +45,13 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -69,6 +80,7 @@ export default {
     Switch,
     SearchableSelect,
     MultiSelectDropdown,
+    ModifierStack,
     ArrowLeft,
     Save,
     Loader2,
@@ -81,6 +93,9 @@ export default {
     Boxes,
     Plus,
     Trash2,
+    Eye,
+    Settings2,
+    ArrowRight,
     Card,
     CardContent,
     CardDescription,
@@ -104,6 +119,11 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
   },
   data() {
     return {
@@ -119,6 +139,17 @@ export default {
       isSaving: false,
       hasChanges: false,
       mappingInfo: null,
+      // Preview
+      previewProductId: null,
+      previewProducts: [],
+      previewData: {}, // keyed by externalFieldKey
+      isLoadingPreview: false,
+      previewDebounceTimer: null,
+      // Modifier sheet
+      editingFieldMapping: null,
+      showModifierSheet: false,
+      // Preview summary sheet
+      showPreviewSheet: false,
       // Для добавления нового поля
       showAddField: false,
       newField: {
@@ -156,6 +187,51 @@ export default {
     hasUnmappedRequired() {
       return this.unmappedRequiredFields.length > 0;
     },
+    previewSummary() {
+      return this.fieldMappings
+        .filter((fm) => fm.isEnabled)
+        .map((fm) => {
+          const p = this.previewData[fm.externalFieldKey];
+          const sourceValue = p?.sourceValue ?? null;
+          const resultValue = p?.resultValue ?? null;
+          const error = p?.error ?? null;
+          return {
+            fieldName: fm.externalFieldName || fm.externalFieldKey,
+            externalFieldKey: fm.externalFieldKey,
+            sourceValue,
+            resultValue,
+            error,
+            isChanged: sourceValue != resultValue && resultValue != null && !error,
+          };
+        });
+    },
+    sortedFieldMappings() {
+      const enabled = this.fieldMappings.filter((fm) => fm.isEnabled);
+      const disabled = this.fieldMappings.filter((fm) => !fm.isEnabled);
+      return [...enabled, ...disabled];
+    },
+    editingSourceFieldOptions() {
+      const fm = this.editingFieldMapping;
+      if (!fm) return [];
+      let optionsJson = null;
+      if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
+        const attr = this.availableSources.categoryAttributes?.find(
+          (a) => a.id === fm.sourceAttributeId
+        );
+        optionsJson = attr?.options;
+      } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
+        const attr = this.availableSources.storeAttributes?.find(
+          (a) => a.id === fm.sourceAttributeId
+        );
+        optionsJson = attr?.options;
+      }
+      if (!optionsJson) return [];
+      try {
+        return JSON.parse(optionsJson);
+      } catch {
+        return [];
+      }
+    },
   },
   methods: {
     ...mapActions([
@@ -164,6 +240,8 @@ export default {
       "toggleFieldMapping",
       "updateFieldMapping",
       "getAvailableSources",
+      "previewFieldMappings",
+      "getAllProducts",
     ]),
 
     async fetchData() {
@@ -171,6 +249,7 @@ export default {
       await Promise.all([
         this.fetchFieldMappings(),
         this.fetchAvailableSources(),
+        this.fetchPreviewProducts(),
       ]);
       this.isLoading = false;
     },
@@ -185,6 +264,9 @@ export default {
             rawTextMode: false,
             parsedOptions: fm.externalFieldOptions
               ? (() => { try { return JSON.parse(fm.externalFieldOptions); } catch { return []; } })()
+              : [],
+            parsedModifiers: fm.modifiersJson
+              ? (() => { try { return JSON.parse(fm.modifiersJson); } catch { return []; } })()
               : [],
           }));
           this.mappingInfo = {
@@ -234,6 +316,7 @@ export default {
       fieldMapping.sourceAttributeId = null;
       fieldMapping.staticValue = null;
       this.hasChanges = true;
+      this.debouncedPreview();
     },
 
     onSourceFieldChange(fieldMapping, value) {
@@ -246,11 +329,13 @@ export default {
         fieldMapping.sourceAttributeId = parseInt(value) || null;
       }
       this.hasChanges = true;
+      this.debouncedPreview();
     },
 
     onStaticValueChange(fieldMapping, value) {
       fieldMapping.staticValue = value != null ? String(value) : null;
       this.hasChanges = true;
+      this.debouncedPreview();
     },
 
     _parseMultiselectValue(value) {
@@ -393,6 +478,9 @@ export default {
         sourceAttributeId: fm.sourceAttributeId,
         staticValue: fm.staticValue,
         isEnabled: fm.isEnabled,
+        modifiersJson: fm.parsedModifiers && fm.parsedModifiers.length > 0
+          ? JSON.stringify(fm.parsedModifiers)
+          : null,
       }));
 
       await this.saveFieldMappings({
@@ -407,6 +495,114 @@ export default {
         },
       });
       this.isSaving = false;
+    },
+
+    // === Modifiers ===
+
+    openModifierSheet(fieldMapping) {
+      this.editingFieldMapping = fieldMapping;
+      this.showModifierSheet = true;
+    },
+
+    closeModifierSheet() {
+      this.showModifierSheet = false;
+      this.editingFieldMapping = null;
+    },
+
+    getModifierCount(fieldMapping) {
+      return (fieldMapping.parsedModifiers || []).length;
+    },
+
+    onModifiersChange(fieldMapping, modifiers) {
+      fieldMapping.parsedModifiers = modifiers;
+      this.hasChanges = true;
+      this.debouncedPreview();
+    },
+
+    // === Preview ===
+
+    async fetchPreviewProducts() {
+      await this.getAllProducts({
+        searchQuery: "",
+        startIndex: 0,
+        pageSize: 500,
+        categoryId: null,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          this.previewProducts = (data.items || []).map((p) => ({
+            value: String(p.id),
+            label: `${p.name || p.sku || "Без названия"} (ID: ${p.id})`,
+          }));
+        },
+        onError: () => {},
+      });
+    },
+
+    onPreviewProductChange(productId) {
+      this.previewProductId = productId ? parseInt(productId) : null;
+      const query = { ...this.$route.query };
+      if (this.previewProductId) {
+        query.previewProduct = String(this.previewProductId);
+        this.fetchPreview();
+      } else {
+        delete query.previewProduct;
+        this.previewData = {};
+      }
+      this.$router.replace({ query });
+    },
+
+    async fetchPreview() {
+      if (!this.previewProductId) return;
+      this.isLoadingPreview = true;
+      // Send current in-memory field mappings so preview works without saving
+      const currentMappings = this.fieldMappings.map((fm) => ({
+        externalFieldKey: fm.externalFieldKey,
+        sourceType: fm.sourceType,
+        sourceField: fm.sourceField,
+        sourceAttributeId: fm.sourceAttributeId,
+        staticValue: fm.staticValue,
+        modifiersJson: fm.parsedModifiers?.length
+          ? JSON.stringify(fm.parsedModifiers)
+          : null,
+        isEnabled: fm.isEnabled,
+      }));
+      await this.previewFieldMappings({
+        mappingId: this.mappingId,
+        productId: this.previewProductId,
+        fieldMappings: currentMappings,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          const previews = data.previews || [];
+          this.previewData = {};
+          for (const p of previews) {
+            this.previewData[p.externalFieldKey] = p;
+          }
+        },
+        onError: () => {
+          this.previewData = {};
+        },
+      });
+      this.isLoadingPreview = false;
+    },
+
+    debouncedPreview() {
+      if (this.previewDebounceTimer) clearTimeout(this.previewDebounceTimer);
+      if (!this.previewProductId) return;
+      this.previewDebounceTimer = setTimeout(() => {
+        this.fetchPreview();
+      }, 300);
+    },
+
+    getPreviewForField(externalFieldKey) {
+      return this.previewData[externalFieldKey] || null;
+    },
+    shouldShowInlinePreview(externalFieldKey) {
+      const p = this.previewData[externalFieldKey];
+      if (!p) return false;
+      if (p.error) return true;
+      // Hide when no values or when source == result (no change)
+      if (p.resultValue == null && p.sourceValue == null) return false;
+      return p.sourceValue != p.resultValue;
     },
 
     goBack() {
@@ -477,7 +673,12 @@ export default {
   mounted() {
     this.connectionId = this.$route.params.connId;
     this.mappingId = this.$route.params.mappingId;
-    this.fetchData();
+    this.fetchData().then(() => {
+      const qp = this.$route.query.previewProduct;
+      if (qp) {
+        this.onPreviewProductChange(qp);
+      }
+    });
   },
 };
 </script>
@@ -556,6 +757,26 @@ export default {
         </div>
       </div>
 
+      <!-- Preview product selector -->
+      <div class="mb-4 flex items-center gap-3">
+        <div class="flex items-center gap-2 text-sm text-muted-foreground">
+          <Eye class="size-4" />
+          <span>Предпросмотр:</span>
+        </div>
+        <SearchableSelect
+          class="w-[500px]"
+          :options="previewProducts"
+          :model-value="previewProductId ? String(previewProductId) : ''"
+          @update:modelValue="onPreviewProductChange"
+          placeholder="Выберите товар для предпросмотра..."
+        />
+        <Loader2 v-if="isLoadingPreview" class="size-4 animate-spin text-muted-foreground" />
+        <Button v-if="previewProductId && !isLoadingPreview" variant="outline" size="sm"
+                @click="showPreviewSheet = true">
+          <Eye class="size-4 mr-2" /> Сводка
+        </Button>
+      </div>
+
       <div class="border rounded-lg h-full w-full grow mb-4 overflow-auto">
         <Table>
           <TableHeader>
@@ -565,17 +786,18 @@ export default {
               <TableHead class="w-[180px]">Тип источника</TableHead>
               <TableHead>Источник данных</TableHead>
               <TableHead class="w-[100px]">Статус</TableHead>
-              <TableHead class="w-[50px]"></TableHead>
+              <!-- preview column removed — shown inline under data source -->
+              <TableHead class="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            <template v-for="fm in sortedFieldMappings" :key="fm.id">
             <TableRow
-              v-for="fm in fieldMappings"
-              :key="fm.id"
               :class="[
                 { 'opacity-50': !fm.isEnabled },
                 { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) },
-                { 'bg-amber-500/5 border-l-2 border-l-amber-500': isUnmappedOptional(fm) }
+                { 'bg-amber-500/5 border-l-2 border-l-amber-500': isUnmappedOptional(fm) },
+                { '!border-b-0': previewProductId && shouldShowInlinePreview(fm.externalFieldKey) }
               ]"
             >
               <TableCell>
@@ -811,6 +1033,7 @@ export default {
                     Значение берётся из названия группы товара
                   </span>
                 </template>
+
               </TableCell>
               <TableCell>
                 <Badge
@@ -825,22 +1048,62 @@ export default {
                   {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : isUnmappedOptional(fm) ? "Не заполнено" : "Не настроено" }}
                 </Badge>
               </TableCell>
+              <!-- preview moved inline under data source cell -->
               <TableCell>
-                <Button
-                  v-if="fm.isCustom"
-                  variant="ghost"
-                  size="icon"
-                  class="size-8 text-destructive hover:text-destructive"
-                  @click="removeField(fm)"
-                  title="Удалить поле"
-                >
-                  <Trash2 class="size-4" />
-                </Button>
+                <div class="flex items-center gap-1">
+                  <Button
+                    v-if="fm.isEnabled"
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 relative"
+                    @click="openModifierSheet(fm)"
+                    title="Настроить модификаторы"
+                  >
+                    <Settings2 class="size-4" />
+                    <span
+                      v-if="getModifierCount(fm) > 0"
+                      class="absolute -top-0.5 -right-0.5 flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium"
+                    >
+                      {{ getModifierCount(fm) }}
+                    </span>
+                  </Button>
+                  <Button
+                    v-if="fm.isCustom"
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 text-destructive hover:text-destructive"
+                    @click="removeField(fm)"
+                    title="Удалить поле"
+                  >
+                    <Trash2 class="size-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
+            <!-- Preview sub-row -->
+            <TableRow
+              v-if="previewProductId && shouldShowInlinePreview(fm.externalFieldKey)"
+              :key="fm.id + '-preview'"
+              class="border-t-0 !border-b hover:bg-transparent"
+            >
+              <TableCell :colspan="6" class="pt-0 pb-1.5 px-4">
+                <div class="flex items-center gap-1.5 text-[11px] leading-none min-w-0">
+                  <Eye class="size-3 shrink-0 text-muted-foreground" />
+                  <template v-if="getPreviewForField(fm.externalFieldKey).error">
+                    <span class="text-destructive truncate">{{ getPreviewForField(fm.externalFieldKey).error }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="text-muted-foreground truncate max-w-[250px]" :title="getPreviewForField(fm.externalFieldKey).sourceValue">{{ getPreviewForField(fm.externalFieldKey).sourceValue || '—' }}</span>
+                    <span class="text-muted-foreground shrink-0">→</span>
+                    <span class="font-medium truncate max-w-[250px]" :title="getPreviewForField(fm.externalFieldKey).resultValue">{{ getPreviewForField(fm.externalFieldKey).resultValue || '—' }}</span>
+                  </template>
+                </div>
+              </TableCell>
+            </TableRow>
+            </template>
 
             <TableRow v-if="fieldMappings.length === 0">
-              <TableCell colspan="6" class="text-center py-8 text-muted-foreground">
+              <TableCell :colspan="6" class="text-center py-8 text-muted-foreground">
                 Нет полей для маппинга. Нажмите "Добавить поле" чтобы создать вручную.
               </TableCell>
             </TableRow>
@@ -848,6 +1111,112 @@ export default {
         </Table>
       </div>
     </template>
+
+    <!-- Боковое окно модификаторов -->
+    <Sheet v-model:open="showModifierSheet">
+      <SheetContent side="right" class="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Модификаторы</SheetTitle>
+          <SheetDescription v-if="editingFieldMapping">
+            {{ editingFieldMapping.externalFieldName || editingFieldMapping.externalFieldKey }}
+          </SheetDescription>
+        </SheetHeader>
+
+        <template v-if="editingFieldMapping">
+          <!-- Source info -->
+          <div class="mt-4 p-3 rounded-md bg-muted/50 text-sm">
+            <div class="text-muted-foreground text-xs mb-1">Источник данных</div>
+            <div class="flex items-center gap-2">
+              <component :is="getSourceTypeIcon(editingFieldMapping.sourceType)" class="size-4 text-muted-foreground" />
+              <span>{{ getSourceTypeLabel(editingFieldMapping.sourceType) }}:</span>
+              <span class="font-medium">{{ getCurrentSourceLabel(editingFieldMapping) }}</span>
+            </div>
+          </div>
+
+          <!-- Modifier chain -->
+          <div class="mt-6">
+            <div class="text-sm font-medium mb-3">Цепочка модификаторов</div>
+            <ModifierStack
+              :modifiers="editingFieldMapping.parsedModifiers || []"
+              :external-field-type="editingFieldMapping.externalFieldType"
+              :external-field-options="editingFieldMapping.parsedOptions || []"
+              :source-field-options="editingSourceFieldOptions"
+              :available-sources="availableSources"
+              :disabled="!editingFieldMapping.isEnabled"
+              @update:modifiers="(v) => onModifiersChange(editingFieldMapping, v)"
+            />
+            <p v-if="!editingFieldMapping.parsedModifiers?.length" class="text-xs text-muted-foreground mt-2">
+              Модификаторы преобразуют значение перед отправкой на маркетплейс. Нажмите "+ Модификатор" чтобы добавить.
+            </p>
+          </div>
+
+          <!-- Preview in sheet -->
+          <div v-if="previewProductId && getPreviewForField(editingFieldMapping.externalFieldKey)" class="mt-6">
+            <div class="text-sm font-medium mb-2">Предпросмотр</div>
+            <div class="p-3 rounded-md border text-sm space-y-2">
+              <div v-if="getPreviewForField(editingFieldMapping.externalFieldKey).error" class="text-destructive">
+                {{ getPreviewForField(editingFieldMapping.externalFieldKey).error }}
+              </div>
+              <template v-else>
+                <div>
+                  <span class="text-xs text-muted-foreground">Исходное значение:</span>
+                  <div class="font-mono text-xs mt-0.5 break-all">
+                    {{ getPreviewForField(editingFieldMapping.externalFieldKey).sourceValue || '—' }}
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 text-muted-foreground">
+                  <span>→</span>
+                </div>
+                <div>
+                  <span class="text-xs text-muted-foreground">Результат:</span>
+                  <div class="font-mono text-xs mt-0.5 font-medium break-all">
+                    {{ getPreviewForField(editingFieldMapping.externalFieldKey).resultValue || '—' }}
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </SheetContent>
+    </Sheet>
+
+    <!-- Сводка предпросмотра -->
+    <Sheet v-model:open="showPreviewSheet">
+      <SheetContent side="right" class="overflow-y-auto sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>Предпросмотр</SheetTitle>
+          <SheetDescription>Сводка всех полей. Изменённые значения выделены цветом.</SheetDescription>
+        </SheetHeader>
+
+        <div class="mt-4 space-y-2">
+          <div
+            v-for="item in previewSummary"
+            :key="item.externalFieldKey"
+            class="rounded-md border p-3 text-sm"
+            :class="{
+              'bg-destructive/10 border-l-2 border-l-destructive': item.error,
+              'bg-amber-500/10 border-l-2 border-l-amber-500': item.isChanged,
+            }"
+          >
+            <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
+            <div v-if="item.error" class="text-destructive text-xs break-all whitespace-pre-wrap">{{ item.error }}</div>
+            <div v-else class="space-y-1 text-xs">
+              <div class="flex gap-2 min-w-0">
+                <span class="text-muted-foreground shrink-0">Исх:</span>
+                <span class="text-muted-foreground font-mono break-all whitespace-pre-wrap">{{ item.sourceValue ?? '—' }}</span>
+              </div>
+              <div class="flex gap-2 min-w-0">
+                <span class="text-muted-foreground shrink-0">Рез:</span>
+                <span class="font-medium font-mono break-all whitespace-pre-wrap">{{ item.resultValue ?? '—' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="previewSummary.length === 0" class="text-center text-muted-foreground py-8 text-sm">
+            Нет активных полей
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
 
     <!-- Диалог добавления нового поля -->
     <Dialog v-model:open="showAddField">

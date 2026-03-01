@@ -638,6 +638,36 @@ export default {
         .catch((error) => onError(error));
     },
 
+    // === Field Mapping Preview ===
+
+    /**
+     * Previews field mapping modifier results for a specific product.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.mappingId - The category mapping ID.
+     * @param {number} params.productId - The product ID to preview.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async previewFieldMappings(ctx, { mappingId, productId, fieldMappings, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/mappings/${mappingId}/preview`,
+        {
+          method: "POST",
+          cache: false,
+          data: { productId, fieldMappings },
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     // === Product Links ===
 
     /**

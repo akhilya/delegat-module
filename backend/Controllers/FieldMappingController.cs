@@ -7,7 +7,9 @@ using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
+using PrintO.Models.Products;
 using PrintO.Services.Marketplace;
+using PrintO.Services.Marketplace.Modifiers;
 
 namespace PrintO.Controllers;
 
@@ -19,6 +21,8 @@ public class FieldMappingController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
+    private readonly MappingService _mappingService;
+    private readonly DataContext _context;
     private readonly ILogger<FieldMappingController> _logger;
 
     public FieldMappingController(
@@ -26,12 +30,16 @@ public class FieldMappingController : ControllerBase
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
+        MappingService mappingService,
+        DataContext context,
         ILogger<FieldMappingController> logger)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
+        _mappingService = mappingService;
+        _context = context;
         _logger = logger;
     }
 
@@ -110,6 +118,7 @@ public class FieldMappingController : ControllerBase
             sourceAttributeId = fm.sourceAttributeId,
             staticValue = fm.staticValue,
             transformExpression = fm.transformExpression,
+            modifiersJson = fm.modifiersJson,
             externalFieldType = fm.externalFieldType,
             externalFieldOptions = fm.externalFieldOptions,
             sortOrder = fm.sortOrder
@@ -154,6 +163,7 @@ public class FieldMappingController : ControllerBase
                     sourceAttributeId = item.sourceAttributeId,
                     staticValue = item.staticValue,
                     transformExpression = item.transformExpression,
+                    modifiersJson = item.modifiersJson,
                     sortOrder = item.sortOrder
                 });
                 await repo.UpdateAsync(existing);
@@ -174,6 +184,7 @@ public class FieldMappingController : ControllerBase
                     sourceAttributeId = item.sourceAttributeId,
                     staticValue = item.staticValue,
                     transformExpression = item.transformExpression,
+                    modifiersJson = item.modifiersJson,
                     sortOrder = item.sortOrder
                 });
                 await repo.AddAsync(newMapping);
@@ -241,6 +252,8 @@ public class FieldMappingController : ControllerBase
             updateForm.staticValue = input.staticValue;
         if (input.transformExpression != null)
             updateForm.transformExpression = input.transformExpression;
+        if (input.modifiersJson != null)
+            updateForm.modifiersJson = input.modifiersJson;
         if (input.sortOrder.HasValue)
             updateForm.sortOrder = input.sortOrder.Value;
 
@@ -289,16 +302,132 @@ public class FieldMappingController : ControllerBase
                 id = a.Id,
                 key = a.key,
                 name = a.name,
-                type = a.type.ToString()
+                type = a.type.ToString(),
+                options = a.options
             }) ?? Enumerable.Empty<object>(),
             storeAttributes = storeAttributes.Select(sa => new
             {
                 id = sa.Id,
                 key = sa.key,
                 name = sa.name,
-                type = sa.type.ToString()
+                type = sa.type.ToString(),
+                options = sa.options
             })
         });
+    }
+
+    /// <summary>
+    /// Preview modifier results for a specific product
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/mappings/{mappingId}/preview")]
+    public async Task<IActionResult> PreviewFieldMappings(
+        int mappingId,
+        [FromBody] PreviewInput input,
+        CancellationToken ct)
+    {
+        var mapping = await GetMappingAsync(mappingId);
+
+        // Load product with all relations needed for field value extraction
+        var product = await _context.products
+            .Include(p => p.category)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.attribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.files)
+            .Include(p => p.images)
+                .ThenInclude(i => i.file)
+            .Include(p => p.groupMemberships)
+                .ThenInclude(gm => gm.group)
+            .FirstOrDefaultAsync(p => p.Id == input.productId, ct);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        // Build field mapping list: use overrides from request body if provided,
+        // otherwise fall back to DB records.
+        List<FieldMapping> fieldMappings;
+        if (input.fieldMappings is { Count: > 0 })
+        {
+            fieldMappings = input.fieldMappings
+                .Where(fm => fm.isEnabled)
+                .Select(fm => new FieldMapping
+                {
+                    externalFieldKey = fm.externalFieldKey,
+                    sourceType = fm.sourceType,
+                    sourceField = fm.sourceField,
+                    sourceAttributeId = fm.sourceAttributeId,
+                    staticValue = fm.staticValue,
+                    modifiersJson = fm.modifiersJson,
+                    isEnabled = fm.isEnabled,
+                })
+                .ToList();
+        }
+        else
+        {
+            var repo = _unitOfWork.Repository<FieldMapping>();
+            fieldMappings = (await repo.FindAllAsync(
+                fm => fm.categoryMappingId == mappingId && fm.isEnabled,
+                query => query.OrderBy(fm => fm.sortOrder))).ToList();
+        }
+
+        var previews = new List<object>();
+
+        foreach (var fm in fieldMappings)
+        {
+            string? error = null;
+            object? sourceValue = null;
+            object? resultValue = null;
+
+            try
+            {
+                sourceValue = _mappingService.GetFieldValue(product, fm);
+
+                var modifierContext = new ModifierContext
+                {
+                    ResolveReference = (reference) => _mappingService.ResolveFieldReference(product, reference)
+                };
+
+                // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
+                if (!string.IsNullOrEmpty(fm.modifiersJson))
+                {
+                    resultValue = ModifierPipeline.ApplyModifiers(sourceValue, fm.modifiersJson, modifierContext);
+                }
+                else if (!string.IsNullOrEmpty(fm.transformExpression) && sourceValue != null)
+                {
+                    resultValue = sourceValue;
+                }
+                else
+                {
+                    resultValue = sourceValue;
+                }
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+
+            previews.Add(new
+            {
+                fieldMappingId = fm.Id,
+                externalFieldKey = fm.externalFieldKey,
+                sourceValue = FormatPreviewValue(sourceValue),
+                resultValue = FormatPreviewValue(resultValue),
+                error
+            });
+        }
+
+        return Ok(new { previews });
+    }
+
+    private static string? FormatPreviewValue(object? value)
+    {
+        if (value == null) return null;
+        if (value is string s) return s;
+        if (value is List<string> list) return string.Join(", ", list);
+        if (value is decimal d) return d.ToString();
+        return value.ToString();
     }
 
     #region Helpers
@@ -395,6 +524,7 @@ public class FieldMappingController : ControllerBase
         public int? sourceAttributeId { get; set; }
         public string? staticValue { get; set; }
         public string? transformExpression { get; set; }
+        public string? modifiersJson { get; set; }
         public int sortOrder { get; set; }
     }
 
@@ -406,7 +536,29 @@ public class FieldMappingController : ControllerBase
         public int? sourceAttributeId { get; set; }
         public string? staticValue { get; set; }
         public string? transformExpression { get; set; }
+        public string? modifiersJson { get; set; }
         public int? sortOrder { get; set; }
+    }
+
+    public struct PreviewInput
+    {
+        public int productId { get; set; }
+        /// <summary>
+        /// Optional in-memory field mapping overrides (unsaved state from the UI).
+        /// When provided, these are used instead of DB records.
+        /// </summary>
+        public List<PreviewFieldMappingItem>? fieldMappings { get; set; }
+    }
+
+    public struct PreviewFieldMappingItem
+    {
+        public string externalFieldKey { get; set; }
+        public FieldMappingSourceType sourceType { get; set; }
+        public string? sourceField { get; set; }
+        public int? sourceAttributeId { get; set; }
+        public string? staticValue { get; set; }
+        public string? modifiersJson { get; set; }
+        public bool isEnabled { get; set; }
     }
 
     #endregion

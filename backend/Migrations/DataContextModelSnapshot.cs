@@ -393,6 +393,9 @@ namespace PrintO.Migrations
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<string>("modifiersJson")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("sortOrder")
                         .HasColumnType("int");
 

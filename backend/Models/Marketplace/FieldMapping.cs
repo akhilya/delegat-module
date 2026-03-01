@@ -75,9 +75,16 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
 
     /// <summary>
     /// Optional value transformation expression (e.g., "multiply:1000", "append:_suffix").
+    /// Legacy field — kept for backward compatibility. Prefer modifiersJson.
     /// </summary>
     [StringLength(TRANSFORM_MAX_LENGTH)]
     public string? transformExpression { get; set; }
+
+    /// <summary>
+    /// JSON-serialized modifier chain. Format: [{"type":"multiply","params":{"factor":1000}}, ...].
+    /// Takes priority over transformExpression when present.
+    /// </summary>
+    public string? modifiersJson { get; set; }
 
     /// <summary>
     /// Cached field type from the marketplace (e.g. "string", "number", "boolean", "select", "multiselect").
@@ -110,6 +117,7 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         sourceAttributeId = form.sourceAttributeId;
         staticValue = form.staticValue;
         transformExpression = form.transformExpression;
+        modifiersJson = form.modifiersJson;
         externalFieldType = form.externalFieldType;
         externalFieldOptions = form.externalFieldOptions;
         sortOrder = form.sortOrder;
@@ -130,6 +138,8 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
             staticValue = form.staticValue;
         if (form.transformExpression != null)
             transformExpression = form.transformExpression;
+        if (form.modifiersJson != null)
+            modifiersJson = form.modifiersJson;
         if (form.sortOrder.HasValue)
             sortOrder = form.sortOrder.Value;
         return true;
@@ -154,6 +164,7 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
             sourceAttributeId = sourceAttributeId,
             staticValue = staticValue,
             transformExpression = transformExpression,
+            modifiersJson = modifiersJson,
             externalFieldType = externalFieldType,
             externalFieldOptions = externalFieldOptions,
             sortOrder = sortOrder
@@ -188,6 +199,11 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
     /// Maximum length for transform expression.
     /// </summary>
     public const int TRANSFORM_MAX_LENGTH = 1000;
+
+    /// <summary>
+    /// Maximum length for serialized modifiers JSON.
+    /// </summary>
+    public const int MODIFIERS_MAX_LENGTH = 65535;
 
     /// <summary>
     /// Maximum length for external field type.
@@ -264,6 +280,11 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         public string? transformExpression { get; set; }
 
         /// <summary>
+        /// JSON-serialized modifier chain.
+        /// </summary>
+        public string? modifiersJson { get; set; }
+
+        /// <summary>
         /// Cached external field type.
         /// </summary>
         [StringLength(EXTERNAL_FIELD_TYPE_MAX_LENGTH)]
@@ -317,6 +338,11 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         /// </summary>
         [StringLength(TRANSFORM_MAX_LENGTH)]
         public string? transformExpression { get; set; }
+
+        /// <summary>
+        /// Updated modifier chain JSON.
+        /// </summary>
+        public string? modifiersJson { get; set; }
     }
 
     /// <summary>
@@ -356,6 +382,11 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         /// </summary>
         [StringLength(TRANSFORM_MAX_LENGTH)]
         public string? transformExpression { get; set; }
+
+        /// <summary>
+        /// Updated modifier chain JSON.
+        /// </summary>
+        public string? modifiersJson { get; set; }
 
         /// <summary>
         /// Updated display order.
@@ -422,6 +453,11 @@ public class FieldMapping : IEntity, IMapToDTO<FieldMapping.MappingDTO>,
         /// Value transformation expression.
         /// </summary>
         public string? transformExpression { get; set; }
+
+        /// <summary>
+        /// JSON-serialized modifier chain.
+        /// </summary>
+        public string? modifiersJson { get; set; }
 
         /// <summary>
         /// Cached external field type.

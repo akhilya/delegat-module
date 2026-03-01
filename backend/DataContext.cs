@@ -72,6 +72,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .Property(a => a.options)
             .HasColumnType("longtext");
 
+        // FieldMapping modifiersJson - LONGTEXT for JSON modifier chains
+        builder.Entity<FieldMapping>()
+            .Property(fm => fm.modifiersJson)
+            .HasColumnType("longtext");
+
         // Product grouping indexes
         builder.Entity<ProductGroupMember>()
             .HasIndex(m => new { m.groupId, m.productId })

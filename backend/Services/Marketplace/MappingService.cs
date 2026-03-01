@@ -2,6 +2,7 @@ using PrintO.Enums;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
+using PrintO.Services.Marketplace.Modifiers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -49,8 +50,18 @@ public class MappingService
 
             var value = GetFieldValue(product, mapping);
 
-            // Apply transformation if specified
-            if (!string.IsNullOrEmpty(mapping.transformExpression) && value != null)
+            // Build modifier context for template resolution
+            var modifierContext = new ModifierContext
+            {
+                ResolveReference = (reference) => ResolveFieldReference(product, reference)
+            };
+
+            // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
+            if (!string.IsNullOrEmpty(mapping.modifiersJson) && value != null)
+            {
+                value = ModifierPipeline.ApplyModifiers(value, mapping.modifiersJson, modifierContext);
+            }
+            else if (!string.IsNullOrEmpty(mapping.transformExpression) && value != null)
             {
                 value = ApplyTransform(value, mapping.transformExpression);
             }
@@ -89,9 +100,10 @@ public class MappingService
     }
 
     /// <summary>
-    /// Get field value from the data source
+    /// Get field value from the data source.
+    /// Public to allow preview endpoint to access source values.
     /// </summary>
-    private object? GetFieldValue(
+    public object? GetFieldValue(
         Product product,
         FieldMapping mapping)
     {
@@ -104,6 +116,34 @@ public class MappingService
             FieldMappingSourceType.GroupName => GetGroupNameValue(product),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Resolve a template reference like "Name", "attr:5", "storeAttr:3" to a product value.
+    /// </summary>
+    public object? ResolveFieldReference(Product product, string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            return null;
+
+        // attr:ID — category attribute
+        if (reference.StartsWith("attr:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(reference[5..], out var attrId))
+                return GetCategoryAttributeValue(product, attrId);
+            return null;
+        }
+
+        // storeAttr:ID — store attribute
+        if (reference.StartsWith("storeAttr:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(reference[10..], out var storeAttrId))
+                return GetStoreAttributeValue(product, storeAttrId);
+            return null;
+        }
+
+        // Plain field name — product field (case-insensitive)
+        return GetProductFieldValue(product, reference);
     }
 
     /// <summary>
@@ -124,6 +164,7 @@ public class MappingService
             "storagequantity" or "stock" or "quantity" => product.storageQuantity,
             "categoryid" => product.categoryId,
             "categoryname" => product.category?.name,
+            "groupname" => GetGroupNameValue(product),
             "images" => GetProductImageUrls(product),
             _ => null
         };
@@ -299,6 +340,7 @@ public class MappingService
             new("price", "Цена", "number"),
             new("storageQuantity", "Количество на складе", "number"),
             new("categoryName", "Название категории", "string"),
+            new("groupName", "Название группы товара", "string"),
             new("images", "Изображения", "array")
         };
     }
