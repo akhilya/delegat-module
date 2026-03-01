@@ -58,7 +58,7 @@ jobs:
         run: npm run build
         working-directory: ./frontend
         env:
-          VITE_API_SERVER: ${{ vars.VITE_API_SERVER || 'https://api.printo.studio/api' }}
+          VITE_API_SERVER: ${{ vars.VITE_API_SERVER || '/api' }}
 
   # Deploy to Dokploy
   deploy:

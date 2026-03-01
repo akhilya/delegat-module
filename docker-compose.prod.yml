@@ -50,8 +50,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_API_SERVER: ${VITE_API_SERVER:-https://api.printo.studio/api}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
       interval: 10s
