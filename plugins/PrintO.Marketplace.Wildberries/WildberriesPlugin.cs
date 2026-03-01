@@ -1,0 +1,1388 @@
+using System.Globalization;
+using System.Text.Json;
+using PrintO.Marketplace.SDK;
+using PrintO.Marketplace.SDK.DTOs;
+using PrintO.Marketplace.SDK.RateLimit;
+using PrintO.Marketplace.Wildberries.Models;
+
+namespace PrintO.Marketplace.Wildberries;
+
+public class WildberriesPlugin : MarketplacePluginBase
+{
+    #region Metadata
+
+    public override string Key => "wildberries";
+    public override string DisplayName => "Wildberries";
+    public override string Version => "1.0.0";
+    public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
+    public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
+
+    public override MarketplaceCapabilities Capabilities =>
+        MarketplaceCapabilities.GetCategories |
+        MarketplaceCapabilities.GetCategoryFields |
+        MarketplaceCapabilities.ImportProduct |
+        MarketplaceCapabilities.ImportAllProducts |
+        MarketplaceCapabilities.ImportProductBatch |
+        MarketplaceCapabilities.ExportProduct |
+        MarketplaceCapabilities.ExportProductBulk |
+        MarketplaceCapabilities.ArchiveProduct |
+        MarketplaceCapabilities.ImportPrices |
+        MarketplaceCapabilities.ExportPrices |
+        MarketplaceCapabilities.ImportStocks |
+        MarketplaceCapabilities.ExportStocks |
+        MarketplaceCapabilities.EndpointBasedGrouping |
+        MarketplaceCapabilities.ImportGroups |
+        MarketplaceCapabilities.ModifyGroupMembership;
+
+    #endregion
+
+    #region Rate Limiting
+
+    public override RateLimitConfig? GetRateLimitConfig()
+        => new RateLimitConfig { MaxRequestsPerSecond = 1 };
+
+    public override async Task<List<QuotaInfo>> GetQuotasAsync(ConnectionContext context, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        try
+        {
+            var limits = await client.GetCardLimitsAsync(ct);
+            var data = limits.Data;
+            if (data == null) return new List<QuotaInfo>();
+
+            return new List<QuotaInfo>
+            {
+                new QuotaInfo(
+                    "free_limits",
+                    "Бесплатные карточки",
+                    data.FreeLimits,
+                    0,
+                    null),
+                new QuotaInfo(
+                    "paid_limits",
+                    "Платные карточки",
+                    data.PaidLimits,
+                    0,
+                    null)
+            };
+        }
+        catch
+        {
+            return new List<QuotaInfo>();
+        }
+    }
+
+    public override MarketplaceRateLimiter? GetRateLimiterForConnection(ConnectionContext context)
+    {
+        var apiKey = context.GetCredential("apiKey");
+        if (string.IsNullOrEmpty(apiKey)) return null;
+        return WildberriesApiClient.GetRateLimiterForApiKey(apiKey);
+    }
+
+    #endregion
+
+    #region Credentials
+
+    public override CredentialsSchema GetCredentialsSchema()
+    {
+        return new CredentialsSchema
+        {
+            Fields = new List<CredentialField>
+            {
+                new()
+                {
+                    Key = "apiKey",
+                    DisplayName = "API-ключ",
+                    Description = "API-ключ из личного кабинета Wildberries",
+                    Type = "password",
+                    IsRequired = true,
+                    IsSecret = true,
+                    Placeholder = "eyJhbGciOiJFUzI1NiIs..."
+                }
+            }
+        };
+    }
+
+    #endregion
+
+    #region Connection
+
+    public override async Task<ConnectionTestResult> TestConnectionAsync(
+        ConnectionContext context, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = CreateClient(context);
+            var warehouses = await client.GetWarehousesAsync(ct);
+
+            return new ConnectionTestResult(
+                true,
+                "Соединение установлено",
+                new Dictionary<string, object>
+                {
+                    ["warehouseCount"] = warehouses.Count,
+                    ["warehouses"] = warehouses.Select(w => w.Name).ToList()
+                });
+        }
+        catch (WildberriesApiException ex)
+        {
+            return new ConnectionTestResult(
+                false,
+                $"Ошибка API Wildberries: {ex.Message}",
+                new Dictionary<string, object>
+                {
+                    ["statusCode"] = ex.StatusCode,
+                    ["response"] = ex.ResponseBody ?? ""
+                });
+        }
+        catch (Exception ex)
+        {
+            return new ConnectionTestResult(false, $"Ошибка: {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Categories
+
+    public override async Task<List<ExternalCategory>> GetCategoriesAsync(
+        ConnectionContext context,
+        string? parentId = null,
+        string? searchQuery = null,
+        CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+
+        // Search by name
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var subjects = await client.GetSubjectsAsync(name: searchQuery, ct: ct);
+            return (subjects.Data ?? new())
+                .Select(s => new ExternalCategory(
+                    Id: s.SubjectId.ToString(),
+                    Name: s.SubjectName,
+                    ParentId: $"parent:{s.ParentId}",
+                    ParentName: s.ParentName,
+                    FullPath: $"{s.ParentName} / {s.SubjectName}",
+                    HasChildren: false))
+                .ToList();
+        }
+
+        // Root level: return parent categories
+        if (parentId == null)
+        {
+            var parents = await client.GetParentCategoriesAsync(ct);
+            return (parents.Data ?? new())
+                .Where(p => p.IsVisible)
+                .Select(p => new ExternalCategory(
+                    Id: $"parent:{p.Id}",
+                    Name: p.Name,
+                    HasChildren: true))
+                .ToList();
+        }
+
+        // Children of a parent category
+        if (parentId.StartsWith("parent:") && int.TryParse(parentId[7..], out var pid))
+        {
+            var subjects = await client.GetSubjectsAsync(parentId: pid, ct: ct);
+            return (subjects.Data ?? new())
+                .Select(s => new ExternalCategory(
+                    Id: s.SubjectId.ToString(),
+                    Name: s.SubjectName,
+                    ParentId: parentId,
+                    ParentName: s.ParentName,
+                    FullPath: $"{s.ParentName} / {s.SubjectName}",
+                    HasChildren: false))
+                .ToList();
+        }
+
+        return new List<ExternalCategory>();
+    }
+
+    public override async Task<List<ExternalField>> GetCategoryFieldsAsync(
+        ConnectionContext context,
+        string externalCategoryId,
+        CancellationToken ct = default)
+    {
+        // Parent categories have no fields
+        if (externalCategoryId.StartsWith("parent:"))
+            return new List<ExternalField>();
+
+        if (!int.TryParse(externalCategoryId, out var subjectId))
+            return new List<ExternalField>();
+
+        var client = CreateClient(context);
+        var response = await client.GetCharacteristicsAsync(subjectId, ct);
+
+        var fields = new List<ExternalField>();
+
+        // Standard fields
+        fields.Add(new ExternalField("sku", "Артикул продавца (vendorCode)", true, "string", SortOrder: 0, MaxLength: 72));
+        fields.Add(new ExternalField("name", "Наименование", true, "string", SortOrder: 1, MaxLength: 60));
+        fields.Add(new ExternalField("description", "Описание", false, "string", SortOrder: 2, MaxLength: 5000));
+        fields.Add(new ExternalField("brand", "Бренд", true, "string", SortOrder: 3));
+        fields.Add(new ExternalField("price", "Цена (руб)", true, "number", SortOrder: 4));
+        fields.Add(new ExternalField("length", "Длина (см)", false, "number", SortOrder: 5, Group: "Габариты"));
+        fields.Add(new ExternalField("width", "Ширина (см)", false, "number", SortOrder: 6, Group: "Габариты"));
+        fields.Add(new ExternalField("height", "Высота (см)", false, "number", SortOrder: 7, Group: "Габариты"));
+        fields.Add(new ExternalField("weight", "Вес брутто (кг)", false, "number", SortOrder: 8, Group: "Габариты"));
+        fields.Add(new ExternalField("images", "Изображения (URL через запятую)", false, "string", SortOrder: 9));
+
+        if (response.Data == null) return fields;
+
+        // Known directory characteristics that need options loaded
+        var directoryCharcNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Цвет", "Пол", "Страна производства", "Сезон"
+        };
+
+        // Preload directories for known chars
+        Dictionary<string, List<WbDirectoryItem>>? directoryCache = null;
+
+        foreach (var charc in response.Data.Where(c => c.CharcType != 0))
+        {
+            string fieldType;
+            List<ExternalFieldOption>? options = null;
+
+            if (charc.CharcType == 4)
+            {
+                fieldType = "number";
+            }
+            else if (charc.CharcType == 1)
+            {
+                fieldType = charc.MaxCount > 1 || charc.MaxCount == 0 ? "multiselect" : "string";
+
+                // Load directory values for known characteristics
+                if (directoryCharcNames.Contains(charc.Name))
+                {
+                    directoryCache ??= await LoadDirectoryCacheAsync(client, ct);
+
+                    if (directoryCache.TryGetValue(charc.Name, out var items))
+                    {
+                        options = items.Select(i => new ExternalFieldOption(i.Name, i.Name)).ToList();
+                        fieldType = charc.MaxCount > 1 || charc.MaxCount == 0 ? "multiselect" : "select";
+                    }
+                }
+            }
+            else
+            {
+                continue;
+            }
+
+            fields.Add(new ExternalField(
+                Key: $"charc:{charc.CharcId}",
+                Name: charc.Name,
+                IsRequired: charc.Required,
+                Type: fieldType,
+                Options: options,
+                Unit: charc.UnitName,
+                Group: "Характеристики",
+                SortOrder: charc.Popular ? 100 : 200
+            ));
+        }
+
+        return fields;
+    }
+
+    private static async Task<Dictionary<string, List<WbDirectoryItem>>> LoadDirectoryCacheAsync(
+        WildberriesApiClient client, CancellationToken ct)
+    {
+        var cache = new Dictionary<string, List<WbDirectoryItem>>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var colors = await client.GetColorsAsync(ct);
+            if (colors.Data != null) cache["Цвет"] = colors.Data;
+        }
+        catch { /* non-critical */ }
+
+        try
+        {
+            var kinds = await client.GetKindsAsync(ct);
+            if (kinds.Data != null) cache["Пол"] = kinds.Data;
+        }
+        catch { /* non-critical */ }
+
+        try
+        {
+            var countries = await client.GetCountriesAsync(ct);
+            if (countries.Data != null) cache["Страна производства"] = countries.Data;
+        }
+        catch { /* non-critical */ }
+
+        try
+        {
+            var seasons = await client.GetSeasonsAsync(ct);
+            if (seasons.Data != null) cache["Сезон"] = seasons.Data;
+        }
+        catch { /* non-critical */ }
+
+        return cache;
+    }
+
+    #endregion
+
+    #region Product Import
+
+    public override async Task<ExternalProduct?> ImportProductAsync(
+        ConnectionContext context, string externalProductId, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+
+        var request = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Filter = new WbCardsListFilter { TextSearch = externalProductId, WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 100 }
+            }
+        };
+
+        var response = await client.GetCardsListAsync(request, ct);
+
+        if (response.Cards == null || response.Cards.Count == 0) return null;
+
+        // Find by nmID
+        if (int.TryParse(externalProductId, out var nmId))
+        {
+            var card = response.Cards.FirstOrDefault(c => c.NmId == nmId);
+            if (card != null) return MapCardToProduct(card);
+        }
+
+        // Fallback: return first card
+        return MapCardToProduct(response.Cards[0]);
+    }
+
+    public override async Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(
+        ConnectionContext context, int pageSize = 100, string? cursor = null,
+        string? offerIdFilter = null, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var limit = Math.Min(pageSize, 100);
+
+        string? updatedAt = null;
+        int? nmId = null;
+
+        // Parse cursor: "updatedAt|nmID"
+        if (!string.IsNullOrEmpty(cursor))
+        {
+            var parts = cursor.Split('|');
+            if (parts.Length == 2)
+            {
+                updatedAt = parts[0];
+                if (int.TryParse(parts[1], out var parsedNmId))
+                    nmId = parsedNmId;
+            }
+        }
+
+        var request = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Sort = new WbCardsListSort { Ascending = false },
+                Filter = new WbCardsListFilter
+                {
+                    WithPhoto = -1,
+                    TextSearch = offerIdFilter
+                },
+                Cursor = new WbCardsListCursor
+                {
+                    Limit = limit,
+                    UpdatedAt = updatedAt,
+                    NmId = nmId
+                }
+            }
+        };
+
+        var response = await client.GetCardsListAsync(request, ct);
+        var products = (response.Cards ?? new()).Select(MapCardToProduct).ToList();
+
+        string? nextCursor = null;
+        var hasMore = false;
+
+        if (response.Cursor != null && products.Count == limit)
+        {
+            hasMore = true;
+            nextCursor = $"{response.Cursor.UpdatedAt}|{response.Cursor.NmId}";
+        }
+
+        return new PagedResult<ExternalProduct>(
+            products, hasMore, nextCursor, response.Cursor?.Total);
+    }
+
+    private static ExternalProduct MapCardToProduct(WbCard card)
+    {
+        // Extract price from first size
+        decimal? price = null;
+        string? barcode = null;
+        if (card.Sizes?.Count > 0)
+        {
+            var firstSize = card.Sizes[0];
+            if (firstSize.Price.HasValue)
+                price = firstSize.Price.Value;
+            barcode = firstSize.Skus?.FirstOrDefault();
+        }
+
+        // Map characteristics to attributes
+        var attributes = new Dictionary<string, object>();
+        if (card.Characteristics != null)
+        {
+            foreach (var charc in card.Characteristics)
+            {
+                var key = $"charc:{charc.Id}";
+                if (charc.Value.HasValue)
+                {
+                    attributes[key] = ExtractCharacteristicValue(charc.Value.Value);
+                }
+            }
+        }
+
+        // Image URLs
+        var imageUrls = card.Photos?
+            .Where(p => !string.IsNullOrEmpty(p.Big))
+            .Select(p => p.Big!)
+            .ToList();
+
+        // Raw data for round-trip
+        var rawData = new Dictionary<string, object>
+        {
+            ["imtID"] = card.ImtId,
+            ["nmUUID"] = card.NmUuid ?? "",
+            ["subjectID"] = card.SubjectId,
+        };
+        if (card.Sizes != null)
+        {
+            rawData["sizes"] = JsonSerializer.Serialize(card.Sizes);
+        }
+        if (card.Dimensions != null)
+        {
+            rawData["dimensions"] = JsonSerializer.Serialize(card.Dimensions);
+        }
+
+        return new ExternalProduct(
+            ExternalId: card.NmId.ToString(),
+            Sku: card.VendorCode,
+            Name: card.Title ?? card.VendorCode,
+            Description: card.Description,
+            Price: price,
+            Quantity: null,
+            CategoryId: card.SubjectId.ToString(),
+            CategoryName: card.SubjectName,
+            Attributes: attributes.Count > 0 ? attributes : null,
+            ImageUrls: imageUrls?.Count > 0 ? imageUrls : null,
+            Barcode: barcode,
+            Brand: card.Brand,
+            RawData: rawData,
+            GroupId: card.ImtId.ToString()
+        );
+    }
+
+    private static object ExtractCharacteristicValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? "",
+            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
+            JsonValueKind.Array => element.EnumerateArray()
+                .Select(e => e.ValueKind == JsonValueKind.String
+                    ? (object)(e.GetString() ?? "")
+                    : e.ValueKind == JsonValueKind.Number
+                        ? e.TryGetInt64(out var n) ? n : e.GetDouble()
+                        : e.ToString())
+                .ToList(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => element.ToString()
+        };
+    }
+
+    #endregion
+
+    #region Product Export
+
+    public override async Task<ExportResult> ExportProductAsync(
+        ConnectionContext context,
+        Dictionary<string, object> productData,
+        string? existingExternalId = null,
+        CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+
+        if (existingExternalId != null)
+            return await UpdateProductAsync(client, productData, existingExternalId, ct);
+
+        return await CreateProductAsync(client, productData, ct);
+    }
+
+    private async Task<ExportResult> CreateProductAsync(
+        WildberriesApiClient client,
+        Dictionary<string, object> data,
+        CancellationToken ct)
+    {
+        var subjectId = GetIntValue(data, "categoryId");
+        if (subjectId == 0)
+            return new ExportResult(false, ErrorMessage: "categoryId is required");
+
+        var vendorCode = GetStringValue(data, "sku");
+        if (string.IsNullOrEmpty(vendorCode))
+            return new ExportResult(false, ErrorMessage: "sku (vendorCode) is required");
+
+        var variant = new WbCardVariant
+        {
+            VendorCode = vendorCode,
+            Title = GetStringValue(data, "name"),
+            Description = GetStringValue(data, "description"),
+            Brand = GetStringValue(data, "brand"),
+            Dimensions = BuildDimensions(data),
+            Characteristics = BuildCharacteristics(data),
+            Sizes = new List<WbCardCreateSize>
+            {
+                new WbCardCreateSize
+                {
+                    TechSize = "0",
+                    Price = GetIntValue(data, "price")
+                }
+            }
+        };
+
+        var group = new WbCardCreateGroup
+        {
+            SubjectId = subjectId,
+            Variants = new List<WbCardVariant> { variant }
+        };
+
+        try
+        {
+            var response = await client.CreateCardsAsync(new List<WbCardCreateGroup> { group }, ct);
+
+            if (response.Error)
+            {
+                return new ExportResult(false, ErrorMessage: response.ErrorText ?? "Create failed");
+            }
+
+            // Poll for the created card by vendorCode
+            var nmId = await PollForCreatedCardAsync(client, vendorCode, ct);
+            if (nmId == null)
+            {
+                // Check error list
+                var errors = await CheckCardErrorsAsync(client, vendorCode, ct);
+                if (!string.IsNullOrEmpty(errors))
+                    return new ExportResult(false, ErrorMessage: $"Card creation failed: {errors}");
+
+                return new ExportResult(false, ErrorMessage: "Card created but could not be found. It may still be processing.");
+            }
+
+            // Upload images
+            var imageUrls = GetImageUrls(data);
+            if (imageUrls.Count > 0)
+            {
+                try
+                {
+                    await client.SaveMediaByUrlAsync(new WbMediaSaveRequest
+                    {
+                        NmId = nmId.Value,
+                        Data = imageUrls
+                    }, ct);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WbPlugin] Image upload failed for nmId={nmId}: {ex.Message}");
+                }
+            }
+
+            return new ExportResult(true, ExternalProductId: nmId.Value.ToString());
+        }
+        catch (WildberriesApiException ex)
+        {
+            return new ExportResult(false, ErrorMessage: $"WB API error: {ex.Message}");
+        }
+    }
+
+    private async Task<ExportResult> UpdateProductAsync(
+        WildberriesApiClient client,
+        Dictionary<string, object> data,
+        string existingExternalId,
+        CancellationToken ct)
+    {
+        if (!int.TryParse(existingExternalId, out var nmId))
+            return new ExportResult(false, ErrorMessage: $"Invalid nmID: {existingExternalId}");
+
+        // Fetch existing card (WB overwrites entire card on update)
+        var fetchRequest = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Filter = new WbCardsListFilter { TextSearch = existingExternalId, WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 100 }
+            }
+        };
+
+        var fetchResponse = await client.GetCardsListAsync(fetchRequest, ct);
+        var existingCard = fetchResponse.Cards?.FirstOrDefault(c => c.NmId == nmId);
+        if (existingCard == null)
+            return new ExportResult(false, ErrorMessage: $"Card with nmID={nmId} not found");
+
+        // Build update item, merging with existing data
+        var updateItem = new WbCardUpdateItem
+        {
+            NmId = nmId,
+            VendorCode = existingCard.VendorCode, // immutable
+            Brand = GetStringValue(data, "brand") ?? existingCard.Brand,
+            Title = GetStringValue(data, "name") ?? existingCard.Title,
+            Description = GetStringValue(data, "description") ?? existingCard.Description,
+            Dimensions = BuildDimensions(data) ?? existingCard.Dimensions,
+            Characteristics = BuildCharacteristics(data)
+                ?? existingCard.Characteristics?.Select(c => new WbCardCreateCharacteristic
+                {
+                    Id = c.Id,
+                    Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
+                }).ToList(),
+            Sizes = existingCard.Sizes?.Select(s => new WbCardUpdateSize
+            {
+                ChrtId = s.ChrtId,
+                TechSize = s.TechSize,
+                WbSize = s.WbSize,
+                Skus = s.Skus
+            }).ToList()
+        };
+
+        try
+        {
+            var response = await client.UpdateCardsAsync(new List<WbCardUpdateItem> { updateItem }, ct);
+
+            if (response.Error)
+            {
+                return new ExportResult(false, existingExternalId, response.ErrorText ?? "Update failed");
+            }
+
+            // Upload images if changed
+            var imageUrls = GetImageUrls(data);
+            if (imageUrls.Count > 0)
+            {
+                try
+                {
+                    await client.SaveMediaByUrlAsync(new WbMediaSaveRequest
+                    {
+                        NmId = nmId,
+                        Data = imageUrls
+                    }, ct);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WbPlugin] Image upload failed for nmId={nmId}: {ex.Message}");
+                }
+            }
+
+            return new ExportResult(true, existingExternalId);
+        }
+        catch (WildberriesApiException ex)
+        {
+            return new ExportResult(false, existingExternalId, $"WB API error: {ex.Message}");
+        }
+    }
+
+    private async Task<int?> PollForCreatedCardAsync(
+        WildberriesApiClient client, string vendorCode, CancellationToken ct)
+    {
+        // Wait initial 5s for WB processing
+        await Task.Delay(5000, ct);
+
+        for (int i = 0; i < 5; i++)
+        {
+            var request = new WbCardsListRequest
+            {
+                Settings = new WbCardsListSettings
+                {
+                    Filter = new WbCardsListFilter { TextSearch = vendorCode, WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor { Limit = 10 }
+                }
+            };
+
+            var response = await client.GetCardsListAsync(request, ct);
+            var card = response.Cards?.FirstOrDefault(c =>
+                c.VendorCode.Equals(vendorCode, StringComparison.OrdinalIgnoreCase));
+
+            if (card != null)
+                return card.NmId;
+
+            await Task.Delay(5000, ct);
+        }
+
+        return null;
+    }
+
+    private static async Task<string?> CheckCardErrorsAsync(
+        WildberriesApiClient client, string vendorCode, CancellationToken ct)
+    {
+        try
+        {
+            var errorRequest = new WbCardErrorListRequest
+            {
+                Cursor = new WbCardErrorCursor { Limit = 100 },
+                Order = new WbCardErrorOrder { Ascending = false }
+            };
+            var errorResponse = await client.GetCardErrorsAsync(errorRequest, ct);
+
+            if (errorResponse.Data?.Items != null)
+            {
+                foreach (var batch in errorResponse.Data.Items)
+                {
+                    if (batch.VendorCodes?.Contains(vendorCode) == true && batch.Errors != null)
+                    {
+                        if (batch.Errors.TryGetValue(vendorCode, out var errors))
+                            return string.Join("; ", errors);
+                    }
+                }
+            }
+        }
+        catch { /* non-critical */ }
+
+        return null;
+    }
+
+    public override async Task<ExportResult> ArchiveProductAsync(
+        ConnectionContext context, string externalProductId, CancellationToken ct = default)
+    {
+        if (!int.TryParse(externalProductId, out var nmId))
+            return new ExportResult(false, ErrorMessage: $"Invalid nmID: {externalProductId}");
+
+        var client = CreateClient(context);
+        try
+        {
+            var response = await client.MoveToTrashAsync(new List<int> { nmId }, ct);
+            if (response.Error)
+                return new ExportResult(false, externalProductId, response.ErrorText);
+
+            return new ExportResult(true, externalProductId);
+        }
+        catch (WildberriesApiException ex)
+        {
+            return new ExportResult(false, externalProductId, ex.Message);
+        }
+    }
+
+    #endregion
+
+    #region Prices
+
+    public override async Task<List<PriceInfo>> ImportPricesAsync(
+        ConnectionContext context, List<string>? externalProductIds = null, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var result = new List<PriceInfo>();
+
+        if (externalProductIds != null && externalProductIds.Count > 0)
+        {
+            // Fetch by specific IDs in batches of 1000
+            var nmIds = externalProductIds
+                .Where(id => int.TryParse(id, out _))
+                .Select(id => int.Parse(id))
+                .ToList();
+
+            for (int i = 0; i < nmIds.Count; i += 1000)
+            {
+                var batch = nmIds.Skip(i).Take(1000).ToList();
+                var response = await client.GetGoodsWithPricesByNmIdsAsync(batch, ct);
+                MapPriceResponse(response, result);
+            }
+        }
+        else
+        {
+            // Fetch all with pagination
+            var offset = 0;
+            const int limit = 1000;
+            while (true)
+            {
+                var response = await client.GetGoodsWithPricesAsync(limit, offset, ct);
+                var count = MapPriceResponse(response, result);
+                if (count < limit) break;
+                offset += limit;
+            }
+        }
+
+        return result;
+    }
+
+    private static int MapPriceResponse(WbGoodsListResponse response, List<PriceInfo> result)
+    {
+        var goods = response.Data?.ListGoods;
+        if (goods == null) return 0;
+
+        foreach (var item in goods)
+        {
+            decimal? price = null;
+            decimal? oldPrice = null;
+            string currency = item.CurrencyCode ?? "RUB";
+
+            if (item.Sizes?.Count > 0)
+            {
+                var firstSize = item.Sizes[0];
+                price = firstSize.DiscountedPrice;
+                oldPrice = firstSize.Price;
+            }
+
+            result.Add(new PriceInfo(
+                ExternalProductId: item.NmId.ToString(),
+                Price: price,
+                OldPrice: oldPrice,
+                Currency: currency));
+        }
+
+        return goods.Count;
+    }
+
+    public override async Task<ImportResult> ExportPricesAsync(
+        ConnectionContext context, List<PriceInfo> prices, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var errors = new List<ImportError>();
+        var successCount = 0;
+
+        // Process in batches of 1000
+        for (int i = 0; i < prices.Count; i += 1000)
+        {
+            var batch = prices.Skip(i).Take(1000).ToList();
+            var items = new List<WbPriceItem>();
+
+            foreach (var p in batch)
+            {
+                if (!int.TryParse(p.ExternalProductId, out var nmId))
+                {
+                    errors.Add(new ImportError(p.ExternalProductId, "Invalid nmID"));
+                    continue;
+                }
+
+                // WB uses base price + discount%. Reverse-calculate from absolute prices.
+                int basePrice;
+                int discount;
+
+                if (p.OldPrice.HasValue && p.OldPrice.Value > 0 && p.Price.HasValue)
+                {
+                    basePrice = (int)Math.Round(p.OldPrice.Value);
+                    discount = (int)Math.Round((1 - p.Price.Value / p.OldPrice.Value) * 100);
+                    if (discount < 0) discount = 0;
+                    if (discount > 99) discount = 99;
+                }
+                else if (p.Price.HasValue)
+                {
+                    basePrice = (int)Math.Round(p.Price.Value);
+                    discount = 0;
+                }
+                else
+                {
+                    errors.Add(new ImportError(p.ExternalProductId, "Price is required"));
+                    continue;
+                }
+
+                items.Add(new WbPriceItem { NmId = nmId, Price = basePrice, Discount = discount });
+            }
+
+            if (items.Count == 0) continue;
+
+            try
+            {
+                var response = await client.SetPricesAndDiscountsAsync(items, ct);
+                if (response.Error)
+                {
+                    foreach (var item in items)
+                        errors.Add(new ImportError(item.NmId.ToString(), response.ErrorText ?? "Price update failed"));
+                }
+                else
+                {
+                    successCount += items.Count;
+                }
+            }
+            catch (WildberriesApiException ex)
+            {
+                foreach (var item in items)
+                    errors.Add(new ImportError(item.NmId.ToString(), ex.Message));
+            }
+        }
+
+        return new ImportResult(prices.Count, successCount, errors.Count, errors.Count > 0 ? errors : null);
+    }
+
+    #endregion
+
+    #region Stocks
+
+    public override async Task<List<StockInfo>> ImportStocksAsync(
+        ConnectionContext context, List<string>? externalProductIds = null, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var result = new List<StockInfo>();
+
+        // Get warehouses
+        var warehouses = await client.GetWarehousesAsync(ct);
+        if (warehouses.Count == 0) return result;
+
+        // Get all cards to build nmID -> chrtIDs mapping
+        var chrtIdMap = await BuildChrtIdMapAsync(client, ct);
+        if (chrtIdMap.Count == 0) return result;
+
+        // Filter by requested IDs
+        var nmIdsToQuery = externalProductIds != null
+            ? chrtIdMap.Where(kv => externalProductIds.Contains(kv.Key.ToString()))
+                .ToDictionary(kv => kv.Key, kv => kv.Value)
+            : chrtIdMap;
+
+        // Aggregate stocks across warehouses
+        var stocksByNmId = new Dictionary<int, int>();
+
+        foreach (var warehouse in warehouses)
+        {
+            var allChrtIds = nmIdsToQuery.Values.SelectMany(ids => ids).Distinct().ToList();
+
+            // Query in batches of 1000
+            for (int i = 0; i < allChrtIds.Count; i += 1000)
+            {
+                var batch = allChrtIds.Skip(i).Take(1000).ToList();
+                try
+                {
+                    var levels = await client.GetStockLevelsAsync(warehouse.Id, batch, ct);
+                    if (levels.Stocks == null) continue;
+
+                    foreach (var level in levels.Stocks)
+                    {
+                        // Find which nmID this chrtId belongs to
+                        foreach (var (nmId, chrtIds) in nmIdsToQuery)
+                        {
+                            if (chrtIds.Contains(level.ChrtId))
+                            {
+                                stocksByNmId.TryGetValue(nmId, out var current);
+                                stocksByNmId[nmId] = current + level.Amount;
+                            }
+                        }
+                    }
+                }
+                catch (WildberriesApiException ex)
+                {
+                    Console.WriteLine($"[WbPlugin] GetStockLevels failed for warehouse {warehouse.Id}: {ex.Message}");
+                }
+            }
+        }
+
+        foreach (var (nmId, quantity) in stocksByNmId)
+        {
+            result.Add(new StockInfo(
+                ExternalProductId: nmId.ToString(),
+                Quantity: quantity));
+        }
+
+        return result;
+    }
+
+    public override async Task<ImportResult> ExportStocksAsync(
+        ConnectionContext context, List<StockInfo> stocks, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var errors = new List<ImportError>();
+        var successCount = 0;
+
+        // Get warehouses — use first one
+        var warehouses = await client.GetWarehousesAsync(ct);
+        if (warehouses.Count == 0)
+            return new ImportResult(stocks.Count, 0, stocks.Count,
+                new List<ImportError> { new ImportError(null, "No warehouses found") });
+
+        var warehouseId = warehouses[0].Id;
+
+        // Get cards to resolve nmID -> first chrtID
+        var chrtIdMap = await BuildChrtIdMapAsync(client, ct);
+
+        // Build stock items
+        var stockItems = new List<WbStockItem>();
+        foreach (var stock in stocks)
+        {
+            if (!int.TryParse(stock.ExternalProductId, out var nmId))
+            {
+                errors.Add(new ImportError(stock.ExternalProductId, "Invalid nmID"));
+                continue;
+            }
+
+            if (!chrtIdMap.TryGetValue(nmId, out var chrtIds) || chrtIds.Count == 0)
+            {
+                errors.Add(new ImportError(stock.ExternalProductId, "No sizes found for product"));
+                continue;
+            }
+
+            // Apply stock to first chrtID
+            stockItems.Add(new WbStockItem { ChrtId = chrtIds[0], Amount = stock.Quantity });
+        }
+
+        // Update in batches of 1000
+        for (int i = 0; i < stockItems.Count; i += 1000)
+        {
+            var batch = stockItems.Skip(i).Take(1000).ToList();
+            try
+            {
+                await client.UpdateStocksAsync(warehouseId, batch, ct);
+                successCount += batch.Count;
+            }
+            catch (WildberriesApiException ex)
+            {
+                foreach (var item in batch)
+                    errors.Add(new ImportError(item.ChrtId.ToString(), ex.Message));
+            }
+        }
+
+        return new ImportResult(stocks.Count, successCount, errors.Count, errors.Count > 0 ? errors : null);
+    }
+
+    /// <summary>
+    /// Build mapping: nmID -> list of chrtIDs (from all card sizes)
+    /// </summary>
+    private static async Task<Dictionary<int, List<int>>> BuildChrtIdMapAsync(
+        WildberriesApiClient client, CancellationToken ct)
+    {
+        var map = new Dictionary<int, List<int>>();
+
+        var request = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Sort = new WbCardsListSort { Ascending = false },
+                Filter = new WbCardsListFilter { WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 100 }
+            }
+        };
+
+        while (true)
+        {
+            var response = await client.GetCardsListAsync(request, ct);
+            if (response.Cards == null || response.Cards.Count == 0) break;
+
+            foreach (var card in response.Cards)
+            {
+                if (card.Sizes != null)
+                {
+                    map[card.NmId] = card.Sizes
+                        .Where(s => s.ChrtId > 0)
+                        .Select(s => s.ChrtId)
+                        .ToList();
+                }
+            }
+
+            if (response.Cursor == null || response.Cards.Count < 100) break;
+
+            request.Settings.Cursor = new WbCardsListCursor
+            {
+                Limit = 100,
+                UpdatedAt = response.Cursor.UpdatedAt,
+                NmId = response.Cursor.NmId
+            };
+        }
+
+        return map;
+    }
+
+    #endregion
+
+    #region Product Grouping
+
+    public override async Task<PagedResult<ExternalGroup>> ImportGroupsAsync(
+        ConnectionContext context, int pageSize = 100, string? cursor = null, CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+
+        // Fetch all cards and group by imtID
+        var allCards = new List<WbCard>();
+        var request = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Sort = new WbCardsListSort { Ascending = false },
+                Filter = new WbCardsListFilter { WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 100 }
+            }
+        };
+
+        while (true)
+        {
+            var response = await client.GetCardsListAsync(request, ct);
+            if (response.Cards == null || response.Cards.Count == 0) break;
+            allCards.AddRange(response.Cards);
+
+            if (response.Cursor == null || response.Cards.Count < 100) break;
+
+            request.Settings.Cursor = new WbCardsListCursor
+            {
+                Limit = 100,
+                UpdatedAt = response.Cursor.UpdatedAt,
+                NmId = response.Cursor.NmId
+            };
+        }
+
+        var groups = allCards
+            .GroupBy(c => c.ImtId)
+            .Where(g => g.Count() >= 2) // Only groups with 2+ cards
+            .Select(g => new ExternalGroup(
+                ExternalId: g.Key.ToString(),
+                Name: g.First().Title ?? g.First().VendorCode,
+                ProductExternalIds: g.Select(c => c.NmId.ToString()).ToList()))
+            .ToList();
+
+        return new PagedResult<ExternalGroup>(groups, false);
+    }
+
+    public override async Task<CreateGroupResult> CreateGroupAsync(
+        ConnectionContext context, List<string> productExternalIds, string? groupName = null,
+        CancellationToken ct = default)
+    {
+        if (productExternalIds.Count < 2)
+            return new CreateGroupResult(false, ErrorMessage: "Need at least 2 products to create a group");
+
+        var client = CreateClient(context);
+
+        // First product already has an imtID — fetch it
+        var firstId = productExternalIds[0];
+        var firstProduct = await ImportProductAsync(context, firstId, ct);
+        if (firstProduct == null)
+            return new CreateGroupResult(false, ErrorMessage: $"Product {firstId} not found");
+
+        if (!int.TryParse(firstProduct.GroupId, out var imtId) || imtId == 0)
+            return new CreateGroupResult(false, ErrorMessage: $"Product {firstId} has no imtID");
+
+        // Add remaining products to the merge group
+        var remaining = productExternalIds.Skip(1).ToList();
+        var addResult = await AddProductsToGroupAsync(context, imtId.ToString(), remaining, ct);
+
+        if (addResult.Success)
+            return new CreateGroupResult(true, ExternalGroupId: imtId.ToString());
+
+        return new CreateGroupResult(false, ErrorMessage: addResult.ErrorMessage);
+    }
+
+    public override async Task<GroupMembershipResult> AddProductsToGroupAsync(
+        ConnectionContext context, string externalGroupId, List<string> productExternalIds,
+        CancellationToken ct = default)
+    {
+        if (!int.TryParse(externalGroupId, out var imtId))
+            return new GroupMembershipResult(false, ErrorMessage: $"Invalid imtID: {externalGroupId}");
+
+        var client = CreateClient(context);
+        var errors = new List<GroupMembershipError>();
+        var added = 0;
+
+        // Fetch each product to build variant data for the merge request
+        var cardsToAdd = new List<WbCardVariant>();
+        foreach (var productId in productExternalIds)
+        {
+            var product = await ImportProductAsync(context, productId, ct);
+            if (product == null)
+            {
+                errors.Add(new GroupMembershipError(productId, "Product not found"));
+                continue;
+            }
+
+            // Get the full card to extract variant data
+            var fetchRequest = new WbCardsListRequest
+            {
+                Settings = new WbCardsListSettings
+                {
+                    Filter = new WbCardsListFilter { TextSearch = productId, WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor { Limit = 10 }
+                }
+            };
+            var fetchResponse = await client.GetCardsListAsync(fetchRequest, ct);
+            var card = fetchResponse.Cards?.FirstOrDefault(c => c.NmId.ToString() == productId);
+            if (card == null)
+            {
+                errors.Add(new GroupMembershipError(productId, "Card not found"));
+                continue;
+            }
+
+            cardsToAdd.Add(new WbCardVariant
+            {
+                VendorCode = card.VendorCode,
+                Brand = card.Brand,
+                Title = card.Title,
+                Description = card.Description,
+                Dimensions = card.Dimensions,
+                Characteristics = card.Characteristics?.Select(c => new WbCardCreateCharacteristic
+                {
+                    Id = c.Id,
+                    Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
+                }).ToList(),
+                Sizes = card.Sizes?.Select(s => new WbCardCreateSize
+                {
+                    TechSize = s.TechSize,
+                    WbSize = s.WbSize,
+                    Price = s.Price ?? 0,
+                    Skus = s.Skus
+                }).ToList()
+            });
+        }
+
+        if (cardsToAdd.Count == 0)
+            return new GroupMembershipResult(false, FailedCount: errors.Count, Errors: errors,
+                ErrorMessage: "No valid cards to add");
+
+        try
+        {
+            var request = new WbCardAddToMergeRequest
+            {
+                ImtId = imtId,
+                CardsToAdd = cardsToAdd
+            };
+            var response = await client.AddCardsToMergeGroupAsync(request, ct);
+
+            if (response.Error)
+            {
+                return new GroupMembershipResult(false, FailedCount: cardsToAdd.Count,
+                    ErrorMessage: response.ErrorText);
+            }
+
+            added = cardsToAdd.Count;
+        }
+        catch (WildberriesApiException ex)
+        {
+            return new GroupMembershipResult(false, ErrorMessage: ex.Message);
+        }
+
+        return new GroupMembershipResult(true, AddedCount: added, FailedCount: errors.Count,
+            Errors: errors.Count > 0 ? errors : null);
+    }
+
+    // WB API does not support removing products from merge groups or deleting groups
+    // The base class throws NotSupportedException by default, which is correct.
+
+    #endregion
+
+    #region Helpers
+
+    private static WildberriesApiClient CreateClient(ConnectionContext context)
+    {
+        var apiKey = context.GetCredential("apiKey")
+            ?? throw new InvalidOperationException("API key is required");
+        return new WildberriesApiClient(apiKey);
+    }
+
+    private static string? GetStringValue(Dictionary<string, object> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val)) return null;
+        if (val is JsonElement je) return je.GetString();
+        return val?.ToString();
+    }
+
+    private static int GetIntValue(Dictionary<string, object> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val)) return 0;
+        if (val is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.Number) return je.GetInt32();
+            if (je.ValueKind == JsonValueKind.String && int.TryParse(je.GetString(), out var parsed)) return parsed;
+        }
+        if (val is int i) return i;
+        if (val is long l) return (int)l;
+        if (val is double d) return (int)d;
+        if (val is decimal m) return (int)m;
+        if (val is string s && int.TryParse(s, out var r)) return r;
+        return 0;
+    }
+
+    private static WbDimensions? BuildDimensions(Dictionary<string, object> data)
+    {
+        var l = GetIntValue(data, "length");
+        var w = GetIntValue(data, "width");
+        var h = GetIntValue(data, "height");
+        var weight = GetDoubleValue(data, "weight");
+
+        if (l == 0 && w == 0 && h == 0 && weight == 0) return null;
+
+        return new WbDimensions
+        {
+            Length = l,
+            Width = w,
+            Height = h,
+            WeightBrutto = weight
+        };
+    }
+
+    private static double GetDoubleValue(Dictionary<string, object> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val)) return 0;
+        if (val is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.Number) return je.GetDouble();
+            if (je.ValueKind == JsonValueKind.String && double.TryParse(je.GetString(), CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        }
+        if (val is double d) return d;
+        if (val is float f) return f;
+        if (val is int i) return i;
+        if (val is decimal m) return (double)m;
+        if (val is string s && double.TryParse(s, CultureInfo.InvariantCulture, out var r)) return r;
+        return 0;
+    }
+
+    private static List<WbCardCreateCharacteristic>? BuildCharacteristics(Dictionary<string, object> data)
+    {
+        var chars = new List<WbCardCreateCharacteristic>();
+
+        foreach (var (key, value) in data)
+        {
+            if (!key.StartsWith("charc:")) continue;
+            if (!int.TryParse(key[6..], out var charcId)) continue;
+
+            object? parsedValue = null;
+
+            if (value is JsonElement je)
+            {
+                parsedValue = je.ValueKind switch
+                {
+                    JsonValueKind.String => new List<string> { je.GetString()! },
+                    JsonValueKind.Number => je.TryGetInt64(out var n) ? (object)n : je.GetDouble(),
+                    JsonValueKind.Array => je.EnumerateArray()
+                        .Select(e => e.GetString() ?? e.ToString())
+                        .ToList(),
+                    _ => je.ToString()
+                };
+            }
+            else if (value is string s)
+            {
+                parsedValue = new List<string> { s };
+            }
+            else if (value is IEnumerable<object> list)
+            {
+                parsedValue = list.Select(x => x.ToString()!).ToList();
+            }
+            else
+            {
+                parsedValue = value;
+            }
+
+            chars.Add(new WbCardCreateCharacteristic { Id = charcId, Value = parsedValue });
+        }
+
+        return chars.Count > 0 ? chars : null;
+    }
+
+    private static List<string> GetImageUrls(Dictionary<string, object> data)
+    {
+        if (!data.TryGetValue("images", out var val)) return new List<string>();
+
+        if (val is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.Array)
+                return je.EnumerateArray().Select(e => e.GetString()!).Where(s => !string.IsNullOrEmpty(s)).ToList();
+            if (je.ValueKind == JsonValueKind.String)
+            {
+                var str = je.GetString();
+                if (!string.IsNullOrEmpty(str))
+                    return str.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            }
+        }
+        else if (val is string s && !string.IsNullOrEmpty(s))
+        {
+            return s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        }
+        else if (val is List<string> list)
+        {
+            return list;
+        }
+
+        return new List<string>();
+    }
+
+    #endregion
+}
