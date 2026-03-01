@@ -206,9 +206,10 @@ export default {
         });
     },
     sortedFieldMappings() {
-      const enabled = this.fieldMappings.filter((fm) => fm.isEnabled);
-      const disabled = this.fieldMappings.filter((fm) => !fm.isEnabled);
-      return [...enabled, ...disabled];
+      const required = this.fieldMappings.filter((fm) => fm.isRequired);
+      const enabled = this.fieldMappings.filter((fm) => !fm.isRequired && fm.isEnabled);
+      const disabled = this.fieldMappings.filter((fm) => !fm.isRequired && !fm.isEnabled);
+      return [...required, ...enabled, ...disabled];
     },
     editingSourceFieldOptions() {
       const fm = this.editingFieldMapping;
@@ -802,9 +803,9 @@ export default {
             >
               <TableCell>
                 <Switch
+                  v-if="!fm.isRequired"
                   :model-value="fm.isEnabled"
                   @update:model-value="handleToggleField(fm)"
-                  :disabled="fm.isRequired"
                 />
               </TableCell>
               <TableCell>

@@ -18,7 +18,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronUp, ChevronDown, X, Plus } from "lucide-vue-next";
+import Badge from "@/components/ui/badge/Badge.vue";
+import { ChevronUp, ChevronDown, X, Plus, AlertTriangle } from "lucide-vue-next";
 
 export default {
   components: {
@@ -27,6 +28,7 @@ export default {
     TemplateEditor,
     Input,
     Label,
+    Badge,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuGroup,
@@ -38,6 +40,7 @@ export default {
     ChevronDown,
     X,
     Plus,
+    AlertTriangle,
   },
   props: {
     modifiers: { type: Array, default: () => [] },
@@ -48,6 +51,11 @@ export default {
     disabled: { type: Boolean, default: false },
   },
   emits: ["update:modifiers"],
+  data() {
+    return {
+      tagInputValues: {},
+    };
+  },
   computed: {
     availableModifiers() {
       return getAvailableModifiers(this.externalFieldType);
@@ -88,7 +96,7 @@ export default {
         case "text": return "border-l-blue-500";
         case "number": return "border-l-green-500";
         case "select": return "border-l-purple-500";
-        case "multiselect": return "border-l-orange-500";
+        case "array": return "border-l-cyan-500";
         default: return "border-l-gray-400";
       }
     },
@@ -124,8 +132,36 @@ export default {
       this.$emit("update:modifiers", updated);
     },
 
+    isReversible(type) {
+      return MODIFIER_CATALOG[type]?.reversible === true;
+    },
+
     getParamValue(mod, param) {
       return mod.params?.[param.key] ?? param.default;
+    },
+
+    getTagInputKey(index, paramKey) {
+      return `${index}_${paramKey}`;
+    },
+
+    addTag(index, paramKey) {
+      const key = this.getTagInputKey(index, paramKey);
+      const val = (this.tagInputValues[key] || "").trim();
+      if (!val) return;
+      const current = Array.isArray(this.modifiers[index]?.params?.[paramKey])
+        ? [...this.modifiers[index].params[paramKey]]
+        : [];
+      current.push(val);
+      this.onParamChange(index, paramKey, current);
+      this.tagInputValues[key] = "";
+    },
+
+    removeTag(index, paramKey, tagIndex) {
+      const current = Array.isArray(this.modifiers[index]?.params?.[paramKey])
+        ? [...this.modifiers[index].params[paramKey]]
+        : [];
+      current.splice(tagIndex, 1);
+      this.onParamChange(index, paramKey, current);
     },
   },
 };
@@ -146,6 +182,14 @@ export default {
       <div class="flex items-center gap-1 px-3 py-2">
         <span class="text-sm font-medium flex-1 truncate">
           {{ getCatalog(mod.type)?.displayName || mod.type }}
+        </span>
+        <span
+          v-if="!isReversible(mod.type)"
+          class="inline-flex items-center gap-0.5 text-amber-500 shrink-0"
+          title="При импорте значение не будет восстановлено"
+        >
+          <AlertTriangle class="size-3" />
+          <span class="text-[10px] leading-none">необратимый</span>
         </span>
         <div v-if="!disabled" class="flex items-center gap-0.5 shrink-0">
           <button
@@ -212,6 +256,46 @@ export default {
                 :available-sources="availableSources"
                 @update:modelValue="(v) => onParamChange(index, param.key, v)"
               />
+            </div>
+          </template>
+
+          <!-- Tag input (string array) -->
+          <template v-else-if="param.type === 'tagInput'">
+            <div class="space-y-1">
+              <Label class="text-xs">{{ param.label }}</Label>
+              <div class="flex gap-1">
+                <Input
+                  :model-value="tagInputValues[getTagInputKey(index, param.key)] || ''"
+                  @update:modelValue="(v) => (tagInputValues[getTagInputKey(index, param.key)] = v)"
+                  @keydown.enter.prevent="addTag(index, param.key)"
+                  placeholder="Введите значение…"
+                  class="h-7 text-xs flex-1"
+                />
+                <button
+                  type="button"
+                  class="h-7 px-2 rounded-md border text-xs hover:bg-muted cursor-pointer shrink-0"
+                  @click="addTag(index, param.key)"
+                >
+                  <Plus class="size-3" />
+                </button>
+              </div>
+              <div v-if="(getParamValue(mod, param) || []).length" class="flex flex-wrap gap-1 pt-1">
+                <Badge
+                  v-for="(tag, tagIdx) in getParamValue(mod, param)"
+                  :key="tagIdx"
+                  variant="secondary"
+                  class="text-xs gap-1 pr-1"
+                >
+                  {{ tag }}
+                  <button
+                    type="button"
+                    class="hover:text-destructive cursor-pointer"
+                    @click="removeTag(index, param.key, tagIdx)"
+                  >
+                    <X class="size-3" />
+                  </button>
+                </Badge>
+              </div>
             </div>
           </template>
 

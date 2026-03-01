@@ -11,12 +11,21 @@ public interface IFieldModifier
     string Type { get; }
 
     /// <summary>
-    /// Apply the modifier to a value.
+    /// Whether this modifier can be reversed during import.
+    /// Irreversible modifiers (truncate, uppercase, template, etc.) pass through on reverse.
     /// </summary>
-    /// <param name="value">Input value (may be null).</param>
-    /// <param name="parameters">Modifier parameters from JSON.</param>
-    /// <returns>Transformed value.</returns>
+    bool IsReversible => false;
+
+    /// <summary>
+    /// Apply the modifier to a value (export direction).
+    /// </summary>
     object? Apply(object? value, Dictionary<string, object> parameters);
+
+    /// <summary>
+    /// Reverse-apply the modifier (import direction).
+    /// Default implementation is pass-through for irreversible modifiers.
+    /// </summary>
+    object? ReverseApply(object? value, Dictionary<string, object> parameters) => value;
 }
 
 /// <summary>
@@ -29,4 +38,11 @@ public interface IContextAwareModifier : IFieldModifier
     /// Apply the modifier with access to a resolution context.
     /// </summary>
     object? ApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context);
+
+    /// <summary>
+    /// Reverse-apply the modifier with context (import direction).
+    /// Default delegates to ReverseApply without context.
+    /// </summary>
+    object? ReverseApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+        => ReverseApply(value, parameters);
 }

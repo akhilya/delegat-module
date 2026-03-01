@@ -36,6 +36,14 @@ public static class ModifierPipeline
             new OptionMapModifier(),
             new DefaultValueModifier(),
             new TakeFirstModifier(),
+            // Array
+            new LimitModifier(),
+            new SkipModifier(),
+            new ReverseModifier(),
+            new JoinModifier(),
+            new SortModifier(),
+            new AddItemsModifier(),
+            new RemoveItemsModifier(),
             // Context-aware
             new TemplateModifier(),
         };
