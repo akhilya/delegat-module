@@ -394,11 +394,11 @@ export default {
     getProductImageUrl(product) {
       // Handle GroupProductDTO structure (members in group)
       if (product.images && product.images.length > 0) {
-        return product.images[0].url;
+        return product.images[0].thumbnailUrl ?? product.images[0].url;
       }
       // Handle ProductReviewDTO structure (product search results)
-      if (product.primaryImage) {
-        return product.primaryImage;
+      if (product.primaryImageThumbnail ?? product.primaryImage) {
+        return product.primaryImageThumbnail ?? product.primaryImage;
       }
       return null;
     },

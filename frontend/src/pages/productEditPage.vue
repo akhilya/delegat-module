@@ -815,8 +815,8 @@ export default {
                       class="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-accent/50 transition-colors"
                     >
                       <img
-                        v-if="member.imageUrl"
-                        :src="member.imageUrl"
+                        v-if="member.imageThumbnailUrl || member.imageUrl"
+                        :src="member.imageThumbnailUrl ?? member.imageUrl"
                         class="size-8 rounded object-cover shrink-0"
                         :alt="member.productName"
                       />

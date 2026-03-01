@@ -128,12 +128,19 @@ public class ProductController : ControllerBase
             orderBy = secondarySort;
         }
 
+        // Ensure deterministic ordering for AsSplitQuery — without a unique
+        // tiebreaker, split-query sub-queries may select different rows for
+        // the same LIMIT/OFFSET, losing collection data (files, images).
+        var stableOrderBy = orderBy;
+        orderBy = q => stableOrderBy(q).ThenBy(p => p.Id);
+
         var (items, total) = await productRepo.FindPagedAsync(
             predicate,
             query => query
                 .AsSplitQuery()
                 .Include(p => p.files)
                 .Include(p => p.images)
+                    .ThenInclude(i => i.file)
                 .Include(p => p.category)
                 .Include(p => p.storeAttributeValues)
                     .ThenInclude(sav => sav.storeAttribute),
@@ -482,7 +489,11 @@ public class ProductController : ControllerBase
                 productId = m.productId,
                 productName = m.product?.name ?? "",
                 productSku = m.product?.sku ?? "",
-                imageUrl = m.product?.images?.FirstOrDefault()?.file?.GetFullPath(_serviceProvider)
+                imageUrl = m.product?.images?.FirstOrDefault()?.file?.GetFullPath(_serviceProvider),
+                imageThumbnailUrl = m.product?.images?.FirstOrDefault()?.file is { } f
+                    && f.contentType.StartsWith("image/")
+                    ? $"/api/files/{f.Id}/thumbnail?w=128"
+                    : null
             })
             .ToList();
 

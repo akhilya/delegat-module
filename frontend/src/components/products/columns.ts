@@ -96,11 +96,13 @@ export const columns: ProductColumnDef[] = [
     label: "Изображение",
     hideable: true,
     header: "",
-    cell: ({ row }) =>
-      h(ImageFile, {
+    cell: ({ row }) => {
+      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
+      return h(ImageFile, {
         class: "size-32",
-        file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
-      }),
+        file: src ? { fullPath: src } : null,
+      });
+    },
   },
   {
     id: "sku",
@@ -361,10 +363,11 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     header: "Товар",
     size: 320,
     cell: ({ row }) => {
+      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
       return h("div", { class: "flex gap-3 items-start py-1" }, [
         h(ImageFile, {
           class: "size-14 shrink-0 rounded",
-          file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
+          file: src ? { fullPath: src } : null,
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(
@@ -391,10 +394,11 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     header: "Товар",
     size: 360,
     cell: ({ row }) => {
+      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
       return h("div", { class: "flex gap-3 items-start py-1" }, [
         h(ImageFile, {
           class: "size-14 shrink-0 rounded",
-          file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
+          file: src ? { fullPath: src } : null,
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(

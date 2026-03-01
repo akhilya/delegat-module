@@ -191,17 +191,15 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         ImageReference? primaryImageRef = images.OrderBy(i => i.index).FirstOrDefault();
         string? primaryImagePath = null;
         string? primaryImageThumbnail = null;
-        if (primaryImageRef is not null)
+
+        // Prefer image from ImageReference, fall back to first image file
+        var primaryImageFile = primaryImageRef?.file
+            ?? files.FirstOrDefault(f => f.contentType.StartsWith("image/"));
+
+        if (primaryImageFile is not null)
         {
-            var primaryImageFile = files.FirstOrDefault(f => f.Id == primaryImageRef.fileId);
-
-            if (primaryImageFile is not null)
-            {
-                primaryImagePath = primaryImageFile.GetFullPath(serviceProvider);
-
-                if (primaryImageFile.contentType.StartsWith("image/"))
-                    primaryImageThumbnail = $"/api/files/{primaryImageFile.Id}/thumbnail?w=256";
-            }
+            primaryImagePath = primaryImageFile.GetFullPath(serviceProvider);
+            primaryImageThumbnail = $"/api/files/{primaryImageFile.Id}/thumbnail?w=256";
         }
 
         return new ProductReviewDTO()
