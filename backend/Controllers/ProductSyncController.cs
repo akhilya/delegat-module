@@ -1315,10 +1315,13 @@ public class ProductSyncController : ControllerBase
     /// <summary>
     /// Import changes from the marketplace into the local product
     /// </summary>
+    public record ImportFromLinkInput(List<string>? ExcludeFields = null);
+
     [HttpPost]
     [Route("/marketplace/links/{linkId}/import")]
-    public async Task<IActionResult> ImportFromLink(int linkId, CancellationToken ct)
+    public async Task<IActionResult> ImportFromLink(int linkId, [FromBody] ImportFromLinkInput? input, CancellationToken ct)
     {
+        var excludeFields = input?.ExcludeFields != null ? new HashSet<string>(input.ExcludeFields) : null;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
@@ -1360,7 +1363,8 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest("Локальный товар не найден");
 
         // Обновляем название
-        if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
+        if (excludeFields?.Contains("name") != true &&
+            !string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
         {
             oldValues["name"] = product.name;
             newValues["name"] = externalProduct.Name;
@@ -1369,7 +1373,8 @@ public class ProductSyncController : ControllerBase
         }
 
         // Обновляем описание
-        if (externalProduct.Description != null && product.description != externalProduct.Description)
+        if (excludeFields?.Contains("description") != true &&
+            externalProduct.Description != null && product.description != externalProduct.Description)
         {
             oldValues["description"] = product.description;
             newValues["description"] = externalProduct.Description;
@@ -1378,7 +1383,8 @@ public class ProductSyncController : ControllerBase
         }
 
         // Обновляем цену
-        if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
+        if (excludeFields?.Contains("price") != true &&
+            externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
         {
             oldValues["price"] = product.price;
             newValues["price"] = externalProduct.Price.Value;
@@ -1387,7 +1393,8 @@ public class ProductSyncController : ControllerBase
         }
 
         // Обновляем остаток
-        if (externalProduct.Quantity.HasValue && product.storageQuantity != externalProduct.Quantity.Value)
+        if (excludeFields?.Contains("storageQuantity") != true &&
+            externalProduct.Quantity.HasValue && product.storageQuantity != externalProduct.Quantity.Value)
         {
             oldValues["storageQuantity"] = product.storageQuantity;
             newValues["storageQuantity"] = externalProduct.Quantity.Value;
@@ -1396,6 +1403,20 @@ public class ProductSyncController : ControllerBase
         }
 
         // Обновляем атрибуты на основе маппинга категории
+        // Build set of excluded attribute field names (strip "attr:" prefix)
+        HashSet<string>? excludeAttrFieldNames = null;
+        if (excludeFields != null)
+        {
+            excludeAttrFieldNames = new HashSet<string>();
+            foreach (var ef in excludeFields)
+            {
+                if (ef.StartsWith("attr:"))
+                    excludeAttrFieldNames.Add(ef[5..]);
+            }
+            if (excludeAttrFieldNames.Count == 0)
+                excludeAttrFieldNames = null;
+        }
+
         if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
         {
             var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
@@ -1403,7 +1424,8 @@ public class ProductSyncController : ControllerBase
                 link.connectionId,
                 product.categoryId.Value,
                 externalProduct.Attributes,
-                ct);
+                ct,
+                excludeAttrFieldNames);
             foreach (var change in attrChanges)
             {
                 var key = $"attr:{change.FieldName}";
@@ -1503,6 +1525,8 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("storageQuantity");
         }
 
+        var irreversibleFields = new List<string>();
+
         if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
         {
             var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
@@ -1517,6 +1541,8 @@ public class ProductSyncController : ControllerBase
                 updatedFields.Add(key);
                 oldValues[key] = change.OldValue;
                 newValues[key] = change.NewValue;
+                if (change.HasIrreversibleModifiers)
+                    irreversibleFields.Add(key);
             }
         }
 
@@ -1525,7 +1551,8 @@ public class ProductSyncController : ControllerBase
             hasChanges = updatedFields.Count > 0,
             updatedFields,
             oldValues,
-            newValues
+            newValues,
+            irreversibleFields
         });
     }
 

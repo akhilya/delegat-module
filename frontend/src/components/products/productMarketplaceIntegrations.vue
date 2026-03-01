@@ -23,6 +23,7 @@ import {
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
   Card,
   CardContent,
@@ -84,6 +85,7 @@ export default {
     TableHeader,
     TableRow,
     Separator,
+    Checkbox,
   },
   props: {
     productId: {
@@ -110,6 +112,7 @@ export default {
       isLoadingPreview: false,
       isApplyingImport: false,
       previewLinkId: null,
+      importExcludedFields: new Set(),
     };
   },
   computed: {
@@ -230,6 +233,7 @@ export default {
             displaySonnerSuccess("Изменений не обнаружено");
           } else {
             this.importPreviewData = result;
+            this.importExcludedFields = new Set(result.irreversibleFields || []);
             this.previewLinkId = conn.linkId;
             this.showImportPreviewDialog = true;
           }
@@ -242,11 +246,47 @@ export default {
       this.importingLinkId = null;
     },
 
+    isFieldIncluded(field) {
+      return !this.importExcludedFields.has(field);
+    },
+    toggleFieldIncluded(field) {
+      const next = new Set(this.importExcludedFields);
+      if (next.has(field)) {
+        next.delete(field);
+      } else {
+        next.add(field);
+      }
+      this.importExcludedFields = next;
+    },
+    isFieldIrreversible(field) {
+      return this.importPreviewData?.irreversibleFields?.includes(field);
+    },
+    allFieldsExcluded() {
+      if (!this.importPreviewData?.updatedFields) return true;
+      return this.importPreviewData.updatedFields.every((f) => this.importExcludedFields.has(f));
+    },
+    allFieldsIncluded() {
+      if (!this.importPreviewData?.updatedFields) return false;
+      return this.importPreviewData.updatedFields.every((f) => !this.importExcludedFields.has(f));
+    },
+    toggleAllFields() {
+      if (!this.importPreviewData?.updatedFields) return;
+      if (this.allFieldsIncluded()) {
+        this.importExcludedFields = new Set(this.importPreviewData.updatedFields);
+      } else {
+        this.importExcludedFields = new Set();
+      }
+    },
+    hasIrreversibleFields() {
+      return this.importPreviewData?.irreversibleFields?.length > 0;
+    },
     async confirmImport() {
       if (!this.previewLinkId) return;
       this.isApplyingImport = true;
+      const excludeFields = [...this.importExcludedFields];
       await this.importFromLink({
         linkId: this.previewLinkId,
+        excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
@@ -271,6 +311,7 @@ export default {
       this.showImportPreviewDialog = false;
       this.importPreviewData = null;
       this.previewLinkId = null;
+      this.importExcludedFields = new Set();
     },
 
     getFieldLabel(field) {
@@ -681,9 +722,23 @@ export default {
           </DialogDescription>
         </DialogHeader>
         <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+          <!-- Warning banner for irreversible fields -->
+          <div
+            v-if="hasIrreversibleFields()"
+            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200 text-sm"
+          >
+            <AlertTriangle class="size-4 mt-0.5 shrink-0" />
+            <span>Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную.</span>
+          </div>
           <table class="w-full table-fixed text-sm">
             <thead>
               <tr class="border-b">
+                <th class="w-[40px] py-2 px-2">
+                  <Checkbox
+                    :model-value="allFieldsIncluded()"
+                    @update:model-value="toggleAllFields"
+                  />
+                </th>
                 <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
                 <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
                 <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
@@ -695,7 +750,24 @@ export default {
                 :key="field"
                 class="border-b"
               >
-                <td class="py-2 px-2 font-medium align-top">{{ getFieldLabel(field) }}</td>
+                <td class="py-2 px-2 align-top">
+                  <Checkbox
+                    :model-value="isFieldIncluded(field)"
+                    @update:model-value="toggleFieldIncluded(field)"
+                  />
+                </td>
+                <td class="py-2 px-2 font-medium align-top">
+                  <div class="flex items-center gap-1">
+                    {{ getFieldLabel(field) }}
+                    <span
+                      v-if="isFieldIrreversible(field)"
+                      class="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"
+                      title="Необратимые модификаторы"
+                    >
+                      <AlertTriangle class="size-3.5" />
+                    </span>
+                  </div>
+                </td>
                 <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                   {{ formatFieldValue(field, importPreviewData.oldValues[field]) }}
                 </td>
@@ -708,7 +780,7 @@ export default {
         </div>
         <DialogFooter>
           <Button variant="outline" @click="cancelImport">Отменить</Button>
-          <Button @click="confirmImport" :disabled="isApplyingImport">
+          <Button @click="confirmImport" :disabled="isApplyingImport || allFieldsExcluded()">
             <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
             Подтвердить

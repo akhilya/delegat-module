@@ -6,6 +6,7 @@ using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Marketplace.DTOs;
 using PrintO.Models.Products;
+using PrintO.Services.Marketplace.Modifiers;
 
 namespace PrintO.Services.Marketplace;
 
@@ -733,6 +734,10 @@ public class ProductSyncService
             if (string.IsNullOrEmpty(stringValue))
                 continue;
 
+            // Reverse-apply modifiers to convert marketplace values back to local format
+            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
+                          ?? stringValue;
+
             switch (fieldMapping.sourceType)
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
@@ -784,7 +789,8 @@ public class ProductSyncService
         int connectionId,
         int categoryId,
         Dictionary<string, object> externalAttributes,
-        CancellationToken ct)
+        CancellationToken ct,
+        HashSet<string>? excludeFieldNames = null)
     {
         var changes = new List<AttributeChangeDetail>();
 
@@ -849,7 +855,14 @@ public class ProductSyncService
             if (string.IsNullOrEmpty(stringValue))
                 continue;
 
+            // Reverse-apply modifiers to convert marketplace values back to local format
+            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
+                          ?? stringValue;
+
             var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
+
+            if (excludeFieldNames?.Contains(fieldName) == true)
+                continue;
 
             switch (fieldMapping.sourceType)
             {
@@ -981,7 +994,12 @@ public class ProductSyncService
             if (string.IsNullOrEmpty(stringValue))
                 continue;
 
+            // Reverse-apply modifiers to convert marketplace values back to local format
+            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
+                          ?? stringValue;
+
             var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
+            var hasIrreversible = ModifierPipeline.HasIrreversibleModifiers(fieldMapping.modifiersJson);
 
             switch (fieldMapping.sourceType)
             {
@@ -990,7 +1008,7 @@ public class ProductSyncService
                     var existing = existingProductAttrs.FirstOrDefault(
                         a => a.attributeId == fieldMapping.sourceAttributeId.Value);
                     if (existing == null || existing.value != stringValue)
-                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue));
+                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue, hasIrreversible));
                     break;
                 }
 
@@ -999,7 +1017,7 @@ public class ProductSyncService
                     var existing = existingStoreAttrs.FirstOrDefault(
                         a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
                     if (existing == null || existing.value != stringValue)
-                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue));
+                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue, hasIrreversible));
                     break;
                 }
             }
@@ -1449,7 +1467,7 @@ public class ProductSyncStatus
 /// <summary>
 /// Detail of a single attribute change (for import preview).
 /// </summary>
-public record AttributeChangeDetail(string FieldName, string? OldValue, string? NewValue);
+public record AttributeChangeDetail(string FieldName, string? OldValue, string? NewValue, bool HasIrreversibleModifiers = false);
 
 /// <summary>
 /// Result of a bulk product export operation.

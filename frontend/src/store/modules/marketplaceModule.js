@@ -1159,11 +1159,12 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importFromLink(ctx, { linkId, onSuccess, onError }) {
+    async importFromLink(ctx, { linkId, excludeFields, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/links/${linkId}/import`,
         {
           method: "POST",
+          data: { excludeFields: excludeFields || null },
           cache: false,
         },
         http,
