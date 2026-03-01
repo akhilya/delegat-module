@@ -107,6 +107,8 @@ builder.Services.AddSingleton<IStorageService>(sp =>
     return new MinIOStorageService(minioSettings, httpClientFactory, logger);
 });
 
+builder.Services.AddSingleton<ThumbnailService>();
+
 // Settings as singletons for DI
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton(minioSettings);

@@ -261,7 +261,7 @@ public class ProductController : ControllerBase
             await _unitOfWork.SaveChangesAsync();
         }
 
-        return Ok(new { next = $"/products/{product.Id}/edit" });
+        return Ok(new { id = product.Id, next = $"/products/{product.Id}/edit" });
     }
 
     /// <summary>

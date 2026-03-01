@@ -196,6 +196,30 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
+    /// Download a file as a stream
+    /// </summary>
+    public async Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default)
+    {
+        try
+        {
+            var ms = new MemoryStream();
+            var args = new GetObjectArgs()
+                .WithBucket(_bucket)
+                .WithObject(path)
+                .WithCallbackStream(stream => stream.CopyTo(ms));
+
+            await _client.GetObjectAsync(args, ct);
+            ms.Position = 0;
+            return ms;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download file from MinIO: {Path}", path);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Check if file exists
     /// </summary>
     public async Task<bool> ExistsAsync(string path, CancellationToken ct = default)

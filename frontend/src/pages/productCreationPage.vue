@@ -94,6 +94,15 @@ export default {
     const productGroups = ref([]);
     const selectedGroupId = ref(null);
     const isLoadingGroups = ref(false);
+    const descriptionRef = ref(null);
+
+    function autoResizeDescription() {
+      const ref = descriptionRef.value;
+      const el = ref?.$el ?? ref;
+      if (!el || el.tagName !== 'TEXTAREA') return;
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
 
     // Fetch store attributes on mount
     async function fetchStoreAttributes() {
@@ -192,6 +201,7 @@ export default {
           name: z.string().min(1, "Название обязательно").max(100),
           description: z.string().max(5000).default(""),
           storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
+          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
         }),
       }),
     );
@@ -306,6 +316,8 @@ export default {
       productGroups,
       selectedGroupId,
       isLoadingGroups,
+      descriptionRef,
+      autoResizeDescription,
     };
   },
 };
@@ -413,26 +425,43 @@ export default {
               <FormItem>
                 <FormLabel>Описание</FormLabel>
                 <FormControl>
-                  <Textarea v-bind="componentField" class="overflow-hidden resize-none" />
+                  <Textarea ref="descriptionRef" v-bind="componentField" @input="autoResizeDescription" class="overflow-hidden resize-none" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             </FormField>
 
-            <!-- Quantity -->
-            <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
-              <FormItem>
-                <FormLabel>Количество на складе</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    :model-value="value"
-                    @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
+            <!-- Quantity + Price -->
+            <div class="grid grid-cols-2 gap-4">
+              <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
+                <FormItem>
+                  <FormLabel>Количество на складе</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      :model-value="value"
+                      @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              </FormField>
+
+              <FormField v-slot="{ value, setValue }" name="product.price">
+                <FormItem>
+                  <FormLabel>Цена</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      :model-value="value"
+                      @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              </FormField>
+            </div>
           </CardContent>
         </Card>
 

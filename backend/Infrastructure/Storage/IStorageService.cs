@@ -41,6 +41,11 @@ public interface IStorageService
     Task<bool> ExistsAsync(string path, CancellationToken ct = default);
 
     /// <summary>
+    /// Download a file as a stream
+    /// </summary>
+    Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default);
+
+    /// <summary>
     /// Get the full public URL for a file
     /// </summary>
     string GetFullPath(string path);

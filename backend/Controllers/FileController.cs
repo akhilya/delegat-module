@@ -8,6 +8,7 @@ using PrintO.Infrastructure.Middleware;
 using PrintO.Infrastructure.Storage;
 using PrintO.Models;
 using PrintO.Models.Products;
+using PrintO.Services;
 
 namespace PrintO.Controllers;
 
@@ -22,24 +23,20 @@ public class FileController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IStorageService _storageService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ThumbnailService _thumbnailService;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="FileController"/> class.
-    /// </summary>
-    /// <param name="currentUserService">Service for resolving the current authenticated user.</param>
-    /// <param name="unitOfWork">Unit of work for database operations.</param>
-    /// <param name="storageService">Object storage service for file uploads and deletions.</param>
-    /// <param name="serviceProvider">Service provider for dependency resolution.</param>
     public FileController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IStorageService storageService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ThumbnailService thumbnailService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _serviceProvider = serviceProvider;
+        _thumbnailService = thumbnailService;
     }
 
     /// <summary>
@@ -284,6 +281,7 @@ public class FileController : ControllerBase
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
 
+        await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
         await _storageService.DeleteAsync(file.filePath);
         await fileRepo.DeleteAsync(file);
         await _unitOfWork.SaveChangesAsync();

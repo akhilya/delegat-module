@@ -190,6 +190,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     {
         ImageReference? primaryImageRef = images.OrderBy(i => i.index).FirstOrDefault();
         string? primaryImagePath = null;
+        string? primaryImageThumbnail = null;
         if (primaryImageRef is not null)
         {
             var primaryImageFile = files.FirstOrDefault(f => f.Id == primaryImageRef.fileId);
@@ -197,6 +198,9 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             if (primaryImageFile is not null)
             {
                 primaryImagePath = primaryImageFile.GetFullPath(serviceProvider);
+
+                if (primaryImageFile.contentType.StartsWith("image/"))
+                    primaryImageThumbnail = $"/api/files/{primaryImageFile.Id}/thumbnail?w=256";
             }
         }
 
@@ -207,6 +211,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             barcode = barcode,
             name = name,
             primaryImage = primaryImagePath,
+            primaryImageThumbnail = primaryImageThumbnail,
             categoryId = categoryId,
             categoryName = category?.name,
             storageQuantity = storageQuantity,
@@ -393,6 +398,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// URL of the primary product image.
         /// </summary>
         public object? primaryImage { get; set; }
+
+        /// <summary>
+        /// Relative URL to the primary image thumbnail (WebP, 256px).
+        /// </summary>
+        public string? primaryImageThumbnail { get; set; }
 
         /// <summary>
         /// Category identifier.

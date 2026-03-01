@@ -33,6 +33,7 @@ export interface Product {
   barcode: string | null;
   name: string;
   primaryImage: any;
+  primaryImageThumbnail?: string;
   categoryId: number | null;
   categoryName: string | null;
   storageQuantity: number | null;
@@ -98,7 +99,7 @@ export const columns: ProductColumnDef[] = [
     cell: ({ row }) =>
       h(ImageFile, {
         class: "size-32",
-        file: { fullPath: row.original.primaryImage },
+        file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
       }),
   },
   {
@@ -363,7 +364,7 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
       return h("div", { class: "flex gap-3 items-start py-1" }, [
         h(ImageFile, {
           class: "size-14 shrink-0 rounded",
-          file: { fullPath: row.original.primaryImage },
+          file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(
@@ -393,7 +394,7 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
       return h("div", { class: "flex gap-3 items-start py-1" }, [
         h(ImageFile, {
           class: "size-14 shrink-0 rounded",
-          file: { fullPath: row.original.primaryImage },
+          file: { fullPath: row.original.primaryImageThumbnail ?? row.original.primaryImage },
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(
