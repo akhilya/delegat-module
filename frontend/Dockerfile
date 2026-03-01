@@ -13,7 +13,7 @@ RUN npm ci
 COPY . .
 
 # Build argument for API server
-ARG VITE_API_SERVER=http://localhost:5000
+ARG VITE_API_SERVER=/api
 ENV VITE_API_SERVER=$VITE_API_SERVER
 
 # Build the application
