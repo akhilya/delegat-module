@@ -55,13 +55,15 @@ public class ThumbnailService
             if (originalStream is null)
                 return null;
 
-            // Resize to WebP
+            // Resize to WebP (AutoOrient applies EXIF rotation to pixels)
             using var image = await Image.LoadAsync(originalStream, ct);
-            image.Mutate(x => x.Resize(new ResizeOptions
-            {
-                Size = new Size(width, 0),
-                Mode = ResizeMode.Max,
-            }));
+            image.Mutate(x => x
+                .AutoOrient()
+                .Resize(new ResizeOptions
+                {
+                    Size = new Size(width, 0),
+                    Mode = ResizeMode.Max,
+                }));
 
             var outputStream = new MemoryStream();
             await image.SaveAsWebpAsync(outputStream, new WebpEncoder { Quality = WebPQuality }, ct);
