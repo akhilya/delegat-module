@@ -150,8 +150,15 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var origins = new List<string> { "https://dashboard.printo.studio" };
         var environment = builder.Environment.EnvironmentName;
+
+        var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ORIGINS") ?? "";
+        var origins = corsOriginsEnv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        if (!origins.Any())
+            origins.Add("https://dashboard.printo.studio");
 
         if (environment == "Development" || environment == "Staging")
         {
@@ -233,12 +240,10 @@ if (!app.Environment.IsProduction())
     app.UseSwaggerUI();
 }
 
-app.UseStaticFiles();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapFallbackToFile("index.html");
 app.MapGet("/api/health", () => Results.Ok("healthy"));
 
 await app.RunAsync("http://0.0.0.0:5000");
