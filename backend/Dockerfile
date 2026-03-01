@@ -7,8 +7,10 @@ WORKDIR /source
 COPY backend/PrintO.csproj backend/
 COPY sdk/PrintO.Marketplace.SDK/PrintO.Marketplace.SDK.csproj sdk/PrintO.Marketplace.SDK/
 COPY plugins/PrintO.Marketplace.Ozon/PrintO.Marketplace.Ozon.csproj plugins/PrintO.Marketplace.Ozon/
+COPY plugins/PrintO.Marketplace.Wildberries/PrintO.Marketplace.Wildberries.csproj plugins/PrintO.Marketplace.Wildberries/
 RUN dotnet restore backend/PrintO.csproj -a $TARGETARCH
 RUN dotnet restore plugins/PrintO.Marketplace.Ozon/PrintO.Marketplace.Ozon.csproj -a $TARGETARCH
+RUN dotnet restore plugins/PrintO.Marketplace.Wildberries/PrintO.Marketplace.Wildberries.csproj -a $TARGETARCH
 
 # Copy all source files
 COPY backend/ backend/
@@ -19,8 +21,9 @@ COPY plugins/ plugins/
 RUN dotnet publish backend/PrintO.csproj -a $TARGETARCH -c Release -o /app
 
 # Build plugins and copy DLLs to app
-RUN dotnet publish plugins/PrintO.Marketplace.Ozon/PrintO.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out
-RUN mkdir -p /app/plugins && cp /plugins-out/PrintO.Marketplace.Ozon.dll /app/plugins/
+RUN dotnet publish plugins/PrintO.Marketplace.Ozon/PrintO.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon
+RUN dotnet publish plugins/PrintO.Marketplace.Wildberries/PrintO.Marketplace.Wildberries.csproj -a $TARGETARCH -c Release -o /plugins-out/wb
+RUN mkdir -p /app/plugins && cp /plugins-out/ozon/PrintO.Marketplace.Ozon.dll /app/plugins/ && cp /plugins-out/wb/PrintO.Marketplace.Wildberries.dll /app/plugins/
 
 # Stage 2: Final image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
