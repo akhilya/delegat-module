@@ -3,7 +3,7 @@
 
 services:
   # Backend API (ASP.NET Core)
-  api:
+  printo-api:
     build:
       context: .
       dockerfile: backend/Dockerfile
