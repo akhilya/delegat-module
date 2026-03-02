@@ -454,6 +454,23 @@ public class ProductSyncService
             {
                 var bulkResult = await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
 
+                // Pre-load existing links by externalProductId to avoid N+1 queries
+                Dictionary<string, ProductMarketplaceLink> dupLinksByExternalId = new();
+                if (bulkResult.Items != null)
+                {
+                    var allExternalIds = bulkResult.Items
+                        .Where(i => i.Success && !string.IsNullOrEmpty(i.ExternalProductId))
+                        .Select(i => i.ExternalProductId!)
+                        .Distinct()
+                        .ToList();
+                    if (allExternalIds.Count > 0)
+                    {
+                        dupLinksByExternalId = await _context.productMarketplaceLinks
+                            .Where(l => l.connectionId == connectionId && allExternalIds.Contains(l.externalProductId))
+                            .ToDictionaryAsync(l => l.externalProductId, ct);
+                    }
+                }
+
                 if (bulkResult.Items != null)
                 {
                     foreach (var exportItemResult in bulkResult.Items)
@@ -492,11 +509,8 @@ public class ProductSyncService
                         }
                         else
                         {
-                            // Check for existing link by externalProductId
-                            var dupLink = await _context.productMarketplaceLinks
-                                .FirstOrDefaultAsync(l =>
-                                    l.externalProductId == exportItemResult.ExternalProductId &&
-                                    l.connectionId == connectionId, ct);
+                            // Check for existing link by externalProductId (pre-loaded)
+                            dupLinksByExternalId.TryGetValue(exportItemResult.ExternalProductId!, out var dupLink);
 
                             if (dupLink != null)
                             {
@@ -547,9 +561,166 @@ public class ProductSyncService
             await _context.SaveChangesAsync(ct);
         }
 
+        // Post-export: sync groups for EndpointBasedGrouping (e.g., WB merge groups)
+        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping))
+        {
+            await SyncEndpointGroupsAfterExportAsync(adapter, connection, connectionId, productIds, itemResults, ct);
+        }
+
         var successCount = itemResults.Count(r => r.IsSuccess);
         var failedCount = itemResults.Count(r => !r.IsSuccess);
         return new BulkProductExportResult(successCount, failedCount, productIds.Count, itemResults);
+    }
+
+    /// <summary>
+    /// After bulk export, sync endpoint-based groups (e.g., WB merge groups).
+    /// For each product group that has successfully exported members, create or update the group on the marketplace.
+    /// </summary>
+    private async Task SyncEndpointGroupsAfterExportAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        int connectionId,
+        List<int> exportedProductIds,
+        List<BulkProductExportItemResult> itemResults,
+        CancellationToken ct)
+    {
+        try
+        {
+            // Find all product groups that contain any of the exported products
+            var groupMemberships = await _context.Set<ProductGroupMember>()
+                .Include(gm => gm.group)
+                    .ThenInclude(g => g.members)
+                .Where(gm => exportedProductIds.Contains(gm.productId))
+                .ToListAsync(ct);
+
+            var groupIds = groupMemberships
+                .Select(gm => gm.groupId)
+                .Distinct()
+                .ToList();
+
+            if (groupIds.Count == 0) return;
+
+            // Load existing group marketplace links for this connection
+            var existingGroupLinks = await _context.productGroupMarketplaceLinks
+                .Where(gl => gl.connectionId == connectionId && groupIds.Contains(gl.productGroupId))
+                .ToDictionaryAsync(gl => gl.productGroupId, ct);
+
+            // Load all product marketplace links for members of these groups
+            var allGroupMemberProductIds = groupMemberships
+                .SelectMany(gm => gm.group.members.Select(m => m.productId))
+                .Distinct()
+                .ToList();
+
+            var productLinks = await _context.productMarketplaceLinks
+                .Where(l => l.connectionId == connectionId && allGroupMemberProductIds.Contains(l.productId))
+                .ToDictionaryAsync(l => l.productId, ct);
+
+            // Process each group
+            foreach (var groupId in groupIds)
+            {
+                var membership = groupMemberships.First(gm => gm.groupId == groupId);
+                var group = membership.group;
+
+                // Collect external IDs for all group members that have been exported
+                var memberExternalIds = group.members
+                    .OrderBy(m => m.sortOrder)
+                    .Where(m => productLinks.ContainsKey(m.productId))
+                    .Select(m => productLinks[m.productId].externalProductId)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .ToList();
+
+                if (memberExternalIds.Count < 2)
+                    continue; // Need at least 2 products for a group
+
+                existingGroupLinks.TryGetValue(groupId, out var groupLink);
+
+                if (groupLink != null && !string.IsNullOrEmpty(groupLink.externalGroupId))
+                {
+                    // Group already exists — add any new members
+                    // The WB API is idempotent for adding existing members, so we can safely add all
+                    try
+                    {
+                        var addResult = await adapter.AddProductsToGroupAsync(
+                            connection, groupLink.externalGroupId, memberExternalIds, ct);
+
+                        groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
+                        {
+                            status = addResult.Success
+                                ? ProductMarketplaceStatus.Synced
+                                : ProductMarketplaceStatus.SyncError,
+                            lastErrorMessage = addResult.ErrorMessage,
+                            lastSyncAt = DateTime.UtcNow
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Failed to update group {GroupId} membership on connection {ConnectionId}",
+                            groupId, connectionId);
+                    }
+                }
+                else
+                {
+                    // Create new group
+                    try
+                    {
+                        var createResult = await adapter.CreateGroupAsync(
+                            connection, memberExternalIds, group.name, ct);
+
+                        if (createResult.Success && !string.IsNullOrEmpty(createResult.ExternalGroupId))
+                        {
+                            if (groupLink == null)
+                            {
+                                groupLink = new ProductGroupMarketplaceLink();
+                                groupLink.AddFill(new ProductGroupMarketplaceLink.AddForm
+                                {
+                                    productGroupId = groupId,
+                                    connectionId = connectionId,
+                                    externalGroupId = createResult.ExternalGroupId,
+                                    externalGroupName = group.name,
+                                    status = ProductMarketplaceStatus.Synced
+                                });
+                                _context.productGroupMarketplaceLinks.Add(groupLink);
+                            }
+                            else
+                            {
+                                groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
+                                {
+                                    externalGroupId = createResult.ExternalGroupId,
+                                    externalGroupName = group.name,
+                                    status = ProductMarketplaceStatus.Synced,
+                                    lastSyncAt = DateTime.UtcNow
+                                });
+                            }
+
+                            _logger.LogInformation(
+                                "Created group {GroupId} on connection {ConnectionId}, externalGroupId={ExternalGroupId}",
+                                groupId, connectionId, createResult.ExternalGroupId);
+                        }
+                        else
+                        {
+                            _logger.LogWarning(
+                                "Failed to create group {GroupId} on connection {ConnectionId}: {Error}",
+                                groupId, connectionId, createResult.ErrorMessage);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Failed to create group {GroupId} on connection {ConnectionId}",
+                            groupId, connectionId);
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Post-export group sync failed for connection {ConnectionId}. Products were exported successfully.",
+                connectionId);
+        }
     }
 
     /// <summary>

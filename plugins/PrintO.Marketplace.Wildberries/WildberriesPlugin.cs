@@ -1044,24 +1044,242 @@ public class WildberriesPlugin : MarketplacePluginBase
             }
         }
 
-        // Phase 6: Updates (sequential — UpdateProductAsync is already fast)
-        foreach (var item in updates)
+        // Phase 6: Batch updates
+        if (updates.Count > 0)
         {
-            try
+            var updateResults = await BatchUpdateProductsAsync(client, updates, ct);
+            foreach (var r in updateResults)
             {
-                var result = await UpdateProductAsync(client, item.ProductData, item.ExistingExternalId!, ct);
-                results.Add(new ExportItemResult(
-                    item.LocalProductId, result.Success, result.ExternalProductId, result.ErrorMessage));
-                if (result.Success) successCount++; else failedCount++;
-            }
-            catch (Exception ex)
-            {
-                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: ex.Message));
-                failedCount++;
+                results.Add(r);
+                if (r.Success) successCount++; else failedCount++;
             }
         }
 
         return new BulkExportResult(items.Count, successCount, failedCount, results);
+    }
+
+    private async Task<List<ExportItemResult>> BatchUpdateProductsAsync(
+        WildberriesApiClient client,
+        List<BulkExportItem> updates,
+        CancellationToken ct)
+    {
+        var results = new List<ExportItemResult>();
+
+        // 6a: Batch fetch all existing cards by nmId
+        var nmIdMap = new Dictionary<int, BulkExportItem>();
+        foreach (var item in updates)
+        {
+            if (int.TryParse(item.ExistingExternalId!, out var nmId))
+                nmIdMap[nmId] = item;
+            else
+                results.Add(new ExportItemResult(item.LocalProductId, false,
+                    ErrorMessage: $"Invalid nmID: {item.ExistingExternalId}"));
+        }
+
+        if (nmIdMap.Count == 0)
+            return results;
+
+        var cardsById = await FetchCardsByNmIdsAsync(client, nmIdMap.Keys.ToList(), ct);
+
+        // 6b: Build update items by merging with existing cards
+        var allUpdateItems = new List<WbCardUpdateItem>();
+        var imageUploads = new List<(int NmId, List<string> Urls, int LocalProductId)>();
+        var updateItemToProductId = new Dictionary<int, int>(); // nmId -> localProductId
+
+        foreach (var (nmId, item) in nmIdMap)
+        {
+            if (!cardsById.TryGetValue(nmId, out var existingCard))
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false,
+                    ErrorMessage: $"Card with nmID={nmId} not found"));
+                continue;
+            }
+
+            var updateItem = BuildUpdateItem(existingCard, item.ProductData);
+            allUpdateItems.Add(updateItem);
+            updateItemToProductId[nmId] = item.LocalProductId;
+
+            var imageUrls = GetImageUrls(item.ProductData);
+            if (imageUrls.Count > 0)
+                imageUploads.Add((nmId, imageUrls, item.LocalProductId));
+        }
+
+        if (allUpdateItems.Count == 0)
+            return results;
+
+        // 6c: Batch update — chunk by 1000 (WB limit: 3000 nmID per request, use 1000 for safety)
+        var successNmIds = new HashSet<int>();
+
+        foreach (var chunk in allUpdateItems
+            .Select((item, i) => new { item, i })
+            .GroupBy(x => x.i / 1000)
+            .Select(g => g.Select(x => x.item).ToList()))
+        {
+            try
+            {
+                var response = await client.UpdateCardsAsync(chunk, ct);
+                if (response.Error)
+                {
+                    // Entire chunk failed — mark all as failed
+                    foreach (var ui in chunk)
+                    {
+                        results.Add(new ExportItemResult(
+                            updateItemToProductId[ui.NmId], false,
+                            ui.NmId.ToString(),
+                            response.ErrorText ?? "Batch update failed"));
+                    }
+                }
+                else
+                {
+                    foreach (var ui in chunk)
+                        successNmIds.Add(ui.NmId);
+                }
+            }
+            catch (WildberriesApiException ex)
+            {
+                foreach (var ui in chunk)
+                {
+                    results.Add(new ExportItemResult(
+                        updateItemToProductId[ui.NmId], false,
+                        ui.NmId.ToString(),
+                        $"WB API error: {ex.Message}"));
+                }
+            }
+        }
+
+        // 6d: Parallel image upload for successful updates
+        var imageErrors = new ConcurrentDictionary<int, string>(); // nmId -> error
+        if (imageUploads.Count > 0)
+        {
+            var semaphore = new SemaphoreSlim(5);
+            var imageTasks = imageUploads
+                .Where(iu => successNmIds.Contains(iu.NmId))
+                .Select(async iu =>
+                {
+                    await semaphore.WaitAsync(ct);
+                    try
+                    {
+                        var (ok, err) = await UploadImagesWithRetryAsync(client, iu.NmId, iu.Urls, 2, ct);
+                        if (!ok)
+                            imageErrors[iu.NmId] = err ?? "Image upload failed";
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+
+            await Task.WhenAll(imageTasks);
+        }
+
+        // Build success results
+        foreach (var nmId in successNmIds)
+        {
+            var localProductId = updateItemToProductId[nmId];
+            imageErrors.TryGetValue(nmId, out var imgWarning);
+            results.Add(new ExportItemResult(localProductId, true, nmId.ToString(),
+                imgWarning != null ? $"Updated but image upload failed: {imgWarning}" : null));
+        }
+
+        return results;
+    }
+
+    private static WbCardUpdateItem BuildUpdateItem(WbCard existingCard, Dictionary<string, object> data)
+    {
+        return new WbCardUpdateItem
+        {
+            NmId = existingCard.NmId,
+            VendorCode = existingCard.VendorCode, // immutable
+            Brand = GetStringValue(data, "brand") ?? existingCard.Brand,
+            Title = GetStringValue(data, "name") ?? existingCard.Title,
+            Description = GetStringValue(data, "description") ?? existingCard.Description,
+            Dimensions = BuildDimensions(data) ?? existingCard.Dimensions,
+            Characteristics = BuildCharacteristics(data)
+                ?? existingCard.Characteristics?.Select(c => new WbCardCreateCharacteristic
+                {
+                    Id = c.Id,
+                    Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
+                }).ToList(),
+            Sizes = existingCard.Sizes?.Select(s => new WbCardUpdateSize
+            {
+                ChrtId = s.ChrtId,
+                TechSize = s.TechSize,
+                WbSize = s.WbSize,
+                Skus = s.Skus
+            }).ToList()
+        };
+    }
+
+    private static async Task<Dictionary<int, WbCard>> FetchCardsByNmIdsAsync(
+        WildberriesApiClient client,
+        List<int> nmIds,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<int, WbCard>();
+        var target = new HashSet<int>(nmIds);
+
+        if (nmIds.Count <= 5)
+        {
+            // Individual TextSearch for small batches
+            foreach (var nmId in nmIds)
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { TextSearch = nmId.ToString(), WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor { Limit = 10 }
+                    }
+                };
+                var response = await client.GetCardsListAsync(request, ct);
+                var card = response.Cards?.FirstOrDefault(c => c.NmId == nmId);
+                if (card != null)
+                    result[nmId] = card;
+            }
+        }
+        else
+        {
+            // Full pagination — match in memory
+            string? cursorUpdatedAt = null;
+            int? cursorNmId = null;
+
+            while (target.Count > 0)
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor
+                        {
+                            Limit = 100,
+                            UpdatedAt = cursorUpdatedAt,
+                            NmId = cursorNmId
+                        }
+                    }
+                };
+
+                var response = await client.GetCardsListAsync(request, ct);
+                if (response.Cards == null || response.Cards.Count == 0) break;
+
+                foreach (var card in response.Cards)
+                {
+                    if (target.Contains(card.NmId))
+                    {
+                        result[card.NmId] = card;
+                        target.Remove(card.NmId);
+                    }
+                }
+
+                if (target.Count == 0) break;
+                if (response.Cursor?.Total == 0) break;
+                cursorUpdatedAt = response.Cursor?.UpdatedAt;
+                cursorNmId = response.Cursor?.NmId;
+                if (cursorUpdatedAt == null) break;
+            }
+        }
+
+        return result;
     }
 
     private async Task<List<ExportItemResult>> FallbackIndividualCreatesAsync(
