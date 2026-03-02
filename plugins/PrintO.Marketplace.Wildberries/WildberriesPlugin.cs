@@ -28,7 +28,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.0.0";
+    public override string Version => "1.1.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -879,6 +879,8 @@ public class WildberriesPlugin : MarketplacePluginBase
         List<BulkExportItem> items,
         CancellationToken ct = default)
     {
+        Console.WriteLine($"[WB Plugin v{Version}] ExportProductsBulkAsync called with {items.Count} items");
+
         var client = CreateClient(context);
         var results = new List<ExportItemResult>();
         int successCount = 0, failedCount = 0;
