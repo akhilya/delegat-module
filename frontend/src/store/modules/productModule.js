@@ -224,6 +224,53 @@ export default {
         onError(error);
       }
     },
+
+    async exportProductsTemplate(ctx, { productIds, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/products/export-template`,
+          { productIds },
+          { responseType: "blob" },
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "products-export.xlsx");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        if (onSuccess) onSuccess();
+      } catch (error) {
+        if (onError) onError(error);
+      }
+    },
+
+    async importProductsPreview(ctx, { file, onSuccess, onError }) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await http.post(`/products/import-preview`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (onSuccess) onSuccess(response.data);
+      } catch (error) {
+        if (onError) onError(error);
+      }
+    },
+
+    async importProductsApply(ctx, { file, onSuccess, onError }) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await http.post(`/products/import-apply`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (onSuccess) onSuccess(response.data);
+      } catch (error) {
+        if (onError) onError(error);
+      }
+    },
   },
   mutations: {},
   state: {},

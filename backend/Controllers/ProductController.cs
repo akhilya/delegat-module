@@ -7,6 +7,7 @@ using PrintO.Infrastructure.Middleware;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
+using PrintO.Services;
 using PrintO.Services.Marketplace;
 
 namespace PrintO.Controllers;
@@ -23,27 +24,25 @@ public class ProductController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ProductController> _logger;
     private readonly DataContext _context;
+    private readonly ExcelProductService _excelService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
     /// </summary>
-    /// <param name="currentUserService">Service for resolving the current authenticated user.</param>
-    /// <param name="unitOfWork">Unit of work for database operations.</param>
-    /// <param name="serviceProvider">Service provider for dependency resolution.</param>
-    /// <param name="logger">Logger instance.</param>
-    /// <param name="context">Database context for direct query access.</param>
     public ProductController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         ILogger<ProductController> logger,
-        DataContext context)
+        DataContext context,
+        ExcelProductService excelService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _logger = logger;
         _context = context;
+        _excelService = excelService;
     }
 
     /// <summary>
@@ -810,6 +809,157 @@ public class ProductController : ControllerBase
         });
 
         return Ok(new { success = true, deletedCount = products.Count });
+    }
+
+    /// <summary>
+    /// Exports selected products to an Excel file (.xlsx).
+    /// </summary>
+    [HttpPost]
+    [Route("/products/export-template")]
+    public async Task<IActionResult> ExportTemplate([FromBody] ExportRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        if (request.productIds == null || request.productIds.Count == 0)
+            throw ApiException.BadRequest("Товары не указаны");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var products = await productRepo.FindAllAsync(
+            p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value,
+            query => query
+                .AsSplitQuery()
+                .Include(p => p.category)
+                .Include(p => p.attributeValues)
+                    .ThenInclude(av => av.attribute)
+                .Include(p => p.storeAttributeValues)
+                    .ThenInclude(sav => sav.storeAttribute));
+
+        // Collect all unique category attributes from the products' categories
+        var categoryIds = products
+            .Where(p => p.categoryId.HasValue)
+            .Select(p => p.categoryId!.Value)
+            .Distinct()
+            .ToList();
+
+        var categoryAttributes = categoryIds.Count > 0
+            ? await _context.categoryAttributes
+                .Where(ca => categoryIds.Contains(ca.categoryId))
+                .OrderBy(ca => ca.categoryId)
+                .ThenBy(ca => ca.sortOrder)
+                .ToListAsync()
+            : new List<CategoryAttribute>();
+
+        // Get all store attributes
+        var storeAttributes = await _context.storeAttributes
+            .Where(sa => sa.storeId == selectedStoreId.Value)
+            .OrderBy(sa => sa.sortOrder)
+            .ToListAsync();
+
+        var stream = _excelService.ExportToExcel(products.ToList(), categoryAttributes, storeAttributes);
+        return File(stream,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "products-export.xlsx");
+    }
+
+    /// <summary>
+    /// Previews changes from an imported Excel file without applying them.
+    /// </summary>
+    [HttpPost]
+    [Route("/products/import-preview")]
+    public async Task<IActionResult> ImportPreview(IFormFile file)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        if (file == null || file.Length == 0)
+            throw ApiException.BadRequest("Файл не загружен");
+
+        using var stream = file.OpenReadStream();
+        var parsed = _excelService.ParseImportFile(stream);
+
+        if (parsed.Rows.Count == 0)
+            return Ok(new ImportChangeset
+            {
+                Summary = new ImportSummary { TotalRows = 0 }
+            });
+
+        var productIds = parsed.Rows.Select(r => r.ProductId).Distinct().ToList();
+        var productRepo = _unitOfWork.Repository<Product>();
+        var products = await productRepo.FindAllAsync(
+            p => productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value,
+            query => query
+                .AsSplitQuery()
+                .Include(p => p.attributeValues)
+                    .ThenInclude(av => av.attribute)
+                .Include(p => p.storeAttributeValues)
+                    .ThenInclude(sav => sav.storeAttribute));
+
+        var changeset = _excelService.BuildChangeset(parsed, products.ToList());
+        return Ok(changeset);
+    }
+
+    /// <summary>
+    /// Applies changes from an imported Excel file to the database.
+    /// </summary>
+    [HttpPost]
+    [Route("/products/import-apply")]
+    public async Task<IActionResult> ImportApply(IFormFile file)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        if (file == null || file.Length == 0)
+            throw ApiException.BadRequest("Файл не загружен");
+
+        using var stream = file.OpenReadStream();
+        var parsed = _excelService.ParseImportFile(stream);
+
+        if (parsed.Rows.Count == 0)
+            return Ok(new ImportApplyResult());
+
+        var productIds = parsed.Rows.Select(r => r.ProductId).Distinct().ToList();
+        var productRepo = _unitOfWork.Repository<Product>();
+
+        // Load with tracking for updates
+        var products = await productRepo.FindAllAsync(
+            p => productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value,
+            query => query
+                .AsSplitQuery()
+                .Include(p => p.attributeValues)
+                    .ThenInclude(av => av.attribute)
+                .Include(p => p.storeAttributeValues)
+                    .ThenInclude(sav => sav.storeAttribute));
+
+        var productsList = products.ToList();
+        var changeset = _excelService.BuildChangeset(parsed, productsList);
+
+        if (changeset.Changes.Count == 0)
+            return Ok(new ImportApplyResult());
+
+        // Re-load with tracking enabled for applying changes
+        var trackedProducts = await _context.products
+            .AsSplitQuery()
+            .Include(p => p.attributeValues)
+            .Include(p => p.storeAttributeValues)
+            .Where(p => productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value)
+            .ToListAsync();
+
+        ImportApplyResult result = null!;
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            result = await _excelService.ApplyChangeset(changeset, trackedProducts, _unitOfWork);
+        });
+
+        return Ok(result);
+    }
+
+    public struct ExportRequest
+    {
+        public List<int> productIds { get; set; }
     }
 
     /// <summary>

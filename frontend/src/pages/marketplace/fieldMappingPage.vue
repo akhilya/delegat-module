@@ -847,12 +847,14 @@ export default {
           <Plus class="size-4 mr-2" />
           Добавить поле
         </Button>
-        <Button variant="outline" size="sm" @click="exportMappings">
-          <Download class="size-4 mr-2" /> Экспорт
-        </Button>
-        <Button variant="outline" size="sm" @click="triggerImport">
-          <Upload class="size-4 mr-2" /> Импорт
-        </Button>
+        <div class="flex">
+          <Button variant="outline" size="sm" class="rounded-r-none border-r-0" @click="exportMappings">
+            <Download class="size-4 mr-2" /> Экспорт
+          </Button>
+          <Button variant="outline" size="sm" class="rounded-l-none" @click="triggerImport">
+            <Upload class="size-4 mr-2" /> Импорт
+          </Button>
+        </div>
         <input ref="importFileInput" type="file" accept=".json" class="hidden"
                @change="importMappings" />
         <Button @click="handleSave" :disabled="isSaving || !hasChanges">

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <!-- Entity Framework Core + MySQL (Pomelo) -->
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.20" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.17">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -62,9 +63,7 @@
       <!-- Get all DLLs from plugin build outputs -->
       <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll" />
     </ItemGroup>
-    <Copy SourceFiles="@(PluginDlls)"
-          DestinationFolder="$(OutputPath)plugins"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

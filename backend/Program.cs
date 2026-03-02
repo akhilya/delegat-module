@@ -125,6 +125,9 @@ builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredS
 // Plugin HostedService (loads plugins at startup)
 builder.Services.AddHostedService<PluginHostedService>();
 
+// Excel import/export
+builder.Services.AddScoped<ExcelProductService>();
+
 // Sync services
 builder.Services.AddScoped<MappingService>();
 builder.Services.AddScoped<CategoryImportService>();

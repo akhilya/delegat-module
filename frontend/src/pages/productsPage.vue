@@ -5,6 +5,7 @@ import Breadcrumbs from "@/components/breadcrumbs.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
 import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
+import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
 import {
   columns as baseProductColumns,
   defaultVisibleColumns,
@@ -26,6 +27,8 @@ import {
   Pencil,
   Trash2,
   X,
+  Download,
+  Upload,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -70,6 +73,7 @@ export default {
     ProductsTable,
     ColumnSelector,
     BulkEditDialog,
+    ImportExcelDialog,
     Button,
     Search,
     ChevronLeft,
@@ -79,6 +83,8 @@ export default {
     Pencil,
     Trash2,
     X,
+    Download,
+    Upload,
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
@@ -114,6 +120,9 @@ export default {
       "getAllStoreAttributes",
       "getCategoryAttributes",
       "getAllCategories",
+      "exportProductsTemplate",
+      "importProductsPreview",
+      "importProductsApply",
     ]),
 
     async fetchProducts() {
@@ -248,6 +257,31 @@ export default {
       this.fetchProducts();
     },
 
+    async handleExportExcel() {
+      this.isExporting = true;
+      await this.exportProductsTemplate({
+        productIds: this.selectedProductIds,
+        onSuccess: () => {
+          toast.success("Файл экспортирован");
+        },
+        onError: (error) => {
+          toast.error(
+            error.response?.data?.message || "Не удалось экспортировать",
+          );
+        },
+      });
+      this.isExporting = false;
+    },
+
+    openImportDialog() {
+      this.isImportDialogOpen = true;
+    },
+
+    handleImportSaved() {
+      this.clearSelection();
+      this.fetchProducts();
+    },
+
     saveColumnVisibility() {
       localStorage.setItem(
         COLUMN_VISIBILITY_KEY,
@@ -344,7 +378,9 @@ export default {
       // Dialogs
       isBulkEditDialogOpen: false,
       isBulkDeleteDialogOpen: false,
+      isImportDialogOpen: false,
       isDeleting: false,
+      isExporting: false,
 
       // Cross-page selection cache: { productId: productObject }
       selectedProductsMap: {},
@@ -618,6 +654,27 @@ export default {
               <Pencil class="h-4 w-4 mr-1" />
               Изменить
             </Button>
+            <div class="flex">
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 rounded-r-none border-r-0"
+                :disabled="isExporting"
+                @click="handleExportExcel"
+              >
+                <Download class="h-4 w-4 mr-1" />
+                {{ isExporting ? "Экспорт..." : "Excel" }}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 rounded-l-none"
+                @click="openImportDialog"
+              >
+                <Upload class="h-4 w-4 mr-1" />
+                Импорт
+              </Button>
+            </div>
             <Button
               variant="destructive"
               size="sm"
@@ -682,6 +739,12 @@ export default {
       :category-attributes="categoryAttributes"
       :store-attributes="storeAttributes"
       @saved="handleBulkEditSaved"
+    />
+
+    <!-- Import Excel Dialog -->
+    <ImportExcelDialog
+      v-model="isImportDialogOpen"
+      @saved="handleImportSaved"
     />
 
     <!-- Bulk Delete Confirmation Dialog -->
