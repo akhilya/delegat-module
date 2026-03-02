@@ -56,7 +56,7 @@ public static class PluginLoader
                 plugin,
                 loadContext,
                 pluginPath,
-                assembly.GetName().Version?.ToString() ?? "1.0.0",
+                plugin.Version,
                 DateTime.UtcNow
             );
         }
