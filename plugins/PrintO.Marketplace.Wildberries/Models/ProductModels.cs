@@ -418,6 +418,15 @@ public class WbCardAddToMergeRequest
     public List<WbCardVariant> CardsToAdd { get; set; } = new();
 }
 
+public class WbMoveNmRequest
+{
+    [JsonPropertyName("targetIMT")]
+    public int TargetImtId { get; set; }
+
+    [JsonPropertyName("nmIDs")]
+    public List<int> NmIds { get; set; } = new();
+}
+
 #endregion
 
 #region Card Limits

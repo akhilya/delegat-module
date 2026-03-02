@@ -28,7 +28,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.1.0";
+    public override string Version => "1.2.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -1969,16 +1969,28 @@ public class WildberriesPlugin : MarketplacePluginBase
     private async Task<CreateGroupResult> CreateSingleGroupAsync(
         ConnectionContext context, List<string> productExternalIds, CancellationToken ct)
     {
-        // First product already has an imtID — fetch it
+        // Fetch first card to get its imtID
         var firstId = productExternalIds[0];
-        var firstProduct = await ImportProductAsync(context, firstId, ct);
-        if (firstProduct == null)
+        var client = CreateClient(context);
+        var fetchRequest = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Filter = new WbCardsListFilter { TextSearch = firstId, WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 10 }
+            }
+        };
+        var fetchResponse = await client.GetCardsListAsync(fetchRequest, ct);
+        var firstCard = fetchResponse.Cards?.FirstOrDefault(c => c.NmId.ToString() == firstId);
+        if (firstCard == null)
             return new CreateGroupResult(false, ErrorMessage: $"Product {firstId} not found");
 
-        if (!int.TryParse(firstProduct.GroupId, out var imtId) || imtId == 0)
+        if (firstCard.ImtId == 0)
             return new CreateGroupResult(false, ErrorMessage: $"Product {firstId} has no imtID");
 
-        // Add remaining products to the merge group
+        var imtId = firstCard.ImtId;
+
+        // Merge remaining products via moveNm (1 API call instead of 2N)
         var remaining = productExternalIds.Skip(1).ToList();
         var addResult = await AddProductsToGroupAsync(context, imtId.ToString(), remaining, ct);
 
@@ -2002,85 +2014,43 @@ public class WildberriesPlugin : MarketplacePluginBase
 
         var client = CreateClient(context);
         var errors = new List<GroupMembershipError>();
-        var added = 0;
 
-        // Fetch each product to build variant data for the merge request
-        var cardsToAdd = new List<WbCardVariant>();
+        // Parse nmIDs, skip invalid ones
+        var nmIds = new List<int>();
         foreach (var productId in productExternalIds)
         {
-            var product = await ImportProductAsync(context, productId, ct);
-            if (product == null)
-            {
-                errors.Add(new GroupMembershipError(productId, "Product not found"));
-                continue;
-            }
-
-            // Get the full card to extract variant data
-            var fetchRequest = new WbCardsListRequest
-            {
-                Settings = new WbCardsListSettings
-                {
-                    Filter = new WbCardsListFilter { TextSearch = productId, WithPhoto = -1 },
-                    Cursor = new WbCardsListCursor { Limit = 10 }
-                }
-            };
-            var fetchResponse = await client.GetCardsListAsync(fetchRequest, ct);
-            var card = fetchResponse.Cards?.FirstOrDefault(c => c.NmId.ToString() == productId);
-            if (card == null)
-            {
-                errors.Add(new GroupMembershipError(productId, "Card not found"));
-                continue;
-            }
-
-            cardsToAdd.Add(new WbCardVariant
-            {
-                VendorCode = card.VendorCode,
-                Brand = card.Brand,
-                Title = card.Title,
-                Description = card.Description,
-                Dimensions = card.Dimensions,
-                Characteristics = card.Characteristics?.Select(c => new WbCardCreateCharacteristic
-                {
-                    Id = c.Id,
-                    Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
-                }).ToList(),
-                Sizes = card.Sizes?.Select(s => new WbCardCreateSize
-                {
-                    TechSize = s.TechSize,
-                    WbSize = s.WbSize,
-                    Price = s.Price ?? 0,
-                    Skus = s.Skus
-                }).ToList()
-            });
+            if (int.TryParse(productId, out var nmId))
+                nmIds.Add(nmId);
+            else
+                errors.Add(new GroupMembershipError(productId, "Invalid nmID"));
         }
 
-        if (cardsToAdd.Count == 0)
+        if (nmIds.Count == 0)
             return new GroupMembershipResult(false, FailedCount: errors.Count, Errors: errors,
-                ErrorMessage: "No valid cards to add");
+                ErrorMessage: "No valid nmIDs to add");
 
         try
         {
-            var request = new WbCardAddToMergeRequest
+            // Use moveNm API: 1 call instead of 2N (no need to fetch card details)
+            var request = new WbMoveNmRequest
             {
-                ImtId = imtId,
-                CardsToAdd = cardsToAdd
+                TargetImtId = imtId,
+                NmIds = nmIds
             };
-            var response = await client.AddCardsToMergeGroupAsync(request, ct);
+            var response = await client.MoveNmAsync(request, ct);
 
             if (response.Error)
             {
-                return new GroupMembershipResult(false, FailedCount: cardsToAdd.Count,
+                return new GroupMembershipResult(false, FailedCount: nmIds.Count,
                     ErrorMessage: response.ErrorText);
             }
-
-            added = cardsToAdd.Count;
         }
         catch (WildberriesApiException ex)
         {
             return new GroupMembershipResult(false, ErrorMessage: ex.Message);
         }
 
-        return new GroupMembershipResult(true, AddedCount: added, FailedCount: errors.Count,
+        return new GroupMembershipResult(true, AddedCount: nmIds.Count, FailedCount: errors.Count,
             Errors: errors.Count > 0 ? errors : null);
     }
 

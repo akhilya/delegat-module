@@ -172,6 +172,13 @@ public class WildberriesApiClient
             ApiDomain.Content, "/content/v2/cards/upload/add", request, ct);
     }
 
+    public async Task<WbCardCreateResponse> MoveNmAsync(
+        WbMoveNmRequest request, CancellationToken ct = default)
+    {
+        return await PostAsync<WbMoveNmRequest, WbCardCreateResponse>(
+            ApiDomain.Content, "/content/v2/cards/moveNm", request, ct);
+    }
+
     public async Task<WbMediaSaveResponse> SaveMediaByUrlAsync(
         WbMediaSaveRequest request, CancellationToken ct = default)
     {
