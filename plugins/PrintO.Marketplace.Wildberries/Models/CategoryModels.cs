@@ -107,8 +107,9 @@ public class WbCharacteristic
 
 #endregion
 
-#region Directory (Colors, Kinds, Countries, Seasons)
+#region Directory (Colors, Kinds, Countries, Seasons, VAT)
 
+// Colors: returns objects {name, parentName}
 public class WbDirectoryResponse
 {
     [JsonPropertyName("data")]
@@ -128,6 +129,66 @@ public class WbDirectoryItem
 
     [JsonPropertyName("parentName")]
     public string? ParentName { get; set; }
+}
+
+// Kinds, Seasons, VAT: returns array of strings
+public class WbStringDirectoryResponse
+{
+    [JsonPropertyName("data")]
+    public List<string>? Data { get; set; }
+
+    [JsonPropertyName("error")]
+    public bool Error { get; set; }
+
+    [JsonPropertyName("errorText")]
+    public string? ErrorText { get; set; }
+}
+
+// TNVED: returns objects {tnved, isKiz}
+public class WbTnvedDirectoryResponse
+{
+    [JsonPropertyName("data")]
+    public List<WbTnvedItem>? Data { get; set; }
+
+    [JsonPropertyName("error")]
+    public bool Error { get; set; }
+
+    [JsonPropertyName("errorText")]
+    public string? ErrorText { get; set; }
+}
+
+public class WbTnvedItem
+{
+    [JsonPropertyName("tnved")]
+    public string Tnved { get; set; } = "";
+
+    [JsonPropertyName("isKiz")]
+    public bool IsKiz { get; set; }
+}
+
+// Countries: returns objects {id, name, fullName}
+public class WbCountryDirectoryResponse
+{
+    [JsonPropertyName("data")]
+    public List<WbCountryItem>? Data { get; set; }
+
+    [JsonPropertyName("error")]
+    public bool Error { get; set; }
+
+    [JsonPropertyName("errorText")]
+    public string? ErrorText { get; set; }
+}
+
+public class WbCountryItem
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("fullName")]
+    public string? FullName { get; set; }
 }
 
 #endregion

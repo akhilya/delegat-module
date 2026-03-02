@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using PrintO.Marketplace.SDK;
@@ -9,6 +10,20 @@ namespace PrintO.Marketplace.Wildberries;
 
 public class WildberriesPlugin : MarketplacePluginBase
 {
+    #region Directory Cache
+
+    private static readonly TimeSpan DirectoryCacheTtl = TimeSpan.FromMinutes(30);
+
+    // Global directories (colors, kinds, countries, seasons, VAT) — same for all categories
+    private static Dictionary<string, List<WbDirectoryItem>>? _globalDirectoryCache;
+    private static DateTime _globalDirectoryCacheExpiry = DateTime.MinValue;
+    private static readonly SemaphoreSlim _globalCacheLock = new(1, 1);
+
+    // ТНВЭД — per subjectId
+    private static readonly ConcurrentDictionary<int, (List<WbDirectoryItem> Items, DateTime Expiry)> _tnvedCache = new();
+
+    #endregion
+
     #region Metadata
 
     public override string Key => "wildberries";
@@ -217,23 +232,33 @@ public class WildberriesPlugin : MarketplacePluginBase
         var fields = new List<ExternalField>();
 
         // Standard fields
-        fields.Add(new ExternalField("sku", "Артикул продавца (vendorCode)", true, "string", SortOrder: 0, MaxLength: 72));
-        fields.Add(new ExternalField("name", "Наименование", true, "string", SortOrder: 1, MaxLength: 60));
-        fields.Add(new ExternalField("description", "Описание", false, "string", SortOrder: 2, MaxLength: 5000));
-        fields.Add(new ExternalField("brand", "Бренд", true, "string", SortOrder: 3));
-        fields.Add(new ExternalField("price", "Цена (руб)", true, "number", SortOrder: 4));
-        fields.Add(new ExternalField("length", "Длина (см)", false, "number", SortOrder: 5, Group: "Габариты"));
-        fields.Add(new ExternalField("width", "Ширина (см)", false, "number", SortOrder: 6, Group: "Габариты"));
-        fields.Add(new ExternalField("height", "Высота (см)", false, "number", SortOrder: 7, Group: "Габариты"));
-        fields.Add(new ExternalField("weight", "Вес брутто (кг)", false, "number", SortOrder: 8, Group: "Габариты"));
-        fields.Add(new ExternalField("images", "Изображения (URL через запятую)", false, "string", SortOrder: 9));
+        fields.Add(new ExternalField("sku", "Артикул продавца (vendorCode)", true, "string",
+            Description: "Уникальный артикул товара в вашей системе (до 72 символов)", SortOrder: 0, MaxLength: 72));
+        fields.Add(new ExternalField("name", "Наименование", true, "string",
+            Description: "Название товара, отображаемое на сайте (до 60 символов)", SortOrder: 1, MaxLength: 60));
+        fields.Add(new ExternalField("description", "Описание", false, "string",
+            Description: "Подробное описание товара (до 5000 символов)", SortOrder: 2, MaxLength: 5000));
+        fields.Add(new ExternalField("brand", "Бренд", true, "string",
+            Description: "Название бренда товара. Должно точно совпадать с названием бренда в системе WB", SortOrder: 3));
+        fields.Add(new ExternalField("price", "Цена (руб)", true, "number",
+            Description: "Цена товара в рублях до скидки", SortOrder: 4));
+        fields.Add(new ExternalField("length", "Длина (см)", false, "number",
+            Description: "Длина упаковки в сантиметрах", SortOrder: 5, Group: "Габариты"));
+        fields.Add(new ExternalField("width", "Ширина (см)", false, "number",
+            Description: "Ширина упаковки в сантиметрах", SortOrder: 6, Group: "Габариты"));
+        fields.Add(new ExternalField("height", "Высота (см)", false, "number",
+            Description: "Высота упаковки в сантиметрах", SortOrder: 7, Group: "Габариты"));
+        fields.Add(new ExternalField("weight", "Вес брутто (кг)", false, "number",
+            Description: "Вес товара с упаковкой в килограммах", SortOrder: 8, Group: "Габариты"));
+        fields.Add(new ExternalField("images", "Изображения (URL через запятую)", false, "string",
+            Description: "Ссылки на изображения товара (через запятую). Минимум 1, максимум 30", SortOrder: 9));
 
         if (response.Data == null) return fields;
 
         // Known directory characteristics that need options loaded
         var directoryCharcNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Цвет", "Пол", "Страна производства", "Сезон"
+            "Цвет", "Пол", "Страна производства", "Сезон", "НДС", "Ставка НДС", "ТНВЭД"
         };
 
         // Preload directories for known chars
@@ -255,7 +280,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                 // Load directory values for known characteristics
                 if (directoryCharcNames.Contains(charc.Name))
                 {
-                    directoryCache ??= await LoadDirectoryCacheAsync(client, ct);
+                    directoryCache ??= await LoadDirectoryCacheAsync(client, subjectId, ct);
 
                     if (directoryCache.TryGetValue(charc.Name, out var items))
                     {
@@ -269,12 +294,23 @@ public class WildberriesPlugin : MarketplacePluginBase
                 continue;
             }
 
+            // Build description from available metadata
+            var descParts = new List<string>();
+            if (!string.IsNullOrEmpty(charc.UnitName))
+                descParts.Add($"Единица измерения: {charc.UnitName}");
+            if (charc.MaxCount > 1)
+                descParts.Add($"Макс. значений: {charc.MaxCount}");
+            else if (charc.MaxCount == 0)
+                descParts.Add("Без ограничения количества значений");
+            var description = descParts.Count > 0 ? string.Join(". ", descParts) : null;
+
             fields.Add(new ExternalField(
                 Key: $"charc:{charc.CharcId}",
                 Name: charc.Name,
                 IsRequired: charc.Required,
                 Type: fieldType,
                 Options: options,
+                Description: description,
                 Unit: charc.UnitName,
                 Group: "Характеристики",
                 SortOrder: charc.Popular ? 100 : 200
@@ -285,39 +321,111 @@ public class WildberriesPlugin : MarketplacePluginBase
     }
 
     private static async Task<Dictionary<string, List<WbDirectoryItem>>> LoadDirectoryCacheAsync(
+        WildberriesApiClient client, int subjectId, CancellationToken ct)
+    {
+        var result = new Dictionary<string, List<WbDirectoryItem>>(StringComparer.OrdinalIgnoreCase);
+
+        // Load global directories (cached across all categories)
+        var global = await LoadGlobalDirectoriesAsync(client, ct);
+        foreach (var kv in global)
+            result[kv.Key] = kv.Value;
+
+        // ТНВЭД — per subjectId, cached separately
+        if (_tnvedCache.TryGetValue(subjectId, out var cached) && cached.Expiry > DateTime.UtcNow)
+        {
+            result["ТНВЭД"] = cached.Items;
+        }
+        else
+        {
+            try
+            {
+                var tnved = await client.GetTnvedAsync(subjectId, ct);
+                if (tnved.Data != null)
+                {
+                    var items = tnved.Data
+                        .Select(t => new WbDirectoryItem { Name = t.Tnved }).ToList();
+                    _tnvedCache[subjectId] = (items, DateTime.UtcNow + DirectoryCacheTtl);
+                    result["ТНВЭД"] = items;
+                }
+            }
+            catch { /* non-critical */ }
+        }
+
+        return result;
+    }
+
+    private static async Task<Dictionary<string, List<WbDirectoryItem>>> LoadGlobalDirectoriesAsync(
         WildberriesApiClient client, CancellationToken ct)
     {
-        var cache = new Dictionary<string, List<WbDirectoryItem>>(StringComparer.OrdinalIgnoreCase);
+        if (_globalDirectoryCache != null && _globalDirectoryCacheExpiry > DateTime.UtcNow)
+            return _globalDirectoryCache;
 
+        await _globalCacheLock.WaitAsync(ct);
         try
         {
-            var colors = await client.GetColorsAsync(ct);
-            if (colors.Data != null) cache["Цвет"] = colors.Data;
-        }
-        catch { /* non-critical */ }
+            // Double-check after acquiring lock
+            if (_globalDirectoryCache != null && _globalDirectoryCacheExpiry > DateTime.UtcNow)
+                return _globalDirectoryCache;
 
-        try
+            var cache = new Dictionary<string, List<WbDirectoryItem>>(StringComparer.OrdinalIgnoreCase);
+
+            // Colors — {name, parentName}
+            try
+            {
+                var colors = await client.GetColorsAsync(ct);
+                if (colors.Data != null) cache["Цвет"] = colors.Data;
+            }
+            catch { /* non-critical */ }
+
+            // Kinds — array of strings
+            try
+            {
+                var kinds = await client.GetKindsAsync(ct);
+                if (kinds.Data != null)
+                    cache["Пол"] = kinds.Data.Select(s => new WbDirectoryItem { Name = s }).ToList();
+            }
+            catch { /* non-critical */ }
+
+            // Countries — {id, name, fullName}
+            try
+            {
+                var countries = await client.GetCountriesAsync(ct);
+                if (countries.Data != null)
+                    cache["Страна производства"] = countries.Data
+                        .Select(c => new WbDirectoryItem { Name = c.Name }).ToList();
+            }
+            catch { /* non-critical */ }
+
+            // Seasons — array of strings
+            try
+            {
+                var seasons = await client.GetSeasonsAsync(ct);
+                if (seasons.Data != null)
+                    cache["Сезон"] = seasons.Data.Select(s => new WbDirectoryItem { Name = s }).ToList();
+            }
+            catch { /* non-critical */ }
+
+            // VAT rates — array of strings
+            try
+            {
+                var vat = await client.GetVatRatesAsync(ct);
+                if (vat.Data != null)
+                {
+                    var items = vat.Data.Select(s => new WbDirectoryItem { Name = s }).ToList();
+                    cache["НДС"] = items;
+                    cache["Ставка НДС"] = items;
+                }
+            }
+            catch { /* non-critical */ }
+
+            _globalDirectoryCache = cache;
+            _globalDirectoryCacheExpiry = DateTime.UtcNow + DirectoryCacheTtl;
+            return cache;
+        }
+        finally
         {
-            var kinds = await client.GetKindsAsync(ct);
-            if (kinds.Data != null) cache["Пол"] = kinds.Data;
+            _globalCacheLock.Release();
         }
-        catch { /* non-critical */ }
-
-        try
-        {
-            var countries = await client.GetCountriesAsync(ct);
-            if (countries.Data != null) cache["Страна производства"] = countries.Data;
-        }
-        catch { /* non-critical */ }
-
-        try
-        {
-            var seasons = await client.GetSeasonsAsync(ct);
-            if (seasons.Data != null) cache["Сезон"] = seasons.Data;
-        }
-        catch { /* non-critical */ }
-
-        return cache;
     }
 
     #endregion

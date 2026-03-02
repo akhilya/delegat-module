@@ -89,22 +89,34 @@ public class WildberriesApiClient
             ApiDomain.Content, "/content/v2/directory/colors?locale=ru", ct);
     }
 
-    public async Task<WbDirectoryResponse> GetKindsAsync(CancellationToken ct = default)
+    public async Task<WbStringDirectoryResponse> GetKindsAsync(CancellationToken ct = default)
     {
-        return await GetAsync<WbDirectoryResponse>(
+        return await GetAsync<WbStringDirectoryResponse>(
             ApiDomain.Content, "/content/v2/directory/kinds?locale=ru", ct);
     }
 
-    public async Task<WbDirectoryResponse> GetCountriesAsync(CancellationToken ct = default)
+    public async Task<WbCountryDirectoryResponse> GetCountriesAsync(CancellationToken ct = default)
     {
-        return await GetAsync<WbDirectoryResponse>(
+        return await GetAsync<WbCountryDirectoryResponse>(
             ApiDomain.Content, "/content/v2/directory/countries?locale=ru", ct);
     }
 
-    public async Task<WbDirectoryResponse> GetSeasonsAsync(CancellationToken ct = default)
+    public async Task<WbStringDirectoryResponse> GetSeasonsAsync(CancellationToken ct = default)
     {
-        return await GetAsync<WbDirectoryResponse>(
+        return await GetAsync<WbStringDirectoryResponse>(
             ApiDomain.Content, "/content/v2/directory/seasons?locale=ru", ct);
+    }
+
+    public async Task<WbStringDirectoryResponse> GetVatRatesAsync(CancellationToken ct = default)
+    {
+        return await GetAsync<WbStringDirectoryResponse>(
+            ApiDomain.Content, "/content/v2/directory/vat?locale=ru", ct);
+    }
+
+    public async Task<WbTnvedDirectoryResponse> GetTnvedAsync(int subjectId, CancellationToken ct = default)
+    {
+        return await GetAsync<WbTnvedDirectoryResponse>(
+            ApiDomain.Content, $"/content/v2/directory/tnved?subjectID={subjectId}&locale=ru", ct);
     }
 
     #endregion

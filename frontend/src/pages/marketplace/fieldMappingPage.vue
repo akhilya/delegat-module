@@ -28,7 +28,14 @@ import {
   Eye,
   Settings2,
   ArrowRight,
+  Info,
 } from "lucide-vue-next";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Card,
   CardContent,
@@ -96,6 +103,11 @@ export default {
     Eye,
     Settings2,
     ArrowRight,
+    Info,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
     Card,
     CardContent,
     CardDescription,
@@ -145,6 +157,8 @@ export default {
       previewData: {}, // keyed by externalFieldKey
       isLoadingPreview: false,
       previewDebounceTimer: null,
+      // External field descriptions keyed by externalFieldKey
+      externalFieldDescriptions: {},
       // Modifier sheet
       editingFieldMapping: null,
       showModifierSheet: false,
@@ -241,6 +255,7 @@ export default {
       "toggleFieldMapping",
       "updateFieldMapping",
       "getAvailableSources",
+      "getExternalFields",
       "previewFieldMappings",
       "getAllProducts",
     ]),
@@ -253,6 +268,9 @@ export default {
         this.fetchPreviewProducts(),
       ]);
       this.isLoading = false;
+
+      // Load descriptions separately — non-blocking, non-critical
+      this.fetchExternalFieldDescriptions();
     },
 
     async fetchFieldMappings() {
@@ -295,6 +313,21 @@ export default {
         onError: (error) => {
           displaySonnerError(error);
         },
+      });
+    },
+
+    async fetchExternalFieldDescriptions() {
+      await this.getExternalFields({
+        mappingId: this.mappingId,
+        onSuccess: (response) => {
+          const fields = extractResponseData(response, []);
+          const descMap = {};
+          for (const f of fields) {
+            if (f.description) descMap[f.key] = f.description;
+          }
+          this.externalFieldDescriptions = descMap;
+        },
+        onError: () => { /* non-critical */ },
       });
     },
 
@@ -816,6 +849,16 @@ export default {
                     <Badge v-if="fm.isCustom" variant="outline" class="text-xs py-0 h-5">
                       вручную
                     </Badge>
+                    <TooltipProvider v-if="externalFieldDescriptions[fm.externalFieldKey]">
+                      <Tooltip>
+                        <TooltipTrigger as-child>
+                          <Info class="size-3.5 text-muted-foreground cursor-help shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" class="max-w-xs">
+                          <p>{{ externalFieldDescriptions[fm.externalFieldKey] }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </span>
                   <span class="text-xs text-muted-foreground">
                     {{ fm.externalFieldKey }}
