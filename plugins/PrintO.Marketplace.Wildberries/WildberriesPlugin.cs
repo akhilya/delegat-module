@@ -236,21 +236,21 @@ public class WildberriesPlugin : MarketplacePluginBase
             Description: "Уникальный артикул товара в вашей системе (до 72 символов)", SortOrder: 0, MaxLength: 72));
         fields.Add(new ExternalField("name", "Наименование", true, "string",
             Description: "Название товара, отображаемое на сайте (до 60 символов)", SortOrder: 1, MaxLength: 60));
-        fields.Add(new ExternalField("description", "Описание", false, "string",
+        fields.Add(new ExternalField("description", "Описание", true, "string",
             Description: "Подробное описание товара (до 5000 символов)", SortOrder: 2, MaxLength: 5000));
         fields.Add(new ExternalField("brand", "Бренд", true, "string",
             Description: "Название бренда товара. Должно точно совпадать с названием бренда в системе WB", SortOrder: 3));
         fields.Add(new ExternalField("price", "Цена (руб)", true, "number",
             Description: "Цена товара в рублях до скидки", SortOrder: 4));
-        fields.Add(new ExternalField("length", "Длина (см)", false, "number",
+        fields.Add(new ExternalField("length", "Длина (см)", true, "number",
             Description: "Длина упаковки в сантиметрах", SortOrder: 5, Group: "Габариты"));
-        fields.Add(new ExternalField("width", "Ширина (см)", false, "number",
+        fields.Add(new ExternalField("width", "Ширина (см)", true, "number",
             Description: "Ширина упаковки в сантиметрах", SortOrder: 6, Group: "Габариты"));
-        fields.Add(new ExternalField("height", "Высота (см)", false, "number",
+        fields.Add(new ExternalField("height", "Высота (см)", true, "number",
             Description: "Высота упаковки в сантиметрах", SortOrder: 7, Group: "Габариты"));
-        fields.Add(new ExternalField("weight", "Вес брутто (кг)", false, "number",
+        fields.Add(new ExternalField("weight", "Вес брутто (кг)", true, "number",
             Description: "Вес товара с упаковкой в килограммах", SortOrder: 8, Group: "Габариты"));
-        fields.Add(new ExternalField("images", "Изображения (URL через запятую)", false, "string",
+        fields.Add(new ExternalField("images", "Изображения (URL через запятую)", true, "string",
             Description: "Ссылки на изображения товара (через запятую). Минимум 1, максимум 30", SortOrder: 9));
 
         if (response.Data == null) return fields;
@@ -627,9 +627,9 @@ public class WildberriesPlugin : MarketplacePluginBase
         Dictionary<string, object> data,
         CancellationToken ct)
     {
-        var subjectId = GetIntValue(data, "categoryId");
+        var subjectId = GetIntValue(data, "_categoryId");
         if (subjectId == 0)
-            return new ExportResult(false, ErrorMessage: "categoryId is required");
+            return new ExportResult(false, ErrorMessage: "_categoryId is required");
 
         var vendorCode = GetStringValue(data, "sku");
         if (string.IsNullOrEmpty(vendorCode))

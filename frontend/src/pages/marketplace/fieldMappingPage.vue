@@ -29,6 +29,9 @@ import {
   Settings2,
   ArrowRight,
   Info,
+  Download,
+  Upload,
+  X,
 } from "lucide-vue-next";
 import {
   Tooltip,
@@ -136,6 +139,9 @@ export default {
     SheetHeader,
     SheetTitle,
     SheetDescription,
+    Download,
+    Upload,
+    X,
   },
   data() {
     return {
@@ -281,6 +287,7 @@ export default {
           this.fieldMappings = (data.fieldMappings || []).map((fm) => ({
             ...fm,
             rawTextMode: false,
+            _newStaticValue: "",
             parsedOptions: fm.externalFieldOptions
               ? (() => { try { return JSON.parse(fm.externalFieldOptions); } catch { return []; } })()
               : [],
@@ -403,6 +410,42 @@ export default {
         const opt = (fm.parsedOptions || []).find((o) => o.value === val);
         return opt ? opt.label : val;
       });
+    },
+
+    getStaticValues(fm) {
+      const values = this._parseMultiselectValue(fm.staticValue);
+      return values.map((val) => {
+        const opt = (fm.parsedOptions || []).find((o) => o.value === val);
+        return { value: val, label: opt ? opt.label : val };
+      });
+    },
+
+    addStaticValue(fm, value) {
+      if (!value) return;
+      const current = this._parseMultiselectValue(fm.staticValue);
+      if (current.includes(value)) return;
+      current.push(value);
+      fm.staticValue = JSON.stringify(current);
+      this.hasChanges = true;
+    },
+
+    removeStaticValue(fm, index) {
+      const current = this._parseMultiselectValue(fm.staticValue);
+      current.splice(index, 1);
+      fm.staticValue = current.length ? JSON.stringify(current) : "";
+      this.hasChanges = true;
+    },
+
+    getAvailableOptions(fm) {
+      const selected = this._parseMultiselectValue(fm.staticValue);
+      return (fm.parsedOptions || []).filter((o) => !selected.includes(o.value));
+    },
+
+    addFreeformStaticValue(fm) {
+      const val = (fm._newStaticValue || "").trim();
+      if (!val) return;
+      this.addStaticValue(fm, val);
+      fm._newStaticValue = "";
     },
 
     onMultiselectDropdownChange(fm, selectedLabels) {
@@ -703,6 +746,71 @@ export default {
         this.hasChanges = true;
       }
     },
+    exportMappings() {
+      const data = this.fieldMappings.map((fm) => ({
+        externalFieldKey: fm.externalFieldKey,
+        externalFieldName: fm.externalFieldName,
+        externalFieldType: fm.externalFieldType,
+        isRequired: fm.isRequired,
+        isEnabled: fm.isEnabled,
+        sourceType: fm.sourceType,
+        sourceField: fm.sourceField,
+        sourceAttributeId: fm.sourceAttributeId,
+        staticValue: fm.staticValue,
+        modifiersJson: fm.parsedModifiers && fm.parsedModifiers.length
+          ? JSON.stringify(fm.parsedModifiers)
+          : null,
+      }));
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mapping-${this.mappingId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    triggerImport() {
+      this.$refs.importFileInput.click();
+    },
+    importMappings(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (!Array.isArray(imported)) {
+            displaySonnerError({ message: "Неверный формат файла" });
+            return;
+          }
+          let updated = 0;
+          for (const item of imported) {
+            const fm = this.fieldMappings.find(
+              (f) => f.externalFieldKey === item.externalFieldKey
+            );
+            if (!fm) continue;
+            if (item.isEnabled !== undefined) fm.isEnabled = item.isEnabled;
+            if (item.sourceType !== undefined) fm.sourceType = item.sourceType;
+            if (item.sourceField !== undefined) fm.sourceField = item.sourceField;
+            if (item.sourceAttributeId !== undefined) fm.sourceAttributeId = item.sourceAttributeId;
+            if (item.staticValue !== undefined) fm.staticValue = item.staticValue;
+            if (item.modifiersJson) {
+              try {
+                fm.parsedModifiers = JSON.parse(item.modifiersJson);
+              } catch { /* ignore bad modifiers */ }
+            }
+            updated++;
+          }
+          this.hasChanges = true;
+          displaySonnerSuccess(`Импортировано: ${updated} полей`);
+        } catch {
+          displaySonnerError({ message: "Ошибка чтения файла" });
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    },
   },
   mounted() {
     this.connectionId = this.$route.params.connId;
@@ -739,6 +847,14 @@ export default {
           <Plus class="size-4 mr-2" />
           Добавить поле
         </Button>
+        <Button variant="outline" size="sm" @click="exportMappings">
+          <Download class="size-4 mr-2" /> Экспорт
+        </Button>
+        <Button variant="outline" size="sm" @click="triggerImport">
+          <Upload class="size-4 mr-2" /> Импорт
+        </Button>
+        <input ref="importFileInput" type="file" accept=".json" class="hidden"
+               @change="importMappings" />
         <Button @click="handleSave" :disabled="isSaving || !hasChanges">
           <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
           <Save v-else class="size-4 mr-2" />
@@ -1015,22 +1131,60 @@ export default {
                     </div>
                   </template>
 
-                  <!-- Multiselect field with MultiSelectDropdown -->
-                  <template v-else-if="fm.externalFieldType === 'multiselect' && fm.parsedOptions?.length">
+                  <!-- Multiselect field with chip/tag UI -->
+                  <template v-else-if="fm.externalFieldType === 'multiselect'">
                     <div class="flex items-center gap-2">
-                      <MultiSelectDropdown
-                        class="flex-1"
-                        :options="fm.parsedOptions.map(o => o.label)"
-                        :model-value="getMultiselectLabels(fm)"
-                        @update:modelValue="(v) => onMultiselectDropdownChange(fm, v)"
-                        placeholder="Выберите значения"
-                        :disabled="!fm.isEnabled"
-                      />
-                      <button
-                        type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
-                        @click="toggleRawTextMode(fm)"
-                      >Вручную</button>
+                      <!-- С опциями маркетплейса: chips + SearchableSelect -->
+                      <template v-if="fm.parsedOptions?.length">
+                        <div class="flex-1 flex flex-col gap-1.5">
+                          <div v-if="getStaticValues(fm).length" class="flex flex-wrap gap-1">
+                            <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
+                                   class="flex items-center gap-1 pl-2 pr-1 py-0.5">
+                              <span class="text-xs">{{ v.label }}</span>
+                              <button type="button" @click="removeStaticValue(fm, i)"
+                                      class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
+                                <X class="size-3" />
+                              </button>
+                            </Badge>
+                          </div>
+                          <SearchableSelect
+                            :options="getAvailableOptions(fm)"
+                            model-value=""
+                            @update:modelValue="v => addStaticValue(fm, v)"
+                            placeholder="Добавить значение..."
+                            :disabled="!fm.isEnabled"
+                          />
+                        </div>
+                      </template>
+                      <!-- Без опций: chips внутри поля ввода -->
+                      <template v-else>
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background focus-within:ring-1 focus-within:ring-ring">
+                          <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
+                                 class="flex items-center gap-1 pl-2 pr-1 py-0.5">
+                            <span class="text-xs">{{ v.label }}</span>
+                            <button type="button" @click="removeStaticValue(fm, i)"
+                                    class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
+                              <X class="size-3" />
+                            </button>
+                          </Badge>
+                          <input
+                            class="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                            :value="fm._newStaticValue"
+                            @input="e => fm._newStaticValue = e.target.value"
+                            @keydown.enter.prevent="addFreeformStaticValue(fm)"
+                            placeholder="Введите и нажмите Enter"
+                            :disabled="!fm.isEnabled"
+                          />
+                        </div>
+                        <Button variant="outline" size="icon" class="shrink-0"
+                                @click="addFreeformStaticValue(fm)"
+                                :disabled="!fm.isEnabled || !fm._newStaticValue?.trim()">
+                          <Plus class="size-4" />
+                        </Button>
+                      </template>
+                      <button type="button"
+                              class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                              @click="toggleRawTextMode(fm)">Вручную</button>
                     </div>
                   </template>
 
