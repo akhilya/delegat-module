@@ -238,7 +238,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             Description: "Название товара, отображаемое на сайте (до 60 символов)", SortOrder: 1, MaxLength: 60));
         fields.Add(new ExternalField("description", "Описание", true, "string",
             Description: "Подробное описание товара (до 5000 символов)", SortOrder: 2, MaxLength: 5000));
-        fields.Add(new ExternalField("brand", "Бренд", true, "string",
+        fields.Add(new ExternalField("brand", "Бренд", false, "string",
             Description: "Название бренда товара. Должно точно совпадать с названием бренда в системе WB", SortOrder: 3));
         fields.Add(new ExternalField("price", "Цена (руб)", true, "number",
             Description: "Цена товара в рублях до скидки", SortOrder: 4));
@@ -634,6 +634,25 @@ public class WildberriesPlugin : MarketplacePluginBase
         var vendorCode = GetStringValue(data, "sku");
         if (string.IsNullOrEmpty(vendorCode))
             return new ExportResult(false, ErrorMessage: "sku (vendorCode) is required");
+
+        // Check if a card with this vendorCode already exists on WB
+        var searchRequest = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Filter = new WbCardsListFilter { TextSearch = vendorCode, WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 10 }
+            }
+        };
+        var searchResponse = await client.GetCardsListAsync(searchRequest, ct);
+        var existingCard = searchResponse.Cards?.FirstOrDefault(c =>
+            c.VendorCode.Equals(vendorCode, StringComparison.OrdinalIgnoreCase));
+
+        if (existingCard != null)
+        {
+            // Card already exists on WB — update instead of creating a duplicate
+            return await UpdateProductAsync(client, data, existingCard.NmId.ToString(), ct);
+        }
 
         var variant = new WbCardVariant
         {
