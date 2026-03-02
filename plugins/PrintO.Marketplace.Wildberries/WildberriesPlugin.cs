@@ -654,23 +654,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             return await UpdateProductAsync(client, data, existingCard.NmId.ToString(), ct);
         }
 
-        var variant = new WbCardVariant
-        {
-            VendorCode = vendorCode,
-            Title = GetStringValue(data, "name"),
-            Description = GetStringValue(data, "description"),
-            Brand = GetStringValue(data, "brand"),
-            Dimensions = BuildDimensions(data),
-            Characteristics = BuildCharacteristics(data),
-            Sizes = new List<WbCardCreateSize>
-            {
-                new WbCardCreateSize
-                {
-                    TechSize = "0",
-                    Price = GetIntValue(data, "price")
-                }
-            }
-        };
+        var variant = BuildVariant(data, vendorCode);
 
         var group = new WbCardCreateGroup
         {
@@ -887,6 +871,466 @@ public class WildberriesPlugin : MarketplacePluginBase
             return new ExportResult(false, externalProductId, ex.Message);
         }
     }
+
+    #region Bulk Export
+
+    public override async Task<BulkExportResult> ExportProductsBulkAsync(
+        ConnectionContext context,
+        List<BulkExportItem> items,
+        CancellationToken ct = default)
+    {
+        var client = CreateClient(context);
+        var results = new List<ExportItemResult>();
+        int successCount = 0, failedCount = 0;
+
+        // Phase 1: Validation — fail invalid items immediately
+        var validItems = new List<BulkExportItem>();
+        foreach (var item in items)
+        {
+            var sku = GetStringValue(item.ProductData, "sku");
+            var categoryId = GetIntValue(item.ProductData, "_categoryId");
+
+            if (string.IsNullOrEmpty(sku))
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: "sku (vendorCode) is required"));
+                failedCount++;
+                continue;
+            }
+
+            if (categoryId == 0 && item.ExistingExternalId == null)
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: "_categoryId is required for new products"));
+                failedCount++;
+                continue;
+            }
+
+            validItems.Add(item);
+        }
+
+        // Phase 2: Partition into creates (no ExternalId) and updates (have ExternalId)
+        var creates = validItems.Where(i => i.ExistingExternalId == null).ToList();
+        var updates = validItems.Where(i => i.ExistingExternalId != null).ToList();
+
+        // Phase 3: Pre-check — find which "creates" already exist on WB by vendorCode
+        if (creates.Count > 0)
+        {
+            var createVendorCodes = creates
+                .Select(i => GetStringValue(i.ProductData, "sku")!)
+                .ToList();
+
+            var existingCards = await FetchExistingCardsMapAsync(client, createVendorCodes, ct);
+
+            if (existingCards.Count > 0)
+            {
+                var movedToUpdate = new List<BulkExportItem>();
+                var remainingCreates = new List<BulkExportItem>();
+
+                foreach (var item in creates)
+                {
+                    var vc = GetStringValue(item.ProductData, "sku")!;
+                    if (existingCards.TryGetValue(vc, out var card))
+                    {
+                        // Move to updates with the existing nmId
+                        updates.Add(new BulkExportItem(
+                            item.LocalProductId,
+                            item.ProductData,
+                            card.NmId.ToString()));
+                    }
+                    else
+                    {
+                        remainingCreates.Add(item);
+                    }
+                }
+
+                creates = remainingCreates;
+            }
+        }
+
+        // Phase 4: Batch create
+        if (creates.Count > 0)
+        {
+            // Group by subjectId for the WB API
+            var groups = creates
+                .GroupBy(i => GetIntValue(i.ProductData, "_categoryId"))
+                .Select(g => new WbCardCreateGroup
+                {
+                    SubjectId = g.Key,
+                    Variants = g.Select(i =>
+                        BuildVariant(i.ProductData, GetStringValue(i.ProductData, "sku")!)).ToList()
+                })
+                .ToList();
+
+            try
+            {
+                var response = await client.CreateCardsAsync(groups, ct);
+
+                if (response.Error)
+                {
+                    // Batch create failed entirely — fallback to individual creates
+                    Console.WriteLine($"[WbPlugin] Batch create failed: {response.ErrorText}. Falling back to individual creates.");
+                    var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, ct);
+                    foreach (var r in fallbackResults)
+                    {
+                        results.Add(r);
+                        if (r.Success) successCount++; else failedCount++;
+                    }
+                }
+                else
+                {
+                    // Phase 5: Batch poll for created cards
+                    var createdVendorCodes = creates
+                        .Select(i => GetStringValue(i.ProductData, "sku")!)
+                        .ToList();
+
+                    var foundCards = await BatchPollForCreatedCardsAsync(client, createdVendorCodes, ct);
+
+                    // Check errors for cards that weren't found
+                    var missingVendorCodes = createdVendorCodes
+                        .Where(vc => !foundCards.ContainsKey(vc))
+                        .ToList();
+
+                    Dictionary<string, string> cardErrors = new();
+                    if (missingVendorCodes.Count > 0)
+                    {
+                        cardErrors = await BatchCheckCardErrorsAsync(client, missingVendorCodes, ct);
+                    }
+
+                    // Build results for each created item
+                    foreach (var item in creates)
+                    {
+                        var vc = GetStringValue(item.ProductData, "sku")!;
+
+                        if (foundCards.TryGetValue(vc, out var nmId))
+                        {
+                            // Upload images with retry
+                            var imageUrls = GetImageUrls(item.ProductData);
+                            string? imageWarning = null;
+                            if (imageUrls.Count > 0)
+                            {
+                                var (imgOk, imgErr) = await UploadImagesWithRetryAsync(client, nmId, imageUrls, 2, ct);
+                                if (!imgOk)
+                                    imageWarning = $"Card created but image upload failed: {imgErr}";
+                            }
+
+                            results.Add(new ExportItemResult(item.LocalProductId, true,
+                                nmId.ToString(), imageWarning));
+                            successCount++;
+                        }
+                        else if (cardErrors.TryGetValue(vc, out var errorMsg))
+                        {
+                            results.Add(new ExportItemResult(item.LocalProductId, false,
+                                ErrorMessage: $"Card creation failed: {errorMsg}"));
+                            failedCount++;
+                        }
+                        else
+                        {
+                            results.Add(new ExportItemResult(item.LocalProductId, false,
+                                ErrorMessage: "Card created but could not be found. It may still be processing."));
+                            failedCount++;
+                        }
+                    }
+                }
+            }
+            catch (WildberriesApiException ex)
+            {
+                // Entire batch API call threw — fallback to individual
+                Console.WriteLine($"[WbPlugin] Batch create threw: {ex.Message}. Falling back to individual creates.");
+                var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, ct);
+                foreach (var r in fallbackResults)
+                {
+                    results.Add(r);
+                    if (r.Success) successCount++; else failedCount++;
+                }
+            }
+        }
+
+        // Phase 6: Updates (sequential — UpdateProductAsync is already fast)
+        foreach (var item in updates)
+        {
+            try
+            {
+                var result = await UpdateProductAsync(client, item.ProductData, item.ExistingExternalId!, ct);
+                results.Add(new ExportItemResult(
+                    item.LocalProductId, result.Success, result.ExternalProductId, result.ErrorMessage));
+                if (result.Success) successCount++; else failedCount++;
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: ex.Message));
+                failedCount++;
+            }
+        }
+
+        return new BulkExportResult(items.Count, successCount, failedCount, results);
+    }
+
+    private async Task<List<ExportItemResult>> FallbackIndividualCreatesAsync(
+        WildberriesApiClient client,
+        List<BulkExportItem> creates,
+        CancellationToken ct)
+    {
+        var results = new List<ExportItemResult>();
+        foreach (var item in creates)
+        {
+            try
+            {
+                var result = await CreateProductAsync(client, item.ProductData, ct);
+                results.Add(new ExportItemResult(
+                    item.LocalProductId, result.Success, result.ExternalProductId, result.ErrorMessage));
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: ex.Message));
+            }
+        }
+        return results;
+    }
+
+    private static async Task<Dictionary<string, WbCard>> FetchExistingCardsMapAsync(
+        WildberriesApiClient client,
+        List<string> vendorCodes,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, WbCard>(StringComparer.OrdinalIgnoreCase);
+
+        if (vendorCodes.Count <= 5)
+        {
+            // Individual TextSearch for small batches
+            foreach (var vc in vendorCodes)
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor { Limit = 10 }
+                    }
+                };
+                var response = await client.GetCardsListAsync(request, ct);
+                var card = response.Cards?.FirstOrDefault(c =>
+                    c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
+                if (card != null)
+                    result[vc] = card;
+            }
+        }
+        else
+        {
+            // Full pagination — match in memory
+            var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
+            string? cursorUpdatedAt = null;
+            int? cursorNmId = null;
+
+            while (remaining.Count > 0)
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor
+                        {
+                            Limit = 100,
+                            UpdatedAt = cursorUpdatedAt,
+                            NmId = cursorNmId
+                        }
+                    }
+                };
+
+                var response = await client.GetCardsListAsync(request, ct);
+                if (response.Cards == null || response.Cards.Count == 0) break;
+
+                foreach (var card in response.Cards)
+                {
+                    if (remaining.Contains(card.VendorCode))
+                    {
+                        result[card.VendorCode] = card;
+                        remaining.Remove(card.VendorCode);
+                    }
+                }
+
+                // Short-circuit when all found
+                if (remaining.Count == 0) break;
+
+                // Check if there are more pages
+                if (response.Cursor?.Total == 0) break;
+                cursorUpdatedAt = response.Cursor?.UpdatedAt;
+                cursorNmId = response.Cursor?.NmId;
+                if (cursorUpdatedAt == null) break;
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<Dictionary<string, int>> BatchPollForCreatedCardsAsync(
+        WildberriesApiClient client,
+        List<string> vendorCodes,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
+
+        // Initial wait for WB batch processing
+        await Task.Delay(7000, ct);
+
+        for (int attempt = 0; attempt < 5 && remaining.Count > 0; attempt++)
+        {
+            // Paginate through all cards looking for our vendorCodes
+            string? cursorUpdatedAt = null;
+            int? cursorNmId = null;
+
+            while (remaining.Count > 0)
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor
+                        {
+                            Limit = 100,
+                            UpdatedAt = cursorUpdatedAt,
+                            NmId = cursorNmId
+                        }
+                    }
+                };
+
+                var response = await client.GetCardsListAsync(request, ct);
+                if (response.Cards == null || response.Cards.Count == 0) break;
+
+                foreach (var card in response.Cards)
+                {
+                    if (remaining.Contains(card.VendorCode))
+                    {
+                        result[card.VendorCode] = card.NmId;
+                        remaining.Remove(card.VendorCode);
+                    }
+                }
+
+                if (remaining.Count == 0) break;
+                if (response.Cursor?.Total == 0) break;
+                cursorUpdatedAt = response.Cursor?.UpdatedAt;
+                cursorNmId = response.Cursor?.NmId;
+                if (cursorUpdatedAt == null) break;
+            }
+
+            if (remaining.Count == 0) break;
+            await Task.Delay(5000, ct);
+        }
+
+        // Final fallback: individual TextSearch for any still missing
+        if (remaining.Count > 0)
+        {
+            foreach (var vc in remaining.ToList())
+            {
+                var request = new WbCardsListRequest
+                {
+                    Settings = new WbCardsListSettings
+                    {
+                        Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
+                        Cursor = new WbCardsListCursor { Limit = 10 }
+                    }
+                };
+                var response = await client.GetCardsListAsync(request, ct);
+                var card = response.Cards?.FirstOrDefault(c =>
+                    c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
+                if (card != null)
+                {
+                    result[vc] = card.NmId;
+                    remaining.Remove(vc);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<Dictionary<string, string>> BatchCheckCardErrorsAsync(
+        WildberriesApiClient client,
+        List<string> vendorCodes,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var errorRequest = new WbCardErrorListRequest
+            {
+                Cursor = new WbCardErrorCursor { Limit = 100 },
+                Order = new WbCardErrorOrder { Ascending = false }
+            };
+            var errorResponse = await client.GetCardErrorsAsync(errorRequest, ct);
+
+            if (errorResponse.Data?.Items != null)
+            {
+                foreach (var batch in errorResponse.Data.Items)
+                {
+                    if (batch.Errors == null) continue;
+                    foreach (var vc in remaining.ToList())
+                    {
+                        if (batch.Errors.TryGetValue(vc, out var errors))
+                        {
+                            result[vc] = string.Join("; ", errors);
+                            remaining.Remove(vc);
+                        }
+                    }
+                    if (remaining.Count == 0) break;
+                }
+            }
+        }
+        catch { /* non-critical */ }
+
+        return result;
+    }
+
+    private static async Task<(bool Success, string? Error)> UploadImagesWithRetryAsync(
+        WildberriesApiClient client,
+        int nmId,
+        List<string> imageUrls,
+        int maxRetries,
+        CancellationToken ct)
+    {
+        for (int attempt = 0; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                var response = await client.SaveMediaByUrlAsync(new WbMediaSaveRequest
+                {
+                    NmId = nmId,
+                    Data = imageUrls
+                }, ct);
+
+                if (response.Error)
+                {
+                    var errorMsg = response.ErrorText ?? "Unknown image upload error";
+                    if (attempt < maxRetries)
+                    {
+                        var delay = (int)Math.Pow(2, attempt + 1) * 1000; // 2s, 4s
+                        await Task.Delay(delay, ct);
+                        continue;
+                    }
+                    return (false, errorMsg);
+                }
+
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                if (attempt < maxRetries)
+                {
+                    var delay = (int)Math.Pow(2, attempt + 1) * 1000;
+                    await Task.Delay(delay, ct);
+                    continue;
+                }
+                return (false, ex.Message);
+            }
+        }
+
+        return (false, "Max retries exceeded");
+    }
+
+    #endregion
 
     #endregion
 
@@ -1377,6 +1821,27 @@ public class WildberriesPlugin : MarketplacePluginBase
     #endregion
 
     #region Helpers
+
+    private static WbCardVariant BuildVariant(Dictionary<string, object> data, string vendorCode)
+    {
+        return new WbCardVariant
+        {
+            VendorCode = vendorCode,
+            Title = GetStringValue(data, "name"),
+            Description = GetStringValue(data, "description"),
+            Brand = GetStringValue(data, "brand"),
+            Dimensions = BuildDimensions(data),
+            Characteristics = BuildCharacteristics(data),
+            Sizes = new List<WbCardCreateSize>
+            {
+                new WbCardCreateSize
+                {
+                    TechSize = "0",
+                    Price = GetIntValue(data, "price")
+                }
+            }
+        };
+    }
 
     private static WildberriesApiClient CreateClient(ConnectionContext context)
     {
