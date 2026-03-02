@@ -1696,6 +1696,8 @@ public class WildberriesPlugin : MarketplacePluginBase
         return new PagedResult<ExternalGroup>(groups, false);
     }
 
+    private const int WbMaxGroupSize = 30;
+
     public override async Task<CreateGroupResult> CreateGroupAsync(
         ConnectionContext context, List<string> productExternalIds, string? groupName = null,
         CancellationToken ct = default)
@@ -1703,8 +1705,50 @@ public class WildberriesPlugin : MarketplacePluginBase
         if (productExternalIds.Count < 2)
             return new CreateGroupResult(false, ErrorMessage: "Need at least 2 products to create a group");
 
-        var client = CreateClient(context);
+        // WB limits merge groups to 30 cards — split into chunks if needed
+        if (productExternalIds.Count <= WbMaxGroupSize)
+            return await CreateSingleGroupAsync(context, productExternalIds, ct);
 
+        // Split into chunks of WbMaxGroupSize, each chunk becomes its own merge group
+        var chunks = productExternalIds
+            .Select((id, i) => new { id, i })
+            .GroupBy(x => x.i / WbMaxGroupSize)
+            .Select(g => g.Select(x => x.id).ToList())
+            .ToList();
+
+        var groupIds = new List<string>();
+        var errors = new List<string>();
+
+        foreach (var chunk in chunks)
+        {
+            if (chunk.Count < 2)
+            {
+                // Single-product chunk can't form a group — skip
+                continue;
+            }
+
+            var result = await CreateSingleGroupAsync(context, chunk, ct);
+            if (result.Success && result.ExternalGroupId != null)
+                groupIds.Add(result.ExternalGroupId);
+            else
+                errors.Add(result.ErrorMessage ?? "Unknown error");
+        }
+
+        if (groupIds.Count == 0)
+            return new CreateGroupResult(false, ErrorMessage: $"Failed to create any groups: {string.Join("; ", errors)}");
+
+        var details = new Dictionary<string, object>();
+        if (groupIds.Count > 1)
+            details["additionalGroupIds"] = groupIds.Skip(1).ToList();
+        if (errors.Count > 0)
+            details["errors"] = errors;
+
+        return new CreateGroupResult(true, ExternalGroupId: groupIds[0], Details: details.Count > 0 ? details : null);
+    }
+
+    private async Task<CreateGroupResult> CreateSingleGroupAsync(
+        ConnectionContext context, List<string> productExternalIds, CancellationToken ct)
+    {
         // First product already has an imtID — fetch it
         var firstId = productExternalIds[0];
         var firstProduct = await ImportProductAsync(context, firstId, ct);
@@ -1730,6 +1774,11 @@ public class WildberriesPlugin : MarketplacePluginBase
     {
         if (!int.TryParse(externalGroupId, out var imtId))
             return new GroupMembershipResult(false, ErrorMessage: $"Invalid imtID: {externalGroupId}");
+
+        // WB limits merge groups to 30 cards — reject if adding too many at once
+        if (productExternalIds.Count >= WbMaxGroupSize)
+            return new GroupMembershipResult(false,
+                ErrorMessage: $"Cannot add {productExternalIds.Count} products — WB merge group limit is {WbMaxGroupSize} cards total. Split into smaller groups.");
 
         var client = CreateClient(context);
         var errors = new List<GroupMembershipError>();

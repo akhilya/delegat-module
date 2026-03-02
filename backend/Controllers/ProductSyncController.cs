@@ -2059,42 +2059,74 @@ public class ProductSyncController : ControllerBase
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
 
+        // Load all links in one query
+        var links = await linkRepo.FindAllAsync(
+            l => input.linkIds.Contains(l.Id),
+            q => q.Include(l => l.connection));
+
         var results = new List<object>();
         int successCount = 0;
         int failedCount = 0;
 
-        foreach (var linkId in input.linkIds)
+        // Report missing/unauthorized links
+        var foundLinkIds = links.Select(l => l.Id).ToHashSet();
+        foreach (var linkId in input.linkIds.Where(id => !foundLinkIds.Contains(id)))
         {
+            results.Add(new { linkId, success = false, error = "Связь не найдена или доступ запрещён" });
+            failedCount++;
+        }
+
+        // Filter by store access
+        var authorizedLinks = links.Where(l => l.connection?.storeId == selectedStoreId.Value).ToList();
+        foreach (var link in links.Where(l => l.connection?.storeId != selectedStoreId.Value))
+        {
+            results.Add(new { linkId = link.Id, success = false, error = "Связь не найдена или доступ запрещён" });
+            failedCount++;
+        }
+
+        // Group by connectionId and call bulk export per group
+        var groups = authorizedLinks.GroupBy(l => l.connectionId);
+        foreach (var group in groups)
+        {
+            var connectionId = group.Key;
+            var groupLinks = group.ToList();
+            var productIds = groupLinks.Select(l => l.productId).Distinct().ToList();
+
+            // Build productId -> linkIds mapping (multiple links can reference same product)
+            var linksByProductId = groupLinks.GroupBy(l => l.productId)
+                .ToDictionary(g => g.Key, g => g.Select(l => l.Id).ToList());
+
             try
             {
-                var link = await linkRepo.FindAsync(
-                    l => l.Id == linkId,
-                    q => q.Include(l => l.connection));
+                var bulkResult = await _productSyncService.ExportProductsBulkAsync(productIds, connectionId, ct);
 
-                if (link == null || link.connection?.storeId != selectedStoreId.Value)
+                foreach (var item in bulkResult.Items)
                 {
-                    results.Add(new { linkId, success = false, error = "Связь не найдена или доступ запрещён" });
-                    failedCount++;
-                    continue;
-                }
+                    if (!linksByProductId.TryGetValue(item.ProductId, out var relatedLinkIds))
+                        continue;
 
-                var result = await _productSyncService.ExportProductAsync(link.productId, link.connectionId, ct);
-
-                if (result.IsSuccess)
-                {
-                    results.Add(new { linkId, success = true, externalProductId = result.ExternalProductId });
-                    successCount++;
-                }
-                else
-                {
-                    results.Add(new { linkId, success = false, error = result.ErrorMessage });
-                    failedCount++;
+                    foreach (var linkId in relatedLinkIds)
+                    {
+                        if (item.IsSuccess)
+                        {
+                            results.Add(new { linkId, success = true, externalProductId = item.ExternalProductId });
+                            successCount++;
+                        }
+                        else
+                        {
+                            results.Add(new { linkId, success = false, error = item.ErrorMessage });
+                            failedCount++;
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                results.Add(new { linkId, success = false, error = ex.Message });
-                failedCount++;
+                foreach (var link in groupLinks)
+                {
+                    results.Add(new { linkId = link.Id, success = false, error = ex.Message });
+                    failedCount++;
+                }
             }
         }
 
