@@ -1457,7 +1457,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             {
                 parsedValue = je.ValueKind switch
                 {
-                    JsonValueKind.String => new List<string> { je.GetString()! },
+                    JsonValueKind.String => ParseStringCharacteristic(je.GetString()!),
                     JsonValueKind.Number => je.TryGetInt64(out var n) ? (object)n : je.GetDouble(),
                     JsonValueKind.Array => je.EnumerateArray()
                         .Select(e => e.GetString() ?? e.ToString())
@@ -1467,7 +1467,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             }
             else if (value is string s)
             {
-                parsedValue = new List<string> { s };
+                parsedValue = ParseStringCharacteristic(s);
             }
             else if (value is IEnumerable<object> list)
             {
@@ -1482,6 +1482,18 @@ public class WildberriesPlugin : MarketplacePluginBase
         }
 
         return chars.Count > 0 ? chars : null;
+    }
+
+    /// <summary>
+    /// If the string is a valid number, return it as long/double so WB receives a numeric JSON value.
+    /// Otherwise wrap it in a list (WB expects string characteristics as string arrays).
+    /// </summary>
+    private static object ParseStringCharacteristic(string s)
+    {
+        if (long.TryParse(s, out var l)) return l;
+        if (double.TryParse(s, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
+        return new List<string> { s };
     }
 
     private static List<string> GetImageUrls(Dictionary<string, object> data)
