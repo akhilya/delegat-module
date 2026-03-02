@@ -586,6 +586,18 @@ public class ProductSyncService
     {
         try
         {
+            // Only consider successfully exported products
+            var successProductIds = itemResults
+                .Where(r => r.IsSuccess)
+                .Select(r => r.ProductId)
+                .ToHashSet();
+
+            if (successProductIds.Count == 0)
+            {
+                _logger.LogDebug("[GroupSync] No successfully exported products, skipping group sync");
+                return;
+            }
+
             // Find all product groups that contain any of the exported products
             var groupMemberships = await _context.Set<ProductGroupMember>()
                 .Include(gm => gm.group)
@@ -598,12 +610,22 @@ public class ProductSyncService
                 .Distinct()
                 .ToList();
 
-            if (groupIds.Count == 0) return;
+            if (groupIds.Count == 0)
+            {
+                _logger.LogDebug("[GroupSync] Exported products do not belong to any groups");
+                return;
+            }
+
+            _logger.LogInformation("[GroupSync] Found {GroupCount} groups to sync for connection {ConnectionId}",
+                groupIds.Count, connectionId);
 
             // Load existing group marketplace links for this connection
-            var existingGroupLinks = await _context.productGroupMarketplaceLinks
+            var existingGroupLinksRaw = await _context.productGroupMarketplaceLinks
                 .Where(gl => gl.connectionId == connectionId && groupIds.Contains(gl.productGroupId))
-                .ToDictionaryAsync(gl => gl.productGroupId, ct);
+                .ToListAsync(ct);
+            var existingGroupLinks = existingGroupLinksRaw
+                .GroupBy(gl => gl.productGroupId)
+                .ToDictionary(g => g.Key, g => g.First());
 
             // Load all product marketplace links for members of these groups
             var allGroupMemberProductIds = groupMemberships
@@ -611,9 +633,12 @@ public class ProductSyncService
                 .Distinct()
                 .ToList();
 
-            var productLinks = await _context.productMarketplaceLinks
+            var productLinksRaw = await _context.productMarketplaceLinks
                 .Where(l => l.connectionId == connectionId && allGroupMemberProductIds.Contains(l.productId))
-                .ToDictionaryAsync(l => l.productId, ct);
+                .ToListAsync(ct);
+            var productLinks = productLinksRaw
+                .GroupBy(l => l.productId)
+                .ToDictionary(g => g.Key, g => g.First());
 
             // Process each group
             foreach (var groupId in groupIds)
@@ -630,18 +655,32 @@ public class ProductSyncService
                     .ToList();
 
                 if (memberExternalIds.Count < 2)
-                    continue; // Need at least 2 products for a group
+                {
+                    _logger.LogDebug(
+                        "[GroupSync] Group {GroupId} '{GroupName}' has only {Count} exported member(s), skipping (need >= 2)",
+                        groupId, group.name, memberExternalIds.Count);
+                    continue;
+                }
 
                 existingGroupLinks.TryGetValue(groupId, out var groupLink);
 
                 if (groupLink != null && !string.IsNullOrEmpty(groupLink.externalGroupId))
                 {
                     // Group already exists — add any new members
-                    // The WB API is idempotent for adding existing members, so we can safely add all
+                    _logger.LogInformation(
+                        "[GroupSync] Updating existing group {GroupId} '{GroupName}' (externalGroupId={ExternalGroupId}) with {Count} members",
+                        groupId, group.name, groupLink.externalGroupId, memberExternalIds.Count);
                     try
                     {
                         var addResult = await adapter.AddProductsToGroupAsync(
                             connection, groupLink.externalGroupId, memberExternalIds, ct);
+
+                        if (!addResult.Success)
+                        {
+                            _logger.LogWarning(
+                                "[GroupSync] AddProductsToGroupAsync failed for group {GroupId}: {Error}",
+                                groupId, addResult.ErrorMessage);
+                        }
 
                         groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
                         {
@@ -655,13 +694,16 @@ public class ProductSyncService
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex,
-                            "Failed to update group {GroupId} membership on connection {ConnectionId}",
+                            "[GroupSync] Exception updating group {GroupId} membership on connection {ConnectionId}",
                             groupId, connectionId);
                     }
                 }
                 else
                 {
                     // Create new group
+                    _logger.LogInformation(
+                        "[GroupSync] Creating new group {GroupId} '{GroupName}' with {Count} members: [{Members}]",
+                        groupId, group.name, memberExternalIds.Count, string.Join(", ", memberExternalIds));
                     try
                     {
                         var createResult = await adapter.CreateGroupAsync(
@@ -694,20 +736,20 @@ public class ProductSyncService
                             }
 
                             _logger.LogInformation(
-                                "Created group {GroupId} on connection {ConnectionId}, externalGroupId={ExternalGroupId}",
+                                "[GroupSync] Created group {GroupId} on connection {ConnectionId}, externalGroupId={ExternalGroupId}",
                                 groupId, connectionId, createResult.ExternalGroupId);
                         }
                         else
                         {
                             _logger.LogWarning(
-                                "Failed to create group {GroupId} on connection {ConnectionId}: {Error}",
+                                "[GroupSync] CreateGroupAsync failed for group {GroupId}: {Error}",
                                 groupId, connectionId, createResult.ErrorMessage);
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex,
-                            "Failed to create group {GroupId} on connection {ConnectionId}",
+                            "[GroupSync] Exception creating group {GroupId} on connection {ConnectionId}",
                             groupId, connectionId);
                     }
                 }
@@ -717,8 +759,8 @@ public class ProductSyncService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "Post-export group sync failed for connection {ConnectionId}. Products were exported successfully.",
+            _logger.LogError(ex,
+                "[GroupSync] Post-export group sync failed for connection {ConnectionId}. Products were exported successfully.",
                 connectionId);
         }
     }
