@@ -55,11 +55,11 @@ public class MappingService
             };
 
             // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
-            if (!string.IsNullOrEmpty(mapping.modifiersJson) && value != null)
+            if (!string.IsNullOrEmpty(mapping.modifiersJson))
             {
                 value = ModifierPipeline.ApplyModifiers(value, mapping.modifiersJson, modifierContext);
             }
-            else if (!string.IsNullOrEmpty(mapping.transformExpression) && value != null)
+            else if (!string.IsNullOrEmpty(mapping.transformExpression))
             {
                 value = ApplyTransform(value, mapping.transformExpression);
             }
