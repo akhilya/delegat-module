@@ -134,14 +134,17 @@ public class ProductSyncController : ControllerBase
         if (mappedLocalCategoryIds.Count == 0)
             return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
 
-        // Get product IDs already linked to this connection
+        // Get product IDs already successfully linked to this connection
+        // (exclude NotSynced/SyncError — those need to be re-exported)
         var linkedProductIds = await _context.productMarketplaceLinks
             .AsNoTracking()
-            .Where(l => l.connectionId == connectionId)
+            .Where(l => l.connectionId == connectionId
+                && (l.status == ProductMarketplaceStatus.Synced
+                    || l.status == ProductMarketplaceStatus.Modified))
             .Select(l => l.productId)
             .ToListAsync();
 
-        // Query local products: in mapped categories, not yet linked
+        // Query local products: in mapped categories, not yet successfully linked
         var query = _context.products
             .AsNoTracking()
             .Include(p => p.category)
