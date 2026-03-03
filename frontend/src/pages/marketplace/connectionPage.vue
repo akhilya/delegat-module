@@ -1735,7 +1735,17 @@ export default {
 
 <template>
   <Page class="flex flex-col">
-    <NavigationBar />
+    <NavigationBar>
+      <template v-if="connection" #center>
+        <Tabs v-model="activeTab" default-value="settings">
+          <TabsList>
+            <TabsTrigger value="settings">Настройки</TabsTrigger>
+            <TabsTrigger value="mappings">Маппинги</TabsTrigger>
+            <TabsTrigger value="products" @click="onProductsTabActivated">Товары</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </template>
+    </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -1759,12 +1769,6 @@ export default {
       </div>
 
       <Tabs v-model="activeTab" default-value="settings" class="w-full flex-1 flex flex-col">
-        <TabsList>
-          <TabsTrigger value="settings">Настройки</TabsTrigger>
-          <TabsTrigger value="mappings">Маппинги</TabsTrigger>
-          <TabsTrigger value="products" @click="onProductsTabActivated">Товары</TabsTrigger>
-        </TabsList>
-
         <!-- Settings Tab -->
         <TabsContent value="settings" class="space-y-4">
           <Card>
@@ -2122,7 +2126,7 @@ export default {
 
         <!-- Products Tab -->
         <TabsContent value="products" class="flex-1 flex flex-col space-y-4">
-          <!-- View toggle -->
+          <!-- View toggle + Search -->
           <div class="flex items-center gap-2">
             <Button
               :variant="productsViewMode === 'external' ? 'default' : 'outline'"
@@ -2138,21 +2142,28 @@ export default {
             >
               Локальные для экспорта
             </Button>
+            <div class="relative flex-1">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                v-if="productsViewMode === 'external'"
+                v-model="searchQuery"
+                placeholder="Поиск по SKU (точное совпадение)"
+                class="pl-10"
+              />
+              <Input
+                v-else
+                v-model="localSearchQuery"
+                placeholder="Поиск по названию или SKU..."
+                class="pl-10"
+              />
+            </div>
+            <div v-if="productsViewMode === 'local'" class="text-sm text-muted-foreground whitespace-nowrap">
+              Найдено: {{ localTotalCount }}
+            </div>
           </div>
 
           <!-- ==================== EXTERNAL VIEW ==================== -->
           <template v-if="productsViewMode === 'external'">
-            <!-- Search -->
-            <div class="flex items-center gap-4">
-              <div class="relative flex-1">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  v-model="searchQuery"
-                  placeholder="Поиск по SKU (точное совпадение)"
-                  class="pl-10"
-                />
-              </div>
-            </div>
 
             <!-- Loading state -->
             <div v-if="isLoadingProducts" class="flex justify-center py-12">
@@ -2387,21 +2398,6 @@ export default {
 
           <!-- ==================== LOCAL VIEW ==================== -->
           <template v-if="productsViewMode === 'local'">
-            <!-- Search -->
-            <div class="flex items-center gap-4">
-              <div class="relative flex-1">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  v-model="localSearchQuery"
-                  placeholder="Поиск по названию или SKU..."
-                  class="pl-10"
-                />
-              </div>
-              <div class="text-sm text-muted-foreground whitespace-nowrap">
-                Найдено: {{ localTotalCount }}
-              </div>
-            </div>
-
             <!-- Loading state -->
             <div v-if="isLoadingLocalProducts && localProducts.length === 0" class="flex justify-center py-12">
               <Loader2 class="size-8 animate-spin text-muted-foreground" />
