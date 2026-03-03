@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.5.2";
+    public override string Version => "1.5.3";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -1265,30 +1265,54 @@ public class WildberriesPlugin : MarketplacePluginBase
         };
     }
 
+    /// <summary>
+    /// Paginate through all seller cards (100/page) and return them.
+    /// Replaces N individual TextSearch calls with ~2-5 paginated requests.
+    /// </summary>
+    private static async Task<List<WbCard>> FetchAllCardsAsync(
+        WildberriesApiClient client, CancellationToken ct)
+    {
+        var allCards = new List<WbCard>();
+
+        var request = new WbCardsListRequest
+        {
+            Settings = new WbCardsListSettings
+            {
+                Sort = new WbCardsListSort { Ascending = false },
+                Filter = new WbCardsListFilter { WithPhoto = -1 },
+                Cursor = new WbCardsListCursor { Limit = 100 }
+            }
+        };
+
+        while (true)
+        {
+            var response = await client.GetCardsListAsync(request, ct);
+            if (response.Cards == null || response.Cards.Count == 0) break;
+            allCards.AddRange(response.Cards);
+
+            if (response.Cursor == null || response.Cards.Count < 100) break;
+
+            request.Settings.Cursor = new WbCardsListCursor
+            {
+                Limit = 100,
+                UpdatedAt = response.Cursor.UpdatedAt,
+                NmId = response.Cursor.NmId
+            };
+        }
+
+        return allCards;
+    }
+
     private static async Task<Dictionary<int, WbCard>> FetchCardsByNmIdsAsync(
         WildberriesApiClient client,
         List<int> nmIds,
         CancellationToken ct)
     {
-        var result = new Dictionary<int, WbCard>();
-
-        foreach (var nmId in nmIds)
-        {
-            var request = new WbCardsListRequest
-            {
-                Settings = new WbCardsListSettings
-                {
-                    Filter = new WbCardsListFilter { TextSearch = nmId.ToString(), WithPhoto = -1 },
-                    Cursor = new WbCardsListCursor { Limit = 10 }
-                }
-            };
-            var response = await client.GetCardsListAsync(request, ct);
-            var card = response.Cards?.FirstOrDefault(c => c.NmId == nmId);
-            if (card != null)
-                result[nmId] = card;
-        }
-
-        return result;
+        var nmIdSet = new HashSet<int>(nmIds);
+        var allCards = await FetchAllCardsAsync(client, ct);
+        return allCards
+            .Where(c => nmIdSet.Contains(c.NmId))
+            .ToDictionary(c => c.NmId, c => c);
     }
 
     private async Task<List<ExportItemResult>> FallbackIndividualCreatesAsync(
@@ -1319,26 +1343,11 @@ public class WildberriesPlugin : MarketplacePluginBase
         List<string> vendorCodes,
         CancellationToken ct)
     {
-        var result = new Dictionary<string, WbCard>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var vc in vendorCodes)
-        {
-            var request = new WbCardsListRequest
-            {
-                Settings = new WbCardsListSettings
-                {
-                    Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
-                    Cursor = new WbCardsListCursor { Limit = 10 }
-                }
-            };
-            var response = await client.GetCardsListAsync(request, ct);
-            var card = response.Cards?.FirstOrDefault(c =>
-                c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
-            if (card != null)
-                result[vc] = card;
-        }
-
-        return result;
+        var vendorCodeSet = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
+        var allCards = await FetchAllCardsAsync(client, ct);
+        return allCards
+            .Where(c => vendorCodeSet.Contains(c.VendorCode))
+            .ToDictionary(c => c.VendorCode, c => c, StringComparer.OrdinalIgnoreCase);
     }
 
     private static async Task<Dictionary<string, int>> BatchPollForCreatedCardsAsync(
@@ -1350,30 +1359,19 @@ public class WildberriesPlugin : MarketplacePluginBase
         var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
 
         // Initial wait — WB needs time to index newly created cards
-        await Task.Delay(10_000, ct);
+        await Task.Delay(5_000, ct);
 
         for (int attempt = 0; attempt < 5 && remaining.Count > 0; attempt++)
         {
-            if (attempt > 0) await Task.Delay(10_000, ct);
+            if (attempt > 0) await Task.Delay(5_000, ct);
 
-            // Use targeted TextSearch per vendorCode instead of paginating all cards
-            foreach (var vc in remaining.ToList())
+            var allCards = await FetchAllCardsAsync(client, ct);
+            foreach (var card in allCards)
             {
-                var request = new WbCardsListRequest
+                if (remaining.Contains(card.VendorCode))
                 {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor { Limit = 10 }
-                    }
-                };
-                var response = await client.GetCardsListAsync(request, ct);
-                var card = response.Cards?.FirstOrDefault(c =>
-                    c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
-                if (card != null)
-                {
-                    result[vc] = card.NmId;
-                    remaining.Remove(vc);
+                    result[card.VendorCode] = card.NmId;
+                    remaining.Remove(card.VendorCode);
                 }
             }
         }
@@ -1742,42 +1740,18 @@ public class WildberriesPlugin : MarketplacePluginBase
     private static async Task<Dictionary<int, List<int>>> BuildChrtIdMapAsync(
         WildberriesApiClient client, CancellationToken ct)
     {
+        var allCards = await FetchAllCardsAsync(client, ct);
         var map = new Dictionary<int, List<int>>();
 
-        var request = new WbCardsListRequest
+        foreach (var card in allCards)
         {
-            Settings = new WbCardsListSettings
+            if (card.Sizes != null)
             {
-                Sort = new WbCardsListSort { Ascending = false },
-                Filter = new WbCardsListFilter { WithPhoto = -1 },
-                Cursor = new WbCardsListCursor { Limit = 100 }
+                map[card.NmId] = card.Sizes
+                    .Where(s => s.ChrtId > 0)
+                    .Select(s => s.ChrtId)
+                    .ToList();
             }
-        };
-
-        while (true)
-        {
-            var response = await client.GetCardsListAsync(request, ct);
-            if (response.Cards == null || response.Cards.Count == 0) break;
-
-            foreach (var card in response.Cards)
-            {
-                if (card.Sizes != null)
-                {
-                    map[card.NmId] = card.Sizes
-                        .Where(s => s.ChrtId > 0)
-                        .Select(s => s.ChrtId)
-                        .ToList();
-                }
-            }
-
-            if (response.Cursor == null || response.Cards.Count < 100) break;
-
-            request.Settings.Cursor = new WbCardsListCursor
-            {
-                Limit = 100,
-                UpdatedAt = response.Cursor.UpdatedAt,
-                NmId = response.Cursor.NmId
-            };
         }
 
         return map;
