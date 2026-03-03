@@ -1,15 +1,28 @@
 <script>
-// ProductRowActionButtons - Action buttons (edit properties, manage files) for a single product table row.
+// ProductRowActionButtons - Dropdown menu with actions for a single product table row.
 import Button from "../ui/button/Button.vue";
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PAGE_PRODUCT_EDIT } from "@/router";
-import { Pencil, HardDrive } from "lucide-vue-next";
+import { EllipsisVertical, Pencil, HardDrive, ExternalLink, StickyNote, Image } from "lucide-vue-next";
 
 export default {
   components: {
     Button,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    EllipsisVertical,
     Pencil,
     HardDrive,
+    ExternalLink,
+    StickyNote,
+    Image,
   },
   props: {
     id: {
@@ -17,33 +30,46 @@ export default {
       required: true,
     },
   },
-  data() {
-    return {
-      PAGE_PRODUCT_EDIT,
-    };
+  methods: {
+    navigate(tab) {
+      this.$router.push({
+        name: PAGE_PRODUCT_EDIT,
+        params: { id: this.id },
+        query: { tab },
+      });
+    },
   },
 };
 </script>
 
 <template>
-  <div class="flex gap-2">
-    <RouterLink
-      :to="{
-        name: PAGE_PRODUCT_EDIT,
-        params: { id },
-        query: { tab: 'properties' },
-      }"
-    >
-      <Button size="icon">
-        <Pencil class="text-primary-foreground size-4" />
+  <DropdownMenu>
+    <DropdownMenuTrigger as-child>
+      <Button variant="ghost" class="w-full h-full rounded-none px-2">
+        <EllipsisVertical class="size-4" />
       </Button>
-    </RouterLink>
-    <RouterLink
-      :to="{ name: PAGE_PRODUCT_EDIT, params: { id }, query: { tab: 'files' } }"
-    >
-      <Button size="icon" variant="outline">
-        <HardDrive class="size-4" />
-      </Button>
-    </RouterLink>
-  </div>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
+      <DropdownMenuItem @click.stop="navigate('properties')">
+        <Pencil class="size-4 mr-2" />
+        Редактировать
+      </DropdownMenuItem>
+      <DropdownMenuItem @click.stop="navigate('files')">
+        <HardDrive class="size-4 mr-2" />
+        Файлы
+      </DropdownMenuItem>
+      <DropdownMenuItem @click.stop="navigate('images')">
+        <Image class="size-4 mr-2" />
+        Изображения
+      </DropdownMenuItem>
+      <DropdownMenuItem @click.stop="navigate('marketplaces')">
+        <ExternalLink class="size-4 mr-2" />
+        Маркетплейсы
+      </DropdownMenuItem>
+      <DropdownMenuItem @click.stop="navigate('notes')">
+        <StickyNote class="size-4 mr-2" />
+        Заметки
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
 </template>

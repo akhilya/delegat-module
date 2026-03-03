@@ -5,7 +5,6 @@ import { ColumnDef } from "@tanstack/vue-table";
 import { h } from "vue";
 
 import ImageFile from "../imageFile.vue";
-import ProductRowActionButtons from "./productRowActionButtons.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -211,13 +210,6 @@ export const columns: ProductColumnDef[] = [
       return h("span", { class: "text-sm tabular-nums" }, d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
     },
   },
-  {
-    id: "editAction",
-    enableHiding: false,
-    cell: ({ row }) => {
-      return h(ProductRowActionButtons, { id: row.original.id });
-    },
-  },
 ];
 
 /** Default visibility state for each column (true = visible, false = hidden). */
@@ -233,7 +225,6 @@ export const defaultVisibleColumns: Record<string, boolean> = {
   name: true,
   createdAt: false, // hidden by default
   updatedAt: false, // hidden by default
-  editAction: true,
 };
 
 /** Returns the list of columns that can be toggled on/off in the column selector. */

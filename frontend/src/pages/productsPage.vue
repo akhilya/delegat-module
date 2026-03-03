@@ -3,6 +3,7 @@ import Page from "@/components/page.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
+import ProductRowActionButtons from "@/components/products/productRowActionButtons.vue";
 import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
@@ -60,6 +61,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PAGE_PRODUCT_EDIT } from "@/router";
 
 const COLUMN_VISIBILITY_KEY = "products-column-visibility";
 const COLUMN_PRESET_KEY = "products-column-preset";
@@ -71,6 +73,7 @@ export default {
     NavigationBar,
     Breadcrumbs,
     ProductsTable,
+    ProductRowActionButtons,
     ColumnSelector,
     BulkEditDialog,
     ImportExcelDialog,
@@ -124,6 +127,13 @@ export default {
       "importProductsPreview",
       "importProductsApply",
     ]),
+
+    onRowClick(product) {
+      this.$router.push({
+        name: PAGE_PRODUCT_EDIT,
+        params: { id: product.id },
+      });
+    },
 
     async fetchProducts() {
       this.isProductsLoading = true;
@@ -586,7 +596,7 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <div
-      class="border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-auto thin-scrollbar"
+      class="border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-hidden"
     >
       <ProductsTable
         :data="products"
@@ -603,6 +613,7 @@ export default {
         @update:column-visibility="onColumnVisibilityChange"
         @update:column-order="onColumnOrderChange"
         @sort="toggleSort"
+        @row-click="onRowClick"
         class="flex-1 min-h-0"
       >
         <template #headerActions>
@@ -613,6 +624,9 @@ export default {
             @update:column-visibility="onColumnVisibilityChange"
             @update:selected-preset="onPresetChange"
           />
+        </template>
+        <template #rowActions="{ row }">
+          <ProductRowActionButtons :id="row.original.id" />
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
