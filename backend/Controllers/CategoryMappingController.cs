@@ -547,13 +547,16 @@ public class CategoryMappingController : ControllerBase
             }
             else
             {
-                // Create a new link with NotSynced status
+                // Create a new link with NotSynced status.
+                // Use a unique placeholder for externalProductId to satisfy the
+                // (externalProductId, connectionId) unique index — will be replaced
+                // with the real marketplace ID on first sync/export.
                 var newLink = new ProductMarketplaceLink();
                 newLink.AddFill(new ProductMarketplaceLink.AddForm
                 {
                     productId = selection.productId,
                     connectionId = connectionId,
-                    externalProductId = "",
+                    externalProductId = $"pending:{selection.productId}",
                     status = ProductMarketplaceStatus.NotSynced,
                     categoryMappingId = selection.categoryMappingId
                 });
