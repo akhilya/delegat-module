@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.5.1";
+    public override string Version => "1.5.2";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -965,115 +965,132 @@ public class WildberriesPlugin : MarketplacePluginBase
                 })
                 .ToList();
 
-            try
+            // WB API limit: max 30 items (variants) per request
+            var chunks = ChunkCardGroups(groups, 30);
+            var failedChunkItems = new List<BulkExportItem>();
+
+            foreach (var chunk in chunks)
             {
-                var response = await client.CreateCardsAsync(groups, ct);
-
-                if (response.Error)
+                try
                 {
-                    // Batch create failed entirely — fallback to individual creates
-                    context.Logger?.LogWarning("[WbPlugin] Batch create failed: {ErrorText}. Falling back to individual creates", response.ErrorText);
-                    var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, context.Logger, ct);
-                    foreach (var r in fallbackResults)
+                    var response = await client.CreateCardsAsync(chunk, ct);
+
+                    if (response.Error)
                     {
-                        results.Add(r);
-                        if (r.Success) successCount++; else failedCount++;
+                        // This chunk failed — collect items for fallback
+                        context.Logger?.LogWarning("[WbPlugin] Batch create chunk failed: {ErrorText}. Will fallback to individual creates", response.ErrorText);
+                        var chunkVendorCodes = chunk.SelectMany(g => g.Variants).Select(v => v.VendorCode).ToHashSet();
+                        failedChunkItems.AddRange(creates.Where(i => chunkVendorCodes.Contains(GetStringValue(i.ProductData, "sku")!)));
                     }
-                }
-                else
-                {
-                    // Phase 5: Batch poll for created cards
-                    var createdVendorCodes = creates
-                        .Select(i => GetStringValue(i.ProductData, "sku")!)
-                        .ToList();
-
-                    var foundCards = await BatchPollForCreatedCardsAsync(client, createdVendorCodes, ct);
-
-                    // Check errors for cards that weren't found
-                    var missingVendorCodes = createdVendorCodes
-                        .Where(vc => !foundCards.ContainsKey(vc))
-                        .ToList();
-
-                    Dictionary<string, string> cardErrors = new();
-                    if (missingVendorCodes.Count > 0)
+                    else
                     {
-                        cardErrors = await BatchCheckCardErrorsAsync(client, missingVendorCodes, ct);
-                    }
+                        // Collect vendor codes for this chunk only
+                        var chunkVendorCodes = chunk
+                            .SelectMany(g => g.Variants)
+                            .Select(v => v.VendorCode)
+                            .ToList();
 
-                    // Build results for each created item + collect image uploads
-                    var imageUploadsForCreates = new List<(int NmId, List<string> Urls, int LocalProductId)>();
-                    foreach (var item in creates)
-                    {
-                        var vc = GetStringValue(item.ProductData, "sku")!;
+                        var chunkItems = creates
+                            .Where(i => chunkVendorCodes.Contains(GetStringValue(i.ProductData, "sku")!))
+                            .ToList();
 
-                        if (foundCards.TryGetValue(vc, out var nmId))
+                        // Phase 5: Batch poll for created cards
+                        var foundCards = await BatchPollForCreatedCardsAsync(client, chunkVendorCodes, ct);
+
+                        // Check errors for cards that weren't found
+                        var missingVendorCodes = chunkVendorCodes
+                            .Where(vc => !foundCards.ContainsKey(vc))
+                            .ToList();
+
+                        Dictionary<string, string> cardErrors = new();
+                        if (missingVendorCodes.Count > 0)
                         {
-                            var imageUrls = GetImageUrls(item.ProductData);
-                            if (imageUrls.Count > 0)
-                                imageUploadsForCreates.Add((nmId, imageUrls, item.LocalProductId));
-
-                            results.Add(new ExportItemResult(item.LocalProductId, true,
-                                nmId.ToString()));
-                            successCount++;
+                            cardErrors = await BatchCheckCardErrorsAsync(client, missingVendorCodes, ct);
                         }
-                        else if (cardErrors.TryGetValue(vc, out var errorMsg))
-                        {
-                            results.Add(new ExportItemResult(item.LocalProductId, false,
-                                ErrorMessage: $"Card creation failed: {errorMsg}"));
-                            failedCount++;
-                        }
-                        else
-                        {
-                            results.Add(new ExportItemResult(item.LocalProductId, false,
-                                ErrorMessage: "Card created but could not be found. It may still be processing."));
-                            failedCount++;
-                        }
-                    }
 
-                    // Parallel image upload for created cards
-                    if (imageUploadsForCreates.Count > 0)
-                    {
-                        var createImageErrors = new ConcurrentDictionary<int, string>();
-                        var semaphore = new SemaphoreSlim(5);
-                        var imageTasks = imageUploadsForCreates.Select(async iu =>
+                        // Build results for each created item + collect image uploads
+                        var imageUploadsForCreates = new List<(int NmId, List<string> Urls, int LocalProductId)>();
+                        foreach (var item in chunkItems)
                         {
-                            await semaphore.WaitAsync(ct);
-                            try
+                            var vc = GetStringValue(item.ProductData, "sku")!;
+
+                            if (foundCards.TryGetValue(vc, out var nmId))
                             {
-                                var (ok, err) = await UploadImagesWithRetryAsync(client, iu.NmId, iu.Urls, 2, ct);
-                                if (!ok)
-                                    createImageErrors[iu.NmId] = err ?? "Image upload failed";
+                                var imageUrls = GetImageUrls(item.ProductData);
+                                if (imageUrls.Count > 0)
+                                    imageUploadsForCreates.Add((nmId, imageUrls, item.LocalProductId));
+
+                                results.Add(new ExportItemResult(item.LocalProductId, true,
+                                    nmId.ToString()));
+                                successCount++;
                             }
-                            finally
+                            else if (cardErrors.TryGetValue(vc, out var errorMsg))
                             {
-                                semaphore.Release();
+                                results.Add(new ExportItemResult(item.LocalProductId, false,
+                                    ErrorMessage: $"Card creation failed: {errorMsg}"));
+                                failedCount++;
                             }
-                        });
-                        await Task.WhenAll(imageTasks);
-
-                        // Update results with image warnings
-                        foreach (var (nmId, _, localProductId) in imageUploadsForCreates)
-                        {
-                            if (createImageErrors.TryGetValue(nmId, out var imgErr))
+                            else
                             {
-                                var idx = results.FindIndex(r =>
-                                    r.LocalProductId == localProductId && r.Success);
-                                if (idx >= 0)
+                                results.Add(new ExportItemResult(item.LocalProductId, false,
+                                    ErrorMessage: "Card created but could not be found. It may still be processing."));
+                                failedCount++;
+                            }
+                        }
+
+                        // Parallel image upload for created cards
+                        if (imageUploadsForCreates.Count > 0)
+                        {
+                            var createImageErrors = new ConcurrentDictionary<int, string>();
+                            var semaphore = new SemaphoreSlim(5);
+                            var imageTasks = imageUploadsForCreates.Select(async iu =>
+                            {
+                                await semaphore.WaitAsync(ct);
+                                try
                                 {
-                                    results[idx] = new ExportItemResult(localProductId, true,
-                                        nmId.ToString(),
-                                        $"Card created but image upload failed: {imgErr}");
+                                    var (ok, err) = await UploadImagesWithRetryAsync(client, iu.NmId, iu.Urls, 2, ct);
+                                    if (!ok)
+                                        createImageErrors[iu.NmId] = err ?? "Image upload failed";
+                                }
+                                finally
+                                {
+                                    semaphore.Release();
+                                }
+                            });
+                            await Task.WhenAll(imageTasks);
+
+                            // Update results with image warnings
+                            foreach (var (nmId, _, localProductId) in imageUploadsForCreates)
+                            {
+                                if (createImageErrors.TryGetValue(nmId, out var imgErr))
+                                {
+                                    var idx = results.FindIndex(r =>
+                                        r.LocalProductId == localProductId && r.Success);
+                                    if (idx >= 0)
+                                    {
+                                        results[idx] = new ExportItemResult(localProductId, true,
+                                            nmId.ToString(),
+                                            $"Card created but image upload failed: {imgErr}");
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                catch (WildberriesApiException ex)
+                {
+                    // This chunk threw — collect items for fallback
+                    context.Logger?.LogWarning(ex, "[WbPlugin] Batch create chunk threw. Will fallback to individual creates");
+                    var chunkVendorCodes = chunk.SelectMany(g => g.Variants).Select(v => v.VendorCode).ToHashSet();
+                    failedChunkItems.AddRange(creates.Where(i => chunkVendorCodes.Contains(GetStringValue(i.ProductData, "sku")!)));
+                }
             }
-            catch (WildberriesApiException ex)
+
+            // Fallback: individually create items from failed chunks
+            if (failedChunkItems.Count > 0)
             {
-                // Entire batch API call threw — fallback to individual
-                context.Logger?.LogWarning(ex, "[WbPlugin] Batch create threw. Falling back to individual creates");
-                var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, context.Logger, ct);
+                context.Logger?.LogWarning("[WbPlugin] Falling back to individual creates for {Count} items from failed chunks", failedChunkItems.Count);
+                var fallbackResults = await FallbackIndividualCreatesAsync(client, failedChunkItems, context.Logger, ct);
                 foreach (var r in fallbackResults)
                 {
                     results.Add(r);
@@ -1969,6 +1986,60 @@ public class WildberriesPlugin : MarketplacePluginBase
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Splits card-create groups into chunks where total variant count per chunk &lt;= maxItems.
+    /// If a single group has more variants than maxItems, it is split into sub-groups.
+    /// </summary>
+    private static List<List<WbCardCreateGroup>> ChunkCardGroups(
+        List<WbCardCreateGroup> groups, int maxItems)
+    {
+        var chunks = new List<List<WbCardCreateGroup>>();
+        var currentChunk = new List<WbCardCreateGroup>();
+        var currentCount = 0;
+
+        foreach (var group in groups)
+        {
+            if (group.Variants.Count <= maxItems)
+            {
+                if (currentCount + group.Variants.Count > maxItems && currentChunk.Count > 0)
+                {
+                    chunks.Add(currentChunk);
+                    currentChunk = new List<WbCardCreateGroup>();
+                    currentCount = 0;
+                }
+
+                currentChunk.Add(group);
+                currentCount += group.Variants.Count;
+            }
+            else
+            {
+                // Flush current chunk first
+                if (currentChunk.Count > 0)
+                {
+                    chunks.Add(currentChunk);
+                    currentChunk = new List<WbCardCreateGroup>();
+                    currentCount = 0;
+                }
+
+                // Split oversized group into sub-groups of maxItems variants each
+                for (var i = 0; i < group.Variants.Count; i += maxItems)
+                {
+                    var subVariants = group.Variants.GetRange(i,
+                        Math.Min(maxItems, group.Variants.Count - i));
+                    chunks.Add(new List<WbCardCreateGroup>
+                    {
+                        new() { SubjectId = group.SubjectId, Variants = subVariants }
+                    });
+                }
+            }
+        }
+
+        if (currentChunk.Count > 0)
+            chunks.Add(currentChunk);
+
+        return chunks;
+    }
 
     /// <summary>
     /// Query WB for the number of cards currently in a merge group (by imtId).
