@@ -369,7 +369,7 @@ export default {
         </table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div class="sticky right-0 z-20 shrink-0 flex flex-col border-l bg-background">
+        <div class="sticky right-0 z-20 shrink-0 flex flex-col bg-background">
           <!-- Header: ColumnSelector slot -->
           <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <slot name="headerActions" />
