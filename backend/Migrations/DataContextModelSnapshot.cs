@@ -235,37 +235,6 @@ namespace PrintO.Migrations
                     b.ToTable("tags");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("createdAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<int?>("parentFolderId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("productId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("parentFolderId");
-
-                    b.HasIndex("productId");
-
-                    b.ToTable("productFolders");
-                });
-
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>
                 {
                     b.Property<int>("Id")
@@ -350,12 +319,15 @@ namespace PrintO.Migrations
                     b.Property<int>("localCategoryId")
                         .HasColumnType("int");
 
+                    b.Property<string>("name")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("connectionId");
 
-                    b.HasIndex("localCategoryId", "connectionId")
-                        .IsUnique();
+                    b.HasIndex("localCategoryId", "connectionId");
 
                     b.ToTable("categoryMappings");
                 });
@@ -526,6 +498,9 @@ namespace PrintO.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("categoryMappingId")
+                        .HasColumnType("int");
+
                     b.Property<int>("connectionId")
                         .HasColumnType("int");
 
@@ -561,6 +536,8 @@ namespace PrintO.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("categoryMappingId");
 
                     b.HasIndex("connectionId");
 
@@ -797,6 +774,37 @@ namespace PrintO.Migrations
                     b.HasIndex("productId");
 
                     b.ToTable("productAttributeValues");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("parentFolderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("parentFolderId");
+
+                    b.HasIndex("productId");
+
+                    b.ToTable("productFolders");
                 });
 
             modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
@@ -1177,24 +1185,6 @@ namespace PrintO.Migrations
                     b.Navigation("file");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
-                {
-                    b.HasOne("PrintO.Models.ProductFolder", "parentFolder")
-                        .WithMany("childFolders")
-                        .HasForeignKey("parentFolderId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("PrintO.Models.Products.Product", "product")
-                        .WithMany("folders")
-                        .HasForeignKey("productId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("parentFolder");
-
-                    b.Navigation("product");
-                });
-
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>
                 {
                     b.HasOne("PrintO.Models.File", "file")
@@ -1285,6 +1275,11 @@ namespace PrintO.Migrations
 
             modelBuilder.Entity("PrintO.Models.Marketplace.ProductMarketplaceLink", b =>
                 {
+                    b.HasOne("PrintO.Models.Marketplace.CategoryMapping", "categoryMapping")
+                        .WithMany()
+                        .HasForeignKey("categoryMappingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
                         .WithMany("productLinks")
                         .HasForeignKey("connectionId")
@@ -1296,6 +1291,8 @@ namespace PrintO.Migrations
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("categoryMapping");
 
                     b.Navigation("connection");
 
@@ -1348,6 +1345,24 @@ namespace PrintO.Migrations
                         .IsRequired();
 
                     b.Navigation("attribute");
+
+                    b.Navigation("product");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+                {
+                    b.HasOne("PrintO.Models.ProductFolder", "parentFolder")
+                        .WithMany("childFolders")
+                        .HasForeignKey("parentFolderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("folders")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("parentFolder");
 
                     b.Navigation("product");
                 });
@@ -1484,18 +1499,18 @@ namespace PrintO.Migrations
                     b.Navigation("productLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
-                {
-                    b.Navigation("marketplaceLinks");
-
-                    b.Navigation("members");
-                });
-
             modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
                 {
                     b.Navigation("childFolders");
 
                     b.Navigation("files");
+                });
+
+            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+                {
+                    b.Navigation("marketplaceLinks");
+
+                    b.Navigation("members");
                 });
 
             modelBuilder.Entity("PrintO.Models.Products.Product", b =>

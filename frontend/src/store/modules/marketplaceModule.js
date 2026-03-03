@@ -467,6 +467,46 @@ export default {
     },
 
     /**
+     * Updates a category mapping (e.g. rename).
+     */
+    async updateCategoryMapping(ctx, { connectionId, mappingId, data }) {
+      const response = await http.patch(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}`,
+        data
+      );
+      return response.data;
+    },
+
+    async duplicateCategoryMapping(ctx, { connectionId, mappingId }) {
+      const response = await http.post(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/duplicate`
+      );
+      return response.data;
+    },
+
+    /**
+     * Resolves available mappings for a list of products (pre-export check).
+     */
+    async resolveMappings(ctx, { connectionId, productIds }) {
+      const params = productIds.map((id) => `productIds=${id}`).join("&");
+      const response = await http.get(
+        `/marketplace/connections/${connectionId}/resolve-mappings?${params}`
+      );
+      return response.data;
+    },
+
+    /**
+     * Saves mapping selections for products before export.
+     */
+    async saveMappingSelections(ctx, { connectionId, selections }) {
+      const response = await http.post(
+        `/marketplace/connections/${connectionId}/save-mapping-selections`,
+        { selections }
+      );
+      return response.data;
+    },
+
+    /**
      * Fetches external category fields for preview before import.
      */
     async getExternalCategoryFields(ctx, { connectionId, externalCategoryId, onSuccess, onError }) {

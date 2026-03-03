@@ -52,6 +52,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     public string? externalCategoryName { get; set; }
 
     /// <summary>
+    /// Optional display name to distinguish multiple mappings for the same category pair.
+    /// </summary>
+    [StringLength(NAME_MAX_LENGTH)]
+    public string? name { get; set; }
+
+    /// <summary>
     /// Timestamp when the mapping was created.
     /// </summary>
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
@@ -69,6 +75,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         localCategoryId = form.localCategoryId;
         externalCategoryId = form.externalCategoryId;
         externalCategoryName = form.externalCategoryName;
+        name = form.name;
         return true;
     }
 
@@ -78,6 +85,8 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             externalCategoryId = form.externalCategoryId;
         if (form.externalCategoryName != null)
             externalCategoryName = form.externalCategoryName;
+        if (form.name != null)
+            name = form.name;
         return true;
     }
 
@@ -95,6 +104,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             localCategoryName = localCategory?.name,
             externalCategoryId = externalCategoryId,
             externalCategoryName = externalCategoryName,
+            name = name,
             fieldMappingsCount = fieldMappings?.Count ?? 0,
             createdAt = createdAt
         };
@@ -103,6 +113,11 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     #endregion
 
     #region Constants
+
+    /// <summary>
+    /// Maximum length for mapping display name.
+    /// </summary>
+    public const int NAME_MAX_LENGTH = 200;
 
     /// <summary>
     /// Maximum length for external category identifier.
@@ -144,6 +159,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// </summary>
         [StringLength(EXTERNAL_CATEGORY_NAME_MAX_LENGTH)]
         public string? externalCategoryName { get; set; }
+
+        /// <summary>
+        /// Optional display name for the mapping.
+        /// </summary>
+        [StringLength(NAME_MAX_LENGTH)]
+        public string? name { get; set; }
     }
 
     /// <summary>
@@ -167,6 +188,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// </summary>
         [StringLength(EXTERNAL_CATEGORY_NAME_MAX_LENGTH)]
         public string? externalCategoryName { get; set; }
+
+        /// <summary>
+        /// Optional display name for the mapping.
+        /// </summary>
+        [StringLength(NAME_MAX_LENGTH)]
+        public string? name { get; set; }
     }
 
     /// <summary>
@@ -185,6 +212,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// </summary>
         [StringLength(EXTERNAL_CATEGORY_NAME_MAX_LENGTH)]
         public string? externalCategoryName { get; set; }
+
+        /// <summary>
+        /// Updated display name.
+        /// </summary>
+        [StringLength(NAME_MAX_LENGTH)]
+        public string? name { get; set; }
     }
 
     /// <summary>
@@ -221,6 +254,11 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// Cached external category name.
         /// </summary>
         public string? externalCategoryName { get; set; }
+
+        /// <summary>
+        /// Optional display name for the mapping.
+        /// </summary>
+        public string? name { get; set; }
 
         /// <summary>
         /// Number of field mappings configured.

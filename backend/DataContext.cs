@@ -63,9 +63,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(l => new { l.externalProductId, l.connectionId })
             .IsUnique();
 
+        // Non-unique: multiple mappings allowed per (localCategoryId, connectionId)
         builder.Entity<CategoryMapping>()
-            .HasIndex(m => new { m.localCategoryId, m.connectionId })
-            .IsUnique();
+            .HasIndex(m => new { m.localCategoryId, m.connectionId });
+
+        // ProductMarketplaceLink → CategoryMapping (optional, ON DELETE SET NULL)
+        builder.Entity<ProductMarketplaceLink>()
+            .HasOne(l => l.categoryMapping)
+            .WithMany()
+            .HasForeignKey(l => l.categoryMappingId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // CategoryAttribute options - use LONGTEXT for large Ozon dictionaries
         builder.Entity<CategoryAttribute>()

@@ -85,22 +85,33 @@ public class ProductSyncService
         if (!product.categoryId.HasValue)
             return ProductExportResult.Failure("Товар не привязан к категории");
 
-        var categoryMapping = await _context.categoryMappings
-            .Include(cm => cm.fieldMappings)
-            .FirstOrDefaultAsync(cm =>
-                cm.connectionId == connectionId &&
-                cm.localCategoryId == product.categoryId.Value, ct);
-
-        if (categoryMapping == null)
-            return ProductExportResult.Failure(
-                $"Не найден маппинг категории для подключения. " +
-                $"Создайте маппинг для категории '{product.category?.name}'");
-
         // Проверяем существующую связь товара
         var existingLink = await _context.productMarketplaceLinks
             .FirstOrDefaultAsync(l =>
                 l.productId == productId &&
                 l.connectionId == connectionId, ct);
+
+        // Если у товара есть выбранный маппинг — используем его, иначе fallback на первый по категории
+        CategoryMapping? categoryMapping;
+        if (existingLink?.categoryMappingId != null)
+        {
+            categoryMapping = await _context.categoryMappings
+                .Include(cm => cm.fieldMappings)
+                .FirstOrDefaultAsync(cm => cm.Id == existingLink.categoryMappingId.Value, ct);
+        }
+        else
+        {
+            categoryMapping = await _context.categoryMappings
+                .Include(cm => cm.fieldMappings)
+                .FirstOrDefaultAsync(cm =>
+                    cm.connectionId == connectionId &&
+                    cm.localCategoryId == product.categoryId.Value, ct);
+        }
+
+        if (categoryMapping == null)
+            return ProductExportResult.Failure(
+                $"Не найден маппинг категории для подключения. " +
+                $"Создайте маппинг для категории '{product.category?.name}'");
 
         try
         {
@@ -342,7 +353,13 @@ public class ProductSyncService
             .Include(cm => cm.fieldMappings)
             .Where(cm => cm.connectionId == connectionId && categoryIds.Contains(cm.localCategoryId))
             .ToListAsync(ct);
-        var mappingByCategoryId = categoryMappings.ToDictionary(cm => cm.localCategoryId, cm => cm);
+
+        // Группируем по категории (может быть несколько маппингов на категорию)
+        var mappingsByCategoryId = categoryMappings
+            .GroupBy(cm => cm.localCategoryId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var mappingsById = categoryMappings.ToDictionary(cm => cm.Id, cm => cm);
 
         // One query: load all group links (for field-based grouping)
         var fieldGroupingConfig = adapter.GetFieldBasedGroupingConfig();
@@ -386,7 +403,21 @@ public class ProductSyncService
                 continue;
             }
 
-            if (!mappingByCategoryId.TryGetValue(product.categoryId.Value, out var categoryMapping))
+            // Resolve category mapping: prefer product's selected mapping, fallback to first for category
+            CategoryMapping? categoryMapping = null;
+
+            if (linkByProductId.TryGetValue(productId, out var existingLink)
+                && existingLink.categoryMappingId != null
+                && mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out var overrideMapping))
+            {
+                categoryMapping = overrideMapping;
+            }
+            else if (mappingsByCategoryId.TryGetValue(product.categoryId.Value, out var catMappings))
+            {
+                categoryMapping = catMappings.First();
+            }
+
+            if (categoryMapping == null)
             {
                 itemResults.Add(new BulkProductExportItemResult(productId, false,
                     ErrorMessage: $"Не найден маппинг категории для '{product.category?.name}'"));
@@ -920,12 +951,25 @@ public class ProductSyncService
         Dictionary<string, object> externalAttributes,
         CancellationToken ct)
     {
-        // Находим CategoryMapping для этой категории и подключения
-        var categoryMapping = await _context.categoryMappings
-            .Include(cm => cm.fieldMappings)
-            .FirstOrDefaultAsync(cm =>
-                cm.connectionId == connectionId &&
-                cm.localCategoryId == categoryId, ct);
+        // Проверяем есть ли выбранный маппинг у товара
+        var existingLink = await _context.productMarketplaceLinks
+            .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+
+        CategoryMapping? categoryMapping;
+        if (existingLink?.categoryMappingId != null)
+        {
+            categoryMapping = await _context.categoryMappings
+                .Include(cm => cm.fieldMappings)
+                .FirstOrDefaultAsync(cm => cm.Id == existingLink.categoryMappingId.Value, ct);
+        }
+        else
+        {
+            categoryMapping = await _context.categoryMappings
+                .Include(cm => cm.fieldMappings)
+                .FirstOrDefaultAsync(cm =>
+                    cm.connectionId == connectionId &&
+                    cm.localCategoryId == categoryId, ct);
+        }
 
         if (categoryMapping == null)
             return;

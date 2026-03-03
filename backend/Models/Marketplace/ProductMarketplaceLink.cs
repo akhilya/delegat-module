@@ -86,6 +86,17 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
     /// </summary>
     public int? externalStock { get; set; }
 
+    /// <summary>
+    /// FK to the selected category mapping (when multiple mappings exist for a category).
+    /// </summary>
+    [ForeignKey(nameof(categoryMapping))]
+    public int? categoryMappingId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the selected category mapping.
+    /// </summary>
+    public CategoryMapping? categoryMapping { get; set; }
+
     #region IAddable / IUpdateable
 
     public bool AddFill(AddForm form)
@@ -95,6 +106,7 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
         externalProductId = form.externalProductId;
         externalSku = form.externalSku;
         status = form.status;
+        categoryMappingId = form.categoryMappingId;
         return true;
     }
 
@@ -114,6 +126,8 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
             externalPrice = form.externalPrice;
         if (form.externalStock.HasValue)
             externalStock = form.externalStock;
+        if (form.categoryMappingId.HasValue)
+            categoryMappingId = form.categoryMappingId;
         return true;
     }
 
@@ -141,6 +155,8 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
             lastSyncAt = lastSyncAt,
             externalPrice = externalPrice,
             externalStock = externalStock,
+            categoryMappingId = categoryMappingId,
+            categoryMappingName = categoryMapping?.name,
             createdAt = createdAt
         };
     }
@@ -199,6 +215,11 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
         /// Initial synchronization status.
         /// </summary>
         public ProductMarketplaceStatus status { get; set; }
+
+        /// <summary>
+        /// Selected category mapping ID.
+        /// </summary>
+        public int? categoryMappingId { get; set; }
     }
 
     /// <summary>
@@ -243,6 +264,11 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
         /// Updated external stock quantity.
         /// </summary>
         public int? externalStock { get; set; }
+
+        /// <summary>
+        /// Updated selected category mapping ID.
+        /// </summary>
+        public int? categoryMappingId { get; set; }
     }
 
     /// <summary>
@@ -329,6 +355,16 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
         /// Stock quantity on the marketplace.
         /// </summary>
         public int? externalStock { get; set; }
+
+        /// <summary>
+        /// Selected category mapping ID.
+        /// </summary>
+        public int? categoryMappingId { get; set; }
+
+        /// <summary>
+        /// Selected category mapping display name.
+        /// </summary>
+        public string? categoryMappingName { get; set; }
 
         /// <summary>
         /// Timestamp when the link was created.

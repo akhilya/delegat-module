@@ -41,6 +41,9 @@ import {
   Boxes,
   Activity,
   Gauge,
+  EllipsisVertical,
+  Pencil,
+  Copy,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -94,6 +97,13 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE } from "@/router";
 
@@ -179,6 +189,14 @@ export default {
     RadioGroup,
     RadioGroupItem,
     Separator,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    EllipsisVertical,
+    Pencil,
+    Copy,
   },
   data() {
     return {
@@ -202,6 +220,7 @@ export default {
         localCategoryId: null,
         externalCategoryId: "",
         externalCategoryName: "",
+        name: "",
       },
       externalCategorySearch: "",
       credentialValues: {},
@@ -266,6 +285,21 @@ export default {
       isExportingNewBulk: false,
       exportNewBulkProgress: null, // { done, total, success, failed }
       localSearchDebounceTimer: null,
+
+      // === Rename mapping dialog ===
+      showRenameMappingDialog: false,
+      renameMappingId: null,
+      renameMappingValue: "",
+      isRenamingMapping: false,
+
+      // === Mapping selection dialog (pre-export) ===
+      showMappingSelectionDialog: false,
+      mappingSelectionProducts: [],
+      mappingSelections: {}, // { productId: categoryMappingId }
+      isResolvingMappings: false,
+      isSavingMappingSelections: false,
+      pendingExportType: null, // 'new' | 'existing'
+      pendingExportProductIds: [],
 
       // === API Limits ===
       limitsData: null,
@@ -458,6 +492,10 @@ export default {
       "getLocalProductsForExport",
       "exportProductsBulk",
       "getConnectionLimits",
+      "updateCategoryMapping",
+      "duplicateCategoryMapping",
+      "resolveMappings",
+      "saveMappingSelections",
     ]),
 
     async fetchData() {
@@ -725,6 +763,7 @@ export default {
             localCategoryId: null,
             externalCategoryId: "",
             externalCategoryName: "",
+            name: "",
           };
           this.fetchMappings();
         },
@@ -747,6 +786,44 @@ export default {
           displaySonnerError(error);
         },
       });
+    },
+
+    async handleDuplicateMapping(mappingId) {
+      try {
+        await this.duplicateCategoryMapping({
+          connectionId: this.connectionId,
+          mappingId,
+        });
+        displaySonnerSuccess("Маппинг продублирован");
+        this.fetchMappings();
+      } catch (err) {
+        displaySonnerError("Ошибка дублирования: " + (err.response?.data?.message || err.message || err));
+      }
+    },
+
+    openRenameMapping(mapping) {
+      this.renameMappingId = mapping.id;
+      this.renameMappingValue = mapping.name || "";
+      this.showRenameMappingDialog = true;
+    },
+
+    async handleRenameMapping() {
+      if (this.renameMappingId == null) return;
+      this.isRenamingMapping = true;
+      try {
+        await this.updateCategoryMapping({
+          connectionId: this.connectionId,
+          mappingId: this.renameMappingId,
+          data: { name: this.renameMappingValue || null },
+        });
+        displaySonnerSuccess("Маппинг переименован");
+        this.showRenameMappingDialog = false;
+        this.fetchMappings();
+      } catch (error) {
+        displaySonnerError(error.response?.data?.message || "Ошибка переименования");
+      } finally {
+        this.isRenamingMapping = false;
+      }
     },
 
     openFieldMapping(mappingId) {
@@ -1246,9 +1323,38 @@ export default {
         return;
       }
 
+      const productIds = this.selectedLinkedItems.map((p) => p.localProductId);
+
+      // Check if any products need mapping selection
+      try {
+        this.isResolvingMappings = true;
+        const resolved = await this.resolveMappings({
+          connectionId: this.connectionId,
+          productIds,
+        });
+        const needsSelection = resolved.products.some((p) => p.needsSelection);
+
+        if (needsSelection) {
+          this.mappingSelectionProducts = resolved.products.filter((p) => p.needsSelection);
+          this.mappingSelections = {};
+          this.pendingExportType = "existing";
+          this.pendingExportProductIds = productIds;
+          this.showMappingSelectionDialog = true;
+          return;
+        }
+      } catch (error) {
+        displaySonnerError("Ошибка проверки маппингов: " + (error.response?.data?.message || error.message));
+        return;
+      } finally {
+        this.isResolvingMappings = false;
+      }
+
+      await this.executeExportBulk(productIds);
+    },
+
+    async executeExportBulk(productIds) {
       this.isExportingBulk = true;
       try {
-        const productIds = this.selectedLinkedItems.map((p) => p.localProductId);
         const response = await http.post(
           `/marketplace/connections/${this.connectionId}/products/export-batch`,
           { productIds }
@@ -1394,11 +1500,39 @@ export default {
         return;
       }
 
+      // Check if any products need mapping selection
+      try {
+        this.isResolvingMappings = true;
+        const resolved = await this.resolveMappings({
+          connectionId: this.connectionId,
+          productIds: this.selectedLocalItems,
+        });
+        const needsSelection = resolved.products.some((p) => p.needsSelection);
+
+        if (needsSelection) {
+          this.mappingSelectionProducts = resolved.products.filter((p) => p.needsSelection);
+          this.mappingSelections = {};
+          this.pendingExportType = "new";
+          this.pendingExportProductIds = [...this.selectedLocalItems];
+          this.showMappingSelectionDialog = true;
+          return;
+        }
+      } catch (error) {
+        displaySonnerError("Ошибка проверки маппингов: " + (error.response?.data?.message || error.message));
+        return;
+      } finally {
+        this.isResolvingMappings = false;
+      }
+
+      await this.executeExportNewBulk(this.selectedLocalItems);
+    },
+
+    async executeExportNewBulk(productIds) {
       this.isExportingNewBulk = true;
       try {
         const response = await http.post(
           `/marketplace/connections/${this.connectionId}/products/export-batch`,
-          { productIds: this.selectedLocalItems }
+          { productIds }
         );
         const result = response.data;
 
@@ -1424,6 +1558,51 @@ export default {
         this.isExportingNewBulk = false;
         this.exportNewBulkProgress = null;
       }
+    },
+
+    async confirmMappingSelections() {
+      // Validate all products have a selection
+      const unselected = this.mappingSelectionProducts.filter(
+        (p) => !this.mappingSelections[p.productId]
+      );
+      if (unselected.length > 0) {
+        displaySonnerError(`Выберите маппинг для всех товаров (осталось: ${unselected.length})`);
+        return;
+      }
+
+      this.isSavingMappingSelections = true;
+      try {
+        const selections = Object.entries(this.mappingSelections).map(([productId, categoryMappingId]) => ({
+          productId: parseInt(productId),
+          categoryMappingId,
+        }));
+
+        await this.saveMappingSelections({
+          connectionId: this.connectionId,
+          selections,
+        });
+
+        this.showMappingSelectionDialog = false;
+
+        // Proceed with the pending export
+        if (this.pendingExportType === "new") {
+          await this.executeExportNewBulk(this.pendingExportProductIds);
+        } else {
+          await this.executeExportBulk(this.pendingExportProductIds);
+        }
+      } catch (error) {
+        displaySonnerError("Ошибка сохранения выбора маппингов: " + (error.response?.data?.message || error.message));
+      } finally {
+        this.isSavingMappingSelections = false;
+      }
+    },
+
+    cancelMappingSelection() {
+      this.showMappingSelectionDialog = false;
+      this.mappingSelectionProducts = [];
+      this.mappingSelections = {};
+      this.pendingExportType = null;
+      this.pendingExportProductIds = [];
     },
 
     getImportFieldLabel(field) {
@@ -1491,7 +1670,7 @@ export default {
     }
 
     if (createMapping === "true" && localCategoryId) {
-      this.activeTab = "categories";
+      this.activeTab = "mappings";
       // Wait for data to load, then open dialog with pre-filled category
       const waitForData = setInterval(() => {
         if (this.localCategories.length > 0) {
@@ -1558,7 +1737,7 @@ export default {
       <Tabs v-model="activeTab" default-value="settings" class="w-full flex-1 flex flex-col">
         <TabsList>
           <TabsTrigger value="settings">Настройки</TabsTrigger>
-          <TabsTrigger value="categories">Категории</TabsTrigger>
+          <TabsTrigger value="mappings">Маппинги</TabsTrigger>
           <TabsTrigger value="products" @click="onProductsTabActivated">Товары</TabsTrigger>
         </TabsList>
 
@@ -1717,19 +1896,19 @@ export default {
           </Card>
         </TabsContent>
 
-        <!-- Categories Tab -->
-        <TabsContent value="categories" class="space-y-4">
+        <!-- Mappings Tab -->
+        <TabsContent value="mappings" class="space-y-4">
           <div class="flex justify-end gap-2">
             <Dialog v-model:open="showCreateMappingDialog" @update:open="$event && onCategoryDialogOpen()">
               <DialogTrigger as-child>
                 <Button variant="outline">
                   <Link class="size-4 mr-2" />
-                  Связать категории
+                  Создать маппинг
                 </Button>
               </DialogTrigger>
               <DialogContent class="sm:max-w-4xl md:max-w-6xl">
                 <DialogHeader>
-                  <DialogTitle>Связать категории</DialogTitle>
+                  <DialogTitle>Создать маппинг</DialogTitle>
                   <DialogDescription>
                     Выберите локальную категорию и категорию маркетплейса для связывания
                   </DialogDescription>
@@ -1827,6 +2006,14 @@ export default {
                       placeholder="ID категории маркетплейса"
                     />
                   </div>
+
+                  <div class="space-y-2">
+                    <Label>Название маппинга <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
+                    <Input
+                      v-model="newMapping.name"
+                      placeholder="Например: Стандарт, Премиум..."
+                    />
+                  </div>
                 </div>
                 <DialogFooter>
                   <DialogClose as-child>
@@ -1848,8 +2035,8 @@ export default {
 
           <div v-if="categoryMappings.length === 0" class="text-center py-12 text-muted-foreground border rounded-lg">
             <FolderTree class="size-12 mx-auto mb-4 opacity-50" />
-            <p>Нет связанных категорий</p>
-            <p class="text-sm">Импортируйте категорию или создайте связь вручную</p>
+            <p>Нет маппингов</p>
+            <p class="text-sm">Импортируйте категорию или создайте маппинг вручную</p>
           </div>
 
           <div v-else class="space-y-2">
@@ -1863,7 +2050,10 @@ export default {
                   <div class="flex items-center gap-4" @click="openFieldMapping(mapping.id)">
                     <FolderTree class="size-5 text-muted-foreground" />
                     <div>
-                      <div class="font-medium">{{ mapping.localCategoryName }}</div>
+                      <div class="font-medium">
+                        {{ mapping.localCategoryName }}
+                        <span v-if="mapping.name" class="text-muted-foreground font-normal"> — {{ mapping.name }}</span>
+                      </div>
                       <div class="text-sm text-muted-foreground">
                         {{ mapping.externalCategoryName || mapping.externalCategoryId }}
                       </div>
@@ -1877,27 +2067,28 @@ export default {
                       Настроить поля
                       <ChevronRight class="size-4 ml-2" />
                     </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger as-child>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger as-child>
                         <Button variant="ghost" size="icon" @click.stop>
-                          <Trash2 class="size-4 text-destructive" />
+                          <EllipsisVertical class="size-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Удалить маппинг?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Маппинг категории "{{ mapping.localCategoryName }}" будет удалён.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Отмена</AlertDialogCancel>
-                          <AlertDialogAction @click="handleDeleteMapping(mapping.id)">
-                            Удалить
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
+                          <Pencil class="size-4 mr-2" />
+                          Переименовать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem @click.stop="handleDuplicateMapping(mapping.id)">
+                          <Copy class="size-4 mr-2" />
+                          Дублировать
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem class="text-destructive" @click.stop="handleDeleteMapping(mapping.id)">
+                          <Trash2 class="size-4 mr-2" />
+                          Удалить
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
@@ -2243,7 +2434,7 @@ export default {
                     <TableCell colspan="6" class="text-center py-8 text-muted-foreground">
                       <Package class="size-12 mx-auto mb-4 opacity-50" />
                       <p>Нет товаров для экспорта</p>
-                      <p class="text-sm">Все товары из связанных категорий уже экспортированы, или нет маппингов категорий</p>
+                      <p class="text-sm">Все товары уже экспортированы, или нет маппингов</p>
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -2527,6 +2718,87 @@ export default {
             <Loader2 v-if="isImportingWithCategories" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
             Импортировать ({{ selectedUnlinkedItems.length }})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <!-- Rename Mapping Dialog -->
+    <Dialog v-model:open="showRenameMappingDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Переименовать маппинг</DialogTitle>
+        </DialogHeader>
+        <div class="py-4">
+          <Input
+            v-model="renameMappingValue"
+            placeholder="Название маппинга"
+            @keyup.enter="handleRenameMapping"
+          />
+        </div>
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">Отмена</Button>
+          </DialogClose>
+          <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
+            <Loader2 v-if="isRenamingMapping" class="size-4 mr-2 animate-spin" />
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Mapping Selection Dialog (pre-export) -->
+    <Dialog v-model:open="showMappingSelectionDialog" @update:open="!$event && cancelMappingSelection()">
+      <DialogContent class="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Выберите маппинг для товаров</DialogTitle>
+          <DialogDescription>
+            Для некоторых товаров доступно несколько маппингов категории. Выберите нужный маппинг для каждого товара.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3 max-h-96 overflow-y-auto">
+          <div
+            v-for="product in mappingSelectionProducts"
+            :key="product.productId"
+            class="border rounded-lg p-3 space-y-2"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium text-sm">{{ product.productName }}</div>
+                <div class="text-xs text-muted-foreground">{{ product.categoryName }}</div>
+              </div>
+            </div>
+            <Select
+              :model-value="mappingSelections[product.productId]?.toString()"
+              @update:model-value="(val) => mappingSelections[product.productId] = parseInt(val)"
+            >
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите маппинг..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="mapping in product.availableMappings"
+                  :key="mapping.id"
+                  :value="mapping.id.toString()"
+                >
+                  {{ mapping.name || `Маппинг #${mapping.id}` }}
+                  <span class="text-muted-foreground ml-1">
+                    ({{ mapping.externalCategoryName || mapping.externalCategoryId }})
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelMappingSelection">Отмена</Button>
+          <Button
+            @click="confirmMappingSelections"
+            :disabled="isSavingMappingSelections"
+          >
+            <Loader2 v-if="isSavingMappingSelections" class="size-4 mr-2 animate-spin" />
+            <Upload v-else class="size-4 mr-2" />
+            Продолжить экспорт
           </Button>
         </DialogFooter>
       </DialogContent>
