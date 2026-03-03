@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.5.0";
+    public override string Version => "1.5.1";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -2084,12 +2084,29 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     private static List<WbCardCreateCharacteristic>? BuildCharacteristics(Dictionary<string, object> data)
     {
+        // Extract field type metadata (set by MappingService.CoerceToFieldType)
+        Dictionary<string, string>? fieldTypes = null;
+        if (data.TryGetValue("_fieldTypes", out var ftObj) && ftObj is Dictionary<string, string> ft)
+            fieldTypes = ft;
+
         var chars = new List<WbCardCreateCharacteristic>();
 
         foreach (var (key, value) in data)
         {
             if (!key.StartsWith("charc:")) continue;
             if (!int.TryParse(key[6..], out var charcId)) continue;
+
+            // If MappingService marked this field as string/text, always send as string list
+            if (fieldTypes != null && fieldTypes.TryGetValue(key, out var ftype)
+                && (ftype == "string" || ftype == "text"))
+            {
+                chars.Add(new WbCardCreateCharacteristic
+                {
+                    Id = charcId,
+                    Value = new List<string> { value?.ToString() ?? "" }
+                });
+                continue;
+            }
 
             object? parsedValue = null;
 
