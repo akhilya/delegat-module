@@ -646,34 +646,32 @@ public class ProductSyncService
                 var membership = groupMemberships.First(gm => gm.groupId == groupId);
                 var group = membership.group;
 
-                // Collect external IDs for all group members that have been exported
-                var memberExternalIds = group.members
-                    .OrderBy(m => m.sortOrder)
-                    .Where(m => productLinks.ContainsKey(m.productId))
-                    .Select(m => productLinks[m.productId].externalProductId)
-                    .Where(id => !string.IsNullOrEmpty(id))
-                    .ToList();
-
-                if (memberExternalIds.Count < 2)
-                {
-                    _logger.LogDebug(
-                        "[GroupSync] Group {GroupId} '{GroupName}' has only {Count} exported member(s), skipping (need >= 2)",
-                        groupId, group.name, memberExternalIds.Count);
-                    continue;
-                }
-
                 existingGroupLinks.TryGetValue(groupId, out var groupLink);
 
                 if (groupLink != null && !string.IsNullOrEmpty(groupLink.externalGroupId))
                 {
-                    // Group already exists — add any new members
+                    // Group already exists — only send newly exported members, not all
+                    var newMemberExternalIds = group.members
+                        .Where(m => successProductIds.Contains(m.productId) && productLinks.ContainsKey(m.productId))
+                        .Select(m => productLinks[m.productId].externalProductId)
+                        .Where(id => !string.IsNullOrEmpty(id))
+                        .ToList();
+
+                    if (newMemberExternalIds.Count == 0)
+                    {
+                        _logger.LogDebug(
+                            "[GroupSync] Group {GroupId} '{GroupName}' has no newly exported members, skipping",
+                            groupId, group.name);
+                        continue;
+                    }
+
                     _logger.LogInformation(
-                        "[GroupSync] Updating existing group {GroupId} '{GroupName}' (externalGroupId={ExternalGroupId}) with {Count} members",
-                        groupId, group.name, groupLink.externalGroupId, memberExternalIds.Count);
+                        "[GroupSync] Updating existing group {GroupId} '{GroupName}' (externalGroupId={ExternalGroupId}) with {Count} new members",
+                        groupId, group.name, groupLink.externalGroupId, newMemberExternalIds.Count);
                     try
                     {
                         var addResult = await adapter.AddProductsToGroupAsync(
-                            connection, groupLink.externalGroupId, memberExternalIds, ct);
+                            connection, groupLink.externalGroupId, newMemberExternalIds, ct);
 
                         if (!addResult.Success)
                         {
@@ -700,7 +698,22 @@ public class ProductSyncService
                 }
                 else
                 {
-                    // Create new group
+                    // Create new group — include all exported members (not just current batch)
+                    var memberExternalIds = group.members
+                        .OrderBy(m => m.sortOrder)
+                        .Where(m => productLinks.ContainsKey(m.productId))
+                        .Select(m => productLinks[m.productId].externalProductId)
+                        .Where(id => !string.IsNullOrEmpty(id))
+                        .ToList();
+
+                    if (memberExternalIds.Count < 2)
+                    {
+                        _logger.LogDebug(
+                            "[GroupSync] Group {GroupId} '{GroupName}' has only {Count} exported member(s), skipping (need >= 2)",
+                            groupId, group.name, memberExternalIds.Count);
+                        continue;
+                    }
+
                     _logger.LogInformation(
                         "[GroupSync] Creating new group {GroupId} '{GroupName}' with {Count} members: [{Members}]",
                         groupId, group.name, memberExternalIds.Count, string.Join(", ", memberExternalIds));

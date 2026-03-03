@@ -28,7 +28,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.2.0";
+    public override string Version => "1.3.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -1390,57 +1390,14 @@ public class WildberriesPlugin : MarketplacePluginBase
         var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
 
-        // Initial wait for WB batch processing
-        await Task.Delay(7000, ct);
+        // Initial wait — WB needs time to index newly created cards
+        await Task.Delay(10_000, ct);
 
         for (int attempt = 0; attempt < 5 && remaining.Count > 0; attempt++)
         {
-            // Paginate through all cards looking for our vendorCodes
-            string? cursorUpdatedAt = null;
-            int? cursorNmId = null;
+            if (attempt > 0) await Task.Delay(10_000, ct);
 
-            while (remaining.Count > 0)
-            {
-                var request = new WbCardsListRequest
-                {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor
-                        {
-                            Limit = 100,
-                            UpdatedAt = cursorUpdatedAt,
-                            NmId = cursorNmId
-                        }
-                    }
-                };
-
-                var response = await client.GetCardsListAsync(request, ct);
-                if (response.Cards == null || response.Cards.Count == 0) break;
-
-                foreach (var card in response.Cards)
-                {
-                    if (remaining.Contains(card.VendorCode))
-                    {
-                        result[card.VendorCode] = card.NmId;
-                        remaining.Remove(card.VendorCode);
-                    }
-                }
-
-                if (remaining.Count == 0) break;
-                if (response.Cursor?.Total == 0) break;
-                cursorUpdatedAt = response.Cursor?.UpdatedAt;
-                cursorNmId = response.Cursor?.NmId;
-                if (cursorUpdatedAt == null) break;
-            }
-
-            if (remaining.Count == 0) break;
-            await Task.Delay(5000, ct);
-        }
-
-        // Final fallback: individual TextSearch for any still missing
-        if (remaining.Count > 0)
-        {
+            // Use targeted TextSearch per vendorCode instead of paginating all cards
             foreach (var vc in remaining.ToList())
             {
                 var request = new WbCardsListRequest
@@ -2007,11 +1964,6 @@ public class WildberriesPlugin : MarketplacePluginBase
         if (!int.TryParse(externalGroupId, out var imtId))
             return new GroupMembershipResult(false, ErrorMessage: $"Invalid imtID: {externalGroupId}");
 
-        // WB limits merge groups to 30 cards — reject if adding too many at once
-        if (productExternalIds.Count >= WbMaxGroupSize)
-            return new GroupMembershipResult(false,
-                ErrorMessage: $"Cannot add {productExternalIds.Count} products — WB merge group limit is {WbMaxGroupSize} cards total. Split into smaller groups.");
-
         var client = CreateClient(context);
         var errors = new List<GroupMembershipError>();
 
@@ -2031,18 +1983,24 @@ public class WildberriesPlugin : MarketplacePluginBase
 
         try
         {
-            // Use moveNm API: 1 call instead of 2N (no need to fetch card details)
-            var request = new WbMoveNmRequest
-            {
-                TargetImtId = imtId,
-                NmIds = nmIds
-            };
-            var response = await client.MoveNmAsync(request, ct);
+            // moveNm API has a limit of ~30 nmIds per call — chunk to stay within it
+            const int moveNmChunkSize = 29;
+            var chunks = nmIds.Chunk(moveNmChunkSize).ToList();
 
-            if (response.Error)
+            foreach (var chunk in chunks)
             {
-                return new GroupMembershipResult(false, FailedCount: nmIds.Count,
-                    ErrorMessage: response.ErrorText);
+                var request = new WbMoveNmRequest
+                {
+                    TargetImtId = imtId,
+                    NmIds = chunk.ToList()
+                };
+                var response = await client.MoveNmAsync(request, ct);
+
+                if (response.Error)
+                {
+                    return new GroupMembershipResult(false, FailedCount: nmIds.Count,
+                        ErrorMessage: response.ErrorText);
+                }
             }
         }
         catch (WildberriesApiException ex)
