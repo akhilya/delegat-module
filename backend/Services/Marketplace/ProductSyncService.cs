@@ -183,10 +183,15 @@ public class ProductSyncService
             }
 
             // Экспортируем через адаптер
+            // "pending:*" placeholders are not real marketplace IDs — treat as null (new product)
+            var realExternalId = existingLink?.externalProductId;
+            if (realExternalId != null && realExternalId.StartsWith("pending:"))
+                realExternalId = null;
+
             var result = await adapter.ExportProductAsync(
                 connection,
                 exportDataNonNull,
-                existingLink?.externalProductId,
+                realExternalId,
                 ct);
 
             if (!result.Success)
@@ -468,6 +473,9 @@ public class ProductSyncService
                 var existingExternalId = linkByProductId.TryGetValue(productId, out var link)
                     ? link.externalProductId
                     : null;
+                // "pending:*" placeholders are not real marketplace IDs — treat as null (new product)
+                if (existingExternalId != null && existingExternalId.StartsWith("pending:"))
+                    existingExternalId = null;
 
                 bulkItems.Add(new BulkExportItem(productId, exportDataNonNull, existingExternalId));
             }
