@@ -260,7 +260,9 @@ public class MappingService
 
         return fieldType.ToLowerInvariant() switch
         {
-            "string" or "text" => value.ToString(),
+            "string" or "text" => value is System.Collections.IEnumerable && value is not string
+                ? value
+                : value.ToString(),
             "number" => ToDecimalOrPassthrough(value),
             "integer" => ToLongOrPassthrough(value),
             "boolean" => ToBoolOrPassthrough(value),
