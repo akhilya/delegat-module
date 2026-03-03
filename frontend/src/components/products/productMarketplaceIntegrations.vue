@@ -25,6 +25,13 @@ import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -86,6 +93,11 @@ export default {
     TableRow,
     Separator,
     Checkbox,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
   },
   props: {
     productId: {
@@ -113,6 +125,12 @@ export default {
       isApplyingImport: false,
       previewLinkId: null,
       importExcludedFields: new Set(),
+      // Mapping selection
+      mappingSelections: {}, // { connectionId: categoryMappingId }
+      // Bulk mapping dialog
+      showBulkMappingDialog: false,
+      bulkMappingConflicts: [],
+      bulkMappingSelections: {}, // temp selections in dialog
     };
   },
   computed: {
@@ -155,6 +173,7 @@ export default {
       "importFromLinkPreview",
       "exportFromLink",
       "recreateProductOnMarketplace",
+      "saveMappingSelections",
     ]),
 
     async fetchData() {
@@ -163,12 +182,34 @@ export default {
         productId: this.productId,
         onSuccess: (response) => {
           this.connections = extractResponseData(response, {});
+          // Initialize mapping selections from saved values or auto-select single mappings
+          const selections = {};
+          for (const conn of this.connections.allConnections || []) {
+            if (conn.selectedMappingId) {
+              selections[conn.connectionId] = conn.selectedMappingId;
+            } else if (conn.availableMappings?.length === 1) {
+              selections[conn.connectionId] = conn.availableMappings[0].id;
+            }
+          }
+          this.mappingSelections = selections;
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isLoading = false;
+    },
+
+    async handleMappingChange(conn, mappingId) {
+      this.mappingSelections = { ...this.mappingSelections, [conn.connectionId]: mappingId };
+      try {
+        await this.saveMappingSelections({
+          connectionId: conn.connectionId,
+          selections: [{ productId: this.productId, categoryMappingId: mappingId }],
+        });
+      } catch {
+        displaySonnerError("Ошибка сохранения маппинга");
+      }
     },
 
     // Export to all marketplaces that have category mapping
@@ -179,6 +220,17 @@ export default {
         displaySonnerSuccess(
           "Товар уже экспортирован на все маркетплейсы с маппингом",
         );
+        return;
+      }
+
+      // Check for connections with multiple mappings but no selection
+      const conflicts = toExport.filter(
+        (c) => c.availableMappings?.length > 1 && !this.mappingSelections[c.connectionId],
+      );
+      if (conflicts.length > 0) {
+        this.bulkMappingConflicts = conflicts;
+        this.bulkMappingSelections = {};
+        this.showBulkMappingDialog = true;
         return;
       }
 
@@ -219,6 +271,36 @@ export default {
 
       this.isExportingAll = false;
       await this.fetchData();
+    },
+
+    allBulkMappingsSelected() {
+      return this.bulkMappingConflicts.every(
+        (c) => this.bulkMappingSelections[c.connectionId],
+      );
+    },
+
+    async confirmBulkMappingAndExport() {
+      // Save all bulk mapping selections
+      for (const conn of this.bulkMappingConflicts) {
+        const mappingId = this.bulkMappingSelections[conn.connectionId];
+        if (mappingId) {
+          this.mappingSelections = { ...this.mappingSelections, [conn.connectionId]: mappingId };
+          try {
+            await this.saveMappingSelections({
+              connectionId: conn.connectionId,
+              selections: [{ productId: this.productId, categoryMappingId: mappingId }],
+            });
+          } catch {
+            displaySonnerError(`Ошибка сохранения маппинга для ${conn.adapterName}`);
+            return;
+          }
+        }
+      }
+      this.showBulkMappingDialog = false;
+      this.bulkMappingConflicts = [];
+      this.bulkMappingSelections = {};
+      // Now proceed with export
+      await this.handleExportToAll();
     },
 
     // Import from a specific marketplace (pull changes) — preview first
@@ -343,6 +425,11 @@ export default {
 
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
+      if (conn.availableMappings?.length > 1 && !this.mappingSelections[conn.connectionId]) {
+        displaySonnerError("Выберите маппинг перед экспортом");
+        return;
+      }
+
       this.exportingConnectionId = conn.connectionId;
 
       if (conn.isLinked) {
@@ -551,6 +638,28 @@ export default {
 
         <Separator class="my-3" />
 
+        <!-- Mapping selection (only if multiple mappings available) -->
+        <div v-if="conn.availableMappings?.length > 1" class="flex items-center gap-2 text-sm mb-3">
+          <span class="text-muted-foreground shrink-0">Маппинг:</span>
+          <Select
+            :model-value="String(mappingSelections[conn.connectionId] || '')"
+            @update:model-value="(val) => handleMappingChange(conn, Number(val))"
+          >
+            <SelectTrigger class="h-8 w-[280px]">
+              <SelectValue placeholder="Выберите маппинг" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="m in conn.availableMappings"
+                :key="m.id"
+                :value="String(m.id)"
+              >
+                {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div class="flex items-center justify-between text-sm">
           <div class="flex items-center gap-4 text-muted-foreground">
             <span>
@@ -626,6 +735,28 @@ export default {
         </div>
 
         <Separator class="my-3" />
+
+        <!-- Mapping selection (only if multiple mappings available) -->
+        <div v-if="conn.availableMappings?.length > 1" class="flex items-center gap-2 text-sm mb-3">
+          <span class="text-muted-foreground shrink-0">Маппинг:</span>
+          <Select
+            :model-value="String(mappingSelections[conn.connectionId] || '')"
+            @update:model-value="(val) => handleMappingChange(conn, Number(val))"
+          >
+            <SelectTrigger class="h-8 w-[280px]">
+              <SelectValue placeholder="Выберите маппинг" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="m in conn.availableMappings"
+                :key="m.id"
+                :value="String(m.id)"
+              >
+                {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div class="flex items-center justify-between text-sm">
           <p class="text-muted-foreground">
@@ -784,6 +915,51 @@ export default {
             <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
             Подтвердить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Bulk Mapping Selection Dialog -->
+    <Dialog v-model:open="showBulkMappingDialog">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Выберите маппинг</DialogTitle>
+          <DialogDescription>
+            Для некоторых подключений доступно несколько маппингов. Выберите нужный для каждого.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3 py-4">
+          <div
+            v-for="conn in bulkMappingConflicts"
+            :key="conn.connectionId"
+            class="flex items-center gap-3"
+          >
+            <span class="text-sm font-medium w-[120px] shrink-0">{{ conn.adapterName }}</span>
+            <Select
+              :model-value="String(bulkMappingSelections[conn.connectionId] || '')"
+              @update:model-value="(val) => (bulkMappingSelections = { ...bulkMappingSelections, [conn.connectionId]: Number(val) })"
+            >
+              <SelectTrigger class="h-8 flex-1">
+                <SelectValue placeholder="Выберите маппинг" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="m in conn.availableMappings"
+                  :key="m.id"
+                  :value="String(m.id)"
+                >
+                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="showBulkMappingDialog = false">Отмена</Button>
+          <Button @click="confirmBulkMappingAndExport" :disabled="!allBulkMappingsSelected()">
+            <Upload class="size-4 mr-2" />
+            Экспортировать
           </Button>
         </DialogFooter>
       </DialogContent>

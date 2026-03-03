@@ -1262,20 +1262,20 @@ public class ProductSyncController : ControllerBase
         var connections = await connRepo.FindAllAsync(
             c => c.storeId == selectedStoreId.Value && c.isActive);
 
-        // Get category mappings (handle duplicates by taking first)
+        // Get category mappings (all per connection for multi-mapping support)
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
         var mappings = await mappingRepo.FindAllAsync(
             m => product.categoryId.HasValue && m.localCategoryId == product.categoryId.Value);
-        var mappingByConnectionId = mappings
+        var mappingsByConnectionId = mappings
             .GroupBy(m => m.connectionId)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Возвращаем ВСЕ подключения с информацией о статусе
         var result = connections
             .Select(conn =>
             {
                 var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
-                var hasMapping = mappingByConnectionId.ContainsKey(conn.Id);
+                var hasMapping = mappingsByConnectionId.ContainsKey(conn.Id);
                 var isLinked = linkByConnectionId.ContainsKey(conn.Id);
                 var link = isLinked ? linkByConnectionId[conn.Id] : null;
 
@@ -1288,7 +1288,15 @@ public class ProductSyncController : ControllerBase
                     // Статус маппинга
                     hasMapping,
                     needsMapping = !hasMapping && product.categoryId.HasValue,
-                    mappingId = hasMapping ? mappingByConnectionId[conn.Id].Id : (int?)null,
+                    // Multi-mapping: all available mappings + selected one from link
+                    selectedMappingId = link?.categoryMappingId,
+                    availableMappings = mappingsByConnectionId.TryGetValue(conn.Id, out var connMappings)
+                        ? connMappings.Select(m => (object)new {
+                            id = m.Id,
+                            name = m.name,
+                            externalCategoryName = m.externalCategoryName
+                        }).ToList()
+                        : new List<object>(),
                     // Статус связи
                     isLinked,
                     linkId = link?.Id,
