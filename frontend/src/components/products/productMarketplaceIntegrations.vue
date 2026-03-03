@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Plus,
   RefreshCw,
+  EllipsisVertical,
+  Layers,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -55,6 +57,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Separator from "@/components/ui/separator/Separator.vue";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
 import { PAGE_MARKETPLACE_CONNECTION } from "@/router";
 
 export default {
@@ -98,6 +110,16 @@ export default {
     SelectItem,
     SelectTrigger,
     SelectValue,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
+    EllipsisVertical,
+    Layers,
   },
   props: {
     productId: {
@@ -493,6 +515,13 @@ export default {
       this.isRecreating = false;
     },
 
+    getSelectedMappingName(conn) {
+      const selectedId = this.mappingSelections[conn.connectionId];
+      if (!selectedId || !conn.availableMappings) return null;
+      const m = conn.availableMappings.find((m) => m.id === selectedId);
+      return m ? (m.name || m.externalCategoryName || `Маппинг #${m.id}`) : null;
+    },
+
     getStatusInfo(status) {
       switch (status) {
         case "Synced":
@@ -555,25 +584,14 @@ export default {
 <template>
   <div class="p-4 space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <Link2 class="size-5" />
-          Маркетплейсы
-        </h2>
-        <p class="text-sm text-muted-foreground">
-          Управление связями товара с маркетплейсами
-        </p>
-      </div>
-      <Button
-        v-if="connections?.allConnections?.length > 1"
-        @click="handleExportToAll"
-        :disabled="isExportingAll || !canExportToAll || isLoading"
-      >
-        <Loader2 v-if="isExportingAll" class="size-4 mr-2 animate-spin" />
-        <Upload v-else class="size-4 mr-2" />
-        Экспортировать во все маркетплейсы
-      </Button>
+    <div>
+      <h2 class="text-lg font-semibold flex items-center gap-2">
+        <Link2 class="size-5" />
+        Маркетплейсы
+      </h2>
+      <p class="text-sm text-muted-foreground">
+        Управление связями товара с маркетплейсами
+      </p>
     </div>
 
     <!-- Loading state -->
@@ -607,227 +625,206 @@ export default {
 
     <!-- Connection cards -->
     <div v-else class="space-y-4">
+      <!-- Export all banner -->
+      <div
+        v-if="connections?.allConnections?.length > 1 && readyToExportConnections.length > 0"
+        class="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="size-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+            <Upload class="size-4 text-primary" />
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-medium">Экспорт на все маркетплейсы</div>
+            <div class="text-xs text-muted-foreground">
+              {{ readyToExportConnections.length }}
+              {{ readyToExportConnections.length < 5 ? 'подключения готовы' : 'подключений готово' }}
+              к экспорту
+            </div>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          @click="handleExportToAll"
+          :disabled="isExportingAll || isLoading"
+        >
+          <Loader2 v-if="isExportingAll" class="size-4 mr-2 animate-spin" />
+          <Upload v-else class="size-4 mr-2" />
+          Экспортировать
+        </Button>
+      </div>
+
       <!-- Linked connections (already exported) -->
       <div
         v-for="conn in linkedConnections"
         :key="conn.connectionId"
-        class="border rounded-lg p-4"
+        class="flex items-center gap-3 border rounded-lg px-4 py-3"
       >
-        <div class="flex items-start justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="size-10 rounded-lg bg-primary/10 flex items-center justify-center"
-            >
-              <ExternalLink class="size-5 text-primary" />
-            </div>
-            <div>
-              <h3 class="font-medium">{{ conn.adapterName }}</h3>
-              <p class="text-sm text-muted-foreground">
-                {{ conn.connectionName }}
-              </p>
-            </div>
+        <div class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <ExternalLink class="size-4 text-primary" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
+            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
-          <Badge :variant="getStatusInfo(conn.linkStatus).variant">
-            <component
-              :is="getStatusInfo(conn.linkStatus).icon"
-              class="size-3 mr-1"
-            />
-            {{ getStatusInfo(conn.linkStatus).label }}
-          </Badge>
-        </div>
-
-        <Separator class="my-3" />
-
-        <!-- Mapping selection (only if multiple mappings available) -->
-        <div v-if="conn.availableMappings?.length > 1" class="flex items-center gap-2 text-sm mb-3">
-          <span class="text-muted-foreground shrink-0">Маппинг:</span>
-          <Select
-            :model-value="String(mappingSelections[conn.connectionId] || '')"
-            @update:model-value="(val) => handleMappingChange(conn, Number(val))"
-          >
-            <SelectTrigger class="h-8 w-[280px]">
-              <SelectValue placeholder="Выберите маппинг" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="m in conn.availableMappings"
-                :key="m.id"
-                :value="String(m.id)"
-              >
-                {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div class="flex items-center justify-between text-sm">
-          <div class="flex items-center gap-4 text-muted-foreground">
-            <span>
-              ID:
-              <code class="bg-muted px-1.5 py-0.5 rounded text-xs">{{
-                conn.externalProductId
-              }}</code>
+          <div class="flex items-center gap-2 mt-0.5">
+            <code class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{{ conn.externalProductId }}</code>
+            <span v-if="conn.availableMappings?.length > 1 && getSelectedMappingName(conn)" class="text-xs text-muted-foreground truncate">
+              {{ getSelectedMappingName(conn) }}
             </span>
           </div>
-          <div class="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              @click="handleImportFromLink(conn)"
-              :disabled="importingLinkId === conn.linkId || !conn.canImport"
-            >
-              <Loader2
-                v-if="importingLinkId === conn.linkId"
-                class="size-4 mr-2 animate-spin"
-              />
-              <Download v-else class="size-4 mr-2" />
-              Импорт
+        </div>
+        <Badge :variant="getStatusInfo(conn.linkStatus).variant" class="shrink-0">
+          <component :is="getStatusInfo(conn.linkStatus).icon" class="size-3 mr-1" />
+          {{ getStatusInfo(conn.linkStatus).label }}
+        </Badge>
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-8 shrink-0">
+              <EllipsisVertical class="size-4" />
             </Button>
-            <Button
-              size="sm"
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
               @click="handleExportToConnection(conn)"
               :disabled="exportingConnectionId === conn.connectionId"
             >
-              <Loader2
-                v-if="exportingConnectionId === conn.connectionId"
-                class="size-4 mr-2 animate-spin"
-              />
-              <Upload v-else class="size-4 mr-2" />
+              <Upload class="size-4 mr-2" />
               Экспорт
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="conn.canImport"
+              @click="handleImportFromLink(conn)"
+              :disabled="importingLinkId === conn.linkId"
+            >
+              <Download class="size-4 mr-2" />
+              Импорт
+            </DropdownMenuItem>
+            <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
+              <DropdownMenuSubTrigger>
+                <Layers class="size-4 mr-2" />
+                Маппинг
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem
+                  v-for="m in conn.availableMappings"
+                  :key="m.id"
+                  @click="handleMappingChange(conn, m.id)"
+                >
+                  <CheckCircle v-if="mappingSelections[conn.connectionId] === m.id" class="size-4 mr-2 text-primary" />
+                  <span v-else class="size-4 mr-2" />
+                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator v-if="conn.canArchive && conn.canExport" />
+            <DropdownMenuItem
               v-if="conn.canArchive && conn.canExport"
               @click="openRecreateDialog(conn)"
             >
               <RefreshCw class="size-4 mr-2" />
               Пересоздать
-            </Button>
-          </div>
-        </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <!-- Ready to export connections (has mapping, not linked) -->
       <div
         v-for="conn in readyToExportConnections"
         :key="conn.connectionId"
-        class="border rounded-lg p-4 border-dashed"
+        class="flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
       >
-        <div class="flex items-start justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="size-10 rounded-lg bg-muted flex items-center justify-center"
-            >
-              <ExternalLink class="size-5 text-muted-foreground" />
-            </div>
-            <div>
-              <h3 class="font-medium">{{ conn.adapterName }}</h3>
-              <p class="text-sm text-muted-foreground">
-                {{ conn.connectionName }}
-              </p>
-            </div>
+        <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <ExternalLink class="size-4 text-muted-foreground" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
+            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
-          <Badge variant="outline" class="text-green-600 border-green-600">
-            <CheckCircle class="size-3 mr-1" />
-            Готов к экспорту
-          </Badge>
+          <div class="flex items-center gap-2 mt-0.5">
+            <span class="text-xs text-muted-foreground">Не экспортирован</span>
+            <span v-if="conn.availableMappings?.length > 1 && getSelectedMappingName(conn)" class="text-xs text-muted-foreground truncate">
+              · {{ getSelectedMappingName(conn) }}
+            </span>
+          </div>
         </div>
-
-        <Separator class="my-3" />
-
-        <!-- Mapping selection (only if multiple mappings available) -->
-        <div v-if="conn.availableMappings?.length > 1" class="flex items-center gap-2 text-sm mb-3">
-          <span class="text-muted-foreground shrink-0">Маппинг:</span>
-          <Select
-            :model-value="String(mappingSelections[conn.connectionId] || '')"
-            @update:model-value="(val) => handleMappingChange(conn, Number(val))"
-          >
-            <SelectTrigger class="h-8 w-[280px]">
-              <SelectValue placeholder="Выберите маппинг" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="m in conn.availableMappings"
-                :key="m.id"
-                :value="String(m.id)"
-              >
-                {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div class="flex items-center justify-between text-sm">
-          <p class="text-muted-foreground">
-            Товар ещё не экспортирован на этот маркетплейс
-          </p>
-          <Button
-            size="sm"
-            @click="handleExportToConnection(conn)"
-            :disabled="exportingConnectionId === conn.connectionId"
-          >
-            <Loader2
-              v-if="exportingConnectionId === conn.connectionId"
-              class="size-4 mr-2 animate-spin"
-            />
-            <Upload v-else class="size-4 mr-2" />
-            Экспортировать
-          </Button>
-        </div>
+        <Badge variant="outline" class="text-green-600 border-green-600 shrink-0">
+          <CheckCircle class="size-3 mr-1" />
+          Готов
+        </Badge>
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-8 shrink-0">
+              <EllipsisVertical class="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              @click="handleExportToConnection(conn)"
+              :disabled="exportingConnectionId === conn.connectionId"
+            >
+              <Upload class="size-4 mr-2" />
+              Экспортировать
+            </DropdownMenuItem>
+            <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
+              <DropdownMenuSubTrigger>
+                <Layers class="size-4 mr-2" />
+                Маппинг
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem
+                  v-for="m in conn.availableMappings"
+                  :key="m.id"
+                  @click="handleMappingChange(conn, m.id)"
+                >
+                  <CheckCircle v-if="mappingSelections[conn.connectionId] === m.id" class="size-4 mr-2 text-primary" />
+                  <span v-else class="size-4 mr-2" />
+                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <!-- Connections without mapping -->
       <div
         v-for="conn in connectionsWithoutMapping"
         :key="conn.connectionId"
-        class="border rounded-lg p-4 border-orange-300 bg-orange-50 dark:bg-orange-950/20"
+        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-orange-300 bg-orange-50 dark:bg-orange-950/20"
       >
-        <div class="flex items-start justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="size-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center"
-            >
-              <AlertTriangle class="size-5 text-orange-500" />
-            </div>
-            <div>
-              <h3 class="font-medium">{{ conn.adapterName }}</h3>
-              <p class="text-sm text-muted-foreground">
-                {{ conn.connectionName }}
-              </p>
-            </div>
+        <div class="size-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
+          <AlertTriangle class="size-4 text-orange-500" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
+            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
-          <Badge variant="outline" class="text-orange-600 border-orange-500">
-            <AlertTriangle class="size-3 mr-1" />
-            Нет маппинга категории
-          </Badge>
+          <div class="text-xs text-muted-foreground mt-0.5">
+            Нет маппинга для «{{ connections.categoryName }}»
+          </div>
         </div>
-
-        <Separator class="my-3" />
-
-        <div class="flex items-center justify-between text-sm">
-          <p class="text-muted-foreground">
-            Категория "{{ connections.categoryName }}" не связана с категорией
-            на {{ conn.adapterName }}
-          </p>
-          <router-link
-            :to="{
-              name: PAGE_MARKETPLACE_CONNECTION,
-              params: { connId: conn.connectionId },
-              query: {
-                tab: 'categories',
-                createMapping: 'true',
-                localCategoryId: connections.categoryId,
-                localCategoryName: connections.categoryName,
-              },
-            }"
-          >
-            <Button variant="outline" size="sm">
-              <Plus class="size-4 mr-2" />
-              Создать маппинг
-            </Button>
-          </router-link>
-        </div>
+        <router-link
+          :to="{
+            name: PAGE_MARKETPLACE_CONNECTION,
+            params: { connId: conn.connectionId },
+            query: {
+              tab: 'categories',
+              createMapping: 'true',
+              localCategoryId: connections.categoryId,
+              localCategoryName: connections.categoryName,
+            },
+          }"
+        >
+          <Button variant="outline" size="sm" class="shrink-0">
+            <Plus class="size-4 mr-2" />
+            Создать маппинг
+          </Button>
+        </router-link>
       </div>
 
       <!-- Empty state when all connections have issues -->

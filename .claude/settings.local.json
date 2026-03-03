@@ -97,7 +97,21 @@
       "Bash(Select-String \"error CS\")",
       "Bash(git log:*)",
       "Bash(npm install:*)",
-      "Bash(pwsh -Command:*)"
+      "Bash(pwsh -Command:*)",
+      "WebFetch(domain:dev.wildberries.ru)",
+      "WebFetch(domain:openapi.wb.ru)",
+      "WebFetch(domain:habr.com)",
+      "WebFetch(domain:infostart.ru)",
+      "WebFetch(domain:openapi.wildberries.ru)",
+      "WebFetch(domain:app.swaggerhub.com)",
+      "Bash(dotnet add:*)",
+      "Bash(npx vite:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type",
+      "Bash(node:*)"
     ]
   }
 }

@@ -462,6 +462,23 @@ export default {
       }
       return Object.values(groups);
     },
+
+    mappingCategoryGroups() {
+      if (!this.mappingSelectionProducts.length) return [];
+      const groups = {};
+      for (const p of this.mappingSelectionProducts) {
+        const key = p.categoryName || 'Без категории';
+        if (!groups[key]) {
+          groups[key] = {
+            categoryName: key,
+            products: [],
+            availableMappings: p.availableMappings,
+          };
+        }
+        groups[key].products.push(p);
+      }
+      return Object.values(groups);
+    },
   },
   methods: {
     ...mapActions([
@@ -1603,6 +1620,13 @@ export default {
       this.mappingSelections = {};
       this.pendingExportType = null;
       this.pendingExportProductIds = [];
+    },
+
+    applyMappingToGroup(group, mappingId) {
+      const id = parseInt(mappingId);
+      for (const p of group.products) {
+        this.mappingSelections[p.productId] = id;
+      }
     },
 
     getImportFieldLabel(field) {
@@ -2757,6 +2781,38 @@ export default {
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-3 max-h-96 overflow-y-auto">
+          <!-- Быстрый выбор по категории -->
+          <div v-if="mappingCategoryGroups.length > 0" class="space-y-2 pb-3 border-b">
+            <div class="text-sm font-medium text-muted-foreground">Применить ко всем</div>
+            <div
+              v-for="group in mappingCategoryGroups"
+              :key="group.categoryName"
+              class="flex items-center gap-2"
+            >
+              <span class="text-sm shrink-0 w-[140px] truncate" :title="group.categoryName">
+                {{ group.categoryName }}
+                <span class="text-muted-foreground">({{ group.products.length }})</span>
+              </span>
+              <Select @update:model-value="(val) => applyMappingToGroup(group, val)">
+                <SelectTrigger class="h-8 flex-1">
+                  <SelectValue placeholder="Выберите маппинг..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="m in group.availableMappings"
+                    :key="m.id"
+                    :value="m.id.toString()"
+                  >
+                    {{ m.name || `Маппинг #${m.id}` }}
+                    <span class="text-muted-foreground ml-1">
+                      ({{ m.externalCategoryName || m.externalCategoryId }})
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div
             v-for="product in mappingSelectionProducts"
             :key="product.productId"
