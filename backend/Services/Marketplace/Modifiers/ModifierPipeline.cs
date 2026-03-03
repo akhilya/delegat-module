@@ -34,6 +34,7 @@ public static class ModifierPipeline
             // Select / Other
             new ValueMapModifier(),
             new OptionMapModifier(),
+            new ToTextModifier(),
             new DefaultValueModifier(),
             new TakeFirstModifier(),
             // Array

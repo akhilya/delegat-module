@@ -451,6 +451,82 @@ public class RemoveItemsModifier : IFieldModifier
     }
 }
 
+public class ToTextModifier : IContextAwareModifier
+{
+    public string Type => "toText";
+    public bool IsReversible => true;
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        return value?.ToString();
+    }
+
+    public object? ApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+    {
+        if (value == null) return null;
+
+        if (context.SourceAttributeOptions is { Count: > 0 } options)
+        {
+            // Handle array values: map each element
+            var elements = TryParseList(value);
+            if (elements != null)
+            {
+                var mapped = elements
+                    .Select(el => LookupLabel(el, options) ?? el)
+                    .ToList();
+                return JsonSerializer.Serialize(mapped);
+            }
+
+            // Single value
+            var str = value.ToString();
+            return LookupLabel(str, options) ?? str;
+        }
+
+        return value.ToString();
+    }
+
+    public object? ReverseApply(object? value, Dictionary<string, object> parameters)
+    {
+        return value; // pass-through without context
+    }
+
+    public object? ReverseApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+    {
+        if (value == null) return null;
+
+        if (context.SourceAttributeOptions is { Count: > 0 } options)
+        {
+            var elements = TryParseList(value);
+            if (elements != null)
+            {
+                var mapped = elements
+                    .Select(el => LookupValue(el, options) ?? el)
+                    .ToList();
+                return JsonSerializer.Serialize(mapped);
+            }
+
+            var str = value.ToString();
+            return LookupValue(str, options) ?? str;
+        }
+
+        return value; // pass-through for non-select types
+    }
+
+    private static string? LookupLabel(string? val, List<SourceOption> options)
+    {
+        if (val == null) return null;
+        return options.FirstOrDefault(o =>
+            string.Equals(o.value, val, StringComparison.OrdinalIgnoreCase))?.label;
+    }
+
+    private static string? LookupValue(string? label, List<SourceOption> options)
+    {
+        if (label == null) return null;
+        return options.FirstOrDefault(o =>
+            string.Equals(o.label, label, StringComparison.OrdinalIgnoreCase))?.value;
+    }
+}
+
 // ===== Context-Aware Modifiers =====
 
 public class TemplateModifier : IContextAwareModifier

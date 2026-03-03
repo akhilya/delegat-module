@@ -200,6 +200,16 @@ export const MODIFIER_CATALOG = {
     },
   },
 
+  toText: {
+    type: "toText",
+    displayName: "Преобразовать в текст",
+    category: "any",
+    reversible: true,
+    applicableTypes: ["select", "multiselect", "number", "integer"],
+    params: [],
+    summary: () => "",
+  },
+
   // Template
   template: {
     type: "template",

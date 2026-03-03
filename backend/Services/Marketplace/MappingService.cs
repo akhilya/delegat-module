@@ -53,7 +53,8 @@ public class MappingService
             // Build modifier context for template resolution
             var modifierContext = new ModifierContext
             {
-                ResolveReference = (reference) => ResolveFieldReference(product, reference)
+                ResolveReference = (reference) => ResolveFieldReference(product, reference),
+                SourceAttributeOptions = ResolveSourceOptions(product, mapping)
             };
 
             // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
@@ -244,6 +245,40 @@ public class MappingService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolve options from the source attribute (for select/multiselect toText modifier).
+    /// </summary>
+    private List<Modifiers.SourceOption>? ResolveSourceOptions(Product product, FieldMapping mapping)
+    {
+        string? optionsJson = null;
+
+        if (mapping.sourceType == FieldMappingSourceType.CategoryAttribute && mapping.sourceAttributeId.HasValue)
+        {
+            optionsJson = product.attributeValues?
+                .FirstOrDefault(av => av.attributeId == mapping.sourceAttributeId.Value)
+                ?.attribute?.options;
+        }
+        else if (mapping.sourceType == FieldMappingSourceType.StoreAttribute && mapping.sourceAttributeId.HasValue)
+        {
+            optionsJson = product.storeAttributeValues?
+                .FirstOrDefault(sav => sav.storeAttributeId == mapping.sourceAttributeId.Value)
+                ?.storeAttribute?.options;
+        }
+
+        if (string.IsNullOrEmpty(optionsJson))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<Modifiers.SourceOption>>(optionsJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
