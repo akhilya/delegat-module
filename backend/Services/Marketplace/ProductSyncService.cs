@@ -676,8 +676,8 @@ public class ProductSyncService
                         if (!addResult.Success)
                         {
                             _logger.LogWarning(
-                                "[GroupSync] AddProductsToGroupAsync failed for group {GroupId}: {Error}",
-                                groupId, addResult.ErrorMessage);
+                                "[GroupSync] AddProductsToGroupAsync failed for group {GroupId} '{GroupName}': {Error} (marketplace may limit total group size, e.g. WB max 30 cards per group)",
+                                groupId, group.name, addResult.ErrorMessage);
                         }
 
                         groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
@@ -755,8 +755,8 @@ public class ProductSyncService
                         else
                         {
                             _logger.LogWarning(
-                                "[GroupSync] CreateGroupAsync failed for group {GroupId}: {Error}",
-                                groupId, connectionId, createResult.ErrorMessage);
+                                "[GroupSync] CreateGroupAsync failed for group {GroupId} '{GroupName}' with {MemberCount} members: {Error} (marketplace may limit total group size, e.g. WB max 30 cards per group)",
+                                groupId, group.name, memberExternalIds.Count, createResult.ErrorMessage);
                         }
                     }
                     catch (Exception ex)

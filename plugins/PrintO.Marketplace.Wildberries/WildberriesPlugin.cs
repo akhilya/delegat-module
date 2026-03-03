@@ -28,7 +28,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.3.0";
+    public override string Version => "1.4.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -997,25 +997,20 @@ public class WildberriesPlugin : MarketplacePluginBase
                         cardErrors = await BatchCheckCardErrorsAsync(client, missingVendorCodes, ct);
                     }
 
-                    // Build results for each created item
+                    // Build results for each created item + collect image uploads
+                    var imageUploadsForCreates = new List<(int NmId, List<string> Urls, int LocalProductId)>();
                     foreach (var item in creates)
                     {
                         var vc = GetStringValue(item.ProductData, "sku")!;
 
                         if (foundCards.TryGetValue(vc, out var nmId))
                         {
-                            // Upload images with retry
                             var imageUrls = GetImageUrls(item.ProductData);
-                            string? imageWarning = null;
                             if (imageUrls.Count > 0)
-                            {
-                                var (imgOk, imgErr) = await UploadImagesWithRetryAsync(client, nmId, imageUrls, 2, ct);
-                                if (!imgOk)
-                                    imageWarning = $"Card created but image upload failed: {imgErr}";
-                            }
+                                imageUploadsForCreates.Add((nmId, imageUrls, item.LocalProductId));
 
                             results.Add(new ExportItemResult(item.LocalProductId, true,
-                                nmId.ToString(), imageWarning));
+                                nmId.ToString()));
                             successCount++;
                         }
                         else if (cardErrors.TryGetValue(vc, out var errorMsg))
@@ -1029,6 +1024,44 @@ public class WildberriesPlugin : MarketplacePluginBase
                             results.Add(new ExportItemResult(item.LocalProductId, false,
                                 ErrorMessage: "Card created but could not be found. It may still be processing."));
                             failedCount++;
+                        }
+                    }
+
+                    // Parallel image upload for created cards
+                    if (imageUploadsForCreates.Count > 0)
+                    {
+                        var createImageErrors = new ConcurrentDictionary<int, string>();
+                        var semaphore = new SemaphoreSlim(5);
+                        var imageTasks = imageUploadsForCreates.Select(async iu =>
+                        {
+                            await semaphore.WaitAsync(ct);
+                            try
+                            {
+                                var (ok, err) = await UploadImagesWithRetryAsync(client, iu.NmId, iu.Urls, 2, ct);
+                                if (!ok)
+                                    createImageErrors[iu.NmId] = err ?? "Image upload failed";
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
+                        });
+                        await Task.WhenAll(imageTasks);
+
+                        // Update results with image warnings
+                        foreach (var (nmId, _, localProductId) in imageUploadsForCreates)
+                        {
+                            if (createImageErrors.TryGetValue(nmId, out var imgErr))
+                            {
+                                var idx = results.FindIndex(r =>
+                                    r.LocalProductId == localProductId && r.Success);
+                                if (idx >= 0)
+                                {
+                                    results[idx] = new ExportItemResult(localProductId, true,
+                                        nmId.ToString(),
+                                        $"Card created but image upload failed: {imgErr}");
+                                }
+                            }
                         }
                     }
                 }
@@ -1218,67 +1251,21 @@ public class WildberriesPlugin : MarketplacePluginBase
         CancellationToken ct)
     {
         var result = new Dictionary<int, WbCard>();
-        var target = new HashSet<int>(nmIds);
 
-        if (nmIds.Count <= 5)
+        foreach (var nmId in nmIds)
         {
-            // Individual TextSearch for small batches
-            foreach (var nmId in nmIds)
+            var request = new WbCardsListRequest
             {
-                var request = new WbCardsListRequest
+                Settings = new WbCardsListSettings
                 {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { TextSearch = nmId.ToString(), WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor { Limit = 10 }
-                    }
-                };
-                var response = await client.GetCardsListAsync(request, ct);
-                var card = response.Cards?.FirstOrDefault(c => c.NmId == nmId);
-                if (card != null)
-                    result[nmId] = card;
-            }
-        }
-        else
-        {
-            // Full pagination — match in memory
-            string? cursorUpdatedAt = null;
-            int? cursorNmId = null;
-
-            while (target.Count > 0)
-            {
-                var request = new WbCardsListRequest
-                {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor
-                        {
-                            Limit = 100,
-                            UpdatedAt = cursorUpdatedAt,
-                            NmId = cursorNmId
-                        }
-                    }
-                };
-
-                var response = await client.GetCardsListAsync(request, ct);
-                if (response.Cards == null || response.Cards.Count == 0) break;
-
-                foreach (var card in response.Cards)
-                {
-                    if (target.Contains(card.NmId))
-                    {
-                        result[card.NmId] = card;
-                        target.Remove(card.NmId);
-                    }
+                    Filter = new WbCardsListFilter { TextSearch = nmId.ToString(), WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor { Limit = 10 }
                 }
-
-                if (target.Count == 0) break;
-                if (response.Cursor?.Total == 0) break;
-                cursorUpdatedAt = response.Cursor?.UpdatedAt;
-                cursorNmId = response.Cursor?.NmId;
-                if (cursorUpdatedAt == null) break;
-            }
+            };
+            var response = await client.GetCardsListAsync(request, ct);
+            var card = response.Cards?.FirstOrDefault(c => c.NmId == nmId);
+            if (card != null)
+                result[nmId] = card;
         }
 
         return result;
@@ -1313,70 +1300,21 @@ public class WildberriesPlugin : MarketplacePluginBase
     {
         var result = new Dictionary<string, WbCard>(StringComparer.OrdinalIgnoreCase);
 
-        if (vendorCodes.Count <= 5)
+        foreach (var vc in vendorCodes)
         {
-            // Individual TextSearch for small batches
-            foreach (var vc in vendorCodes)
+            var request = new WbCardsListRequest
             {
-                var request = new WbCardsListRequest
+                Settings = new WbCardsListSettings
                 {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor { Limit = 10 }
-                    }
-                };
-                var response = await client.GetCardsListAsync(request, ct);
-                var card = response.Cards?.FirstOrDefault(c =>
-                    c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
-                if (card != null)
-                    result[vc] = card;
-            }
-        }
-        else
-        {
-            // Full pagination — match in memory
-            var remaining = new HashSet<string>(vendorCodes, StringComparer.OrdinalIgnoreCase);
-            string? cursorUpdatedAt = null;
-            int? cursorNmId = null;
-
-            while (remaining.Count > 0)
-            {
-                var request = new WbCardsListRequest
-                {
-                    Settings = new WbCardsListSettings
-                    {
-                        Filter = new WbCardsListFilter { WithPhoto = -1 },
-                        Cursor = new WbCardsListCursor
-                        {
-                            Limit = 100,
-                            UpdatedAt = cursorUpdatedAt,
-                            NmId = cursorNmId
-                        }
-                    }
-                };
-
-                var response = await client.GetCardsListAsync(request, ct);
-                if (response.Cards == null || response.Cards.Count == 0) break;
-
-                foreach (var card in response.Cards)
-                {
-                    if (remaining.Contains(card.VendorCode))
-                    {
-                        result[card.VendorCode] = card;
-                        remaining.Remove(card.VendorCode);
-                    }
+                    Filter = new WbCardsListFilter { TextSearch = vc, WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor { Limit = 10 }
                 }
-
-                // Short-circuit when all found
-                if (remaining.Count == 0) break;
-
-                // Check if there are more pages
-                if (response.Cursor?.Total == 0) break;
-                cursorUpdatedAt = response.Cursor?.UpdatedAt;
-                cursorNmId = response.Cursor?.NmId;
-                if (cursorUpdatedAt == null) break;
-            }
+            };
+            var response = await client.GetCardsListAsync(request, ct);
+            var card = response.Cards?.FirstOrDefault(c =>
+                c.VendorCode.Equals(vc, StringComparison.OrdinalIgnoreCase));
+            if (card != null)
+                result[vc] = card;
         }
 
         return result;
