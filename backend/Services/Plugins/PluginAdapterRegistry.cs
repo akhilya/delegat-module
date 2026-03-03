@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PrintO.Marketplace.SDK;
 using PrintO.Services.Marketplace;
 
@@ -10,12 +11,14 @@ namespace PrintO.Services.Plugins;
 public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
 {
     private readonly PluginManager _pluginManager;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly Dictionary<string, PluginAdapterWrapper> _wrapperCache = new();
     private readonly object _cacheLock = new();
 
-    public PluginAdapterRegistry(PluginManager pluginManager)
+    public PluginAdapterRegistry(PluginManager pluginManager, ILoggerFactory loggerFactory)
     {
         _pluginManager = pluginManager;
+        _loggerFactory = loggerFactory;
     }
 
     public IReadOnlyList<IMarketplaceAdapter> GetAll()
@@ -83,7 +86,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
                 throw new KeyNotFoundException($"Plugin '{key}' not found");
             }
 
-            var wrapper = new PluginAdapterWrapper(currentPlugin);
+            var wrapper = new PluginAdapterWrapper(currentPlugin, _loggerFactory);
             _wrapperCache[key] = wrapper;
             return wrapper;
         }

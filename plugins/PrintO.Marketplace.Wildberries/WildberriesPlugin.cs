@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using PrintO.Marketplace.SDK;
 using PrintO.Marketplace.SDK.DTOs;
 using PrintO.Marketplace.SDK.RateLimit;
@@ -28,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.4.0";
+    public override string Version => "1.5.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -617,14 +618,15 @@ public class WildberriesPlugin : MarketplacePluginBase
         var client = CreateClient(context);
 
         if (existingExternalId != null)
-            return await UpdateProductAsync(client, productData, existingExternalId, ct);
+            return await UpdateProductAsync(client, productData, existingExternalId, context.Logger, ct);
 
-        return await CreateProductAsync(client, productData, ct);
+        return await CreateProductAsync(client, productData, context.Logger, ct);
     }
 
     private async Task<ExportResult> CreateProductAsync(
         WildberriesApiClient client,
         Dictionary<string, object> data,
+        ILogger? logger,
         CancellationToken ct)
     {
         var subjectId = GetIntValue(data, "_categoryId");
@@ -651,7 +653,7 @@ public class WildberriesPlugin : MarketplacePluginBase
         if (existingCard != null)
         {
             // Card already exists on WB — update instead of creating a duplicate
-            return await UpdateProductAsync(client, data, existingCard.NmId.ToString(), ct);
+            return await UpdateProductAsync(client, data, existingCard.NmId.ToString(), logger, ct);
         }
 
         var variant = BuildVariant(data, vendorCode);
@@ -697,7 +699,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WbPlugin] Image upload failed for nmId={nmId}: {ex.Message}");
+                    logger?.LogWarning(ex, "[WbPlugin] Image upload failed for nmId={NmId}", nmId);
                 }
             }
 
@@ -713,6 +715,7 @@ public class WildberriesPlugin : MarketplacePluginBase
         WildberriesApiClient client,
         Dictionary<string, object> data,
         string existingExternalId,
+        ILogger? logger,
         CancellationToken ct)
     {
         if (!int.TryParse(existingExternalId, out var nmId))
@@ -780,7 +783,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WbPlugin] Image upload failed for nmId={nmId}: {ex.Message}");
+                    logger?.LogWarning(ex, "[WbPlugin] Image upload failed for nmId={NmId}", nmId);
                 }
             }
 
@@ -879,7 +882,7 @@ public class WildberriesPlugin : MarketplacePluginBase
         List<BulkExportItem> items,
         CancellationToken ct = default)
     {
-        Console.WriteLine($"[WB Plugin v{Version}] ExportProductsBulkAsync called with {items.Count} items");
+        context.Logger?.LogInformation("[WB Plugin v{Version}] ExportProductsBulkAsync called with {ItemCount} items", Version, items.Count);
 
         var client = CreateClient(context);
         var results = new List<ExportItemResult>();
@@ -969,8 +972,8 @@ public class WildberriesPlugin : MarketplacePluginBase
                 if (response.Error)
                 {
                     // Batch create failed entirely — fallback to individual creates
-                    Console.WriteLine($"[WbPlugin] Batch create failed: {response.ErrorText}. Falling back to individual creates.");
-                    var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, ct);
+                    context.Logger?.LogWarning("[WbPlugin] Batch create failed: {ErrorText}. Falling back to individual creates", response.ErrorText);
+                    var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, context.Logger, ct);
                     foreach (var r in fallbackResults)
                     {
                         results.Add(r);
@@ -1069,8 +1072,8 @@ public class WildberriesPlugin : MarketplacePluginBase
             catch (WildberriesApiException ex)
             {
                 // Entire batch API call threw — fallback to individual
-                Console.WriteLine($"[WbPlugin] Batch create threw: {ex.Message}. Falling back to individual creates.");
-                var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, ct);
+                context.Logger?.LogWarning(ex, "[WbPlugin] Batch create threw. Falling back to individual creates");
+                var fallbackResults = await FallbackIndividualCreatesAsync(client, creates, context.Logger, ct);
                 foreach (var r in fallbackResults)
                 {
                     results.Add(r);
@@ -1274,6 +1277,7 @@ public class WildberriesPlugin : MarketplacePluginBase
     private async Task<List<ExportItemResult>> FallbackIndividualCreatesAsync(
         WildberriesApiClient client,
         List<BulkExportItem> creates,
+        ILogger? logger,
         CancellationToken ct)
     {
         var results = new List<ExportItemResult>();
@@ -1281,7 +1285,7 @@ public class WildberriesPlugin : MarketplacePluginBase
         {
             try
             {
-                var result = await CreateProductAsync(client, item.ProductData, ct);
+                var result = await CreateProductAsync(client, item.ProductData, logger, ct);
                 results.Add(new ExportItemResult(
                     item.LocalProductId, result.Success, result.ExternalProductId, result.ErrorMessage));
             }
@@ -1643,7 +1647,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                 }
                 catch (WildberriesApiException ex)
                 {
-                    Console.WriteLine($"[WbPlugin] GetStockLevels failed for warehouse {warehouse.Id}: {ex.Message}");
+                    context.Logger?.LogWarning(ex, "[WbPlugin] GetStockLevels failed for warehouse {WarehouseId}", warehouse.Id);
                 }
             }
         }
@@ -1921,6 +1925,15 @@ public class WildberriesPlugin : MarketplacePluginBase
 
         try
         {
+            // Pre-check: query current group size to avoid wasting a rate-limited API call
+            var currentGroupSize = await GetGroupMemberCountAsync(client, imtId, ct);
+            if (currentGroupSize >= 0 && currentGroupSize + nmIds.Count > WbMaxGroupSize)
+            {
+                var msg = $"Group {imtId} already has {currentGroupSize} cards; adding {nmIds.Count} would exceed WB limit of {WbMaxGroupSize}";
+                context.Logger?.LogWarning("[WbPlugin] {Message}", msg);
+                return new GroupMembershipResult(false, FailedCount: nmIds.Count, ErrorMessage: msg);
+            }
+
             // moveNm API has a limit of ~30 nmIds per call — chunk to stay within it
             const int moveNmChunkSize = 29;
             var chunks = nmIds.Chunk(moveNmChunkSize).ToList();
@@ -1957,6 +1970,33 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     #region Helpers
 
+    /// <summary>
+    /// Query WB for the number of cards currently in a merge group (by imtId).
+    /// Returns -1 if the count could not be determined (caller should skip the pre-check).
+    /// </summary>
+    private static async Task<int> GetGroupMemberCountAsync(
+        WildberriesApiClient client, int imtId, CancellationToken ct)
+    {
+        try
+        {
+            var request = new WbCardsListRequest
+            {
+                Settings = new WbCardsListSettings
+                {
+                    Filter = new WbCardsListFilter { ImtId = imtId, WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor { Limit = 100 }
+                }
+            };
+            var response = await client.GetCardsListAsync(request, ct);
+            return response.Cards?.Count ?? 0;
+        }
+        catch
+        {
+            // If the pre-check fails, don't block — let moveNm proceed and report its own error
+            return -1;
+        }
+    }
+
     private static WbCardVariant BuildVariant(Dictionary<string, object> data, string vendorCode)
     {
         return new WbCardVariant
@@ -1982,7 +2022,7 @@ public class WildberriesPlugin : MarketplacePluginBase
     {
         var apiKey = context.GetCredential("apiKey")
             ?? throw new InvalidOperationException("API key is required");
-        return new WildberriesApiClient(apiKey);
+        return new WildberriesApiClient(apiKey, context.Logger);
     }
 
     private static string? GetStringValue(Dictionary<string, object> data, string key)

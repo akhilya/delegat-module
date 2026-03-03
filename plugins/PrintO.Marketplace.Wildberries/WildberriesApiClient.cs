@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Marketplace.Wildberries.Models;
 
@@ -42,10 +43,12 @@ public class WildberriesApiClient
 
     private readonly string _apiKey;
     private readonly MarketplaceRateLimiter _rateLimiter;
+    private readonly ILogger? _logger;
 
-    public WildberriesApiClient(string apiKey)
+    public WildberriesApiClient(string apiKey, ILogger? logger = null)
     {
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+        _logger = logger;
 
         var keyHash = apiKey.Length > 8 ? apiKey[..8] : apiKey;
         _rateLimiter = RateLimiters.GetOrAdd(keyHash,
@@ -277,7 +280,8 @@ public class WildberriesApiClient
                             $"WB API rate limited after {MaxRetries} retries", 429, body);
                     }
                     var delay = TimeSpan.FromSeconds(Math.Pow(2, retryCount));
-                    Console.WriteLine($"[WbApiClient] 429 on GET {endpoint}, retry {retryCount}/{MaxRetries}, waiting {delay.TotalSeconds:F0}s");
+                    _logger?.LogWarning("[WbApiClient] 429 on GET {Endpoint}, retry {RetryCount}/{MaxRetries}, waiting {DelaySec}s",
+                        endpoint, retryCount, MaxRetries, delay.TotalSeconds.ToString("F0"));
                     await Task.Delay(delay, ct);
                     continue;
                 }
@@ -338,7 +342,8 @@ public class WildberriesApiClient
                             $"WB API rate limited after {MaxRetries} retries", 429, body429);
                     }
                     var delay = TimeSpan.FromSeconds(Math.Pow(2, retryCount));
-                    Console.WriteLine($"[WbApiClient] 429 on POST {endpoint}, retry {retryCount}/{MaxRetries}, waiting {delay.TotalSeconds:F0}s");
+                    _logger?.LogWarning("[WbApiClient] 429 on POST {Endpoint}, retry {RetryCount}/{MaxRetries}, waiting {DelaySec}s",
+                        endpoint, retryCount, MaxRetries, delay.TotalSeconds.ToString("F0"));
                     await Task.Delay(delay, ct);
                     continue;
                 }
@@ -399,7 +404,8 @@ public class WildberriesApiClient
                             $"WB API rate limited after {MaxRetries} retries", 429, body429);
                     }
                     var delay = TimeSpan.FromSeconds(Math.Pow(2, retryCount));
-                    Console.WriteLine($"[WbApiClient] 429 on PUT {endpoint}, retry {retryCount}/{MaxRetries}, waiting {delay.TotalSeconds:F0}s");
+                    _logger?.LogWarning("[WbApiClient] 429 on PUT {Endpoint}, retry {RetryCount}/{MaxRetries}, waiting {DelaySec}s",
+                        endpoint, retryCount, MaxRetries, delay.TotalSeconds.ToString("F0"));
                     await Task.Delay(delay, ct);
                     continue;
                 }

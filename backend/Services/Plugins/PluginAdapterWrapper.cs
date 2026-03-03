@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using PrintO.Marketplace.SDK;
 using PrintO.Marketplace.SDK.DTOs;
 using PrintO.Marketplace.SDK.RateLimit;
@@ -14,10 +15,12 @@ namespace PrintO.Services.Plugins;
 public class PluginAdapterWrapper : IMarketplaceAdapter
 {
     private readonly IMarketplacePlugin _plugin;
+    private readonly ILogger _logger;
 
-    public PluginAdapterWrapper(IMarketplacePlugin plugin)
+    public PluginAdapterWrapper(IMarketplacePlugin plugin, ILoggerFactory loggerFactory)
     {
         _plugin = plugin;
+        _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
     }
 
     #region Metadata
@@ -234,10 +237,10 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         string? existingExternalId = null,
         CancellationToken ct = default)
     {
-        Console.WriteLine($"[PluginAdapterWrapper.ExportProductAsync] Calling plugin {_plugin.Key} with {productData.Count} data keys");
+        _logger.LogDebug("ExportProductAsync called with {DataKeyCount} data keys", productData.Count);
         var context = CreateContext(connection);
         var result = await _plugin.ExportProductAsync(context, productData, existingExternalId, ct);
-        Console.WriteLine($"[PluginAdapterWrapper.ExportProductAsync] Plugin returned: Success={result.Success}, Error={result.ErrorMessage}");
+        _logger.LogDebug("ExportProductAsync returned: Success={Success}, Error={Error}", result.Success, result.ErrorMessage);
 
         return new Models.Marketplace.DTOs.ExportResult(
             result.Success,
@@ -524,7 +527,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     /// <summary>
     /// Create ConnectionContext from MarketplaceConnection.
     /// </summary>
-    private static ConnectionContext CreateContext(MarketplaceConnection connection)
+    private ConnectionContext CreateContext(MarketplaceConnection connection)
     {
         var credentials = new Dictionary<string, string>();
         var settings = new Dictionary<string, string>();
@@ -573,7 +576,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         {
             ConnectionId = connection.Id,
             Credentials = credentials,
-            Settings = settings
+            Settings = settings,
+            Logger = _logger
         };
     }
 

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace PrintO.Marketplace.SDK;
 
 /// <summary>
@@ -20,6 +22,12 @@ public class ConnectionContext
     /// Additional settings as key-value pairs
     /// </summary>
     public Dictionary<string, string> Settings { get; set; } = new();
+
+    /// <summary>
+    /// Logger provided by the host for structured logging.
+    /// Plugins should use this instead of Console.WriteLine.
+    /// </summary>
+    public ILogger? Logger { get; set; }
 
     /// <summary>
     /// Get credential value by key
