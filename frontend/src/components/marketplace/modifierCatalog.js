@@ -210,6 +210,30 @@ export const MODIFIER_CATALOG = {
     summary: () => "",
   },
 
+  forceType: {
+    type: "forceType",
+    displayName: "Принудительный тип",
+    category: "any",
+    reversible: true,
+    applicableTypes: null,
+    params: [
+      {
+        key: "type", label: "Отправить как", type: "select", required: true,
+        default: "string",
+        options: [
+          { value: "string", label: "Текст" },
+          { value: "number", label: "Число" },
+          { value: "integer", label: "Целое число" },
+          { value: "boolean", label: "Логическое" },
+        ],
+      },
+    ],
+    summary: (p) => {
+      const labels = { string: "текст", number: "число", integer: "целое", boolean: "логич." };
+      return labels[p.type] || p.type || "";
+    },
+  },
+
   // Template
   template: {
     type: "template",

@@ -35,6 +35,7 @@ public static class ModifierPipeline
             new ValueMapModifier(),
             new OptionMapModifier(),
             new ToTextModifier(),
+            new ForceTypeModifier(),
             new DefaultValueModifier(),
             new TakeFirstModifier(),
             // Array

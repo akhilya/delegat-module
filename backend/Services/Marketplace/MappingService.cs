@@ -3,6 +3,7 @@ using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
 using PrintO.Services.Marketplace.Modifiers;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -44,10 +45,6 @@ public class MappingService
 
         foreach (var mapping in fieldMappings)
         {
-            // Track field types so the plugin knows how to handle each value
-            if (!string.IsNullOrEmpty(mapping.externalFieldType))
-                fieldTypes[mapping.externalFieldKey] = mapping.externalFieldType;
-
             var value = GetFieldValue(product, mapping);
 
             // Build modifier context for template resolution
@@ -66,6 +63,12 @@ public class MappingService
             {
                 value = ApplyTransform(value, mapping.transformExpression);
             }
+
+            // Coerce value to match the effective field type (forceType overrides externalFieldType)
+            var effectiveType = GetEffectiveFieldType(mapping.modifiersJson, mapping.externalFieldType);
+            value = CoerceToFieldType(value, effectiveType);
+            if (!string.IsNullOrEmpty(effectiveType))
+                fieldTypes[mapping.externalFieldKey] = effectiveType;
 
             // Multiselect values may be stored as JSON arrays '["123","456"]'
             // or as comma-separated strings "123,456" (legacy format from field mapping page).
@@ -245,6 +248,90 @@ public class MappingService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Coerce a value to match the expected field type.
+    /// </summary>
+    private static object? CoerceToFieldType(object? value, string? fieldType)
+    {
+        if (value == null || string.IsNullOrEmpty(fieldType))
+            return value;
+
+        return fieldType.ToLowerInvariant() switch
+        {
+            "string" or "text" => value.ToString(),
+            "number" => ToDecimalOrPassthrough(value),
+            "integer" => ToLongOrPassthrough(value),
+            "boolean" => ToBoolOrPassthrough(value),
+            _ => value // select, multiselect, array — no coercion
+        };
+    }
+
+    private static object? ToDecimalOrPassthrough(object? value)
+    {
+        if (value is decimal) return value;
+        if (decimal.TryParse(value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            return d;
+        return value;
+    }
+
+    private static object? ToLongOrPassthrough(object? value)
+    {
+        if (value is long) return value;
+        if (value is int i) return (long)i;
+        if (long.TryParse(value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var l))
+            return l;
+        // Try parsing as decimal first, then truncate (e.g. "123.45" → 123)
+        if (decimal.TryParse(value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            return (long)Math.Truncate(d);
+        return value;
+    }
+
+    private static object? ToBoolOrPassthrough(object? value)
+    {
+        if (value is bool) return value;
+        var str = value?.ToString()?.Trim().ToLowerInvariant();
+        return str switch
+        {
+            "true" or "1" or "yes" or "да" => true,
+            "false" or "0" or "no" or "нет" => false,
+            _ => value
+        };
+    }
+
+    /// <summary>
+    /// Get the effective field type — checks for a forceType modifier override, falls back to defaultType.
+    /// </summary>
+    private static string? GetEffectiveFieldType(string? modifiersJson, string? defaultType)
+    {
+        if (string.IsNullOrWhiteSpace(modifiersJson))
+            return defaultType;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(modifiersJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return defaultType;
+
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                if (element.TryGetProperty("type", out var typeProp) &&
+                    typeProp.GetString()?.Equals("forceType", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (element.TryGetProperty("params", out var paramsProp) &&
+                        paramsProp.TryGetProperty("type", out var forceTypeProp))
+                    {
+                        var forceType = forceTypeProp.GetString();
+                        if (!string.IsNullOrEmpty(forceType))
+                            return forceType;
+                    }
+                }
+            }
+        }
+        catch (JsonException) { }
+
+        return defaultType;
     }
 
     /// <summary>

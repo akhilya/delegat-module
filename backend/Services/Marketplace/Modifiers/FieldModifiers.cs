@@ -527,6 +527,14 @@ public class ToTextModifier : IContextAwareModifier
     }
 }
 
+public class ForceTypeModifier : IFieldModifier
+{
+    public string Type => "forceType";
+    public bool IsReversible => true;
+    public object? Apply(object? value, Dictionary<string, object> parameters) => value;
+    public object? ReverseApply(object? value, Dictionary<string, object> parameters) => value;
+}
+
 // ===== Context-Aware Modifiers =====
 
 public class TemplateModifier : IContextAwareModifier

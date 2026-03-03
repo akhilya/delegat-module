@@ -10,6 +10,13 @@ import TemplateEditor from "./TemplateEditor.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -28,6 +35,11 @@ export default {
     TemplateEditor,
     Input,
     Label,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
     Badge,
     DropdownMenu,
     DropdownMenuContent,
@@ -296,6 +308,31 @@ export default {
                   </button>
                 </Badge>
               </div>
+            </div>
+          </template>
+
+          <!-- Select param (dropdown) -->
+          <template v-else-if="param.type === 'select'">
+            <div class="space-y-1">
+              <Label class="text-xs">{{ param.label }}</Label>
+              <Select
+                :model-value="getParamValue(mod, param)"
+                @update:modelValue="(v) => onParamChange(index, param.key, v)"
+              >
+                <SelectTrigger class="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="opt in param.options"
+                    :key="opt.value"
+                    :value="opt.value"
+                    class="text-xs"
+                  >
+                    {{ opt.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </template>
 
