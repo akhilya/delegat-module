@@ -380,7 +380,7 @@ export default {
               v-for="(row, i) in table.getRowModel().rows"
               :key="'action-' + row.id"
               :style="{ height: rowHeights[i] ? rowHeights[i] + 'px' : 'auto' }"
-              class="shadow-[inset_0_-1px_0_0_hsl(var(--border))]"
+              class="border-b"
               :class="row.getIsSelected() ? 'bg-muted' : ''"
             >
               <slot name="rowActions" :row="row" />
