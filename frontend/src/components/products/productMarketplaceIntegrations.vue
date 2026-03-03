@@ -522,6 +522,17 @@ export default {
       return m ? (m.name || m.externalCategoryName || `Маппинг #${m.id}`) : null;
     },
 
+    isConnectionBusy(conn) {
+      if (this.exportingConnectionId === conn.connectionId) return true;
+      if (this.isExportingAll && !conn.isLinked && conn.hasMapping && conn.canExport) return true;
+      if (conn.isLinked) {
+        if (this.importingLinkId === conn.linkId) return true;
+        if (this.isApplyingImport && this.previewLinkId === conn.linkId) return true;
+        if (this.isRecreating && this.recreateConn?.connectionId === conn.connectionId) return true;
+      }
+      return false;
+    },
+
     getStatusInfo(status) {
       switch (status) {
         case "Synced":
@@ -658,8 +669,11 @@ export default {
       <div
         v-for="conn in linkedConnections"
         :key="conn.connectionId"
-        class="flex items-center gap-3 border rounded-lg px-4 py-3"
+        class="relative flex items-center gap-3 border rounded-lg px-4 py-3"
       >
+        <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
+          <Loader2 class="size-5 animate-spin text-primary" />
+        </div>
         <div class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <ExternalLink class="size-4 text-primary" />
         </div>
@@ -734,8 +748,11 @@ export default {
       <div
         v-for="conn in readyToExportConnections"
         :key="conn.connectionId"
-        class="flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
+        class="relative flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
       >
+        <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
+          <Loader2 class="size-5 animate-spin text-primary" />
+        </div>
         <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
           <ExternalLink class="size-4 text-muted-foreground" />
         </div>
