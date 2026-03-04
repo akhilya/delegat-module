@@ -63,6 +63,18 @@ export default {
     const draggedColumnId = ref(null);
     const dragOverColumnId = ref(null);
 
+    // Scroll shadow — show inset shadow on actions column when content is scrollable
+    const scrollContainerEl = ref(null);
+    const canScrollRight = ref(false);
+
+    function checkScroll() {
+      const el = scrollContainerEl.value;
+      if (!el) { canScrollRight.value = false; return; }
+      canScrollRight.value = el.scrollWidth - el.scrollLeft - el.clientWidth > 1;
+    }
+
+    let scrollResizeObserver = null;
+
     // Row height sync — query DOM directly for reliable height measurement
     const tableEl = ref(null);
     const rowHeights = ref([]);
@@ -86,6 +98,20 @@ export default {
       resizeObserver = new ResizeObserver(syncHeights);
       rows.forEach(tr => resizeObserver.observe(tr));
     }
+
+    // Scroll shadow — attach/detach listeners when the scroll container appears/disappears (v-if/v-else)
+    watch(scrollContainerEl, (el, oldEl) => {
+      if (oldEl) oldEl.removeEventListener('scroll', checkScroll);
+      scrollResizeObserver?.disconnect();
+      if (el) {
+        el.addEventListener('scroll', checkScroll);
+        scrollResizeObserver = new ResizeObserver(checkScroll);
+        scrollResizeObserver.observe(el);
+        checkScroll();
+      } else {
+        canScrollRight.value = false;
+      }
+    }, { flush: 'post' });
 
     onMounted(() => {
       syncHeights();
@@ -188,6 +214,8 @@ export default {
 
     onBeforeUnmount(() => {
       resizeObserver?.disconnect();
+      scrollContainerEl.value?.removeEventListener('scroll', checkScroll);
+      scrollResizeObserver?.disconnect();
     });
 
     // Check if a column can be dragged (not select or editAction)
@@ -278,6 +306,8 @@ export default {
       onDragEnd,
       tableEl,
       rowHeights,
+      scrollContainerEl,
+      canScrollRight,
     };
   },
 };
@@ -288,7 +318,7 @@ export default {
     <div v-if="isLoading" class="flex-1 flex items-center justify-center">
       <Loader2 class="text-primary size-4 animate-spin" />
     </div>
-    <div v-else class="flex-1 min-h-0 overflow-auto">
+    <div v-else ref="scrollContainerEl" class="flex-1 min-h-0 overflow-auto">
       <div class="flex min-w-full w-max">
         <!-- Data table -->
         <table ref="tableEl" class="table-fixed grow shrink-0 text-sm border-separate border-spacing-0">
@@ -369,7 +399,7 @@ export default {
         </table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div class="sticky right-0 z-20 shrink-0 flex flex-col bg-background">
+        <div :class="['sticky right-0 z-20 shrink-0 flex flex-col bg-background transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
           <!-- Header: ColumnSelector slot -->
           <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background border-b">
             <slot name="headerActions" />
