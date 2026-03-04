@@ -35,6 +35,7 @@ import {
   ArrowDown,
   Filter,
   Check,
+  FileSpreadsheet,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -51,6 +52,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,6 +101,12 @@ export default {
     ArrowDown,
     Filter,
     Check,
+    FileSpreadsheet,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
     Input,
     Select,
     SelectContent,
@@ -283,7 +297,8 @@ export default {
       this.isExporting = false;
     },
 
-    openImportDialog() {
+    openImportFromExcelDialog() {
+      this.isExcelDialogOpen = false;
       this.isImportDialogOpen = true;
     },
 
@@ -389,6 +404,7 @@ export default {
       isBulkEditDialogOpen: false,
       isBulkDeleteDialogOpen: false,
       isImportDialogOpen: false,
+      isExcelDialogOpen: false,
       isDeleting: false,
       isExporting: false,
 
@@ -664,29 +680,14 @@ export default {
             <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
               <X class="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" class="h-8" @click="openBulkEditDialog">
-              <Pencil class="h-4 w-4 mr-1" />
-              Изменить
-            </Button>
             <div class="flex">
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 rounded-r-none border-r-0"
-                :disabled="isExporting"
-                @click="handleExportExcel"
-              >
-                <Download class="h-4 w-4 mr-1" />
-                {{ isExporting ? "Экспорт..." : "Excel" }}
+              <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
+                <Pencil class="h-4 w-4 mr-1" />
+                Изменить
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 rounded-l-none"
-                @click="openImportDialog"
-              >
-                <Upload class="h-4 w-4 mr-1" />
-                Импорт
+              <Button variant="outline" size="sm" class="h-8 rounded-l-none" @click="isExcelDialogOpen = true">
+                <FileSpreadsheet class="h-4 w-4 mr-1" />
+                Редактирование из таблицы
               </Button>
             </div>
             <Button
@@ -754,6 +755,30 @@ export default {
       :store-attributes="storeAttributes"
       @saved="handleBulkEditSaved"
     />
+
+    <!-- Excel Actions Dialog -->
+    <Dialog v-model:open="isExcelDialogOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Редактирование из таблицы</DialogTitle>
+          <DialogDescription>
+            Действие для выбранных {{ selectedProductIds.length }} товаров
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-2">
+          <Button variant="outline" class="w-full justify-start" :disabled="isExporting"
+                  @click="handleExportExcel">
+            <Download class="h-4 w-4 mr-2" />
+            {{ isExporting ? 'Экспорт...' : 'Скачать шаблон редактирования' }}
+          </Button>
+          <Button variant="outline" class="w-full justify-start"
+                  @click="openImportFromExcelDialog">
+            <Upload class="h-4 w-4 mr-2" />
+            Загрузить изменения из файла
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- Import Excel Dialog -->
     <ImportExcelDialog

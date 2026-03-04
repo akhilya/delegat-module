@@ -465,7 +465,17 @@ public class ToTextModifier : IContextAwareModifier
     {
         if (value == null) return null;
 
-        if (context.SourceAttributeOptions is { Count: > 0 } options)
+        var useLabel = false;
+        if (parameters.TryGetValue("useLabel", out var useLabelObj))
+        {
+            useLabel = useLabelObj is bool b ? b
+                : useLabelObj is JsonElement je ? je.ValueKind == JsonValueKind.True
+                : false;
+        }
+
+        var options = useLabel ? context.SourceAttributeOptions : null;
+
+        if (options is { Count: > 0 })
         {
             // Handle array values: map each element
             var elements = TryParseList(value);
@@ -474,13 +484,18 @@ public class ToTextModifier : IContextAwareModifier
                 var mapped = elements
                     .Select(el => LookupLabel(el, options) ?? el)
                     .ToList();
-                return JsonSerializer.Serialize(mapped);
+                return mapped;
             }
 
             // Single value
             var str = value.ToString();
             return LookupLabel(str, options) ?? str;
         }
+
+        // No label lookup — just convert to string
+        var list = TryParseList(value);
+        if (list != null)
+            return list.Select(el => el).ToList();
 
         return value.ToString();
     }
@@ -639,6 +654,9 @@ internal static class ModifierHelpers
         if (value is List<string> list)
             return list;
 
+        if (value is List<object> objList)
+            return objList.Select(o => o?.ToString() ?? "").ToList();
+
         if (value is JsonElement je && je.ValueKind == JsonValueKind.Array)
         {
             var result = new List<string>();
@@ -657,6 +675,14 @@ internal static class ModifierHelpers
                     return parsed;
             }
             catch (JsonException) { }
+        }
+
+        // Comma-separated fallback (legacy format)
+        if (str != null && str.Contains(','))
+        {
+            var parts = str.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length > 1)
+                return parts.ToList();
         }
 
         return null;

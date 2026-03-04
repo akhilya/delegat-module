@@ -84,6 +84,9 @@ public static class ModifierPipeline
             if (string.IsNullOrEmpty(descriptor.type))
                 continue;
 
+            if (descriptor.enabled == false)
+                continue;
+
             if (!_modifiers.TryGetValue(descriptor.type, out var modifier))
                 continue;
 
@@ -130,6 +133,9 @@ public static class ModifierPipeline
             if (string.IsNullOrEmpty(descriptor.type))
                 continue;
 
+            if (descriptor.enabled == false)
+                continue;
+
             if (!_modifiers.TryGetValue(descriptor.type, out var modifier))
                 continue;
 
@@ -171,6 +177,9 @@ public static class ModifierPipeline
             if (string.IsNullOrEmpty(descriptor.type))
                 continue;
 
+            if (descriptor.enabled == false)
+                continue;
+
             if (_modifiers.TryGetValue(descriptor.type, out var modifier) && !modifier.IsReversible)
                 return true;
         }
@@ -184,6 +193,7 @@ public static class ModifierPipeline
     private class ModifierDescriptor
     {
         public string type { get; set; } = "";
+        public bool? enabled { get; set; }  // null = true (backward compat)
 
         [System.Text.Json.Serialization.JsonExtensionData]
         public Dictionary<string, object>? _extra { get; set; }

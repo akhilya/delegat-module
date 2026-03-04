@@ -291,16 +291,16 @@ export default {
     <div v-else class="flex-1 min-h-0 overflow-auto">
       <div class="flex min-w-full w-max">
         <!-- Data table -->
-        <table ref="tableEl" class="table-fixed grow shrink-0 text-sm">
-          <thead class="sticky top-0 z-10 bg-background shadow-[inset_0_-1px_0_0_hsl(var(--border))] [&_tr]:border-b">
-            <tr class="bg-background border-b transition-colors">
+        <table ref="tableEl" class="table-fixed grow shrink-0 text-sm border-separate border-spacing-0">
+          <thead class="sticky top-0 z-10 bg-background">
+            <tr class="bg-background transition-colors">
               <th
                 v-for="header in table.getHeaderGroups()[0]?.headers"
                 :key="header.id"
                 :style="{ width: header.getSize() + 'px' }"
                 :draggable="canDragColumn(header.column.id)"
                 :class="[
-                  'h-9 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap bg-background group/th',
+                  'h-9 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap bg-background border-b group/th',
                   canDragColumn(header.column.id) ? 'cursor-grab active:cursor-grabbing' : '',
                   dragOverColumnId === header.column.id ? 'bg-muted/50' : '',
                   isSortable(header.column.id) ? 'select-none' : '',
@@ -336,20 +336,20 @@ export default {
               </th>
             </tr>
           </thead>
-          <tbody class="[&_tr:last-child]:border-0">
+          <tbody class="[&_tr:last-child>td]:border-0">
             <template v-if="table.getRowModel().rows?.length">
               <tr
                 v-for="row in table.getRowModel().rows"
                 :key="row.id"
                 :data-state="row.getIsSelected() ? 'selected' : undefined"
-                class="hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors cursor-pointer group"
+                class="hover:bg-muted/50 data-[state=selected]:bg-muted transition-colors cursor-pointer group"
                 @click="onRowClick(row, $event)"
               >
                 <td
                   v-for="cell in row.getVisibleCells()"
                   :key="cell.id"
                   :style="{ width: cell.column.getSize() + 'px' }"
-                  class="px-2 py-1 align-middle whitespace-nowrap"
+                  class="px-2 py-1 align-middle whitespace-nowrap border-b"
                 >
                   <FlexRender
                     :render="cell.column.columnDef.cell"
@@ -359,8 +359,8 @@ export default {
               </tr>
             </template>
             <template v-else>
-              <tr class="border-b transition-colors">
-                <td :colspan="columns.length" class="h-32 text-center p-2 align-middle">
+              <tr class="transition-colors">
+                <td :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b">
                   Нет результатов
                 </td>
               </tr>
@@ -371,7 +371,7 @@ export default {
         <!-- Actions column (OUTSIDE table, sticky right) -->
         <div class="sticky right-0 z-20 shrink-0 flex flex-col bg-background">
           <!-- Header: ColumnSelector slot -->
-          <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+          <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background border-b">
             <slot name="headerActions" />
           </div>
           <!-- Row action buttons -->

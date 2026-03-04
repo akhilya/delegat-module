@@ -206,8 +206,16 @@ export const MODIFIER_CATALOG = {
     category: "any",
     reversible: true,
     applicableTypes: ["select", "multiselect", "number", "integer"],
-    params: [],
-    summary: () => "",
+    params: [
+      {
+        key: "useLabel",
+        label: "Словесное преобразование (лейбл вместо кода)",
+        type: "checkbox",
+        required: false,
+        default: false,
+      },
+    ],
+    summary: (p) => (p.useLabel ? "с лейблами" : ""),
   },
 
   forceType: {

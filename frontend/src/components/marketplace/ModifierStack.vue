@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Badge from "@/components/ui/badge/Badge.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { ChevronUp, ChevronDown, X, Plus, AlertTriangle } from "lucide-vue-next";
 
 export default {
@@ -41,6 +42,7 @@ export default {
     SelectTrigger,
     SelectValue,
     Badge,
+    Checkbox,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuGroup,
@@ -69,12 +71,9 @@ export default {
     };
   },
   computed: {
-    availableModifiers() {
-      return getAvailableModifiers(this.externalFieldType);
-    },
     groupedModifiers() {
       const groups = {};
-      for (const mod of this.availableModifiers) {
+      for (const mod of this.getAvailableModifiersForIndex(this.modifiers.length)) {
         const cat = mod.category;
         if (!groups[cat]) {
           groups[cat] = {
@@ -88,6 +87,22 @@ export default {
     },
   },
   methods: {
+    getEffectiveTypeAtIndex(index) {
+      // Scan modifiers before this index for the LAST enabled forceType
+      for (let i = index - 1; i >= 0; i--) {
+        if (this.modifiers[i]?.enabled === false) continue;
+        if (this.modifiers[i]?.type === "forceType") {
+          return this.modifiers[i]?.params?.type || this.externalFieldType;
+        }
+      }
+      return this.externalFieldType;
+    },
+
+    getAvailableModifiersForIndex(index) {
+      const effectiveType = this.getEffectiveTypeAtIndex(index);
+      return getAvailableModifiers(effectiveType);
+    },
+
     getCatalog(type) {
       return MODIFIER_CATALOG[type];
     },
@@ -118,7 +133,13 @@ export default {
       for (const p of catalogEntry.params) {
         params[p.key] = p.default;
       }
-      const updated = [...this.modifiers, { type: catalogEntry.type, params }];
+      const updated = [...this.modifiers, { type: catalogEntry.type, params, enabled: true }];
+      this.$emit("update:modifiers", updated);
+    },
+
+    onToggleEnabled(index, value) {
+      const updated = [...this.modifiers];
+      updated[index] = { ...updated[index], enabled: !!value };
       this.$emit("update:modifiers", updated);
     },
 
@@ -188,11 +209,19 @@ export default {
       :class="[
         'rounded-md border border-l-[3px] bg-card text-card-foreground',
         getCategoryBorderColor(mod.type),
+        mod.enabled === false && 'opacity-50',
       ]"
     >
       <!-- Header -->
-      <div class="flex items-center gap-1 px-3 py-2">
-        <span class="text-sm font-medium flex-1 truncate">
+      <div class="flex items-center gap-1.5 px-3 py-2">
+        <Checkbox
+          v-if="!disabled"
+          :model-value="mod.enabled !== false"
+          @update:modelValue="(v) => onToggleEnabled(index, v)"
+          class="shrink-0"
+          title="Включить/выключить модификатор"
+        />
+        <span :class="['text-sm font-medium flex-1 truncate', mod.enabled === false && 'line-through text-muted-foreground']">
           {{ getCatalog(mod.type)?.displayName || mod.type }}
         </span>
         <span
@@ -346,6 +375,20 @@ export default {
                 @update:modelValue="(v) => onParamChange(index, param.key, Number(v))"
                 class="h-7 text-xs"
               />
+            </div>
+          </template>
+
+          <!-- Checkbox param -->
+          <template v-else-if="param.type === 'checkbox'">
+            <div class="flex items-center gap-2">
+              <Checkbox
+                :id="`mod-${index}-${param.key}`"
+                :model-value="!!getParamValue(mod, param)"
+                @update:modelValue="(v) => onParamChange(index, param.key, v)"
+              />
+              <Label :for="`mod-${index}-${param.key}`" class="text-xs cursor-pointer">
+                {{ param.label }}
+              </Label>
             </div>
           </template>
 

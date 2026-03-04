@@ -47,6 +47,29 @@ public class MappingService
         {
             var value = GetFieldValue(product, mapping);
 
+            // Deserialize multiselect values BEFORE modifiers,
+            // so modifiers work with List<string> instead of raw JSON/CSV strings
+            if (mapping.externalFieldType == "multiselect" && value is string multiStr
+                && !string.IsNullOrEmpty(multiStr))
+            {
+                if (multiStr.StartsWith('['))
+                {
+                    try
+                    {
+                        var list = JsonSerializer.Deserialize<List<string>>(multiStr);
+                        if (list != null && list.Count > 0)
+                            value = list;
+                    }
+                    catch (JsonException) { }
+                }
+                else if (multiStr.Contains(','))
+                {
+                    var parts = multiStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (parts.Length > 1)
+                        value = parts.ToList();
+                }
+            }
+
             // Build modifier context for template resolution
             var modifierContext = new ModifierContext
             {
@@ -69,30 +92,6 @@ public class MappingService
             value = CoerceToFieldType(value, effectiveType);
             if (!string.IsNullOrEmpty(effectiveType))
                 fieldTypes[mapping.externalFieldKey] = effectiveType;
-
-            // Multiselect values may be stored as JSON arrays '["123","456"]'
-            // or as comma-separated strings "123,456" (legacy format from field mapping page).
-            // Deserialize to List<string> so the plugin receives a proper list.
-            if (mapping.externalFieldType == "multiselect" && value is string multiStr
-                && !string.IsNullOrEmpty(multiStr))
-            {
-                if (multiStr.StartsWith('['))
-                {
-                    try
-                    {
-                        var list = JsonSerializer.Deserialize<List<string>>(multiStr);
-                        if (list != null && list.Count > 0)
-                            value = list;
-                    }
-                    catch (JsonException) { }
-                }
-                else if (multiStr.Contains(','))
-                {
-                    var parts = multiStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    if (parts.Length > 1)
-                        value = parts.ToList();
-                }
-            }
 
             result[mapping.externalFieldKey] = value;
         }
@@ -318,6 +317,11 @@ public class MappingService
 
             foreach (var element in doc.RootElement.EnumerateArray())
             {
+                // Skip disabled modifiers
+                if (element.TryGetProperty("enabled", out var enabledProp)
+                    && enabledProp.ValueKind == JsonValueKind.False)
+                    continue;
+
                 if (element.TryGetProperty("type", out var typeProp) &&
                     typeProp.GetString()?.Equals("forceType", StringComparison.OrdinalIgnoreCase) == true)
                 {
@@ -366,7 +370,24 @@ public class MappingService
         }
         catch (JsonException)
         {
-            return null;
+            // Fallback: comma-separated "value:label" format
+            try
+            {
+                return optionsJson.Split(',')
+                    .Select(o => o.Trim())
+                    .Where(o => !string.IsNullOrEmpty(o))
+                    .Select(o =>
+                    {
+                        var parts = o.Split(':', 2);
+                        return new Modifiers.SourceOption
+                        {
+                            value = parts[0].Trim(),
+                            label = parts.Length > 1 ? parts[1].Trim() : parts[0].Trim()
+                        };
+                    })
+                    .ToList();
+            }
+            catch { return null; }
         }
     }
 

@@ -32,6 +32,7 @@ import {
   Download,
   Upload,
   X,
+  EllipsisVertical,
 } from "lucide-vue-next";
 import {
   Tooltip,
@@ -77,6 +78,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default {
   components: {
@@ -142,6 +149,11 @@ export default {
     Download,
     Upload,
     X,
+    EllipsisVertical,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
   },
   data() {
     return {
@@ -843,20 +855,29 @@ export default {
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <Button variant="outline" @click="openAddFieldDialog">
-          <Plus class="size-4 mr-2" />
-          Добавить поле
-        </Button>
-        <div class="flex">
-          <Button variant="outline" size="sm" class="rounded-r-none border-r-0" @click="exportMappings">
-            <Download class="size-4 mr-2" /> Экспорт
-          </Button>
-          <Button variant="outline" size="sm" class="rounded-l-none" @click="triggerImport">
-            <Upload class="size-4 mr-2" /> Импорт
-          </Button>
-        </div>
         <input ref="importFileInput" type="file" accept=".json" class="hidden"
                @change="importMappings" />
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button variant="outline" size="icon">
+              <EllipsisVertical class="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem @click="openAddFieldDialog" class="cursor-pointer">
+              <Plus class="size-4 mr-2" />
+              Добавить поле
+            </DropdownMenuItem>
+            <DropdownMenuItem @click="exportMappings" class="cursor-pointer">
+              <Download class="size-4 mr-2" />
+              Экспорт маппинга
+            </DropdownMenuItem>
+            <DropdownMenuItem @click="triggerImport" class="cursor-pointer">
+              <Upload class="size-4 mr-2" />
+              Импорт маппинга из файла
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button @click="handleSave" :disabled="isSaving || !hasChanges">
           <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
           <Save v-else class="size-4 mr-2" />
@@ -1314,7 +1335,7 @@ export default {
 
     <!-- Боковое окно модификаторов -->
     <Sheet v-model:open="showModifierSheet">
-      <SheetContent side="right" class="overflow-y-auto">
+      <SheetContent side="right" class="overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Модификаторы</SheetTitle>
           <SheetDescription v-if="editingFieldMapping">
@@ -1360,7 +1381,7 @@ export default {
               <template v-else>
                 <div>
                   <span class="text-xs text-muted-foreground">Исходное значение:</span>
-                  <div class="font-mono text-xs mt-0.5 break-all">
+                  <div class="font-mono text-xs mt-0.5 break-all whitespace-pre-wrap">
                     {{ getPreviewForField(editingFieldMapping.externalFieldKey).sourceValue || '—' }}
                   </div>
                 </div>
@@ -1369,7 +1390,7 @@ export default {
                 </div>
                 <div>
                   <span class="text-xs text-muted-foreground">Результат:</span>
-                  <div class="font-mono text-xs mt-0.5 font-medium break-all">
+                  <div class="font-mono text-xs mt-0.5 font-medium break-all whitespace-pre-wrap">
                     {{ getPreviewForField(editingFieldMapping.externalFieldKey).resultValue || '—' }}
                   </div>
                 </div>
