@@ -175,7 +175,7 @@ public class ProductSyncService
 
             // DEBUG: Log export data before sending to adapter
             Console.WriteLine($"[ProductSyncService] Export data keys: [{string.Join(", ", exportDataNonNull.Keys)}]");
-            foreach (var kvp in exportDataNonNull.Take(15))
+            foreach (var kvp in exportDataNonNull)
             {
                 var valueStr = kvp.Value?.ToString();
                 if (valueStr?.Length > 50) valueStr = valueStr.Substring(0, 50) + "...";

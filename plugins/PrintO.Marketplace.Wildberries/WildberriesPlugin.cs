@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.5.3";
+    public override string Version => "1.5.4";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -2181,6 +2181,17 @@ public class WildberriesPlugin : MarketplacePluginBase
             }
 
             chars.Add(new WbCardCreateCharacteristic { Id = charcId, Value = parsedValue });
+        }
+
+        // Log built characteristics for debugging
+        foreach (var c in chars)
+        {
+            var valStr = c.Value switch
+            {
+                IEnumerable<string> list => $"[{string.Join(", ", list)}]",
+                _ => c.Value?.ToString() ?? "null"
+            };
+            Console.WriteLine($"[WbPlugin] Characteristic {c.Id} = {valStr}");
         }
 
         return chars.Count > 0 ? chars : null;
