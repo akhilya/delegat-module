@@ -34,6 +34,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<FieldMapping> fieldMappings { get; set; }
     public DbSet<ProductMarketplaceLink> productMarketplaceLinks { get; set; }
 
+    // System versioning
+    public DbSet<SystemVersion> systemVersions { get; set; }
+
     // Product grouping
     public DbSet<ProductGroup> productGroups { get; set; }
     public DbSet<ProductGroupMember> productGroupMembers { get; set; }
@@ -53,6 +56,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasOne(u => u.selectedStore)
             .WithMany()
             .HasForeignKey(u => u.selectedStoreId);
+
+        // SystemVersion unique key
+        builder.Entity<SystemVersion>()
+            .HasIndex(sv => sv.key)
+            .IsUnique();
 
         // Marketplace integration indexes
         builder.Entity<ProductMarketplaceLink>()

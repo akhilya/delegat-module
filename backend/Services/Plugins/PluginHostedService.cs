@@ -1,20 +1,26 @@
 namespace PrintO.Services.Plugins;
 
 /// <summary>
-/// Hosted service that loads all plugins at application startup.
+/// Hosted service that loads all plugins at application startup
+/// and syncs plugin field mappings when versions change.
 /// </summary>
 public class PluginHostedService : IHostedService
 {
     private readonly PluginManager _pluginManager;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PluginHostedService> _logger;
 
-    public PluginHostedService(PluginManager pluginManager, ILogger<PluginHostedService> logger)
+    public PluginHostedService(
+        PluginManager pluginManager,
+        IServiceScopeFactory scopeFactory,
+        ILogger<PluginHostedService> logger)
     {
         _pluginManager = pluginManager;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Plugin system starting...");
 
@@ -26,9 +32,21 @@ public class PluginHostedService : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during plugin system startup");
+            return;
         }
 
-        return Task.CompletedTask;
+        // Sync plugin versions and add missing fields to mappings
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var syncService = scope.ServiceProvider.GetRequiredService<PluginVersionSyncService>();
+            await syncService.SyncAllPluginVersionsAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Plugin version sync failed");
+            // Don't block app startup
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

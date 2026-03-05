@@ -303,7 +303,7 @@ public class CategoryImportService
     /// <summary>
     /// Determine automatic field mapping based on field key/name patterns.
     /// </summary>
-    private (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
+    internal static (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
         DetermineAutoMapping(ExternalField field, Dictionary<string, int> attributeMap)
     {
         var keyLower = field.Key.ToLowerInvariant();

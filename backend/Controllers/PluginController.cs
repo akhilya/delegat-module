@@ -12,15 +12,18 @@ public class PluginController : ControllerBase
 {
     private readonly PluginManager _pluginManager;
     private readonly PluginAdapterRegistry _registry;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PluginController> _logger;
 
     public PluginController(
         PluginManager pluginManager,
         PluginAdapterRegistry registry,
+        IServiceScopeFactory scopeFactory,
         ILogger<PluginController> logger)
     {
         _pluginManager = pluginManager;
         _registry = registry;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -190,7 +193,7 @@ public class PluginController : ControllerBase
     /// Reload a plugin (useful after updating the DLL file)
     /// </summary>
     [HttpPost("{key}/reload")]
-    public IActionResult ReloadPlugin(string key)
+    public async Task<IActionResult> ReloadPlugin(string key)
     {
         try
         {
@@ -203,6 +206,18 @@ public class PluginController : ControllerBase
 
             _logger.LogInformation("Plugin reloaded: {Key}", key);
 
+            // Sync fields for reloaded plugin
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var syncService = scope.ServiceProvider.GetRequiredService<PluginVersionSyncService>();
+                await syncService.SyncAllPluginVersionsAsync();
+            }
+            catch (Exception syncEx)
+            {
+                _logger.LogError(syncEx, "Plugin version sync failed after reload of {Key}", key);
+            }
+
             return Ok(new
             {
                 success = true,
@@ -211,6 +226,10 @@ public class PluginController : ControllerBase
                 version = reloaded.Version,
                 message = $"Плагин '{reloaded.Plugin.DisplayName}' перезагружен"
             });
+        }
+        catch (ApiException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

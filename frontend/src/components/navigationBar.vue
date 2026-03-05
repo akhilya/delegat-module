@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Button from "./ui/button/Button.vue";
 
+import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers } from "lucide-vue-next";
@@ -59,6 +60,7 @@ export default {
       me: undefined,
       isLoading: false,
       memberships: [],
+      platformVersion: null,
     };
   },
   methods: {
@@ -137,6 +139,10 @@ export default {
       },
     });
     this.isLoading = false;
+
+    http.get("/health").then(r => {
+      this.platformVersion = r.data?.version;
+    }).catch(() => {});
   },
 };
 </script>
@@ -235,6 +241,12 @@ export default {
               <LogOut class="w-4 h-4 mr-2" />
               Выйти
             </DropdownMenuItem>
+            <template v-if="platformVersion">
+              <DropdownMenuSeparator />
+              <div class="px-2 py-1 text-[10px] text-muted-foreground text-center select-none">
+                v{{ platformVersion }}
+              </div>
+            </template>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

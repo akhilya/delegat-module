@@ -1025,6 +1025,35 @@ namespace PrintO.Migrations
                     b.ToTable("storeProductAttributeValues");
                 });
 
+            modelBuilder.Entity("PrintO.Models.SystemVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("appliedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("version")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("key")
+                        .IsUnique();
+
+                    b.ToTable("systemVersions");
+                });
+
             modelBuilder.Entity("PrintO.Models.User", b =>
                 {
                     b.Property<int>("Id")

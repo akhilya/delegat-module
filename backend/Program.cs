@@ -11,6 +11,7 @@ using PrintO.Infrastructure.Middleware;
 using PrintO.Infrastructure.Storage;
 using PrintO.Models;
 using PrintO.Services;
+using PrintO.Services.DataMigrations;
 using PrintO.Services.Marketplace;
 using PrintO.Services.Plugins;
 using System.Text;
@@ -134,6 +135,7 @@ builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<ProductSyncService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
+builder.Services.AddScoped<PluginVersionSyncService>();
 
 // Background services
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
@@ -229,6 +231,12 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// Run platform data migrations
+using (var scope = app.Services.CreateScope())
+{
+    await DataMigrationRunner.RunAsync(scope.ServiceProvider);
+}
+
 // Seed admin user if configured
 var adminSettings = builder.Configuration.GetAdminSeedSettings();
 using (var scope = app.Services.CreateScope())
@@ -249,6 +257,6 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/api/health", () => Results.Ok("healthy"));
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", version = PlatformVersion.Current }));
 
 await app.RunAsync("http://0.0.0.0:5000");
