@@ -118,6 +118,10 @@ public class PluginVersionSyncService
                 .Where(m => m.connectionId == connection.Id)
                 .ToListAsync(ct);
 
+            _logger.LogInformation(
+                "Connection {ConnId} ({ConnName}): found {Count} category mappings.",
+                connection.Id, connection.name, mappings.Count);
+
             foreach (var mapping in mappings)
             {
                 try
@@ -181,6 +185,12 @@ public class PluginVersionSyncService
         var maxSortOrder = mapping.fieldMappings.Any()
             ? mapping.fieldMappings.Max(fm => fm.sortOrder)
             : -1;
+
+        var newFields = fields.Where(f => !existingKeys.Contains(f.Key)).ToList();
+        _logger.LogInformation(
+            "Mapping {Id} ({Category}): {Total} fields from API, {Existing} already mapped, {New} new.",
+            mapping.Id, mapping.externalCategoryName,
+            fields.Count, existingKeys.Count, newFields.Count);
 
         int count = 0;
 
