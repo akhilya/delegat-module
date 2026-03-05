@@ -61,7 +61,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-vue-next";
-import { PAGE_PRODUCT_GROUPS } from "@/router";
+import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 
 export default {
@@ -183,6 +183,7 @@ export default {
         id: this.groupId,
         onSuccess: (response) => {
           this.group = response.data.value;
+          setPageTitle(this.group.name);
           this.members = this.group.members || [];
           this.syncStatuses = this.group.marketplaceLinks || [];
         },

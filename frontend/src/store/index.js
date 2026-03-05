@@ -21,6 +21,14 @@ import exportProgress from "./modules/exportProgressModule";
  */
 export function createStore() {
   return _createStore({
+    state: {
+      appKey: 0,
+    },
+    mutations: {
+      incrementAppKey(state) {
+        state.appKey++;
+      },
+    },
     modules: {
       authModule,
       userModule,

@@ -53,7 +53,7 @@ import {
   Pencil,
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { PAGE_CATEGORIES } from "@/router";
+import { PAGE_CATEGORIES, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
 
@@ -217,6 +217,7 @@ export default {
         id: this.categoryId,
         onSuccess: (response) => {
           this.category = response.data.value;
+          setPageTitle(this.category.name);
           this.attributes = this.category.attributes || [];
         },
         onError: (error) => {

@@ -14,13 +14,18 @@ export default {
     ExportProgressPanel,
     LoadingBar,
   },
+  computed: {
+    appKey() {
+      return this.$store.state.appKey;
+    },
+  },
 };
 </script>
 
 <template>
   <LoadingBar ref="loadingBar" />
   <RouterView v-slot="{ Component, route }">
-    <component :is="Component" :key="route.path" />
+    <component :is="Component" :key="route.path + '-' + appKey" />
   </RouterView>
   <Toaster />
   <ImportProgressPanel />

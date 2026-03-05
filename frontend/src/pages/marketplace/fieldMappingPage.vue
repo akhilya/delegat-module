@@ -12,6 +12,7 @@ import MultiSelectDropdown from "@/components/ui/multi-select/MultiSelectDropdow
 import ModifierStack from "@/components/marketplace/ModifierStack.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import { setPageTitle } from "@/router";
 import {
   ArrowLeft,
   Save,
@@ -312,6 +313,7 @@ export default {
             externalCategoryId: data.externalCategoryId,
             externalCategoryName: data.externalCategoryName,
           };
+          setPageTitle(data.externalCategoryName || data.localCategoryName);
         },
         onError: (error) => {
           displaySonnerError(error);

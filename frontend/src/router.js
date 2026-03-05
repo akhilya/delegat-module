@@ -43,35 +43,52 @@ export const PAGE_MARKETPLACE_CONNECTION = "/marketplace/:connId";
 export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/marketplace/:connId/categories/import";
 export const PAGE_MARKETPLACE_FIELD_MAPPING = "/marketplace/:connId/categories/:mappingId";
 
+export const APP_TITLE = "PrintO";
+
 export const routes = [
-  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true } },
-  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true } },
-  { path: "/", component: productsPage },
-  { path: PAGE_PRODUCTS, component: productsPage },
-  { path: PAGE_PRODUCT_CREATION, component: productCreationPage },
-  { path: PAGE_PRODUCT_EDIT, component: productEditPage },
-  { path: PAGE_CATEGORIES, component: categoriesPage },
-  { path: PAGE_CATEGORY_EDIT, component: categoryEditPage },
-  { path: PAGE_PRODUCT_GROUPS, component: productGroupsPage },
-  { path: PAGE_PRODUCT_GROUP_CREATE, component: productGroupEditPage },
-  { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage },
-  { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage },
-  { path: PAGE_ADMIN_STORES, component: AdminStoresPage },
-  { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage },
-  { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage },
-  { path: PAGE_NOT_FOUND, component: NotFoundPage },
-  { path: PAGE_TOOLS, component: ToolsPage },
-  { path: PAGE_MARKETPLACE, component: MarketplacePage },
-  { path: PAGE_MARKETPLACE_PLUGINS, component: PluginsPage },
-  { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage },
-  { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage },
-  { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage },
+  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, title: "Регистрация" } },
+  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true, title: "Вход" } },
+  { path: "/", component: productsPage, meta: { title: "Товары" } },
+  { path: PAGE_PRODUCTS, component: productsPage, meta: { title: "Товары" } },
+  { path: PAGE_PRODUCT_CREATION, component: productCreationPage, meta: { title: "Новый товар" } },
+  { path: PAGE_PRODUCT_EDIT, component: productEditPage, meta: { title: "Товар" } },
+  { path: PAGE_CATEGORIES, component: categoriesPage, meta: { title: "Категории" } },
+  { path: PAGE_CATEGORY_EDIT, component: categoryEditPage, meta: { title: "Категория" } },
+  { path: PAGE_PRODUCT_GROUPS, component: productGroupsPage, meta: { title: "Группы товаров" } },
+  { path: PAGE_PRODUCT_GROUP_CREATE, component: productGroupEditPage, meta: { title: "Новая группа" } },
+  { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage, meta: { title: "Группа товаров" } },
+  { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { title: "Глобальные атрибуты" } },
+  { path: PAGE_ADMIN_STORES, component: AdminStoresPage, meta: { title: "Магазины" } },
+  { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage, meta: { title: "Магазин" } },
+  { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage, meta: { title: "Токены" } },
+  { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
+  { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
+  { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Маркетплейсы" } },
+  { path: PAGE_MARKETPLACE_PLUGINS, component: PluginsPage, meta: { title: "Плагины" } },
+  { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { title: "Подключение" } },
+  { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { title: "Импорт категории" } },
+  { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage, meta: { title: "Маппинг полей" } },
 ];
 routes.forEach((r) => (r.name = r.path));
 
+/**
+ * Set the page title. Use from page components after loading data.
+ * @param {string} detail - e.g. product SKU, category name
+ */
+export function setPageTitle(detail) {
+  document.title = detail ? `${detail} — ${APP_TITLE}` : APP_TITLE;
+}
+
 export function createRouter() {
-  return _createRouter({
+  const router = _createRouter({
     history: createWebHistory(),
     routes,
   });
+
+  router.afterEach((to) => {
+    const title = to.meta?.title;
+    document.title = title ? `${title} — ${APP_TITLE}` : APP_TITLE;
+  });
+
+  return router;
 }

@@ -50,7 +50,7 @@ import {
   Pencil,
   ArrowRightLeft,
 } from "lucide-vue-next";
-import { PAGE_PRODUCTS } from "@/router";
+import { PAGE_PRODUCTS, setPageTitle } from "@/router";
 import { useStore } from "vuex";
 import { useRoute } from "vue-router";
 import { ref, computed, watch, nextTick } from "vue";
@@ -222,6 +222,7 @@ export default {
         onSuccess: (response) => {
           const product = response.data.value;
           productSKU.value = product.sku;
+          setPageTitle(product.sku);
           notes.value = product.notes || [];
           files.value = (product.files || []).sort((a, b) => {
             if (a.contentType < b.contentType) return -1;

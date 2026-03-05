@@ -77,6 +77,7 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -105,7 +106,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Separator from "@/components/ui/separator/Separator.vue";
-import { PAGE_MARKETPLACE } from "@/router";
+import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 
 export default {
   components: {
@@ -172,6 +173,7 @@ export default {
     CardTitle,
     Select,
     SelectContent,
+    SelectGroup,
     SelectItem,
     SelectTrigger,
     SelectValue,
@@ -246,6 +248,7 @@ export default {
       linkedCount: 0,
       hasMoreProducts: false,
       externalPage: 1,
+      externalPageSize: 50,
       pageCursors: [null],
       productsPageCache: {}, // { pageNum: { items, hasMore, total, linkedCount } }
 
@@ -262,6 +265,7 @@ export default {
       isLoadingSinglePreview: false,
       isApplyingSingleImport: false,
       previewLinkId: null,
+      singleImportExcludedFields: new Set(),
 
       // Bulk import preview dialog
       showBulkImportPreviewDialog: false,
@@ -281,7 +285,7 @@ export default {
       localPage: 1,
       localPageSize: 50,
       localSearchQuery: "",
-      selectedLocalItems: [],
+      selectedLocalItemsMap: {},
       isExportingNewBulk: false,
       exportNewBulkProgress: null, // { done, total, success, failed }
       localSearchDebounceTimer: null,
@@ -431,14 +435,17 @@ export default {
     hasAnySelected() {
       return this.selectedItems.length > 0;
     },
+    selectedLocalIds() {
+      return Object.keys(this.selectedLocalItemsMap).map(Number);
+    },
     allLocalSelected() {
       return (
         this.localProducts.length > 0 &&
-        this.selectedLocalItems.length === this.localProducts.length
+        this.localProducts.every((p) => this.selectedLocalItemsMap[p.id])
       );
     },
     someLocalSelected() {
-      return this.selectedLocalItems.length > 0 && !this.allLocalSelected;
+      return this.selectedLocalIds.length > 0 && !this.allLocalSelected;
     },
     canGoNextExternal() {
       return this.hasMoreProducts;
@@ -543,6 +550,7 @@ export default {
         connectionId: this.connectionId,
         onSuccess: (response) => {
           this.connection = extractResponseData(response);
+          setPageTitle(this.connection.name);
           this.parseCredentials();
         },
         onError: (error) => {
@@ -900,7 +908,7 @@ export default {
 
       await this.getExternalProducts({
         connectionId: this.connectionId,
-        pageSize: 50,
+        pageSize: this.externalPageSize,
         cursor,
         offerIdSearch: this.searchQuery || null,
         onSuccess: (response) => {
@@ -1025,8 +1033,10 @@ export default {
     async confirmSingleImport() {
       if (!this.previewLinkId) return;
       this.isApplyingSingleImport = true;
+      const excludeFields = [...this.singleImportExcludedFields];
       await this.importFromLink({
         linkId: this.previewLinkId,
+        excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
@@ -1048,6 +1058,36 @@ export default {
       this.showSingleImportPreviewDialog = false;
       this.singleImportPreviewData = null;
       this.previewLinkId = null;
+      this.singleImportExcludedFields = new Set();
+    },
+
+    isSingleImportFieldIncluded(field) {
+      return !this.singleImportExcludedFields.has(field);
+    },
+    toggleSingleImportField(field) {
+      const next = new Set(this.singleImportExcludedFields);
+      if (next.has(field)) {
+        next.delete(field);
+      } else {
+        next.add(field);
+      }
+      this.singleImportExcludedFields = next;
+    },
+    allSingleImportFieldsIncluded() {
+      if (!this.singleImportPreviewData?.updatedFields) return false;
+      return this.singleImportPreviewData.updatedFields.every((f) => !this.singleImportExcludedFields.has(f));
+    },
+    allSingleImportFieldsExcluded() {
+      if (!this.singleImportPreviewData?.updatedFields) return true;
+      return this.singleImportPreviewData.updatedFields.every((f) => this.singleImportExcludedFields.has(f));
+    },
+    toggleAllSingleImportFields() {
+      if (!this.singleImportPreviewData?.updatedFields) return;
+      if (this.allSingleImportFieldsIncluded()) {
+        this.singleImportExcludedFields = new Set(this.singleImportPreviewData.updatedFields);
+      } else {
+        this.singleImportExcludedFields = new Set();
+      }
     },
 
     async handleExportSingle(product) {
@@ -1470,7 +1510,6 @@ export default {
     async fetchLocalProducts() {
       this.syncPageQuery();
       this.isLoadingLocalProducts = true;
-      this.selectedLocalItems = [];
 
       await this.getLocalProductsForExport({
         connectionId: this.connectionId,
@@ -1491,28 +1530,39 @@ export default {
 
     toggleSelectAllLocal() {
       if (this.allLocalSelected) {
-        this.selectedLocalItems = [];
+        // Deselect only current page items
+        const next = { ...this.selectedLocalItemsMap };
+        for (const p of this.localProducts) {
+          delete next[p.id];
+        }
+        this.selectedLocalItemsMap = next;
       } else {
-        this.selectedLocalItems = this.localProducts.map((p) => p.id);
+        const next = { ...this.selectedLocalItemsMap };
+        for (const p of this.localProducts) {
+          next[p.id] = true;
+        }
+        this.selectedLocalItemsMap = next;
       }
     },
 
     toggleSelectLocal(id) {
-      const index = this.selectedLocalItems.indexOf(id);
-      if (index === -1) {
-        this.selectedLocalItems.push(id);
+      const next = { ...this.selectedLocalItemsMap };
+      if (next[id]) {
+        delete next[id];
       } else {
-        this.selectedLocalItems.splice(index, 1);
+        next[id] = true;
       }
+      this.selectedLocalItemsMap = next;
     },
 
     isLocalSelected(id) {
-      return this.selectedLocalItems.includes(id);
+      return !!this.selectedLocalItemsMap[id];
     },
 
     async handleExportNewBulk() {
       if (this.isExportingNewBulk) return;
-      if (this.selectedLocalItems.length === 0) {
+      const productIds = this.selectedLocalIds;
+      if (productIds.length === 0) {
         displaySonnerError("Выберите товары для экспорта");
         return;
       }
@@ -1522,7 +1572,7 @@ export default {
         this.isResolvingMappings = true;
         const resolved = await this.resolveMappings({
           connectionId: this.connectionId,
-          productIds: this.selectedLocalItems,
+          productIds,
         });
         const needsSelection = resolved.products.some((p) => p.needsSelection);
 
@@ -1530,7 +1580,7 @@ export default {
           this.mappingSelectionProducts = resolved.products.filter((p) => p.needsSelection);
           this.mappingSelections = {};
           this.pendingExportType = "new";
-          this.pendingExportProductIds = [...this.selectedLocalItems];
+          this.pendingExportProductIds = [...productIds];
           this.showMappingSelectionDialog = true;
           return;
         }
@@ -1541,7 +1591,7 @@ export default {
         this.isResolvingMappings = false;
       }
 
-      await this.executeExportNewBulk(this.selectedLocalItems);
+      await this.executeExportNewBulk(productIds);
     },
 
     async executeExportNewBulk(productIds) {
@@ -1568,7 +1618,7 @@ export default {
         });
 
         displaySonnerSuccess(result.message);
-        this.selectedLocalItems = [];
+        this.selectedLocalItemsMap = {};
       } catch (error) {
         displaySonnerError(error.response?.data?.message || "Ошибка создания пакета экспорта");
       } finally {
@@ -2282,9 +2332,29 @@ export default {
 
             <!-- Pagination -->
             <div v-if="products.length > 0" class="flex items-center justify-between py-3">
-              <p class="text-sm text-muted-foreground">
-                Страница {{ externalPage }}, показано: {{ products.length }}
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm text-muted-foreground">по</p>
+                <Select
+                  :model-value="String(externalPageSize)"
+                  @update:model-value="(val) => { externalPageSize = Number(val); externalPage = 1; pageCursors = [null]; clearProductsCache(); fetchProducts(); }"
+                >
+                  <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem as="button" value="10">10</SelectItem>
+                      <SelectItem as="button" value="25">25</SelectItem>
+                      <SelectItem as="button" value="50">50</SelectItem>
+                      <SelectItem as="button" value="100">100</SelectItem>
+                      <SelectItem as="button" value="250">250</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p class="text-sm text-muted-foreground">
+                  Страница {{ externalPage }}, показано: {{ products.length }}
+                </p>
+              </div>
               <div class="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -2463,9 +2533,29 @@ export default {
 
             <!-- Pagination -->
             <div v-if="localTotalCount > 0" class="flex items-center justify-between py-3">
-              <p class="text-sm text-muted-foreground">
-                Всего: {{ localTotalCount }}
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm text-muted-foreground">по</p>
+                <Select
+                  :model-value="String(localPageSize)"
+                  @update:model-value="(val) => { localPageSize = Number(val); localPage = 1; fetchLocalProducts(); }"
+                >
+                  <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem as="button" value="10">10</SelectItem>
+                      <SelectItem as="button" value="25">25</SelectItem>
+                      <SelectItem as="button" value="50">50</SelectItem>
+                      <SelectItem as="button" value="100">100</SelectItem>
+                      <SelectItem as="button" value="250">250</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p class="text-sm text-muted-foreground">
+                  Всего: {{ localTotalCount }}
+                </p>
+              </div>
               <div class="flex items-center gap-2">
                 <p class="text-sm text-muted-foreground mr-2">
                   {{ localPage }} / {{ localLastPage }}
@@ -2511,11 +2601,11 @@ export default {
 
             <!-- Bulk export bar -->
             <div
-              v-if="selectedLocalItems.length > 0 || isExportingNewBulk"
+              v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
               class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
             >
               <div class="text-sm text-muted-foreground">
-                Выбрано: {{ selectedLocalItems.length }}
+                Выбрано: {{ selectedLocalIds.length }}
               </div>
               <Button
                 @click="handleExportNewBulk"
@@ -2523,7 +2613,7 @@ export default {
               >
                 <Loader2 v-if="isExportingNewBulk" class="size-4 mr-2 animate-spin" />
                 <Upload v-else class="size-4 mr-2" />
-                Экспортировать на МП ({{ selectedLocalItems.length }})
+                Экспортировать на МП ({{ selectedLocalIds.length }})
               </Button>
             </div>
           </template>
@@ -2544,6 +2634,12 @@ export default {
           <table class="w-full table-fixed text-sm">
             <thead>
               <tr class="border-b">
+                <th class="w-[40px] py-2 px-2">
+                  <Checkbox
+                    :model-value="allSingleImportFieldsIncluded()"
+                    @update:model-value="toggleAllSingleImportFields"
+                  />
+                </th>
                 <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
                 <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
                 <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
@@ -2555,6 +2651,12 @@ export default {
                 :key="field"
                 class="border-b"
               >
+                <td class="py-2 px-2 align-top">
+                  <Checkbox
+                    :model-value="isSingleImportFieldIncluded(field)"
+                    @update:model-value="toggleSingleImportField(field)"
+                  />
+                </td>
                 <td class="py-2 px-2 font-medium align-top">{{ getImportFieldLabel(field) }}</td>
                 <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                   {{ formatImportFieldValue(field, singleImportPreviewData.oldValues[field]) }}
@@ -2568,7 +2670,7 @@ export default {
         </div>
         <DialogFooter>
           <Button variant="outline" @click="cancelSingleImport">Отменить</Button>
-          <Button @click="confirmSingleImport" :disabled="isApplyingSingleImport">
+          <Button @click="confirmSingleImport" :disabled="isApplyingSingleImport || allSingleImportFieldsExcluded()">
             <Loader2 v-if="isApplyingSingleImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
             Подтвердить

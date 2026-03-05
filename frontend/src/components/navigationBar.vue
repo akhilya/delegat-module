@@ -59,6 +59,7 @@ export default {
     return {
       me: undefined,
       isLoading: false,
+      isSwitchingStore: false,
       memberships: [],
       platformVersion: null,
     };
@@ -71,13 +72,32 @@ export default {
       "postSelectStore",
       "getIsAuthenticated",
     ]),
-    selectStore(storeId) {
+    async selectStore(storeId) {
+      this.isSwitchingStore = true;
+      const minDelay = new Promise(r => setTimeout(r, 1000));
       this.postSelectStore({
         storeId,
-        onSuccess: (response) => {
-          window.location.href = response.data.value.next;
+        onSuccess: async (response) => {
+          // Re-fetch user data (selectedStoreId changed on server)
+          await this.getMe({
+            onSuccess: (r) => { this.me = r.data.value; },
+            onError: () => {},
+          });
+          // Force re-render all page components via appKey
+          this.$store.commit("incrementAppKey");
+          // Navigate to the target path (usually current page)
+          const next = response.data.value.next;
+          const targetPath = new URL(next, window.location.origin).pathname;
+          if (this.$route.path !== targetPath) {
+            await this.$router.push(targetPath);
+          }
+          // Ensure overlay is visible for at least 1 second
+          await minDelay;
+          this.isSwitchingStore = false;
         },
-        onError: (error) => {
+        onError: async (error) => {
+          await minDelay;
+          this.isSwitchingStore = false;
           displaySonnerError(error);
         },
       });
@@ -257,4 +277,29 @@ export default {
       </div>
     </template>
   </div>
+
+  <!-- Fullscreen overlay during store switch -->
+  <Transition name="store-switch">
+    <div
+      v-if="isSwitchingStore"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background"
+    >
+      <div class="flex flex-col items-center gap-3">
+        <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        <span class="text-sm text-muted-foreground">Переключение магазина...</span>
+      </div>
+    </div>
+  </Transition>
 </template>
+
+<style scoped>
+.store-switch-enter-active {
+  transition: opacity 0.2s ease;
+}
+.store-switch-enter-from {
+  opacity: 0;
+}
+.store-switch-enter-to {
+  opacity: 1;
+}
+</style>

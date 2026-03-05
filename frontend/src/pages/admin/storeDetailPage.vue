@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PAGE_ADMIN_STORES } from "@/router";
+import { PAGE_ADMIN_STORES, setPageTitle } from "@/router";
 
 export default {
   components: {
@@ -107,6 +107,7 @@ export default {
         id: this.storeId,
         onSuccess: (response) => {
           this.store = response.data.value;
+          setPageTitle(this.store.name);
         },
         onError: (error) => {
           displaySonnerError(error);
