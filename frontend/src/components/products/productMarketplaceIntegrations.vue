@@ -67,7 +67,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import { PAGE_MARKETPLACE_CONNECTION } from "@/router";
+import { PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
 
 export default {
   components: {
@@ -135,6 +135,7 @@ export default {
       exportingConnectionId: null,
       importingLinkId: null,
       PAGE_MARKETPLACE_CONNECTION,
+      PAGE_MARKETPLACE_FIELD_MAPPING,
       // Recreate dialog
       showRecreateDialog: false,
       recreateConn: null,
@@ -515,11 +516,25 @@ export default {
       this.isRecreating = false;
     },
 
-    getSelectedMappingName(conn) {
+    getSelectedMapping(conn) {
       const selectedId = this.mappingSelections[conn.connectionId];
       if (!selectedId || !conn.availableMappings) return null;
-      const m = conn.availableMappings.find((m) => m.id === selectedId);
+      return conn.availableMappings.find((m) => m.id === selectedId) || null;
+    },
+
+    getSelectedMappingName(conn) {
+      const m = this.getSelectedMapping(conn);
       return m ? (m.name || m.externalCategoryName || `Маппинг #${m.id}`) : null;
+    },
+
+    getMappingRoute(conn) {
+      const m = this.getSelectedMapping(conn);
+      if (!m) return null;
+      return {
+        name: PAGE_MARKETPLACE_FIELD_MAPPING,
+        params: { connId: conn.connectionId, mappingId: m.id },
+        query: { previewProduct: String(this.productId) },
+      };
     },
 
     isConnectionBusy(conn) {
@@ -684,9 +699,13 @@ export default {
           </div>
           <div class="flex items-center gap-2 mt-0.5">
             <code class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{{ conn.externalProductId }}</code>
-            <span v-if="conn.availableMappings?.length > 1 && getSelectedMappingName(conn)" class="text-xs text-muted-foreground truncate">
+            <router-link
+              v-if="getMappingRoute(conn)"
+              :to="getMappingRoute(conn)"
+              class="text-xs text-primary hover:underline truncate"
+            >
               {{ getSelectedMappingName(conn) }}
-            </span>
+            </router-link>
           </div>
         </div>
         <Badge :variant="getStatusInfo(conn.linkStatus).variant" class="shrink-0">
@@ -763,9 +782,13 @@ export default {
           </div>
           <div class="flex items-center gap-2 mt-0.5">
             <span class="text-xs text-muted-foreground">Не экспортирован</span>
-            <span v-if="conn.availableMappings?.length > 1 && getSelectedMappingName(conn)" class="text-xs text-muted-foreground truncate">
+            <router-link
+              v-if="getMappingRoute(conn)"
+              :to="getMappingRoute(conn)"
+              class="text-xs text-primary hover:underline truncate"
+            >
               · {{ getSelectedMappingName(conn) }}
-            </span>
+            </router-link>
           </div>
         </div>
         <Badge variant="outline" class="text-green-600 border-green-600 shrink-0">
