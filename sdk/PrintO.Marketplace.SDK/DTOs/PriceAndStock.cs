@@ -32,7 +32,12 @@ public record PriceInfo(
     /// <summary>
     /// Currency (ISO code)
     /// </summary>
-    string Currency = "RUB"
+    string Currency = "RUB",
+
+    /// <summary>
+    /// Variant identifier for multi-size products (e.g. chrtId for WB).
+    /// </summary>
+    string? VariantId = null
 );
 
 /// <summary>
@@ -57,5 +62,15 @@ public record StockInfo(
     /// <summary>
     /// Warehouse name
     /// </summary>
-    string? WarehouseName = null
+    string? WarehouseName = null,
+
+    /// <summary>
+    /// Variant identifier for multi-size products (e.g. chrtId for WB).
+    /// </summary>
+    string? VariantId = null,
+
+    /// <summary>
+    /// Barcode associated with this variant.
+    /// </summary>
+    string? Barcode = null
 );

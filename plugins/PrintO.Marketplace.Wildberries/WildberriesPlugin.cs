@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.5.6";
+    public override string Version => "1.7.0";
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
 
@@ -253,6 +253,9 @@ public class WildberriesPlugin : MarketplacePluginBase
             Description: "Вес товара с упаковкой в килограммах", SortOrder: 8, Group: "Габариты"));
         fields.Add(new ExternalField("images", "Изображения (URL через запятую)", true, "string",
             Description: "Ссылки на изображения товара (через запятую). Минимум 1, максимум 30", SortOrder: 9));
+
+        fields.Add(new ExternalField("barcode", "Баркод (EAN/GTIN)", false, "string",
+            Description: "Штрих-код товара (EAN-13, GTIN). Если не указан, WB сгенерирует автоматически", SortOrder: 10));
 
         if (response.Data == null) return fields;
 
@@ -578,6 +581,19 @@ public class WildberriesPlugin : MarketplacePluginBase
             rawData["dimensions"] = JsonSerializer.Serialize(card.Dimensions);
         }
 
+        // Build variants for multi-size cards (more than 1 size)
+        List<ExternalProductVariant>? variants = null;
+        if (card.Sizes?.Count > 1)
+        {
+            variants = card.Sizes.Select(s => new ExternalProductVariant(
+                VariantId: s.ChrtId.ToString(),
+                TechSize: s.TechSize,
+                MarketplaceSize: s.WbSize,
+                Barcodes: s.Skus,
+                Price: s.Price
+            )).ToList();
+        }
+
         return new ExternalProduct(
             ExternalId: card.NmId.ToString(),
             Sku: card.VendorCode,
@@ -592,7 +608,8 @@ public class WildberriesPlugin : MarketplacePluginBase
             Barcode: barcode,
             Brand: card.Brand,
             RawData: rawData,
-            GroupId: card.ImtId.ToString()
+            GroupId: card.ImtId.ToString(),
+            Variants: variants
         );
     }
 
@@ -761,13 +778,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                     Id = c.Id,
                     Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
                 }).ToList(),
-            Sizes = existingCard.Sizes?.Select(s => new WbCardUpdateSize
-            {
-                ChrtId = s.ChrtId,
-                TechSize = s.TechSize,
-                WbSize = s.WbSize,
-                Skus = s.Skus
-            }).ToList()
+            Sizes = BuildUpdateSizes(existingCard.Sizes, data)
         };
 
         try
@@ -1265,13 +1276,7 @@ public class WildberriesPlugin : MarketplacePluginBase
                     Id = c.Id,
                     Value = c.Value.HasValue ? ExtractCharacteristicValue(c.Value.Value) : null
                 }).ToList(),
-            Sizes = existingCard.Sizes?.Select(s => new WbCardUpdateSize
-            {
-                ChrtId = s.ChrtId,
-                TechSize = s.TechSize,
-                WbSize = s.WbSize,
-                Skus = s.Skus
-            }).ToList()
+            Sizes = BuildUpdateSizes(existingCard.Sizes, data)
         };
     }
 
@@ -1536,6 +1541,8 @@ public class WildberriesPlugin : MarketplacePluginBase
                 oldPrice = firstSize.Price;
             }
 
+            // Product-level price from first size (WB goods API uses sizeID, not chrtID,
+            // so per-variant prices are imported via MapCardToProduct instead)
             result.Add(new PriceInfo(
                 ExternalProductId: item.NmId.ToString(),
                 Price: price,
@@ -1715,13 +1722,20 @@ public class WildberriesPlugin : MarketplacePluginBase
                 continue;
             }
 
+            // If VariantId is provided, use it directly as chrtId (multi-size support)
+            if (!string.IsNullOrEmpty(stock.VariantId) && int.TryParse(stock.VariantId, out var directChrtId))
+            {
+                stockItems.Add(new WbStockItem { ChrtId = directChrtId, Amount = stock.Quantity });
+                continue;
+            }
+
             if (!chrtIdMap.TryGetValue(nmId, out var chrtIds) || chrtIds.Count == 0)
             {
                 errors.Add(new ImportError(stock.ExternalProductId, "No sizes found for product"));
                 continue;
             }
 
-            // Apply stock to first chrtID
+            // Fallback: apply stock to first chrtID only
             stockItems.Add(new WbStockItem { ChrtId = chrtIds[0], Amount = stock.Quantity });
         }
 
@@ -2054,6 +2068,59 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     private static WbCardVariant BuildVariant(Dictionary<string, object> data, string vendorCode)
     {
+        // Build sizes from _variants if present (multi-size), fallback to single techSize "0"
+        List<WbCardCreateSize> sizes;
+        if (data.TryGetValue("_variants", out var variantsObj) && variantsObj is IEnumerable<object> variantsList)
+        {
+            sizes = new List<WbCardCreateSize>();
+            foreach (var v in variantsList)
+            {
+                if (v is Dictionary<string, object?> vDict)
+                {
+                    var techSize = vDict.TryGetValue("techSize", out var ts) ? ts?.ToString() : "0";
+                    var barcode = vDict.TryGetValue("barcode", out var bc) ? bc?.ToString() : null;
+                    int? price = null;
+                    if (vDict.TryGetValue("price", out var p) && p != null)
+                    {
+                        if (p is decimal d) price = (int)d;
+                        else if (int.TryParse(p.ToString(), out var pi)) price = pi;
+                    }
+                    sizes.Add(new WbCardCreateSize
+                    {
+                        TechSize = techSize ?? "0",
+                        Price = price ?? 0,
+                        Skus = !string.IsNullOrEmpty(barcode) ? new List<string> { barcode } : null
+                    });
+                }
+            }
+            // Fallback if parsing yielded no sizes
+            if (sizes.Count == 0)
+            {
+                sizes.Add(new WbCardCreateSize
+                {
+                    TechSize = "0",
+                    Price = GetIntValue(data, "price"),
+                    Skus = !string.IsNullOrEmpty(GetStringValue(data, "barcode"))
+                        ? new List<string> { GetStringValue(data, "barcode")! }
+                        : null
+                });
+            }
+        }
+        else
+        {
+            sizes = new List<WbCardCreateSize>
+            {
+                new WbCardCreateSize
+                {
+                    TechSize = "0",
+                    Price = GetIntValue(data, "price"),
+                    Skus = !string.IsNullOrEmpty(GetStringValue(data, "barcode"))
+                        ? new List<string> { GetStringValue(data, "barcode")! }
+                        : null
+                }
+            };
+        }
+
         return new WbCardVariant
         {
             VendorCode = vendorCode,
@@ -2062,15 +2129,50 @@ public class WildberriesPlugin : MarketplacePluginBase
             Brand = GetStringValue(data, "brand"),
             Dimensions = BuildDimensions(data),
             Characteristics = BuildCharacteristics(data),
-            Sizes = new List<WbCardCreateSize>
+            Sizes = sizes
+        };
+    }
+
+    /// <summary>
+    /// Build update sizes from existing card sizes, optionally merging variant prices from _variants.
+    /// </summary>
+    private static List<WbCardUpdateSize>? BuildUpdateSizes(List<WbCardSize>? existingSizes, Dictionary<string, object> data)
+    {
+        if (existingSizes == null) return null;
+
+        // Build a lookup of variant prices by chrtId from _variants
+        Dictionary<string, decimal?>? variantPrices = null;
+        if (data.TryGetValue("_variants", out var variantsObj) && variantsObj is IEnumerable<object> variantsList)
+        {
+            variantPrices = new Dictionary<string, decimal?>();
+            foreach (var v in variantsList)
             {
-                new WbCardCreateSize
+                if (v is Dictionary<string, object?> vDict
+                    && vDict.TryGetValue("variantId", out var vid)
+                    && vid != null)
                 {
-                    TechSize = "0",
-                    Price = GetIntValue(data, "price")
+                    decimal? price = null;
+                    if (vDict.TryGetValue("price", out var p) && p != null)
+                    {
+                        if (p is decimal d) price = d;
+                        else if (decimal.TryParse(p.ToString(), out var dp)) price = dp;
+                    }
+                    variantPrices[vid.ToString()!] = price;
                 }
             }
-        };
+        }
+
+        return existingSizes.Select(s =>
+        {
+            var updateSize = new WbCardUpdateSize
+            {
+                ChrtId = s.ChrtId,
+                TechSize = s.TechSize,
+                WbSize = s.WbSize,
+                Skus = s.Skus
+            };
+            return updateSize;
+        }).ToList();
     }
 
     private static WildberriesApiClient CreateClient(ConnectionContext context)

@@ -150,6 +150,8 @@ export default {
       importExcludedFields: new Set(),
       // Mapping selection
       mappingSelections: {}, // { connectionId: categoryMappingId }
+      // Variants per connection: { connectionId: { loading, variants: [] } }
+      variantsData: {},
       // Bulk mapping dialog
       showBulkMappingDialog: false,
       bulkMappingConflicts: [],
@@ -197,6 +199,8 @@ export default {
       "exportFromLink",
       "recreateProductOnMarketplace",
       "saveMappingSelections",
+      "getProductVariants",
+      "updateProductVariant",
     ]),
 
     async fetchData() {
@@ -232,6 +236,37 @@ export default {
         });
       } catch {
         displaySonnerError("Ошибка сохранения маппинга");
+      }
+    },
+
+    async loadVariants(connectionId) {
+      this.variantsData = {
+        ...this.variantsData,
+        [connectionId]: { loading: true, variants: this.variantsData[connectionId]?.variants || [] },
+      };
+      try {
+        const data = await this.getProductVariants({ productId: this.productId });
+        this.variantsData = {
+          ...this.variantsData,
+          [connectionId]: { loading: false, variants: data || [] },
+        };
+      } catch {
+        this.variantsData = {
+          ...this.variantsData,
+          [connectionId]: { loading: false, variants: [] },
+        };
+      }
+    },
+
+    toggleVariants(conn) {
+      const current = this.variantsData[conn.connectionId];
+      if (current && current.variants.length > 0) {
+        // Hide variants
+        const copy = { ...this.variantsData };
+        delete copy[conn.connectionId];
+        this.variantsData = copy;
+      } else {
+        this.loadVariants(conn.connectionId);
       }
     },
 
@@ -684,8 +719,9 @@ export default {
       <div
         v-for="conn in linkedConnections"
         :key="conn.connectionId"
-        class="relative flex items-center gap-3 border rounded-lg px-4 py-3"
+        class="relative border rounded-lg"
       >
+        <div class="flex items-center gap-3 px-4 py-3">
         <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
           <Loader2 class="size-5 animate-spin text-primary" />
         </div>
@@ -712,6 +748,9 @@ export default {
           <component :is="getStatusInfo(conn.linkStatus).icon" class="size-3 mr-1" />
           {{ getStatusInfo(conn.linkStatus).label }}
         </Badge>
+        <Button variant="ghost" size="icon" class="size-8 shrink-0" @click="toggleVariants(conn)">
+          <Layers class="size-4" />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" size="icon" class="size-8 shrink-0">
@@ -761,6 +800,41 @@ export default {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
+        <!-- Variants panel -->
+        <div v-if="variantsData[conn.connectionId]" class="border-t px-4 py-2">
+          <div v-if="variantsData[conn.connectionId].loading" class="flex items-center gap-2 py-2">
+            <Loader2 class="size-4 animate-spin" />
+            <span class="text-xs text-muted-foreground">Загрузка размеров...</span>
+          </div>
+          <div v-else-if="variantsData[conn.connectionId].variants.length === 0" class="py-2">
+            <span class="text-xs text-muted-foreground">Нет размеров для этого подключения</span>
+          </div>
+          <Table v-else>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="text-xs h-8">Размер</TableHead>
+                <TableHead class="text-xs h-8">SKU</TableHead>
+                <TableHead class="text-xs h-8">Баркод</TableHead>
+                <TableHead class="text-xs h-8">Цена</TableHead>
+                <TableHead class="text-xs h-8">Остаток</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="v in variantsData[conn.connectionId].variants" :key="v.id">
+                <TableCell class="text-xs py-1">{{ v.size || '—' }}</TableCell>
+                <TableCell class="text-xs py-1">
+                  <code class="bg-muted px-1 rounded">{{ v.sku || '—' }}</code>
+                </TableCell>
+                <TableCell class="text-xs py-1">
+                  <code class="bg-muted px-1 rounded">{{ v.barcode || '—' }}</code>
+                </TableCell>
+                <TableCell class="text-xs py-1">{{ v.price != null ? v.price : '—' }}</TableCell>
+                <TableCell class="text-xs py-1">{{ v.quantity != null ? v.quantity : '—' }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <!-- Ready to export connections (has mapping, not linked) -->

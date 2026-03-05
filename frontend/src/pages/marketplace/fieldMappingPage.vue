@@ -178,11 +178,17 @@ export default {
       previewDebounceTimer: null,
       // External field descriptions keyed by externalFieldKey
       externalFieldDescriptions: {},
+      // Aspect fields (size, color) keyed by externalFieldKey
+      aspectFields: {},
       // Modifier sheet
       editingFieldMapping: null,
       showModifierSheet: false,
       // Preview summary sheet
       showPreviewSheet: false,
+      // Mapping settings dialog
+      showMappingSettings: false,
+      settingsName: "",
+      isSavingSettings: false,
       // Для добавления нового поля
       showAddField: false,
       newField: {
@@ -277,6 +283,7 @@ export default {
       "getExternalFields",
       "previewFieldMappings",
       "getAllProducts",
+      "updateCategoryMapping",
     ]),
 
     async fetchData() {
@@ -309,6 +316,7 @@ export default {
               : [],
           }));
           this.mappingInfo = {
+            name: data.name,
             localCategoryName: data.localCategoryName,
             externalCategoryId: data.externalCategoryId,
             externalCategoryName: data.externalCategoryName,
@@ -343,10 +351,13 @@ export default {
         onSuccess: (response) => {
           const fields = extractResponseData(response, []);
           const descMap = {};
+          const aspectMap = {};
           for (const f of fields) {
             if (f.description) descMap[f.key] = f.description;
+            if (f.isAspect) aspectMap[f.key] = true;
           }
           this.externalFieldDescriptions = descMap;
+          this.aspectFields = aspectMap;
         },
         onError: () => { /* non-critical */ },
       });
@@ -700,6 +711,29 @@ export default {
       this.$router.push(`/marketplace/${this.connectionId}`);
     },
 
+    openMappingSettings() {
+      this.settingsName = this.mappingInfo?.name || "";
+      this.showMappingSettings = true;
+    },
+
+    async saveMappingSettings() {
+      this.isSavingSettings = true;
+      try {
+        await this.updateCategoryMapping({
+          connectionId: this.connectionId,
+          mappingId: this.mappingId,
+          data: { name: this.settingsName || null },
+        });
+        this.mappingInfo.name = this.settingsName || null;
+        displaySonnerSuccess("Настройки сохранены");
+        this.showMappingSettings = false;
+      } catch (error) {
+        displaySonnerError(error.response?.data?.message || "Ошибка сохранения");
+      } finally {
+        this.isSavingSettings = false;
+      }
+    },
+
     // Добавление нового поля вручную
     openAddFieldDialog() {
       this.newField = {
@@ -866,6 +900,10 @@ export default {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem @click="openMappingSettings" class="cursor-pointer">
+              <Settings2 class="size-4 mr-2" />
+              Настройки
+            </DropdownMenuItem>
             <DropdownMenuItem @click="openAddFieldDialog" class="cursor-pointer">
               <Plus class="size-4 mr-2" />
               Добавить поле
@@ -989,6 +1027,9 @@ export default {
                     <span v-if="fm.isRequired" class="text-destructive">*</span>
                     <Badge v-if="fm.isCustom" variant="outline" class="text-xs py-0 h-5">
                       вручную
+                    </Badge>
+                    <Badge v-if="aspectFields[fm.externalFieldKey]" variant="secondary" class="text-xs py-0 h-5">
+                      аспектный
                     </Badge>
                     <TooltipProvider v-if="externalFieldDescriptions[fm.externalFieldKey]">
                       <Tooltip>
@@ -1442,6 +1483,33 @@ export default {
     </Sheet>
 
     <!-- Диалог добавления нового поля -->
+    <!-- Mapping Settings Dialog -->
+    <Dialog v-model:open="showMappingSettings">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Настройки маппинга</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label>Название</Label>
+            <Input
+              v-model="settingsName"
+              placeholder="Название маппинга"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">Отмена</Button>
+          </DialogClose>
+          <Button @click="saveMappingSettings" :disabled="isSavingSettings">
+            <Loader2 v-if="isSavingSettings" class="size-4 mr-2 animate-spin" />
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <Dialog v-model:open="showAddField">
       <DialogContent>
         <DialogHeader>

@@ -218,6 +218,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// </summary>
         [StringLength(NAME_MAX_LENGTH)]
         public string? name { get; set; }
+
     }
 
     /// <summary>

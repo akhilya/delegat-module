@@ -77,5 +77,12 @@ public record ExternalProduct(
     /// <summary>
     /// Group name on the marketplace
     /// </summary>
-    string? GroupName = null
+    string? GroupName = null,
+
+    /// <summary>
+    /// Product variants (e.g. sizes) within a single marketplace card.
+    /// Used for WB-style marketplaces where one card has multiple sizes.
+    /// Null for single-variant products or Ozon (each size = separate product).
+    /// </summary>
+    List<ExternalProductVariant>? Variants = null
 );

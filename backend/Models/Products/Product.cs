@@ -126,6 +126,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     /// </summary>
     public virtual ICollection<ProductGroupMember> groupMemberships { get; set; } = new List<ProductGroupMember>();
 
+    /// <summary>
+    /// Collection of product variants (sizes) across marketplace connections.
+    /// </summary>
+    public virtual ICollection<ProductVariant> variants { get; set; } = new List<ProductVariant>();
+
     public bool AddFill(AddForm form)
     {
         sku = form.userAddForm.sku;

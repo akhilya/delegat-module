@@ -28,6 +28,11 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
     public string? description { get; set; }
 
     /// <summary>
+    /// Whether products in this category support sizes (e.g. clothing, shoes).
+    /// </summary>
+    public bool hasSizes { get; set; } = false;
+
+    /// <summary>
     /// Timestamp when the category was created.
     /// </summary>
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
@@ -68,6 +73,8 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         if (!string.IsNullOrEmpty(form.name))
             name = form.name;
         description = form.description;
+        if (form.hasSizes.HasValue)
+            hasSizes = form.hasSizes.Value;
         return true;
     }
 
@@ -78,6 +85,7 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
             id = Id,
             name = name,
             description = description,
+            hasSizes = hasSizes,
             createdAt = createdAt,
             productsCount = products?.Count ?? 0,
             attributesCount = attributes?.Count ?? 0
@@ -91,6 +99,7 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
             id = Id,
             name = name,
             description = description,
+            hasSizes = hasSizes,
             createdAt = createdAt,
             attributes = attributes?.OrderBy(a => a.sortOrder).Select(a => ((IMapToDTO<CategoryAttribute.AttributeDTO>)a).MapToDTO(serviceProvider)).ToList() ?? new List<CategoryAttribute.AttributeDTO>(),
             productsCount = products?.Count ?? 0
@@ -164,6 +173,11 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         /// </summary>
         [StringLength(CATEGORY_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
+
+        /// <summary>
+        /// Whether products in this category support sizes.
+        /// </summary>
+        public bool? hasSizes { get; set; }
     }
 
     /// <summary>
@@ -194,6 +208,8 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         /// <summary>
         /// Number of products in this category.
         /// </summary>
+        public bool hasSizes { get; set; }
+
         public int productsCount { get; set; }
 
         /// <summary>
@@ -231,6 +247,8 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         /// Ordered list of category attributes.
         /// </summary>
         public List<CategoryAttribute.AttributeDTO> attributes { get; set; }
+
+        public bool hasSizes { get; set; }
 
         /// <summary>
         /// Number of products in this category.

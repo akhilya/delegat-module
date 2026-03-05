@@ -76,7 +76,8 @@ public class FieldMappingController : ControllerBase
                 type = f.Type,
                 options = f.Options,
                 description = f.Description,
-                sortOrder = f.SortOrder
+                sortOrder = f.SortOrder,
+                isAspect = f.IsAspect
             }));
         }
         catch (Exception ex)
@@ -129,7 +130,8 @@ public class FieldMappingController : ControllerBase
             fieldMappings = result,
             localCategoryName = mapping.localCategory?.name,
             externalCategoryId = mapping.externalCategoryId,
-            externalCategoryName = mapping.externalCategoryName
+            externalCategoryName = mapping.externalCategoryName,
+            name = mapping.name
         });
     }
 

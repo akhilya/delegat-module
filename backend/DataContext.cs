@@ -37,6 +37,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // System versioning
     public DbSet<SystemVersion> systemVersions { get; set; }
 
+    // Product variants (sizes)
+    public DbSet<ProductVariant> productVariants { get; set; }
+    public DbSet<ProductVariantLink> productVariantLinks { get; set; }
+
     // Product grouping
     public DbSet<ProductGroup> productGroups { get; set; }
     public DbSet<ProductGroupMember> productGroupMembers { get; set; }
@@ -104,6 +108,18 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<ProductGroupMarketplaceLink>()
             .HasIndex(l => new { l.externalGroupId, l.connectionId })
             .IsUnique();
+
+        // ProductVariant: index on productId
+        builder.Entity<ProductVariant>()
+            .HasIndex(v => v.productId);
+
+        // ProductVariantLink: unique (variantId, connectionId), index on connectionId
+        builder.Entity<ProductVariantLink>()
+            .HasIndex(l => new { l.variantId, l.connectionId })
+            .IsUnique();
+
+        builder.Entity<ProductVariantLink>()
+            .HasIndex(l => l.connectionId);
 
         // Pending product import indexes
         builder.Entity<PendingProductImport>()

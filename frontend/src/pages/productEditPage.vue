@@ -31,6 +31,7 @@ import ProductImagesEditor from "@/components/productImagesEditor.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
+import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import Separator from "@/components/ui/separator/Separator.vue";
@@ -94,6 +95,7 @@ export default {
     ProductAttributeForm,
     StoreAttributeForm,
     ProductMarketplaceIntegrations,
+    ProductVariantsEditor,
     BarcodeInput,
     SearchableSelect,
     Separator,
@@ -623,6 +625,7 @@ export default {
             <TabsTrigger value="notes">Заметки</TabsTrigger>
             <TabsTrigger value="files">Файлы</TabsTrigger>
             <TabsTrigger value="images">Изображения</TabsTrigger>
+            <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
             <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -746,8 +749,8 @@ export default {
                     </FormItem>
                   </FormField>
 
-                  <!-- Price and Quantity in a row -->
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <!-- Price and Quantity in a row (hidden when category has sizes — managed per variant) -->
+                  <div v-if="!category?.hasSizes" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
                       <FormItem>
                         <FormLabel>Количество на складе</FormLabel>
@@ -980,6 +983,11 @@ export default {
             :productId="productId"
             @onOrderSave="saveImageOrder"
           />
+        </div>
+
+        <!-- Sizes tab -->
+        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col grow border rounded-xl">
+          <ProductVariantsEditor :productId="productId" />
         </div>
 
         <!-- Marketplaces tab -->

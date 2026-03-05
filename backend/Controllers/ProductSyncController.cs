@@ -2146,6 +2146,159 @@ public class ProductSyncController : ControllerBase
 
     #endregion
 
+    #region Product Variants
+
+    /// <summary>
+    /// Get all variants for a product
+    /// </summary>
+    [HttpGet]
+    [Route("/products/{productId}/variants")]
+    public async Task<IActionResult> GetProductVariants(int productId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        var variants = await _context.productVariants
+            .Where(v => v.productId == productId)
+            .OrderBy(v => v.sortOrder)
+            .Select(v => new
+            {
+                v.Id,
+                v.productId,
+                v.sku,
+                v.barcode,
+                v.size,
+                v.price,
+                v.quantity,
+                v.sortOrder,
+                v.createdAt,
+                v.updatedAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(variants);
+    }
+
+    /// <summary>
+    /// Create a new product variant
+    /// </summary>
+    [HttpPost]
+    [Route("/products/{productId}/variants")]
+    public async Task<IActionResult> CreateProductVariant(
+        int productId,
+        [FromBody] CreateVariantInput input,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        // Determine next sort order
+        var maxSortOrder = await _context.productVariants
+            .Where(v => v.productId == productId)
+            .MaxAsync(v => (int?)v.sortOrder, ct) ?? -1;
+
+        var variant = new ProductVariant();
+        variant.AddFill(new ProductVariant.AddForm
+        {
+            productId = productId,
+            sku = input.sku,
+            barcode = input.barcode,
+            size = input.size,
+            price = input.price,
+            quantity = input.quantity,
+            sortOrder = maxSortOrder + 1
+        });
+
+        _context.productVariants.Add(variant);
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { id = variant.Id });
+    }
+
+    /// <summary>
+    /// Update a product variant
+    /// </summary>
+    [HttpPut]
+    [Route("/products/{productId}/variants/{variantId}")]
+    public async Task<IActionResult> UpdateProductVariant(
+        int productId,
+        int variantId,
+        [FromBody] UpdateVariantInput input,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        var variant = await _context.productVariants
+            .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
+        if (variant == null)
+            throw ApiException.NotFound("Вариант не найден");
+
+        variant.UpdateFill(new ProductVariant.UpdateForm
+        {
+            sku = input.sku,
+            barcode = input.barcode,
+            size = input.size,
+            price = input.price,
+            quantity = input.quantity,
+            sortOrder = input.sortOrder
+        });
+
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Delete a product variant
+    /// </summary>
+    [HttpDelete]
+    [Route("/products/{productId}/variants/{variantId}")]
+    public async Task<IActionResult> DeleteProductVariant(
+        int productId,
+        int variantId,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        var variant = await _context.productVariants
+            .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
+        if (variant == null)
+            throw ApiException.NotFound("Вариант не найден");
+
+        _context.productVariants.Remove(variant);
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { success = true });
+    }
+
+    #endregion
+
     #region Helpers
 
     private async Task<MarketplaceConnection> GetConnectionAsync(int connectionId)
@@ -2213,6 +2366,25 @@ public class ProductSyncController : ControllerBase
     public struct LinksBulkInput
     {
         public List<int> linkIds { get; set; }
+    }
+
+    public struct CreateVariantInput
+    {
+        public string? sku { get; set; }
+        public string? barcode { get; set; }
+        public string? size { get; set; }
+        public decimal? price { get; set; }
+        public int? quantity { get; set; }
+    }
+
+    public struct UpdateVariantInput
+    {
+        public string? sku { get; set; }
+        public string? barcode { get; set; }
+        public string? size { get; set; }
+        public decimal? price { get; set; }
+        public int? quantity { get; set; }
+        public int? sortOrder { get; set; }
     }
 
     #endregion

@@ -238,6 +238,7 @@ export default {
         id: this.categoryId,
         name: this.category.name.trim(),
         description: this.category.description?.trim() || null,
+        hasSizes: this.category.hasSizes ?? false,
         onSuccess: () => {
           displaySonnerSuccess("Категория сохранена");
         },
@@ -510,6 +511,10 @@ export default {
                 placeholder="Описание категории (необязательно)"
                 class="h-24"
               />
+            </div>
+            <div class="flex items-center gap-2">
+              <Switch :model-value="category.hasSizes" @update:model-value="category.hasSizes = $event" />
+              <Label>Товары имеют размеры</Label>
             </div>
             <Button
               @click="handleSaveCategory"

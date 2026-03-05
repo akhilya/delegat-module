@@ -1389,6 +1389,30 @@ export default {
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
     },
+
+    // === Product Variants ===
+
+    async getProductVariants(ctx, { productId }) {
+      const response = await http.get(`/products/${productId}/variants`);
+      return response.data;
+    },
+
+    async createProductVariant(ctx, { productId, data }) {
+      const response = await http.post(`/products/${productId}/variants`, data);
+      return response.data;
+    },
+
+    async updateProductVariant(ctx, { productId, variantId, data }) {
+      const response = await http.put(
+        `/products/${productId}/variants/${variantId}`,
+        data
+      );
+      return response.data;
+    },
+
+    async deleteProductVariant(ctx, { productId, variantId }) {
+      await http.delete(`/products/${productId}/variants/${variantId}`);
+    },
   },
   mutations: {},
   state: {},

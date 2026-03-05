@@ -190,6 +190,9 @@ public class CategoryImportService
         var existingFieldKeys = new HashSet<string>();
         int updatedFieldMappings = 0;
 
+        // Remove meta-field from processing (plugin may still emit _hasSizes)
+        fields = fields.Where(f => f.Key != "_hasSizes").ToList();
+
         if (categoryMapping != null)
         {
             // Existing mapping found — reuse it, update external category info

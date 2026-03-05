@@ -89,13 +89,13 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateCategory(ctx, { id, name, description, onSuccess, onError }) {
+    async updateCategory(ctx, { id, name, description, hasSizes, onSuccess, onError }) {
       return await useAxios(
         `/categories/${id}`,
         {
           method: "PATCH",
           cache: false,
-          data: { name, description },
+          data: { name, description, hasSizes },
         },
         http,
         {

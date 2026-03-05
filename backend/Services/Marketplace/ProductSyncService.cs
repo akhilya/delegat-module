@@ -138,6 +138,28 @@ public class ProductSyncService
                 }
             }
 
+            // Inject variants if product has them — join with links for this connection
+            var variants = await _context.productVariants
+                .Where(v => v.productId == product.Id)
+                .Include(v => v.marketplaceLinks.Where(l => l.connectionId == connectionId))
+                .ToListAsync(ct);
+            if (variants.Count > 0)
+            {
+                exportData["_variants"] = variants.Select(v =>
+                {
+                    var link = v.marketplaceLinks.FirstOrDefault();
+                    return new Dictionary<string, object?>
+                    {
+                        ["variantId"] = link?.externalVariantId,
+                        ["techSize"] = v.size,
+                        ["marketplaceSize"] = link?.marketplaceSize,
+                        ["barcode"] = v.barcode,
+                        ["price"] = v.price,
+                        ["quantity"] = v.quantity
+                    };
+                }).ToList();
+            }
+
             // Валидация обязательных полей перед отправкой
             var requiredMappings = categoryMapping.fieldMappings
                 .Where(fm => fm.isRequired && fm.isEnabled)
@@ -388,6 +410,15 @@ public class ProductSyncService
             }
         }
 
+        // One query: load all product variants with marketplace links for this connection
+        var allVariants = await _context.productVariants
+            .Where(v => productIds.Contains(v.productId))
+            .Include(v => v.marketplaceLinks.Where(l => l.connectionId == connectionId))
+            .ToListAsync(ct);
+        var variantsByProductId = allVariants
+            .GroupBy(v => v.productId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         // Build BulkExportItem list
         var bulkItems = new List<BulkExportItem>();
         var failedProductIds = new HashSet<int>();
@@ -440,6 +471,24 @@ public class ProductSyncService
                 {
                     if (groupIdByProductId.TryGetValue(productId, out var groupId) && groupId != null)
                         exportData[fieldGroupingConfig.GroupFieldKey] = groupId;
+                }
+
+                // Inject variants if present
+                if (variantsByProductId.TryGetValue(productId, out var prodVariants) && prodVariants.Count > 0)
+                {
+                    exportData["_variants"] = prodVariants.Select(v =>
+                    {
+                        var link = v.marketplaceLinks.FirstOrDefault();
+                        return new Dictionary<string, object?>
+                        {
+                            ["variantId"] = link?.externalVariantId,
+                            ["techSize"] = v.size,
+                            ["marketplaceSize"] = link?.marketplaceSize,
+                            ["barcode"] = v.barcode,
+                            ["price"] = v.price,
+                            ["quantity"] = v.quantity
+                        };
+                    }).ToList();
                 }
 
                 // Validate required fields
@@ -928,6 +977,12 @@ public class ProductSyncService
 
             _context.productMarketplaceLinks.Add(link);
             await _context.SaveChangesAsync(ct);
+
+            // Sync variants (sizes) if present
+            if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
+            {
+                await SyncVariantsAsync(product.Id, connectionId, externalProduct.Variants, ct);
+            }
 
             // Добавляем товар в группу, если GroupId указан
             if (!string.IsNullOrEmpty(externalProduct.GroupId))
@@ -1621,6 +1676,102 @@ public class ProductSyncService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Sync product variants (sizes) from an external product into the local database.
+    /// Additive: matches existing variants by barcode or size, creates new ones if not found.
+    /// Creates/updates ProductVariantLink for marketplace-specific IDs.
+    /// </summary>
+    public async Task SyncVariantsAsync(
+        int productId,
+        int connectionId,
+        List<ExternalProductVariant> variants,
+        CancellationToken ct = default)
+    {
+        // Load existing local variants for this product
+        var existingVariants = await _context.productVariants
+            .Where(v => v.productId == productId)
+            .ToListAsync(ct);
+
+        // Load existing links for this connection
+        var existingLinks = await _context.productVariantLinks
+            .Where(l => l.variant.productId == productId && l.connectionId == connectionId)
+            .ToListAsync(ct);
+        var linkByVariantId = existingLinks.ToDictionary(l => l.variantId, l => l);
+
+        int nextSortOrder = existingVariants.Count > 0
+            ? existingVariants.Max(v => v.sortOrder) + 1
+            : 0;
+
+        foreach (var v in variants)
+        {
+            var firstBarcode = v.Barcodes?.FirstOrDefault();
+
+            // Try to find existing local variant by barcode or size
+            var localVariant = existingVariants.FirstOrDefault(ev =>
+                (!string.IsNullOrEmpty(firstBarcode) && ev.barcode == firstBarcode) ||
+                (!string.IsNullOrEmpty(v.TechSize) && ev.size == v.TechSize));
+
+            if (localVariant == null)
+            {
+                // Create new local variant
+                localVariant = new ProductVariant();
+                localVariant.AddFill(new ProductVariant.AddForm
+                {
+                    productId = productId,
+                    barcode = firstBarcode,
+                    size = v.TechSize,
+                    price = v.Price,
+                    quantity = v.Quantity,
+                    sortOrder = nextSortOrder++
+                });
+                _context.productVariants.Add(localVariant);
+                await _context.SaveChangesAsync(ct); // need ID for link
+                existingVariants.Add(localVariant);
+            }
+            else
+            {
+                // Update existing variant data from marketplace
+                if (v.Price.HasValue)
+                    localVariant.price = v.Price;
+                if (v.Quantity.HasValue)
+                    localVariant.quantity = v.Quantity;
+                if (!string.IsNullOrEmpty(firstBarcode) && string.IsNullOrEmpty(localVariant.barcode))
+                    localVariant.barcode = firstBarcode;
+                localVariant.updatedAt = DateTime.UtcNow;
+            }
+
+            // Create or update marketplace link
+            if (linkByVariantId.TryGetValue(localVariant.Id, out var existingLink))
+            {
+                existingLink.externalVariantId = v.VariantId;
+                existingLink.marketplaceSize = v.MarketplaceSize;
+                existingLink.rawData = v.Extra != null
+                    ? System.Text.Json.JsonSerializer.Serialize(v.Extra)
+                    : null;
+            }
+            else
+            {
+                var link = new ProductVariantLink
+                {
+                    variantId = localVariant.Id,
+                    connectionId = connectionId,
+                    externalVariantId = v.VariantId,
+                    marketplaceSize = v.MarketplaceSize,
+                    rawData = v.Extra != null
+                        ? System.Text.Json.JsonSerializer.Serialize(v.Extra)
+                        : null
+                };
+                _context.productVariantLinks.Add(link);
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Synced {Count} variants for product {ProductId} on connection {ConnectionId}",
+            variants.Count, productId, connectionId);
     }
 }
 

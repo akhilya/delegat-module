@@ -37,5 +37,10 @@ public record ExternalCategory(
     /// <summary>
     /// Number of child categories
     /// </summary>
-    int? ChildrenCount = null
+    int? ChildrenCount = null,
+
+    /// <summary>
+    /// Hint from plugin: whether this category supports sizes (e.g. clothing).
+    /// </summary>
+    bool? HasSizes = null
 );

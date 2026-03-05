@@ -44,6 +44,8 @@ import {
   EllipsisVertical,
   Pencil,
   Copy,
+  FileText,
+  Settings2,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -199,6 +201,8 @@ export default {
     EllipsisVertical,
     Pencil,
     Copy,
+    FileText,
+    Settings2,
   },
   data() {
     return {
@@ -295,6 +299,12 @@ export default {
       renameMappingId: null,
       renameMappingValue: "",
       isRenamingMapping: false,
+
+      // === Mapping settings dialog ===
+      showMappingSettingsDialog: false,
+      mappingSettingsId: null,
+      mappingSettingsName: "",
+      isSavingMappingSettings: false,
 
       // === Mapping selection dialog (pre-export) ===
       showMappingSelectionDialog: false,
@@ -848,6 +858,31 @@ export default {
         displaySonnerError(error.response?.data?.message || "Ошибка переименования");
       } finally {
         this.isRenamingMapping = false;
+      }
+    },
+
+    openMappingSettingsDialog(mapping) {
+      this.mappingSettingsId = mapping.id;
+      this.mappingSettingsName = mapping.name || "";
+      this.showMappingSettingsDialog = true;
+    },
+
+    async saveMappingSettingsDialog() {
+      if (this.mappingSettingsId == null) return;
+      this.isSavingMappingSettings = true;
+      try {
+        await this.updateCategoryMapping({
+          connectionId: this.connectionId,
+          mappingId: this.mappingSettingsId,
+          data: { name: this.mappingSettingsName || null },
+        });
+        displaySonnerSuccess("Настройки сохранены");
+        this.showMappingSettingsDialog = false;
+        this.fetchMappings();
+      } catch (error) {
+        displaySonnerError(error.response?.data?.message || "Ошибка сохранения");
+      } finally {
+        this.isSavingMappingSettings = false;
       }
     },
 
@@ -2122,10 +2157,11 @@ export default {
               v-for="mapping in categoryMappings"
               :key="mapping.id"
               class="cursor-pointer hover:bg-accent/50 transition-colors"
+              @click="openFieldMapping(mapping.id)"
             >
               <CardContent>
                 <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-4" @click="openFieldMapping(mapping.id)">
+                  <div class="flex items-center gap-4">
                     <FolderTree class="size-5 text-muted-foreground" />
                     <div>
                       <div class="font-medium">
@@ -2141,10 +2177,6 @@ export default {
                     </Badge>
                   </div>
                   <div class="flex items-center gap-2">
-                    <Button variant="outline" size="sm" @click="openFieldMapping(mapping.id)">
-                      Настроить поля
-                      <ChevronRight class="size-4 ml-2" />
-                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger as-child>
                         <Button variant="ghost" size="icon" @click.stop>
@@ -2152,6 +2184,15 @@ export default {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem @click.stop="openFieldMapping(mapping.id)">
+                          <FileText class="size-4 mr-2" />
+                          Настроить поля
+                        </DropdownMenuItem>
+                        <DropdownMenuItem @click.stop="openMappingSettingsDialog(mapping)">
+                          <Settings2 class="size-4 mr-2" />
+                          Настройки
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
                           <Pencil class="size-4 mr-2" />
                           Переименовать
@@ -2863,6 +2904,33 @@ export default {
           </DialogClose>
           <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
             <Loader2 v-if="isRenamingMapping" class="size-4 mr-2 animate-spin" />
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Mapping Settings Dialog -->
+    <Dialog v-model:open="showMappingSettingsDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Настройки маппинга</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label>Название</Label>
+            <Input
+              v-model="mappingSettingsName"
+              placeholder="Название маппинга"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">Отмена</Button>
+          </DialogClose>
+          <Button @click="saveMappingSettingsDialog" :disabled="isSavingMappingSettings">
+            <Loader2 v-if="isSavingMappingSettings" class="size-4 mr-2 animate-spin" />
             Сохранить
           </Button>
         </DialogFooter>

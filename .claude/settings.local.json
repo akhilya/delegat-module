@@ -111,7 +111,8 @@
       "mcp__playwright__browser_fill_form",
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(python3:*)"
     ]
   }
 }

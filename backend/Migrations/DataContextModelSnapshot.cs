@@ -97,6 +97,9 @@ namespace PrintO.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<bool>("hasSizes")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -927,6 +930,90 @@ namespace PrintO.Migrations
                     b.ToTable("products");
                 });
 
+            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("barcode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal?>("price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("size")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("sku")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("sortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("productId");
+
+                    b.ToTable("productVariants");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Products.ProductVariantLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("externalVariantId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("marketplaceSize")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("rawData")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("variantId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId");
+
+                    b.HasIndex("variantId", "connectionId")
+                        .IsUnique();
+
+                    b.ToTable("productVariantLinks");
+                });
+
             modelBuilder.Entity("PrintO.Models.Store", b =>
                 {
                     b.Property<int>("Id")
@@ -1443,6 +1530,36 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
+            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+                {
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany("variants")
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("product");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Products.ProductVariantLink", b =>
+                {
+                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                        .WithMany()
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.Products.ProductVariant", "variant")
+                        .WithMany("marketplaceLinks")
+                        .HasForeignKey("variantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("connection");
+
+                    b.Navigation("variant");
+                });
+
             modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
                 {
                     b.HasOne("PrintO.Models.Store", "store")
@@ -1559,6 +1676,13 @@ namespace PrintO.Migrations
                     b.Navigation("notes");
 
                     b.Navigation("storeAttributeValues");
+
+                    b.Navigation("variants");
+                });
+
+            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+                {
+                    b.Navigation("marketplaceLinks");
                 });
 
             modelBuilder.Entity("PrintO.Models.Store", b =>

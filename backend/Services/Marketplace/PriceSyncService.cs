@@ -292,14 +292,45 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
 
-        // Build data for export
-        var stocksToExport = links
-            .Where(l => l.product?.storageQuantity != null)
-            .Select(l => new StockInfo(
-                l.externalProductId,
-                l.product!.storageQuantity!.Value
-            ))
-            .ToList();
+        // Load variants with marketplace links for this connection
+        var productIds = links.Select(l => l.productId).ToList();
+        var allVariants = await _context.productVariants
+            .Where(v => productIds.Contains(v.productId))
+            .Include(v => v.marketplaceLinks.Where(l => l.connectionId == connectionId))
+            .ToListAsync(ct);
+        var variantsByProductId = allVariants
+            .GroupBy(v => v.productId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Build data for export — per-variant if variants exist, otherwise single stock per link
+        var stocksToExport = new List<StockInfo>();
+        foreach (var l in links.Where(l => l.product != null))
+        {
+            if (variantsByProductId.TryGetValue(l.productId, out var variants) && variants.Count > 0)
+            {
+                // One StockInfo per variant (only those with marketplace link)
+                foreach (var v in variants)
+                {
+                    var link = v.marketplaceLinks.FirstOrDefault();
+                    if (link != null)
+                    {
+                        stocksToExport.Add(new StockInfo(
+                            l.externalProductId,
+                            v.quantity ?? l.product!.storageQuantity ?? 0,
+                            VariantId: link.externalVariantId,
+                            Barcode: v.barcode
+                        ));
+                    }
+                }
+            }
+            else if (l.product!.storageQuantity != null)
+            {
+                stocksToExport.Add(new StockInfo(
+                    l.externalProductId,
+                    l.product.storageQuantity.Value
+                ));
+            }
+        }
 
         if (!stocksToExport.Any())
             return PriceSyncResult.Success(0, links.Count, "Нет товаров с остатками для экспорта");
