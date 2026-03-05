@@ -1,4 +1,5 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
+import { BRAND_NAME } from "@/brand";
 
 const signUpPage = () => import("./pages/signUpPage.vue");
 const signInPage = () => import("./pages/signInPage.vue");
@@ -43,7 +44,8 @@ export const PAGE_MARKETPLACE_CONNECTION = "/marketplace/:connId";
 export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/marketplace/:connId/categories/import";
 export const PAGE_MARKETPLACE_FIELD_MAPPING = "/marketplace/:connId/categories/:mappingId";
 
-export const APP_TITLE = "PrintO";
+// Track whether a page component set a custom title (prevents afterEach from overwriting it on tab/query changes)
+let _customTitle = null;
 
 export const routes = [
   { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, title: "Регистрация" } },
@@ -72,11 +74,13 @@ export const routes = [
 routes.forEach((r) => (r.name = r.path));
 
 /**
- * Set the page title. Use from page components after loading data.
+ * Set a dynamic page title from a page component (e.g. after loading data).
+ * Persists across tab/query changes on the same route.
  * @param {string} detail - e.g. product SKU, category name
  */
 export function setPageTitle(detail) {
-  document.title = detail ? `${detail} — ${APP_TITLE}` : APP_TITLE;
+  _customTitle = detail || null;
+  document.title = detail ? `${detail} — ${BRAND_NAME}` : BRAND_NAME;
 }
 
 export function createRouter() {
@@ -85,9 +89,15 @@ export function createRouter() {
     routes,
   });
 
-  router.afterEach((to) => {
+  router.afterEach((to, from) => {
+    // If navigating within the same route path (e.g. tab/query change),
+    // keep the custom title set by the page component
+    if (_customTitle && to.path === from.path) return;
+
+    // New route — reset custom title and apply route meta
+    _customTitle = null;
     const title = to.meta?.title;
-    document.title = title ? `${title} — ${APP_TITLE}` : APP_TITLE;
+    document.title = title ? `${title} — ${BRAND_NAME}` : BRAND_NAME;
   });
 
   return router;

@@ -74,7 +74,7 @@ export default {
     ]),
     async selectStore(storeId) {
       this.isSwitchingStore = true;
-      const minDelay = new Promise(r => setTimeout(r, 1000));
+      const minDelay = new Promise(r => setTimeout(r, 2000));
       this.postSelectStore({
         storeId,
         onSuccess: async (response) => {
