@@ -23,10 +23,14 @@ export function createStore() {
   return _createStore({
     state: {
       appKey: 0,
+      isSwitchingStore: false,
     },
     mutations: {
       incrementAppKey(state) {
         state.appKey++;
+      },
+      setSwitchingStore(state, value) {
+        state.isSwitchingStore = value;
       },
     },
     modules: {

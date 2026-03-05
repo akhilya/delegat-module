@@ -59,7 +59,6 @@ export default {
     return {
       me: undefined,
       isLoading: false,
-      isSwitchingStore: false,
       memberships: [],
       platformVersion: null,
     };
@@ -73,8 +72,8 @@ export default {
       "getIsAuthenticated",
     ]),
     async selectStore(storeId) {
-      this.isSwitchingStore = true;
-      const minDelay = new Promise(r => setTimeout(r, 2000));
+      this.$store.commit("setSwitchingStore", true);
+      const minDelay = new Promise(r => setTimeout(r, 500));
       this.postSelectStore({
         storeId,
         onSuccess: async (response) => {
@@ -93,11 +92,11 @@ export default {
           }
           // Ensure overlay is visible for at least 1 second
           await minDelay;
-          this.isSwitchingStore = false;
+          this.$store.commit("setSwitchingStore", false);
         },
         onError: async (error) => {
           await minDelay;
-          this.isSwitchingStore = false;
+          this.$store.commit("setSwitchingStore", false);
           displaySonnerError(error);
         },
       });
@@ -278,28 +277,4 @@ export default {
     </template>
   </div>
 
-  <!-- Fullscreen overlay during store switch -->
-  <Transition name="store-switch">
-    <div
-      v-if="isSwitchingStore"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-background"
-    >
-      <div class="flex flex-col items-center gap-3">
-        <Loader2 class="size-6 animate-spin text-muted-foreground" />
-        <span class="text-sm text-muted-foreground">Переключение магазина...</span>
-      </div>
-    </div>
-  </Transition>
 </template>
-
-<style scoped>
-.store-switch-enter-active {
-  transition: opacity 0.2s ease;
-}
-.store-switch-enter-from {
-  opacity: 0;
-}
-.store-switch-enter-to {
-  opacity: 1;
-}
-</style>
