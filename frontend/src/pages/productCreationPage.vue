@@ -27,11 +27,17 @@ import {
 import Separator from "@/components/ui/separator/Separator.vue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { Loader2, FolderOpen, Globe, Layers } from "lucide-vue-next";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { Loader2, FolderOpen, Globe, Layers, ExternalLink, Plus, Copy } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
-import { useRouter } from "vue-router";
-import { ref, watch, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { ref, watch, computed, nextTick } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
@@ -64,11 +70,18 @@ export default {
     FolderOpen,
     Globe,
     Layers,
+    ExternalLink,
+    Plus,
+    Copy,
     Separator,
     Card,
     CardContent,
     CardHeader,
     CardTitle,
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
   },
   data() {
     return {
@@ -82,6 +95,7 @@ export default {
   setup() {
     const store = useStore();
     const router = useRouter();
+    const route = useRoute();
     const isSubmitting = ref(false);
     const isLoadingCategories = ref(false);
     const categories = ref([]);
@@ -146,6 +160,100 @@ export default {
 
     fetchProductGroups();
 
+    // Pre-fill from existing product (via query params)
+    const fromProductId = route.query.fromProduct;
+    const fromGroupId = route.query.groupId;
+    const isPreFilling = ref(false);
+    const groupDetail = ref(null);
+
+    // Fetch group detail for sidebar (when creating from a group)
+    async function fetchGroupDetail() {
+      if (!fromGroupId) return;
+      await store.dispatch("getGroup", {
+        id: parseInt(fromGroupId),
+        onSuccess: (response) => {
+          const group = response.data.value;
+          groupDetail.value = {
+            id: group.id,
+            name: group.name,
+            members: group.members?.map(m => ({
+              productId: m.product.id,
+              productName: m.product.name || "",
+              productSku: m.product.sku || "",
+              imageUrl: m.product.images?.[0]?.url,
+              imageThumbnailUrl: m.product.images?.[0]?.thumbnailUrl,
+            })) || [],
+          };
+        },
+        onError: () => {},
+      });
+    }
+    fetchGroupDetail();
+
+    function getDuplicateUrl(sourceProductId) {
+      const params = new URLSearchParams();
+      params.set('fromProduct', String(sourceProductId));
+      if (fromGroupId) params.set('groupId', String(fromGroupId));
+      return `/products/create?${params.toString()}`;
+    }
+
+    async function prefillFromProduct() {
+      if (!fromProductId) return;
+      isPreFilling.value = true;
+      await store.dispatch("getProduct", {
+        productId: parseInt(fromProductId),
+        onSuccess: async (response) => {
+          const product = response.data.value;
+
+          // Set form values (skip SKU and barcode)
+          form.setValues({
+            product: {
+              sku: "",
+              barcode: "",
+              name: product.name || "",
+              description: product.description || "",
+              storageQuantity: product.storageQuantity ?? null,
+              price: product.price ?? null,
+            },
+          });
+
+          // Set category — the watcher will load category details
+          const catId = product.category?.id || product.categoryId;
+          if (catId) {
+            selectedCategoryId.value = catId;
+
+            // Wait for category watcher to finish loading, then overwrite attribute values
+            const unwatchCategory = watch(selectedCategory, (cat) => {
+              if (cat) {
+                nextTick(() => {
+                  if (product.attributeValues?.length) {
+                    attributeValues.value = product.attributeValues.map((av) => ({ ...av }));
+                  }
+                  unwatchCategory();
+                });
+              }
+            });
+          }
+
+          // Set store attribute values
+          if (product.storeAttributeValues?.length) {
+            storeAttributeValues.value = product.storeAttributeValues.map((av) => ({ ...av }));
+          }
+
+          // Set group
+          if (fromGroupId) {
+            selectedGroupId.value = parseInt(fromGroupId);
+          }
+
+          nextTick(() => autoResizeDescription());
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      isPreFilling.value = false;
+    }
+
     // Fetch categories on mount
     async function fetchCategories() {
       isLoadingCategories.value = true;
@@ -160,7 +268,7 @@ export default {
       isLoadingCategories.value = false;
     }
 
-    fetchCategories();
+    fetchCategories().then(() => prefillFromProduct());
 
     // Watch for category selection change
     watch(selectedCategoryId, async (newVal) => {
@@ -318,6 +426,9 @@ export default {
       isLoadingGroups,
       descriptionRef,
       autoResizeDescription,
+      groupDetail,
+      fromProductId,
+      getDuplicateUrl,
     };
   },
 };
@@ -327,7 +438,63 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="h-full w-full grow mb-4 overflow-auto">
+    <div class="h-0 w-full grow flex gap-6 mb-4 overflow-hidden">
+      <!-- Left: Product Group sidebar -->
+      <div v-if="groupDetail" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+          <div class="flex items-center gap-2 min-w-0">
+            <Layers class="size-4 text-primary shrink-0" />
+            <span class="text-sm font-medium truncate">{{ groupDetail.name }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <router-link
+              :to="`/product-groups/${groupDetail.id}/edit`"
+              class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
+              title="Редактировать группу"
+            >
+              <ExternalLink class="size-3.5 text-muted-foreground" />
+            </router-link>
+          </div>
+        </div>
+        <!-- Scrollable product list -->
+        <div class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5">
+          <!-- Add product button (current — highlighted) -->
+          <div class="flex items-center justify-center p-2 rounded-lg bg-accent">
+            <Plus class="size-4 text-primary" />
+          </div>
+          <ContextMenu v-for="member in groupDetail.members" :key="member.productId">
+            <ContextMenuTrigger as-child>
+              <router-link
+                :to="`/products/${member.productId}/edit`"
+                class="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
+              >
+                <img
+                  v-if="member.imageThumbnailUrl || member.imageUrl"
+                  :src="member.imageThumbnailUrl ?? member.imageUrl"
+                  class="size-12 rounded-md object-cover shrink-0"
+                  :alt="member.productName"
+                />
+                <div v-else class="size-12 rounded-md bg-muted flex items-center justify-center shrink-0">
+                  <Layers class="size-5 text-muted-foreground" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm truncate">{{ member.productName || member.productSku }}</p>
+                  <p class="text-xs text-muted-foreground">{{ member.productSku }}</p>
+                </div>
+              </router-link>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
+                <Copy class="size-4 mr-2" />
+                Дублировать
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        </div>
+      </div>
+      <!-- Main content -->
+      <div class="grow flex flex-col overflow-auto">
       <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
         <!-- Card 1: Main fields -->
         <Card>
@@ -520,6 +687,7 @@ export default {
           </Button>
         </div>
       </form>
+      </div>
     </div>
   </Page>
 </template>

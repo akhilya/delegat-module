@@ -26,6 +26,12 @@ import {
   AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import ProductFileManager from "@/components/products/ProductFileManager.vue";
 import ProductImagesEditor from "@/components/productImagesEditor.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
@@ -50,6 +56,8 @@ import {
   Check,
   Pencil,
   ArrowRightLeft,
+  Plus,
+  Copy,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS, setPageTitle } from "@/router";
 import { useStore } from "vuex";
@@ -115,6 +123,12 @@ export default {
     ExternalLink,
     Check,
     ArrowRightLeft,
+    Plus,
+    Copy,
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
   },
   data() {
     return {
@@ -145,7 +159,7 @@ export default {
     const isProductLoading = ref(false);
     const productSKU = ref("");
     const files = ref([]);
-    const productId = parseInt(String(route.params.id));
+    const productId = computed(() => parseInt(String(route.params.id)));
     const images = ref(undefined);
     const isSavingOrder = ref(false);
     const notes = ref([]);
@@ -170,6 +184,14 @@ export default {
     const selectedGroupId = ref(null);
     const isChangingGroup = ref(false);
     const descriptionRef = ref(null);
+    const sidebarScrollRef = ref(null);
+    const mainScrollRef = ref(null);
+
+    // Reload product data when switching between group members (component is reused)
+    watch(productId, () => {
+      fetchProduct();
+      fetchProductGroup();
+    });
 
     function autoResizeDescription() {
       const ref = descriptionRef.value;
@@ -183,7 +205,7 @@ export default {
     async function fetchProductGroup() {
       isLoadingGroup.value = true;
       await store.dispatch("getProductGroup", {
-        productId,
+        productId: productId.value,
         onSuccess: (response) => {
           const data = response.data.value;
           if (data?.hasGroup === false || !data?.group) {
@@ -220,7 +242,7 @@ export default {
     async function fetchProduct() {
       isProductLoading.value = true;
       await store.dispatch("getProduct", {
-        productId,
+        productId: productId.value,
         onSuccess: (response) => {
           const product = response.data.value;
           productSKU.value = product.sku;
@@ -346,7 +368,7 @@ export default {
 
       try {
         await store.dispatch("updateProduct", {
-          productId,
+          productId: productId.value,
           input,
           onSuccess: () => {
             lastSavedAt.value = new Date();
@@ -412,7 +434,7 @@ export default {
       try {
         await store.dispatch("deleteProductFile", {
           id,
-          productId,
+          productId: productId.value,
           onSuccess: () => {
             displaySonnerSuccess("Файл успешно удалён.");
             const fileIndex = files.value.findIndex((f) => f.id == id);
@@ -432,7 +454,7 @@ export default {
     async function saveImageOrder(orderedFiles) {
       isSavingOrder.value = true;
       await store.dispatch("postProductImages", {
-        productId,
+        productId: productId.value,
         files: orderedFiles.map((f) => f.id),
         onSuccess: () => {
           displaySonnerSuccess("Порядок изображений успешно сохранён.");
@@ -446,7 +468,7 @@ export default {
 
     async function handleDeleteProduct() {
       await store.dispatch("deleteProduct", {
-        productId,
+        productId: productId.value,
         onSuccess: (response) => {
           router.push(response.data.value.next);
           displaySonnerSuccess("Товар успешно удалён.");
@@ -459,7 +481,7 @@ export default {
 
     async function addNote() {
       await store.dispatch("postNote", {
-        productId,
+        productId: productId.value,
         input: {
           text: "",
           importance: "low",
@@ -493,7 +515,7 @@ export default {
 
       isUpdatingSku.value = true;
       await store.dispatch("updateProductSku", {
-        productId,
+        productId: productId.value,
         newSku: trimmed,
         onSuccess: (response) => {
           const data = response.data.value;
@@ -544,6 +566,15 @@ export default {
       }))
     );
 
+    const duplicateProductUrl = computed(() => getDuplicateUrl(productId.value));
+
+    function getDuplicateUrl(sourceProductId) {
+      const params = new URLSearchParams();
+      params.set('fromProduct', String(sourceProductId));
+      if (productGroup.value?.id) params.set('groupId', String(productGroup.value.id));
+      return `/products/create?${params.toString()}`;
+    }
+
     async function submitGroupChange() {
       const newId = selectedGroupId.value ? parseInt(selectedGroupId.value) : null;
       const oldId = productGroup.value?.id || null;
@@ -552,10 +583,10 @@ export default {
       isChangingGroup.value = true;
       try {
         if (oldId) {
-          await http.delete(`/productgroups/${oldId}/products/${productId}`);
+          await http.delete(`/productgroups/${oldId}/products/${productId.value}`);
         }
         if (newId) {
-          await http.post(`/productgroups/${newId}/products`, { productIds: [productId] });
+          await http.post(`/productgroups/${newId}/products`, { productIds: [productId.value] });
         }
         showGroupDialog.value = false;
         displaySonnerSuccess(newId ? "Группа изменена" : "Товар убран из группы");
@@ -609,7 +640,11 @@ export default {
       groupOptions,
       submitGroupChange,
       descriptionRef,
+      sidebarScrollRef,
+      mainScrollRef,
       autoResizeDescription,
+      duplicateProductUrl,
+      getDuplicateUrl,
     };
   },
 };
@@ -632,24 +667,92 @@ export default {
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="h-full w-full grow flex gap-4 mb-4 overflow-hidden">
+    <div class="h-0 w-full grow flex gap-6 mb-4 overflow-hidden">
+      <!-- Left: Product Group sidebar -->
+      <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+          <div class="flex items-center gap-2 min-w-0">
+            <Layers class="size-4 text-primary shrink-0" />
+            <span class="text-sm font-medium truncate">{{ productGroup.name }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-7"
+              title="Сменить группу"
+              type="button"
+              @click="openGroupDialog"
+            >
+              <ArrowRightLeft class="size-3.5" />
+            </Button>
+            <router-link
+              :to="`/product-groups/${productGroup.id}/edit`"
+              class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
+              title="Редактировать группу"
+            >
+              <ExternalLink class="size-3.5 text-muted-foreground" />
+            </router-link>
+          </div>
+        </div>
+        <!-- Scrollable product list -->
+        <div ref="sidebarScrollRef" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5">
+          <!-- Add product button -->
+          <router-link
+            :to="duplicateProductUrl"
+            class="flex items-center justify-center p-2 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
+          >
+            <Plus class="size-4 text-muted-foreground" />
+          </router-link>
+          <ContextMenu v-for="member in productGroup.members" :key="member.productId">
+            <ContextMenuTrigger as-child>
+              <router-link
+                :to="{ path: `/products/${member.productId}/edit`, query: { tab } }"
+                class="flex items-center gap-3 p-2 rounded-lg transition-colors"
+                :class="member.isCurrent ? 'bg-accent' : 'hover:bg-accent/50'"
+              >
+                <img
+                  v-if="member.imageThumbnailUrl || member.imageUrl"
+                  :src="member.imageThumbnailUrl ?? member.imageUrl"
+                  class="size-12 rounded-md object-cover shrink-0"
+                  :alt="member.productName"
+                />
+                <div v-else class="size-12 rounded-md bg-muted flex items-center justify-center shrink-0">
+                  <Layers class="size-5 text-muted-foreground" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm truncate" :class="member.isCurrent ? 'font-medium' : ''">{{ member.productName || member.productSku }}</p>
+                  <p class="text-xs text-muted-foreground">{{ member.productSku }}</p>
+                </div>
+              </router-link>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
+                <Copy class="size-4 mr-2" />
+                Дублировать
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        </div>
+      </div>
       <!-- Main content -->
-      <div class="grow flex flex-col overflow-auto">
+      <div ref="mainScrollRef" class="grow flex flex-col overflow-auto">
         <div v-if="!isProductLoading" class="grow flex flex-col">
           <form
             v-if="form"
             v-show="tab == 'properties'"
             @submit.prevent="onSubmit"
-            class="space-y-4 flex flex-col"
+            class="space-y-6 flex flex-col"
           >
             <!-- Card 1: Main fields + Group sidebar -->
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">Основные поля</CardTitle>
               </CardHeader>
-              <CardContent class="relative">
+              <CardContent>
                 <!-- Left: fields -->
-                <div class="space-y-4" :class="productGroup ? 'pr-[19.5rem]' : ''">
+                <div class="space-y-4">
                   <!-- SKU with edit button -->
                   <div class="space-y-2">
                     <Label class="text-muted-foreground">Артикул</Label>
@@ -784,57 +887,6 @@ export default {
                   </div>
                 </div>
 
-                <!-- Right: Product Group sidebar -->
-                <div v-if="productGroup" class="absolute right-6 top-0 bottom-0 w-72 border-l pl-6 flex flex-col overflow-hidden">
-                  <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-1.5">
-                      <Layers class="size-4 text-primary" />
-                      <span class="text-sm font-medium truncate">{{ productGroup.name }}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="size-7"
-                        title="Сменить группу"
-                        type="button"
-                        @click="openGroupDialog"
-                      >
-                        <ArrowRightLeft class="size-3.5" />
-                      </Button>
-                      <router-link
-                        :to="`/product-groups/${productGroup.id}/edit`"
-                        class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
-                        title="Редактировать группу"
-                      >
-                        <ExternalLink class="size-3.5 text-muted-foreground" />
-                      </router-link>
-                    </div>
-                  </div>
-                  <div v-if="productGroup.otherMembers?.length > 0" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar space-y-1">
-                    <router-link
-                      v-for="member in productGroup.otherMembers"
-                      :key="member.productId"
-                      :to="`/products/${member.productId}/edit`"
-                      class="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-accent/50 transition-colors"
-                    >
-                      <img
-                        v-if="member.imageThumbnailUrl || member.imageUrl"
-                        :src="member.imageThumbnailUrl ?? member.imageUrl"
-                        class="size-8 rounded object-cover shrink-0"
-                        :alt="member.productName"
-                      />
-                      <div v-else class="size-8 rounded bg-muted flex items-center justify-center shrink-0">
-                        <Layers class="size-3.5 text-muted-foreground" />
-                      </div>
-                      <div class="min-w-0">
-                        <p class="text-xs truncate">{{ member.productName || member.productSku }}</p>
-                        <p class="text-[11px] text-muted-foreground">{{ member.productSku }}</p>
-                      </div>
-                    </router-link>
-                  </div>
-                  <p v-else class="text-xs text-muted-foreground">Нет других товаров</p>
-                </div>
               </CardContent>
             </Card>
 
@@ -915,15 +967,16 @@ export default {
             </CardContent>
           </Card>
 
-          <!-- Actions row: Delete on left, Save on right -->
+          <!-- Actions row: Delete + Duplicate on left, Save on right -->
           <div class="flex items-center justify-between">
-            <AlertDialog>
-              <AlertDialogTrigger as-child>
-                <Button variant="destructive" type="button">
-                  <Trash2 class="size-4 mr-2" />
-                  Удалить
-                </Button>
-              </AlertDialogTrigger>
+            <div class="flex items-center gap-2">
+              <AlertDialog>
+                <AlertDialogTrigger as-child>
+                  <Button variant="destructive" type="button">
+                    <Trash2 class="size-4 mr-2" />
+                    Удалить
+                  </Button>
+                </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
@@ -937,7 +990,12 @@ export default {
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-            </AlertDialog>
+              </AlertDialog>
+              <Button variant="outline" type="button" @click="$router.push(duplicateProductUrl)">
+                <Copy class="size-4 mr-2" />
+                Дублировать
+              </Button>
+            </div>
 
             <div class="flex items-center gap-4">
               <!-- Save status indicator -->

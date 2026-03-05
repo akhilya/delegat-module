@@ -480,14 +480,14 @@ public class ProductController : ControllerBase
                     .ThenInclude(p => p.images)
                         .ThenInclude(i => i.file));
 
-        var otherMembers = allMembers
-            .Where(m => m.productId != productId)
+        var members = allMembers
             .OrderBy(m => m.sortOrder)
             .Select(m => new
             {
                 productId = m.productId,
                 productName = m.product?.name ?? "",
                 productSku = m.product?.sku ?? "",
+                isCurrent = m.productId == productId,
                 imageUrl = m.product?.images?.FirstOrDefault()?.file?.GetFullPath(_serviceProvider),
                 imageThumbnailUrl = m.product?.images?.FirstOrDefault()?.file is { } f
                     && f.contentType.StartsWith("image/")
@@ -504,7 +504,7 @@ public class ProductController : ControllerBase
                 name = group.name,
                 description = group.description,
                 membersCount = allMembers.Count(),
-                otherMembers
+                members
             }
         });
     }

@@ -291,8 +291,9 @@ export default {
       await Promise.all([
         this.fetchFieldMappings(),
         this.fetchAvailableSources(),
-        this.fetchPreviewProducts(),
       ]);
+      // fetchPreviewProducts needs localCategoryId from mappingInfo, so run after fetchFieldMappings
+      await this.fetchPreviewProducts();
       this.isLoading = false;
 
       // Load descriptions separately — non-blocking, non-critical
@@ -317,6 +318,7 @@ export default {
           }));
           this.mappingInfo = {
             name: data.name,
+            localCategoryId: data.localCategoryId,
             localCategoryName: data.localCategoryName,
             externalCategoryId: data.externalCategoryId,
             externalCategoryName: data.externalCategoryName,
@@ -489,10 +491,14 @@ export default {
     hasValidSource(fieldMapping) {
       switch (fieldMapping.sourceType) {
         case "ProductField":
-          return !!fieldMapping.sourceField;
+          return !!fieldMapping.sourceField
+            && (this.availableSources.productFields || []).some(f => f.key === fieldMapping.sourceField);
         case "CategoryAttribute":
+          return !!fieldMapping.sourceAttributeId
+            && (this.availableSources.categoryAttributes || []).some(a => a.id === fieldMapping.sourceAttributeId);
         case "StoreAttribute":
-          return !!fieldMapping.sourceAttributeId;
+          return !!fieldMapping.sourceAttributeId
+            && (this.availableSources.storeAttributes || []).some(a => a.id === fieldMapping.sourceAttributeId);
         case "Static":
           return !!fieldMapping.staticValue;
         case "GroupName":
@@ -628,7 +634,7 @@ export default {
         searchQuery: "",
         startIndex: 0,
         pageSize: 500,
-        categoryId: null,
+        categoryId: this.mappingInfo?.localCategoryId || null,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
           this.previewProducts = (data.items || []).map((p) => ({

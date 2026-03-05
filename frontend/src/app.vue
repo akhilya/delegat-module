@@ -30,7 +30,7 @@ export default {
 <template>
   <LoadingBar ref="loadingBar" />
   <RouterView v-slot="{ Component, route }">
-    <component :is="Component" :key="route.path + '-' + appKey" />
+    <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
   </RouterView>
   <Toaster />
   <ImportProgressPanel />

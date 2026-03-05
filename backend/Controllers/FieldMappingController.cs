@@ -128,6 +128,7 @@ public class FieldMappingController : ControllerBase
         return Ok(new
         {
             fieldMappings = result,
+            localCategoryId = mapping.localCategoryId,
             localCategoryName = mapping.localCategory?.name,
             externalCategoryId = mapping.externalCategoryId,
             externalCategoryName = mapping.externalCategoryName,

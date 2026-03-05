@@ -53,7 +53,7 @@ export const routes = [
   { path: "/", component: productsPage, meta: { title: "Товары" } },
   { path: PAGE_PRODUCTS, component: productsPage, meta: { title: "Товары" } },
   { path: PAGE_PRODUCT_CREATION, component: productCreationPage, meta: { title: "Новый товар" } },
-  { path: PAGE_PRODUCT_EDIT, component: productEditPage, meta: { title: "Товар" } },
+  { path: PAGE_PRODUCT_EDIT, component: productEditPage, meta: { title: "Товар", stableKey: "product-edit" } },
   { path: PAGE_CATEGORIES, component: categoriesPage, meta: { title: "Категории" } },
   { path: PAGE_CATEGORY_EDIT, component: categoryEditPage, meta: { title: "Категория" } },
   { path: PAGE_PRODUCT_GROUPS, component: productGroupsPage, meta: { title: "Группы товаров" } },
