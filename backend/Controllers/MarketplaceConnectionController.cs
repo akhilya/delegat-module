@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
+using PrintO.Infrastructure.Security;
 using PrintO.Marketplace.SDK.RateLimit;
 using PrintO.Models.Marketplace;
+using PrintO.Services;
 using PrintO.Services.Marketplace;
 
 namespace PrintO.Controllers;
@@ -18,19 +20,25 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly ILogger<MarketplaceConnectionController> _logger;
+    private readonly EncryptionService? _encryptionService;
+    private readonly QuotaService _quotaService;
 
     public MarketplaceConnectionController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
-        ILogger<MarketplaceConnectionController> logger)
+        ILogger<MarketplaceConnectionController> logger,
+        QuotaService quotaService,
+        EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
         _logger = logger;
+        _quotaService = quotaService;
+        _encryptionService = encryptionService;
     }
 
     /// <summary>
@@ -117,6 +125,8 @@ public class MarketplaceConnectionController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
+        await _quotaService.EnsureConnectionQuotaAsync(selectedStoreId.Value);
+
         // Verify that the adapter exists
         var adapter = _adapterRegistry.GetByKey(input.adapterKey);
         if (adapter == null)
@@ -124,12 +134,16 @@ public class MarketplaceConnectionController : ControllerBase
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
+        var encryptedCreds = _encryptionService != null && !string.IsNullOrEmpty(input.credentialsJson)
+            ? _encryptionService.Encrypt(input.credentialsJson)
+            : input.credentialsJson;
+
         var connection = new MarketplaceConnection();
         connection.AddFill(new MarketplaceConnection.AddForm
         {
             name = input.name,
             adapterKey = input.adapterKey,
-            credentialsJson = input.credentialsJson,
+            credentialsJson = encryptedCreds,
             settingsJson = input.settingsJson,
             isActive = input.isActive,
             storeId = selectedStoreId.Value
@@ -158,6 +172,9 @@ public class MarketplaceConnectionController : ControllerBase
 
         if (connection == null)
             throw ApiException.NotFound("Подключение не найдено");
+
+        if (_encryptionService != null && input.credentialsJson != null)
+            input.credentialsJson = _encryptionService.Encrypt(input.credentialsJson);
 
         connection.UpdateFill(input);
         await repo.UpdateAsync(connection);

@@ -41,6 +41,7 @@ public class PluginController : ControllerBase
             description = p.Plugin.Description,
             logoUrl = p.Plugin.LogoUrl,
             capabilities = (int)p.Plugin.Capabilities,
+            isSystem = p.Plugin.IsSystem,
             filePath = Path.GetFileName(p.FilePath),
             loadedAt = p.LoadedAt
         }).ToList();
@@ -68,6 +69,7 @@ public class PluginController : ControllerBase
             description = plugin.Description,
             logoUrl = plugin.LogoUrl,
             capabilities = (int)plugin.Capabilities,
+            isSystem = plugin.IsSystem,
             credentialsSchema = plugin.GetCredentialsSchema(),
             filePath = Path.GetFileName(loaded.FilePath),
             loadedAt = loaded.LoadedAt
@@ -78,6 +80,7 @@ public class PluginController : ControllerBase
     /// Upload and install a new plugin
     /// </summary>
     [HttpPost("upload")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> UploadPlugin(IFormFile file)
     {
         if (file == null || file.Length == 0)
@@ -157,6 +160,9 @@ public class PluginController : ControllerBase
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
             throw ApiException.NotFound($"Плагин '{key}' не найден");
+
+        if (loaded.Plugin.IsSystem)
+            throw ApiException.BadRequest("Системный плагин не может быть удалён");
 
         var filePath = loaded.FilePath;
 

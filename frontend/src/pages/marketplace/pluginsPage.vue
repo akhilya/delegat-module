@@ -386,7 +386,7 @@ export default {
                   <RefreshCw v-else class="size-4" />
                 </Button>
 
-                <AlertDialog>
+                <AlertDialog v-if="!plugin.isSystem">
                   <AlertDialogTrigger as-child>
                     <Button variant="ghost" size="icon" title="Удалить">
                       <Trash2 class="size-4 text-destructive" />

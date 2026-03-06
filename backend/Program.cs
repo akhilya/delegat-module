@@ -16,6 +16,10 @@ using PrintO.Services.Marketplace;
 using PrintO.Services.Plugins;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using PrintO.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,15 +30,25 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 // Configure Kestrel for large file uploads
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 10L * 1024 * 1024 * 1024; // 10GB
+    options.Limits.MaxRequestBodySize = 5 * 1024 * 1024; // 5MB default
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 5 * 1024 * 1024; // 5MB default for forms
 });
 
 // Configuration from environment variables
 var mysqlSettings = builder.Configuration.GetMySqlSettings();
 var minioSettings = builder.Configuration.GetMinIOSettings();
 var jwtSettings = builder.Configuration.GetJwtSettings();
+
+// Encryption
+var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY") ?? "";
+if (!string.IsNullOrEmpty(encryptionKey))
+    builder.Services.AddSingleton(new EncryptionService(encryptionKey));
 
 // Database
 var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";
@@ -49,11 +63,17 @@ builder.Services.AddDbContext<DataContext>(options =>
 // Identity
 builder.Services.AddIdentity<User, UserRole>(options =>
 {
-    options.Password.RequireDigit = false;
-    options.Password.RequireLowercase = false;
+    // Password policy
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
     options.Password.RequireUppercase = false;
     options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequiredLength = 6;
+    options.Password.RequiredLength = 8;
+
+    // Lockout policy
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
 })
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();
@@ -126,6 +146,9 @@ builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredS
 // Plugin HostedService (loads plugins at startup)
 builder.Services.AddHostedService<PluginHostedService>();
 
+// Quotas
+builder.Services.AddScoped<QuotaService>();
+
 // Excel import/export
 builder.Services.AddScoped<ExcelProductService>();
 
@@ -184,6 +207,37 @@ builder.Services.AddCors(options =>
             policy.SetIsOriginAllowed(_ => true);
         }
     });
+});
+
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddMySql(connectionString, name: "mysql")
+    .AddCheck<PrintO.Infrastructure.Health.MinIOHealthCheck>("minio");
+
+// Rate limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 300,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 // Form options for large file uploads
@@ -246,6 +300,7 @@ using (var scope = app.Services.CreateScope())
 
 // Middleware pipeline
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
 
 if (!app.Environment.IsProduction())
 {
@@ -254,9 +309,29 @@ if (!app.Environment.IsProduction())
 }
 
 app.UseCors();
+app.UseRateLimiter();
+app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", version = PlatformVersion.Current }));
+app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString().ToLower(),
+            version = PlatformVersion.Current,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString().ToLower(),
+                description = e.Value.Description,
+                duration = e.Value.Duration.TotalMilliseconds
+            })
+        });
+    }
+});
 
 await app.RunAsync("http://0.0.0.0:5000");

@@ -30,6 +30,9 @@
     <!-- Image Processing -->
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
 
+    <!-- Health Checks -->
+    <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.1" />
+
     <!-- Swagger / OpenAPI -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
 

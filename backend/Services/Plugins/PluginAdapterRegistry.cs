@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using PrintO.Infrastructure.Security;
 using PrintO.Marketplace.SDK;
 using PrintO.Services.Marketplace;
 
@@ -12,13 +13,15 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
 {
     private readonly PluginManager _pluginManager;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly EncryptionService? _encryptionService;
     private readonly Dictionary<string, PluginAdapterWrapper> _wrapperCache = new();
     private readonly object _cacheLock = new();
 
-    public PluginAdapterRegistry(PluginManager pluginManager, ILoggerFactory loggerFactory)
+    public PluginAdapterRegistry(PluginManager pluginManager, ILoggerFactory loggerFactory, EncryptionService? encryptionService = null)
     {
         _pluginManager = pluginManager;
         _loggerFactory = loggerFactory;
+        _encryptionService = encryptionService;
     }
 
     public IReadOnlyList<IMarketplaceAdapter> GetAll()
@@ -86,7 +89,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
                 throw new KeyNotFoundException($"Plugin '{key}' not found");
             }
 
-            var wrapper = new PluginAdapterWrapper(currentPlugin, _loggerFactory);
+            var wrapper = new PluginAdapterWrapper(currentPlugin, _loggerFactory, _encryptionService);
             _wrapperCache[key] = wrapper;
             return wrapper;
         }

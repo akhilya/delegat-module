@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
@@ -19,7 +20,8 @@ public class JwtAuthController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
 
-    private const string COOKIE_TOKEN_NAME = "access_token";
+    private const string ACCESS_COOKIE = "access_token";
+    private const string REFRESH_COOKIE = "refresh_token";
 
     public JwtAuthController(
         UserManager<User> userManager,
@@ -38,18 +40,20 @@ public class JwtAuthController : ControllerBase
     [HttpPost]
     [Route("/auth/signIn")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> PostSignInUser([FromBody] SignInForm input)
     {
         var user = await _userManager.FindByNameAsync(input.userName);
         if (user == null)
             throw ApiException.Unauthorized("Неверные учётные данные");
 
-        var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, false);
+        var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, lockoutOnFailure: true);
+        if (result.IsLockedOut)
+            return StatusCode(429, new { title = "Account locked. Try again later.", status = 429 });
         if (!result.Succeeded)
             throw ApiException.Unauthorized("Неверные учётные данные");
 
-        var token = _jwtService.GenerateToken(user.Id, user.UserName ?? "", input.rememberMe);
-        SetTokenCookie(token, input.rememberMe);
+        await IssueTokens(user.Id, user.UserName ?? "", input.rememberMe);
 
         return Ok(new
         {
@@ -61,6 +65,7 @@ public class JwtAuthController : ControllerBase
     [HttpPost]
     [Route("/auth/signUp")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> PostSignUpUser([FromBody] SignUpForm input, string token)
     {
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
@@ -93,8 +98,7 @@ public class JwtAuthController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync();
 
-        var jwtToken = _jwtService.GenerateToken(user.Id, user.UserName ?? "", false);
-        SetTokenCookie(jwtToken, false);
+        await IssueTokens(user.Id, user.UserName ?? "", false);
 
         return Ok(new
         {
@@ -132,31 +136,130 @@ public class JwtAuthController : ControllerBase
 
     [HttpPost]
     [Route("auth/logOut")]
-    public IActionResult PostLogOut()
+    public async Task<IActionResult> PostLogOut()
     {
-        if (Request.Cookies.Any(cookie => cookie.Key == COOKIE_TOKEN_NAME))
+        // Revoke all refresh tokens for the user
+        var userIdStr = _userManager.GetUserId(User);
+        if (int.TryParse(userIdStr, out var userId))
         {
-            Response.Cookies.Delete(COOKIE_TOKEN_NAME, new CookieOptions { Path = "/" });
-            return Ok(new { next = "/signIn", success = true });
+            var refreshRepo = _unitOfWork.Repository<RefreshToken>();
+            var tokens = await refreshRepo.FindAllAsync(rt => rt.userId == userId && rt.revokedAt == null);
+            foreach (var rt in tokens)
+                rt.revokedAt = DateTime.UtcNow;
+            await _unitOfWork.SaveChangesAsync();
         }
-        else
-        {
-            return Ok(new { success = false });
-        }
+
+        Response.Cookies.Delete(ACCESS_COOKIE, new CookieOptions { Path = "/" });
+        Response.Cookies.Delete(REFRESH_COOKIE, new CookieOptions { Path = "/" });
+
+        return Ok(new { next = "/signIn", success = true });
     }
 
-    private void SetTokenCookie(string token, bool rememberMe)
+    [HttpPost]
+    [Route("/auth/refresh")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PostRefresh()
+    {
+        // Read refresh token from cookie
+        if (!Request.Cookies.TryGetValue(REFRESH_COOKIE, out var refreshTokenValue) || string.IsNullOrEmpty(refreshTokenValue))
+            throw ApiException.Unauthorized("Refresh token отсутствует");
+
+        // Find refresh token in DB
+        var refreshRepo = _unitOfWork.Repository<RefreshToken>();
+        var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
+        if (refreshToken == null || !refreshToken.IsActive)
+            throw ApiException.Unauthorized("Refresh token недействителен");
+
+        // Read access token from cookie and extract userId (allow expired)
+        if (!Request.Cookies.TryGetValue(ACCESS_COOKIE, out var accessTokenValue) || string.IsNullOrEmpty(accessTokenValue))
+            throw ApiException.Unauthorized("Access token отсутствует");
+
+        var principal = _jwtService.ValidateExpiredToken(accessTokenValue);
+        if (principal == null)
+            throw ApiException.Unauthorized("Access token невалиден");
+
+        var userIdClaim = principal.FindFirst("userId")?.Value;
+        if (!int.TryParse(userIdClaim, out var userId) || userId != refreshToken.userId)
+            throw ApiException.Unauthorized("Token mismatch");
+
+        // Verify user still exists
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+            throw ApiException.Unauthorized("Пользователь не найден");
+
+        // Rotation: revoke old, create new
+        refreshToken.revokedAt = DateTime.UtcNow;
+        var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
+        var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
+
+        var newRefreshToken = new RefreshToken
+        {
+            userId = userId,
+            token = newRefreshTokenValue,
+            expiresAt = newRefreshExpiresAt,
+            createdAt = DateTime.UtcNow
+        };
+        await refreshRepo.AddAsync(newRefreshToken);
+        await _unitOfWork.SaveChangesAsync();
+
+        // Issue new access token
+        var newAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+        SetAccessTokenCookie(newAccessToken);
+        SetRefreshTokenCookie(newRefreshTokenValue, rememberMe);
+
+        return Ok();
+    }
+
+    private async Task IssueTokens(int userId, string userName, bool rememberMe)
+    {
+        var accessToken = _jwtService.GenerateToken(userId, userName);
+        var (refreshTokenValue, refreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
+
+        // Save refresh token to DB
+        var refreshRepo = _unitOfWork.Repository<RefreshToken>();
+
+        // Cleanup old refresh tokens for this user
+        var oldTokens = await refreshRepo.FindAllAsync(rt => rt.userId == userId);
+        refreshRepo.DeleteRange(oldTokens);
+
+        var refreshToken = new RefreshToken
+        {
+            userId = userId,
+            token = refreshTokenValue,
+            expiresAt = refreshExpiresAt,
+            createdAt = DateTime.UtcNow
+        };
+        await refreshRepo.AddAsync(refreshToken);
+        await _unitOfWork.SaveChangesAsync();
+
+        SetAccessTokenCookie(accessToken);
+        SetRefreshTokenCookie(refreshTokenValue, rememberMe);
+    }
+
+    private void SetAccessTokenCookie(string token)
     {
         var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        var cookieOptions = new CookieOptions
+        Response.Cookies.Append(ACCESS_COOKIE, token, new CookieOptions
         {
             HttpOnly = true,
             Secure = isProduction,
             SameSite = SameSiteMode.Lax,
             Path = "/",
-            Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(1)
-        };
-        Response.Cookies.Append(COOKIE_TOKEN_NAME, token, cookieOptions);
+            Expires = DateTime.UtcNow.AddMinutes(16)
+        });
+    }
+
+    private void SetRefreshTokenCookie(string token, bool rememberMe)
+    {
+        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
+        Response.Cookies.Append(REFRESH_COOKIE, token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isProduction,
+            SameSite = SameSiteMode.Lax,
+            Path = "/",
+            Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
+        });
     }
 
     public struct SignInForm

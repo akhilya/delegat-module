@@ -1,4 +1,5 @@
 using PrintO.Infrastructure.Interfaces;
+using PrintO.Infrastructure.Security;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -129,12 +130,17 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
 
     ConnectionDetailDTO IMapToDTO<ConnectionDetailDTO>.MapToDTO(IServiceProvider serviceProvider)
     {
+        var decryptedCreds = credentialsJson;
+        var encryption = serviceProvider.GetService(typeof(EncryptionService)) as EncryptionService;
+        if (encryption != null && !string.IsNullOrEmpty(credentialsJson) && encryption.IsEncrypted(credentialsJson))
+            decryptedCreds = encryption.Decrypt(credentialsJson);
+
         return new ConnectionDetailDTO
         {
             id = Id,
             name = name,
             adapterKey = adapterKey,
-            credentialsJson = credentialsJson,
+            credentialsJson = decryptedCreds,
             settingsJson = settingsJson,
             isActive = isActive,
             lastSyncAt = lastSyncAt,

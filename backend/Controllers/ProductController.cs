@@ -25,6 +25,7 @@ public class ProductController : ControllerBase
     private readonly ILogger<ProductController> _logger;
     private readonly DataContext _context;
     private readonly ExcelProductService _excelService;
+    private readonly QuotaService _quotaService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
@@ -35,7 +36,8 @@ public class ProductController : ControllerBase
         IServiceProvider serviceProvider,
         ILogger<ProductController> logger,
         DataContext context,
-        ExcelProductService excelService)
+        ExcelProductService excelService,
+        QuotaService quotaService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -43,6 +45,7 @@ public class ProductController : ControllerBase
         _logger = logger;
         _context = context;
         _excelService = excelService;
+        _quotaService = quotaService;
     }
 
     /// <summary>
@@ -209,6 +212,8 @@ public class ProductController : ControllerBase
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
+
+        await _quotaService.EnsureProductQuotaAsync(selectedStoreId.Value);
 
         var productRepo = _unitOfWork.Repository<Product>();
 

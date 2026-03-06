@@ -15,7 +15,8 @@ public class OzonPlugin : MarketplacePluginBase
 
     public override string Key => "ozon";
     public override string DisplayName => "Ozon";
-    public override string Version => "1.1.0";
+    public override string Version => "1.1.1";
+    public override bool IsSystem => true;
     public override string? Description => "Integration with Ozon Seller API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/9/91/Ozon_logo.svg";
 

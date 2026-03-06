@@ -1014,6 +1014,40 @@ namespace PrintO.Migrations
                     b.ToTable("productVariantLinks");
                 });
 
+            modelBuilder.Entity("PrintO.Models.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("expiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("revokedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.HasIndex("userId");
+
+                    b.ToTable("refreshTokens");
+                });
+
             modelBuilder.Entity("PrintO.Models.Store", b =>
                 {
                     b.Property<int>("Id")
@@ -1558,6 +1592,17 @@ namespace PrintO.Migrations
                     b.Navigation("connection");
 
                     b.Navigation("variant");
+                });
+
+            modelBuilder.Entity("PrintO.Models.RefreshToken", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "user")
+                        .WithMany()
+                        .HasForeignKey("userId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("user");
                 });
 
             modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>

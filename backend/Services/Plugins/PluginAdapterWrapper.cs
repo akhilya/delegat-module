@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using PrintO.Infrastructure.Security;
 using PrintO.Marketplace.SDK;
 using PrintO.Marketplace.SDK.DTOs;
 using PrintO.Marketplace.SDK.RateLimit;
@@ -16,11 +17,13 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
 {
     private readonly IMarketplacePlugin _plugin;
     private readonly ILogger _logger;
+    private readonly EncryptionService? _encryptionService;
 
-    public PluginAdapterWrapper(IMarketplacePlugin plugin, ILoggerFactory loggerFactory)
+    public PluginAdapterWrapper(IMarketplacePlugin plugin, ILoggerFactory loggerFactory, EncryptionService? encryptionService = null)
     {
         _plugin = plugin;
         _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
+        _encryptionService = encryptionService;
     }
 
     #region Metadata
@@ -532,12 +535,16 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         var credentials = new Dictionary<string, string>();
         var settings = new Dictionary<string, string>();
 
-        // Parse credentials JSON
-        if (!string.IsNullOrEmpty(connection.credentialsJson))
+        // Parse credentials JSON (decrypt if encrypted)
+        var rawCreds = connection.credentialsJson;
+        if (_encryptionService != null && !string.IsNullOrEmpty(rawCreds) && _encryptionService.IsEncrypted(rawCreds))
+            rawCreds = _encryptionService.Decrypt(rawCreds);
+
+        if (!string.IsNullOrEmpty(rawCreds))
         {
             try
             {
-                var creds = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(connection.credentialsJson);
+                var creds = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(rawCreds);
                 if (creds != null)
                 {
                     foreach (var kvp in creds)

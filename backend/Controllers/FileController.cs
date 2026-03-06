@@ -24,19 +24,22 @@ public class FileController : ControllerBase
     private readonly IStorageService _storageService;
     private readonly IServiceProvider _serviceProvider;
     private readonly ThumbnailService _thumbnailService;
+    private readonly QuotaService _quotaService;
 
     public FileController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IStorageService storageService,
         IServiceProvider serviceProvider,
-        ThumbnailService thumbnailService)
+        ThumbnailService thumbnailService,
+        QuotaService quotaService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _serviceProvider = serviceProvider;
         _thumbnailService = thumbnailService;
+        _quotaService = quotaService;
     }
 
     /// <summary>
@@ -63,6 +66,9 @@ public class FileController : ControllerBase
 
         if (product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value, files.Length);
+        await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value, files.Sum(f => f.Length));
 
         if (folderId.HasValue)
         {
@@ -124,6 +130,9 @@ public class FileController : ControllerBase
 
         if (product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value);
+        await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value);
 
         if (folderId.HasValue)
         {

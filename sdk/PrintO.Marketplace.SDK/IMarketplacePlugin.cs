@@ -43,6 +43,11 @@ public interface IMarketplacePlugin
     MarketplaceCapabilities Capabilities { get; }
 
     /// <summary>
+    /// Whether this is a built-in system plugin that cannot be deleted.
+    /// </summary>
+    bool IsSystem { get; }
+
+    /// <summary>
     /// Get the schema for connection credentials
     /// </summary>
     CredentialsSchema GetCredentialsSchema();

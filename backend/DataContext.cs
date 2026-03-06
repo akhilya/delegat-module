@@ -34,6 +34,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<FieldMapping> fieldMappings { get; set; }
     public DbSet<ProductMarketplaceLink> productMarketplaceLinks { get; set; }
 
+    // Auth
+    public DbSet<RefreshToken> refreshTokens { get; set; }
+
     // System versioning
     public DbSet<SystemVersion> systemVersions { get; set; }
 
@@ -197,5 +200,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<PendingImageDownload>()
             .HasIndex(pid => new { pid.status, pid.storeId });
+
+        // RefreshToken indexes
+        builder.Entity<RefreshToken>()
+            .HasIndex(rt => rt.token).IsUnique();
+        builder.Entity<RefreshToken>()
+            .HasIndex(rt => rt.userId);
     }
 }

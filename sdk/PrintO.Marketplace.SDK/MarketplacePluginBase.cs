@@ -49,6 +49,9 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
     #region Virtual - Can override
 
     /// <inheritdoc />
+    public virtual bool IsSystem => false;
+
+    /// <inheritdoc />
     public virtual string? Description => null;
 
     /// <inheritdoc />

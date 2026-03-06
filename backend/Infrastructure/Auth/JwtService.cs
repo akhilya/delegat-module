@@ -2,6 +2,7 @@ using Microsoft.IdentityModel.Tokens;
 using PrintO.Infrastructure.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace PrintO.Infrastructure.Auth;
@@ -11,19 +12,21 @@ namespace PrintO.Infrastructure.Auth;
 /// </summary>
 public interface IJwtService
 {
-    string GenerateToken(int userId, string userName, bool rememberMe = false);
+    string GenerateToken(int userId, string userName);
     ClaimsPrincipal? ValidateToken(string token);
+    (string token, DateTime expiresAt) GenerateRefreshToken(bool rememberMe = false);
+    ClaimsPrincipal? ValidateExpiredToken(string token);
 }
 
 /// <summary>
 /// JWT service for generating and validating tokens
-/// Replaces Zorro.Modules.JwtBearer.JwtBearerService
 /// </summary>
 public class JwtService : IJwtService
 {
     private readonly JwtSettings _settings;
     private readonly SigningCredentials _signingCredentials;
     private readonly TokenValidationParameters _validationParameters;
+    private readonly TokenValidationParameters _refreshValidationParameters;
 
     public JwtService(JwtSettings settings)
     {
@@ -41,16 +44,23 @@ public class JwtService : IJwtService
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+        _refreshValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ValidateIssuer = true,
+            ValidIssuer = _settings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = _settings.Audience,
+            ValidateLifetime = false,
+            ClockSkew = TimeSpan.Zero
+        };
     }
 
     /// <summary>
-    /// Generate a JWT token for a user
+    /// Generate a JWT access token (15 min expiry)
     /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="userName">User name</param>
-    /// <param name="rememberMe">If true, token expires in 30 days, otherwise 1 day</param>
-    /// <returns>JWT token string</returns>
-    public string GenerateToken(int userId, string userName, bool rememberMe = false)
+    public string GenerateToken(int userId, string userName)
     {
         var claims = new[]
         {
@@ -61,15 +71,11 @@ public class JwtService : IJwtService
             new Claim("userId", userId.ToString())
         };
 
-        var expiry = rememberMe
-            ? DateTime.UtcNow.AddDays(30)
-            : DateTime.UtcNow.AddDays(1);
-
         var token = new JwtSecurityToken(
             issuer: _settings.Issuer,
             audience: _settings.Audience,
             claims: claims,
-            expires: expiry,
+            expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: _signingCredentials
         );
 
@@ -77,16 +83,43 @@ public class JwtService : IJwtService
     }
 
     /// <summary>
-    /// Validate a JWT token
+    /// Generate a cryptographically random refresh token
     /// </summary>
-    /// <param name="token">Token string to validate</param>
-    /// <returns>ClaimsPrincipal if valid, null otherwise</returns>
+    public (string token, DateTime expiresAt) GenerateRefreshToken(bool rememberMe = false)
+    {
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var token = Convert.ToBase64String(tokenBytes);
+        var expiresAt = rememberMe
+            ? DateTime.UtcNow.AddDays(30)
+            : DateTime.UtcNow.AddDays(7);
+        return (token, expiresAt);
+    }
+
+    /// <summary>
+    /// Validate a JWT token (checks lifetime)
+    /// </summary>
     public ClaimsPrincipal? ValidateToken(string token)
     {
         try
         {
             return new JwtSecurityTokenHandler()
                 .ValidateToken(token, _validationParameters, out _);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Validate a JWT token ignoring lifetime (for refresh flow)
+    /// </summary>
+    public ClaimsPrincipal? ValidateExpiredToken(string token)
+    {
+        try
+        {
+            return new JwtSecurityTokenHandler()
+                .ValidateToken(token, _refreshValidationParameters, out _);
         }
         catch
         {
