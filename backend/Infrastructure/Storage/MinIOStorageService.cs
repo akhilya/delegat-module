@@ -250,6 +250,18 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
+    /// Stream a file directly to an output stream without buffering in memory.
+    /// </summary>
+    public async Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default)
+    {
+        var args = new GetObjectArgs()
+            .WithBucket(_bucket)
+            .WithObject(path)
+            .WithCallbackStream(stream => stream.CopyTo(outputStream));
+        await _client.GetObjectAsync(args, ct);
+    }
+
+    /// <summary>
     /// Generate a presigned (temporary) URL for a file
     /// </summary>
     public async Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600)

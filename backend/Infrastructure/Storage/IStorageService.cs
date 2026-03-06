@@ -51,6 +51,11 @@ public interface IStorageService
     string GetFullPath(string path);
 
     /// <summary>
+    /// Stream a file directly to an output stream without buffering
+    /// </summary>
+    Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default);
+
+    /// <summary>
     /// Generate a presigned (temporary) URL for a file
     /// </summary>
     Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600);

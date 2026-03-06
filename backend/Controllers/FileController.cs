@@ -50,7 +50,7 @@ public class FileController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/files/{id}/download")]
-    public async Task<IActionResult> DownloadFile(int id)
+    public async Task DownloadFile(int id)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -65,17 +65,16 @@ public class FileController : ControllerBase
         if (file.product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
 
-        var stream = await _storageService.GetStreamAsync(file.filePath);
-        if (stream == null)
-            throw ApiException.NotFound("Файл не найден в хранилище");
-
         var fileName = Path.GetFileName(file.filePath);
         var isImage = file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
         var encodedFileName = Uri.EscapeDataString(fileName);
 
+        Response.ContentType = file.contentType;
+        Response.ContentLength = file.length;
         Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-        return File(stream, file.contentType);
+
+        await _storageService.StreamToAsync(file.filePath, Response.Body);
     }
 
     /// <summary>
@@ -405,7 +404,7 @@ public class SharedFileController : ControllerBase
 
     [HttpGet]
     [Route("/shared/{token}")]
-    public async Task<IActionResult> GetSharedFile(string token)
+    public async Task GetSharedFile(string token)
     {
         var shareToken = await _db.fileShareTokens
             .Include(t => t.file)
@@ -414,16 +413,15 @@ public class SharedFileController : ControllerBase
         if (shareToken == null || shareToken.IsExpired)
             throw ApiException.NotFound("Ссылка не найдена или истекла");
 
-        var stream = await _storageService.GetStreamAsync(shareToken.file.filePath);
-        if (stream == null)
-            throw ApiException.NotFound("Файл не найден в хранилище");
-
         var fileName = Path.GetFileName(shareToken.file.filePath);
         var isImage = shareToken.file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
         var encodedFileName = Uri.EscapeDataString(fileName);
 
+        Response.ContentType = shareToken.file.contentType;
+        Response.ContentLength = shareToken.file.length;
         Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-        return File(stream, shareToken.file.contentType);
+
+        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body);
     }
 }
