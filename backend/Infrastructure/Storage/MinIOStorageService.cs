@@ -202,13 +202,12 @@ public class MinIOStorageService : IStorageService
     {
         try
         {
+            var presignedUrl = await GetPresignedUrlAsync(path, 60);
+            var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+            using var response = await httpClient.GetAsync(presignedUrl, ct);
+            response.EnsureSuccessStatusCode();
             var ms = new MemoryStream();
-            var args = new GetObjectArgs()
-                .WithBucket(_bucket)
-                .WithObject(path)
-                .WithCallbackStream(stream => stream.CopyTo(ms));
-
-            await _client.GetObjectAsync(args, ct);
+            await response.Content.CopyToAsync(ms, ct);
             ms.Position = 0;
             return ms;
         }
@@ -256,11 +255,12 @@ public class MinIOStorageService : IStorageService
     {
         await EnsureBucketExistsAsync(ct);
 
-        var args = new GetObjectArgs()
-            .WithBucket(_bucket)
-            .WithObject(path)
-            .WithCallbackStream(stream => stream.CopyTo(outputStream));
-        await _client.GetObjectAsync(args, ct);
+        // Bypass SDK GetObjectAsync — use presigned URL + HttpClient to avoid XML parse issues
+        var presignedUrl = await GetPresignedUrlAsync(path, 60);
+        var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+        using var response = await httpClient.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+        await response.Content.CopyToAsync(outputStream, ct);
     }
 
     /// <summary>
@@ -306,17 +306,13 @@ public class MinIOStorageService : IStorageService
     {
         try
         {
-            // Setting an empty-statement policy removes all public/anonymous access
-            var args = new SetPolicyArgs()
-                .WithBucket(_bucket)
-                .WithPolicy("{\"Version\":\"2012-10-17\",\"Statement\":[]}");
-            await _client.SetPolicyAsync(args, ct);
-            _logger.LogInformation("MinIO bucket '{Bucket}' policy set to private (no public access)", _bucket);
+            var args = new RemovePolicyArgs().WithBucket(_bucket);
+            await _client.RemovePolicyAsync(args, ct);
+            _logger.LogInformation("MinIO bucket '{Bucket}' policy removed (private by default)", _bucket);
         }
         catch (Exception ex)
         {
-            // Log but don't fail — bucket will still work, just might have old policy
-            _logger.LogWarning(ex, "Failed to set private bucket policy for '{Bucket}'", _bucket);
+            _logger.LogWarning(ex, "Failed to remove bucket policy for '{Bucket}'", _bucket);
         }
     }
 }
