@@ -254,6 +254,8 @@ public class MinIOStorageService : IStorageService
     /// </summary>
     public async Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default)
     {
+        await EnsureBucketExistsAsync(ct);
+
         var args = new GetObjectArgs()
             .WithBucket(_bucket)
             .WithObject(path)
