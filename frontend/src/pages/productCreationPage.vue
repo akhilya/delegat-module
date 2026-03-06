@@ -166,11 +166,14 @@ export default {
     const isPreFilling = ref(false);
     const groupDetail = ref(null);
 
-    // Fetch group detail for sidebar (when creating from a group)
-    async function fetchGroupDetail() {
-      if (!fromGroupId) return;
+    // Fetch group detail for sidebar
+    async function fetchGroupDetail(groupId) {
+      if (!groupId) {
+        groupDetail.value = null;
+        return;
+      }
       await store.dispatch("getGroup", {
-        id: parseInt(fromGroupId),
+        id: groupId,
         onSuccess: (response) => {
           const group = response.data.value;
           groupDetail.value = {
@@ -188,7 +191,12 @@ export default {
         onError: () => {},
       });
     }
-    fetchGroupDetail();
+    if (fromGroupId) fetchGroupDetail(parseInt(fromGroupId));
+
+    // Update sidebar when selected group changes
+    watch(selectedGroupId, (newId) => {
+      fetchGroupDetail(newId);
+    });
 
     function getDuplicateUrl(sourceProductId) {
       const params = new URLSearchParams();
@@ -435,16 +443,16 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
+  <Page>
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="h-0 w-full grow flex gap-6 mb-4 overflow-hidden">
+    <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="groupDetail" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden">
+      <div v-if="groupDetail" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b">
           <div class="flex items-center gap-2 min-w-0">
-            <Layers class="size-4 text-primary shrink-0" />
+            <Layers class="size-4 text-muted-foreground shrink-0" />
             <span class="text-sm font-medium truncate">{{ groupDetail.name }}</span>
           </div>
           <div class="flex items-center gap-1 shrink-0">
@@ -458,10 +466,10 @@ export default {
           </div>
         </div>
         <!-- Scrollable product list -->
-        <div class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5">
+        <div class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5" :class="{ 'pointer-events-none opacity-50': isSubmitting }">
           <!-- Add product button (current — highlighted) -->
-          <div class="flex items-center justify-center p-2 rounded-lg bg-accent">
-            <Plus class="size-4 text-primary" />
+          <div class="flex items-center justify-center p-2 h-16 rounded-lg bg-accent">
+            <Plus class="size-4 text-muted-foreground" />
           </div>
           <ContextMenu v-for="member in groupDetail.members" :key="member.productId">
             <ContextMenuTrigger as-child>
@@ -494,7 +502,7 @@ export default {
         </div>
       </div>
       <!-- Main content -->
-      <div class="grow flex flex-col overflow-auto">
+      <div class="grow flex flex-col min-w-0">
       <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
         <!-- Card 1: Main fields -->
         <Card>
@@ -525,34 +533,6 @@ export default {
               <p v-if="categories.length === 0 && !isLoadingCategories" class="text-sm text-muted-foreground">
                 Сначала создайте категорию товаров
               </p>
-            </div>
-
-            <!-- Product Group Selection (optional) -->
-            <div v-if="productGroups.length > 0" class="space-y-2">
-              <Label>Группа товаров <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
-              <Select v-model="selectedGroupId" :disabled="isLoadingGroups">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Не выбрана" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="null">
-                    <span class="text-muted-foreground">Без группы</span>
-                  </SelectItem>
-                  <SelectItem
-                    v-for="group in productGroups"
-                    :key="group.id"
-                    :value="group.id"
-                  >
-                    <span class="flex items-center gap-2">
-                      <Layers class="size-4" />
-                      {{ group.name }}
-                      <span v-if="group.memberCount" class="text-muted-foreground text-xs">
-                        ({{ group.memberCount }})
-                      </span>
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <FormField v-slot="{ componentField }" name="product.sku">
@@ -628,6 +608,34 @@ export default {
                   <FormMessage />
                 </FormItem>
               </FormField>
+            </div>
+
+            <!-- Product Group Selection -->
+            <div v-if="productGroups.length > 0" class="space-y-2">
+              <Label>Группа товара</Label>
+              <Select v-model="selectedGroupId" :disabled="isLoadingGroups">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Не выбрана" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="null">
+                    <span class="text-muted-foreground">Без группы</span>
+                  </SelectItem>
+                  <SelectItem
+                    v-for="group in productGroups"
+                    :key="group.id"
+                    :value="group.id"
+                  >
+                    <span class="flex items-center gap-2">
+                      <Layers class="size-4" />
+                      {{ group.name }}
+                      <span v-if="group.memberCount" class="text-muted-foreground text-xs">
+                        ({{ group.memberCount }})
+                      </span>
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

@@ -161,7 +161,6 @@ export default {
     const files = ref([]);
     const productId = computed(() => parseInt(String(route.params.id)));
     const images = ref(undefined);
-    const isSavingOrder = ref(false);
     const notes = ref([]);
     const category = ref(null);
     const attributeValues = ref([]);
@@ -188,8 +187,24 @@ export default {
     const mainScrollRef = ref(null);
 
     // Reload product data when switching between group members (component is reused)
+    // Preserve both sidebar and page scroll positions across navigation
     watch(productId, () => {
-      fetchProduct();
+      const savedSidebarScroll = sidebarScrollRef.value?.scrollTop ?? 0;
+      const savedPageScroll = window.scrollY;
+
+      // Lock scroll position while data loads to prevent jumps
+      const lockScroll = () => window.scrollTo(0, savedPageScroll);
+      window.addEventListener('scroll', lockScroll);
+
+      fetchProduct().then(() => {
+        nextTick(() => {
+          window.removeEventListener('scroll', lockScroll);
+          if (sidebarScrollRef.value) {
+            sidebarScrollRef.value.scrollTop = savedSidebarScroll;
+          }
+          window.scrollTo(0, savedPageScroll);
+        });
+      });
       fetchProductGroup();
     });
 
@@ -451,21 +466,6 @@ export default {
       }
     }
 
-    async function saveImageOrder(orderedFiles) {
-      isSavingOrder.value = true;
-      await store.dispatch("postProductImages", {
-        productId: productId.value,
-        files: orderedFiles.map((f) => f.id),
-        onSuccess: () => {
-          displaySonnerSuccess("Порядок изображений успешно сохранён.");
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      isSavingOrder.value = false;
-    }
-
     async function handleDeleteProduct() {
       await store.dispatch("deleteProduct", {
         productId: productId.value,
@@ -607,9 +607,7 @@ export default {
       files,
       deleteFile,
       productId,
-      saveImageOrder,
       images,
-      isSavingOrder,
       handleDeleteProduct,
       notes,
       addNote,
@@ -651,7 +649,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
+  <Page>
     <NavigationBar>
       <template #center>
         <Tabs v-model="tab">
@@ -667,13 +665,13 @@ export default {
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="h-0 w-full grow flex gap-6 mb-4 overflow-hidden">
+    <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden">
+      <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b">
           <div class="flex items-center gap-2 min-w-0">
-            <Layers class="size-4 text-primary shrink-0" />
+            <Layers class="size-4 text-muted-foreground shrink-0" />
             <span class="text-sm font-medium truncate">{{ productGroup.name }}</span>
           </div>
           <div class="flex items-center gap-1 shrink-0">
@@ -685,7 +683,7 @@ export default {
               type="button"
               @click="openGroupDialog"
             >
-              <ArrowRightLeft class="size-3.5" />
+              <ArrowRightLeft class="size-3.5 text-muted-foreground" />
             </Button>
             <router-link
               :to="`/product-groups/${productGroup.id}/edit`"
@@ -697,11 +695,11 @@ export default {
           </div>
         </div>
         <!-- Scrollable product list -->
-        <div ref="sidebarScrollRef" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5">
+        <div ref="sidebarScrollRef" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5" :class="{ 'pointer-events-none opacity-50': isProductLoading }">
           <!-- Add product button -->
           <router-link
             :to="duplicateProductUrl"
-            class="flex items-center justify-center p-2 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
+            class="flex items-center justify-center p-2 h-16 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
           >
             <Plus class="size-4 text-muted-foreground" />
           </router-link>
@@ -737,8 +735,8 @@ export default {
         </div>
       </div>
       <!-- Main content -->
-      <div ref="mainScrollRef" class="grow flex flex-col overflow-auto">
-        <div v-if="!isProductLoading" class="grow flex flex-col">
+      <div ref="mainScrollRef" class="grow flex flex-col min-w-0">
+        <div v-show="!isProductLoading" class="grow flex flex-col">
           <form
             v-if="form"
             v-show="tab == 'properties'"
@@ -753,6 +751,15 @@ export default {
               <CardContent>
                 <!-- Left: fields -->
                 <div class="space-y-4">
+                  <!-- Category (read-only) -->
+                  <div v-if="category" class="space-y-2">
+                    <Label class="text-muted-foreground">Категория</Label>
+                    <div class="flex items-center gap-2 h-9 px-3 border rounded-md text-muted-foreground">
+                      <FolderOpen class="size-4" />
+                      <span class="text-sm">{{ category.name }}</span>
+                    </div>
+                  </div>
+
                   <!-- SKU with edit button -->
                   <div class="space-y-2">
                     <Label class="text-muted-foreground">Артикул</Label>
@@ -822,15 +829,6 @@ export default {
                       <FormMessage />
                     </FormItem>
                   </FormField>
-
-                  <!-- Category (read-only) -->
-                  <div v-if="category" class="space-y-2">
-                    <Label class="text-muted-foreground">Категория</Label>
-                    <div class="flex items-center gap-2 h-9 px-3 border rounded-md text-muted-foreground">
-                      <FolderOpen class="size-4" />
-                      <span class="text-sm">{{ category.name }}</span>
-                    </div>
-                  </div>
 
                   <FormField v-slot="{ componentField }" name="product.name">
                     <FormItem>
@@ -1023,7 +1021,7 @@ export default {
         </form>
 
         <!-- Files tab -->
-        <div v-show="tab == 'files'" class="flex flex-col grow border rounded-xl">
+        <div v-show="tab == 'files'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
           <ProductFileManager
             :files="files"
             :productId="productId"
@@ -1033,28 +1031,26 @@ export default {
         </div>
 
         <!-- Images tab -->
-        <div v-show="tab == 'images'" class="flex flex-col grow border rounded-xl">
+        <div v-show="tab == 'images'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductImagesEditor
-            :isSaving="isSavingOrder"
             :files="files"
             :images="images"
             :productId="productId"
-            @onOrderSave="saveImageOrder"
           />
         </div>
 
         <!-- Sizes tab -->
-        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col grow border rounded-xl">
+        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
           <ProductVariantsEditor :productId="productId" />
         </div>
 
         <!-- Marketplaces tab -->
-        <div v-show="tab == 'marketplaces'" class="flex flex-col grow border rounded-xl">
+        <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
           <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
         </div>
 
         <!-- Notes tab -->
-        <div v-show="tab == 'notes'" class="flex flex-col grow border rounded-xl">
+        <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
           <div class="p-4 flex flex-col gap-4">
             <div v-if="notes.length === 0" class="text-center py-8 text-muted-foreground">
               <NotebookPen class="size-12 mx-auto mb-3 opacity-50" />
@@ -1069,8 +1065,8 @@ export default {
               />
             </div>
           </div>
-          <div class="mt-auto p-4 border-t">
-            <Button size="lg" variant="outline" class="w-full" @click="addNote">
+          <div class="mt-auto p-4">
+            <Button variant="outline" @click="addNote">
               <NotebookPen class="size-4 mr-2" />
               Добавить заметку
             </Button>
@@ -1080,7 +1076,7 @@ export default {
 
         <!-- Loading state -->
         <div
-          v-else-if="isProductLoading"
+          v-show="isProductLoading"
           class="grow flex items-center justify-center"
         >
           <Loader2 class="text-primary size-8 animate-spin" />
