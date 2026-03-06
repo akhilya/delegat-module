@@ -170,17 +170,7 @@ public class JwtAuthController : ControllerBase
         if (refreshToken == null || !refreshToken.IsActive)
             throw ApiException.Unauthorized("Refresh token недействителен");
 
-        // Read access token from cookie and extract userId (allow expired)
-        if (!Request.Cookies.TryGetValue(ACCESS_COOKIE, out var accessTokenValue) || string.IsNullOrEmpty(accessTokenValue))
-            throw ApiException.Unauthorized("Access token отсутствует");
-
-        var principal = _jwtService.ValidateExpiredToken(accessTokenValue);
-        if (principal == null)
-            throw ApiException.Unauthorized("Access token невалиден");
-
-        var userIdClaim = principal.FindFirst("userId")?.Value;
-        if (!int.TryParse(userIdClaim, out var userId) || userId != refreshToken.userId)
-            throw ApiException.Unauthorized("Token mismatch");
+        var userId = refreshToken.userId;
 
         // Verify user still exists
         var user = await _userManager.FindByIdAsync(userId.ToString());
@@ -204,7 +194,7 @@ public class JwtAuthController : ControllerBase
 
         // Issue new access token
         var newAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-        SetAccessTokenCookie(newAccessToken);
+        SetAccessTokenCookie(newAccessToken, rememberMe);
         SetRefreshTokenCookie(newRefreshTokenValue, rememberMe);
 
         return Ok();
@@ -232,11 +222,11 @@ public class JwtAuthController : ControllerBase
         await refreshRepo.AddAsync(refreshToken);
         await _unitOfWork.SaveChangesAsync();
 
-        SetAccessTokenCookie(accessToken);
+        SetAccessTokenCookie(accessToken, rememberMe);
         SetRefreshTokenCookie(refreshTokenValue, rememberMe);
     }
 
-    private void SetAccessTokenCookie(string token)
+    private void SetAccessTokenCookie(string token, bool rememberMe)
     {
         var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
         Response.Cookies.Append(ACCESS_COOKIE, token, new CookieOptions
@@ -245,7 +235,7 @@ public class JwtAuthController : ControllerBase
             Secure = isProduction,
             SameSite = SameSiteMode.Lax,
             Path = "/",
-            Expires = DateTime.UtcNow.AddMinutes(16)
+            Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
         });
     }
 
