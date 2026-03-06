@@ -65,6 +65,10 @@ public class FileController : ControllerBase
         if (file.product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
 
+        // Verify the file exists in storage before committing response headers
+        if (!await _storageService.ExistsAsync(file.filePath))
+            throw ApiException.NotFound("Файл не найден в хранилище");
+
         var fileName = Path.GetFileName(file.filePath);
         var isImage = file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
@@ -412,6 +416,10 @@ public class SharedFileController : ControllerBase
 
         if (shareToken == null || shareToken.IsExpired)
             throw ApiException.NotFound("Ссылка не найдена или истекла");
+
+        // Verify the file exists in storage before committing response headers
+        if (!await _storageService.ExistsAsync(shareToken.file.filePath))
+            throw ApiException.NotFound("Файл не найден в хранилище");
 
         var fileName = Path.GetFileName(shareToken.file.filePath);
         var isImage = shareToken.file.contentType.StartsWith("image/");

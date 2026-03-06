@@ -304,10 +304,10 @@ public class MinIOStorageService : IStorageService
     {
         try
         {
-            // Setting an empty policy string removes all public access
+            // Setting an empty-statement policy removes all public/anonymous access
             var args = new SetPolicyArgs()
                 .WithBucket(_bucket)
-                .WithPolicy("");
+                .WithPolicy("{\"Version\":\"2012-10-17\",\"Statement\":[]}");
             await _client.SetPolicyAsync(args, ct);
             _logger.LogInformation("MinIO bucket '{Bucket}' policy set to private (no public access)", _bucket);
         }

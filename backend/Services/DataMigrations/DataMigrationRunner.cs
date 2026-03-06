@@ -55,39 +55,44 @@ public static class DataMigrationRunner
             using var scope = rootProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
 
-            await using var transaction = await db.Database.BeginTransactionAsync();
+            // Wrap in execution strategy to support MySqlRetryingExecutionStrategy
+            var strategy = db.Database.CreateExecutionStrategy();
             try
             {
-                await migration.ExecuteAsync(scope.ServiceProvider, CancellationToken.None);
-
-                // Upsert SystemVersion inside the same transaction
-                var versionRecord = await db.systemVersions
-                    .FirstOrDefaultAsync(sv => sv.key == "platform");
-
-                if (versionRecord != null)
+                await strategy.ExecuteAsync(async () =>
                 {
-                    versionRecord.version = migration.Version;
-                    versionRecord.appliedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    db.systemVersions.Add(new SystemVersion
+                    await using var transaction = await db.Database.BeginTransactionAsync();
+
+                    await migration.ExecuteAsync(scope.ServiceProvider, CancellationToken.None);
+
+                    // Upsert SystemVersion inside the same transaction
+                    var versionRecord = await db.systemVersions
+                        .FirstOrDefaultAsync(sv => sv.key == "platform");
+
+                    if (versionRecord != null)
                     {
-                        key = "platform",
-                        version = migration.Version,
-                        appliedAt = DateTime.UtcNow
-                    });
-                }
+                        versionRecord.version = migration.Version;
+                        versionRecord.appliedAt = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        db.systemVersions.Add(new SystemVersion
+                        {
+                            key = "platform",
+                            version = migration.Version,
+                            appliedAt = DateTime.UtcNow
+                        });
+                    }
 
-                await db.SaveChangesAsync();
-                await transaction.CommitAsync();
+                    await db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
 
                 applied++;
                 logger.LogInformation("Data migration {Version} applied successfully.", migration.Version);
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 logger.LogError(ex, "Data migration {Version} failed. Stopping further migrations.", migration.Version);
                 break; // Stop — subsequent migrations may depend on this one
             }
