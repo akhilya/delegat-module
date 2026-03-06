@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
@@ -26,6 +27,7 @@ public class ThumbnailController : ControllerBase
 
     [HttpGet]
     [Route("/files/{id}/thumbnail")]
+    [DisableRateLimiting]
     [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetThumbnail(int id, [FromQuery] int w = 256, CancellationToken ct = default)
     {

@@ -87,6 +87,17 @@ public class ThumbnailService
         }
     }
 
+    public async Task<string?> GetOrGenerateAsBase64Async(string originalPath, int width, CancellationToken ct = default)
+    {
+        using var stream = await GetOrGenerateAsync(originalPath, width, ct);
+        if (stream is null)
+            return null;
+
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        return $"data:image/webp;base64,{Convert.ToBase64String(ms.ToArray())}";
+    }
+
     public async Task DeleteThumbnailsAsync(string originalPath)
     {
         foreach (var width in AllowedWidths)

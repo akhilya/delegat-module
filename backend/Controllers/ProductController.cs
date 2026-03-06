@@ -150,9 +150,26 @@ public class ProductController : ControllerBase
             startIndex,
             pageSize);
 
-        var paged = items
-            .Select(p => ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider))
-            .ToList();
+        var thumbnailService = _serviceProvider.GetRequiredService<ThumbnailService>();
+
+        var paged = new List<Product.ProductReviewDTO>();
+        foreach (var p in items)
+        {
+            var dto = ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider);
+
+            var primaryImageRef = p.images.OrderBy(i => i.index).FirstOrDefault();
+            var primaryImageFile = primaryImageRef?.file
+                ?? p.files.FirstOrDefault(f => f.contentType.StartsWith("image/"));
+
+            if (primaryImageFile is not null)
+            {
+                var base64 = await thumbnailService.GetOrGenerateAsBase64Async(primaryImageFile.filePath, 128, HttpContext.RequestAborted);
+                if (base64 is not null)
+                    dto.primaryImageThumbnail = base64;
+            }
+
+            paged.Add(dto);
+        }
 
         var lastPage = startIndex + pageSize >= total;
         return Ok(new
