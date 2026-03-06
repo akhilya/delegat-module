@@ -1,4 +1,5 @@
 using PrintO.Enums;
+using PrintO.Infrastructure.Storage;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
 using PrintO.Models.Products;
@@ -168,7 +169,7 @@ public class MappingService
             "categoryid" => product.categoryId,
             "categoryname" => product.category?.name,
             "groupname" => GetGroupNameValue(product),
-            "images" => GetProductImageUrls(product),
+            "images" => GetProductImageUrlsAsync(product).GetAwaiter().GetResult(),
             _ => null
         };
     }
@@ -176,7 +177,7 @@ public class MappingService
     /// <summary>
     /// Get the list of product image URLs in the correct order
     /// </summary>
-    private List<string> GetProductImageUrls(Product product)
+    private async Task<List<string>> GetProductImageUrlsAsync(Product product)
     {
         var urls = new List<string>();
 
@@ -194,7 +195,8 @@ public class MappingService
             var file = imageRef.file ?? product.files?.FirstOrDefault(f => f.Id == imageRef.fileId);
             if (file != null)
             {
-                var url = file.GetFullPath(_serviceProvider);
+                var storageService = _serviceProvider.GetRequiredService<IStorageService>();
+                var url = await storageService.GetPresignedUrlAsync(file.filePath, 3600);
                 if (!string.IsNullOrEmpty(url))
                 {
                     urls.Add(url);

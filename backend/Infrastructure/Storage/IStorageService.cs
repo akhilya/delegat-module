@@ -51,6 +51,11 @@ public interface IStorageService
     string GetFullPath(string path);
 
     /// <summary>
+    /// Generate a presigned (temporary) URL for a file
+    /// </summary>
+    Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600);
+
+    /// <summary>
     /// Get the bucket name
     /// </summary>
     string Bucket { get; }

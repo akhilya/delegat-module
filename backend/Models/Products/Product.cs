@@ -203,7 +203,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
 
         if (primaryImageFile is not null)
         {
-            primaryImagePath = primaryImageFile.GetFullPath(serviceProvider);
+            primaryImagePath = primaryImageFile.GetDownloadUrl();
             primaryImageThumbnail = $"/api/files/{primaryImageFile.Id}/thumbnail?w=256";
         }
 

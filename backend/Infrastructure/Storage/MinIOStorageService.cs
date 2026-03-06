@@ -250,7 +250,19 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
-    /// Ensure the bucket exists, create if not
+    /// Generate a presigned (temporary) URL for a file
+    /// </summary>
+    public async Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600)
+    {
+        var args = new PresignedGetObjectArgs()
+            .WithBucket(_bucket)
+            .WithObject(path)
+            .WithExpiry(expirySeconds);
+        return await _client.PresignedGetObjectAsync(args);
+    }
+
+    /// <summary>
+    /// Ensure the bucket exists and has private access policy (no public listing or download).
     /// </summary>
     private async Task EnsureBucketExistsAsync(CancellationToken ct = default)
     {
@@ -266,6 +278,31 @@ public class MinIOStorageService : IStorageService
             await _client.MakeBucketAsync(makeBucketArgs, ct);
         }
 
+        // Remove any public bucket policy to prevent anonymous listing and download
+        await SetPrivateBucketPolicyAsync(ct);
+
         _bucketExistsVerified = true;
+    }
+
+    /// <summary>
+    /// Sets an empty (private) bucket policy, removing any public access rules.
+    /// This prevents anonymous users from listing or downloading files directly from MinIO.
+    /// </summary>
+    private async Task SetPrivateBucketPolicyAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            // Setting an empty policy string removes all public access
+            var args = new SetPolicyArgs()
+                .WithBucket(_bucket)
+                .WithPolicy("");
+            await _client.SetPolicyAsync(args, ct);
+            _logger.LogInformation("MinIO bucket '{Bucket}' policy set to private (no public access)", _bucket);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail — bucket will still work, just might have old policy
+            _logger.LogWarning(ex, "Failed to set private bucket policy for '{Bucket}'", _bucket);
+        }
     }
 }

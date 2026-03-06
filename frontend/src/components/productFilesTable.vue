@@ -51,8 +51,7 @@ export default {
   },
   methods: {
     extractFileName(file) {
-      let pathComponents = file.fullPath.split("/");
-      return pathComponents[pathComponents.length - 1];
+      return file.fileName || file.fullPath.split("/").pop();
     },
     formatBytes(bytes, decimals = 2) {
       if (!+bytes) return "0 Bytes";

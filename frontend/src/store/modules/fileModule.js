@@ -111,6 +111,17 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async shareFile(ctx, { fileId, ttlHours, onSuccess, onError }) {
+      return await useAxios(
+        `/files/${fileId}/share`,
+        { method: "POST", data: { ttlHours }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     async moveProductFolder(ctx, { productId, folderId, newParentFolderId, onSuccess, onError }) {
       return await useAxios(
         `/products/${productId}/folders/${folderId}/move`,

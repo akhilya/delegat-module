@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
@@ -40,6 +43,38 @@ public class FileController : ControllerBase
         _serviceProvider = serviceProvider;
         _thumbnailService = thumbnailService;
         _quotaService = quotaService;
+    }
+
+    /// <summary>
+    /// Downloads a file by id, proxying through backend with JWT authorization.
+    /// </summary>
+    [HttpGet]
+    [Route("/files/{id}/download")]
+    public async Task<IActionResult> DownloadFile(int id)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var file = await fileRepo.GetByIdWithIncludesAsync(id, includes: f => f.product);
+
+        if (file == null)
+            throw ApiException.NotFound("Файл не найден");
+
+        if (file.product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
+
+        var stream = await _storageService.GetStreamAsync(file.filePath);
+        if (stream == null)
+            throw ApiException.NotFound("Файл не найден в хранилище");
+
+        var fileName = Path.GetFileName(file.filePath);
+        var isImage = file.contentType.StartsWith("image/");
+        var disposition = isImage ? "inline" : "attachment";
+
+        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{fileName}\"";
+        return File(stream, file.contentType);
     }
 
     /// <summary>
@@ -296,5 +331,97 @@ public class FileController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Creates a temporary share link for a file.
+    /// </summary>
+    public record ShareFileRequest(int ttlHours);
+
+    [HttpPost]
+    [Route("/files/{id}/share")]
+    public async Task<IActionResult> ShareFile(int id, [FromBody] ShareFileRequest request)
+    {
+        var allowedTtl = new[] { 1, 24, 168, 720 };
+        if (!allowedTtl.Contains(request.ttlHours))
+            throw ApiException.BadRequest("Недопустимый TTL");
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var file = await fileRepo.GetByIdWithIncludesAsync(id, includes: f => f.product);
+
+        if (file == null)
+            throw ApiException.NotFound("Файл не найден");
+
+        if (file.product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
+
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null)
+            throw ApiException.Unauthorized();
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var token = Base64UrlEncoder.Encode(tokenBytes);
+
+        var shareToken = new FileShareToken
+        {
+            fileId = id,
+            token = token,
+            expiresAt = DateTime.UtcNow.AddHours(request.ttlHours),
+            createdAt = DateTime.UtcNow,
+            createdByUserId = user.Id
+        };
+
+        var shareRepo = _unitOfWork.Repository<FileShareToken>();
+        await shareRepo.AddWithoutSaveAsync(shareToken);
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(new
+        {
+            url = $"/api/shared/{token}",
+            expiresAt = shareToken.expiresAt
+        });
+    }
+}
+
+/// <summary>
+/// Public controller for accessing shared file links (no auth required).
+/// </summary>
+[ApiController]
+public class SharedFileController : ControllerBase
+{
+    private readonly DataContext _db;
+    private readonly IStorageService _storageService;
+
+    public SharedFileController(DataContext db, IStorageService storageService)
+    {
+        _db = db;
+        _storageService = storageService;
+    }
+
+    [HttpGet]
+    [Route("/shared/{token}")]
+    public async Task<IActionResult> GetSharedFile(string token)
+    {
+        var shareToken = await _db.fileShareTokens
+            .Include(t => t.file)
+            .FirstOrDefaultAsync(t => t.token == token);
+
+        if (shareToken == null || shareToken.IsExpired)
+            throw ApiException.NotFound("Ссылка не найдена или истекла");
+
+        var stream = await _storageService.GetStreamAsync(shareToken.file.filePath);
+        if (stream == null)
+            throw ApiException.NotFound("Файл не найден в хранилище");
+
+        var fileName = Path.GetFileName(shareToken.file.filePath);
+        var isImage = shareToken.file.contentType.StartsWith("image/");
+        var disposition = isImage ? "inline" : "attachment";
+
+        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{fileName}\"";
+        return File(stream, shareToken.file.contentType);
     }
 }

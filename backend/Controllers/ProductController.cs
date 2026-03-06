@@ -493,7 +493,7 @@ public class ProductController : ControllerBase
                 productName = m.product?.name ?? "",
                 productSku = m.product?.sku ?? "",
                 isCurrent = m.productId == productId,
-                imageUrl = m.product?.images?.FirstOrDefault()?.file?.GetFullPath(_serviceProvider),
+                imageUrl = m.product?.images?.FirstOrDefault()?.file?.GetDownloadUrl(),
                 imageThumbnailUrl = m.product?.images?.FirstOrDefault()?.file is { } f
                     && f.contentType.StartsWith("image/")
                     ? $"/api/files/{f.Id}/thumbnail?w=128"

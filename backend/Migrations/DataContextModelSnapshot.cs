@@ -212,6 +212,42 @@ namespace PrintO.Migrations
                     b.ToTable("files");
                 });
 
+            modelBuilder.Entity("PrintO.Models.FileShareToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("createdByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("expiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("createdByUserId");
+
+                    b.HasIndex("fileId");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.ToTable("fileShareTokens");
+                });
+
             modelBuilder.Entity("PrintO.Models.FileTag", b =>
                 {
                     b.Property<int>("Id")
@@ -1322,6 +1358,25 @@ namespace PrintO.Migrations
                     b.Navigation("folder");
 
                     b.Navigation("product");
+                });
+
+            modelBuilder.Entity("PrintO.Models.FileShareToken", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "createdByUser")
+                        .WithMany()
+                        .HasForeignKey("createdByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.File", "file")
+                        .WithMany()
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("createdByUser");
+
+                    b.Navigation("file");
                 });
 
             modelBuilder.Entity("PrintO.Models.FileTag", b =>

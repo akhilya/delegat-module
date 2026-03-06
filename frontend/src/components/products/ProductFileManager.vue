@@ -43,6 +43,9 @@ import {
   FolderInput,
   Loader2,
   ChevronRight,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-vue-next";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 
@@ -77,6 +80,14 @@ const deleteFolderRecursive = ref(false);
 const showMoveFile = ref(false);
 const moveFileTarget = ref(null);
 const moveFileFolderId = ref("root");
+
+// Share dialog
+const showShareDialog = ref(false);
+const shareFileTarget = ref(null);
+const shareTtlHours = ref("168");
+const shareUrl = ref("");
+const isCreatingShare = ref(false);
+const shareCopied = ref(false);
 
 // Computed
 const breadcrumbs = computed(() => {
@@ -402,9 +413,44 @@ async function moveFile() {
   showMoveFile.value = false;
 }
 
+function openShareDialog(file) {
+  shareFileTarget.value = file;
+  shareTtlHours.value = "168";
+  shareUrl.value = "";
+  shareCopied.value = false;
+  showShareDialog.value = true;
+}
+
+async function createShareLink() {
+  if (!shareFileTarget.value || isCreatingShare.value) return;
+  isCreatingShare.value = true;
+  await store.dispatch("shareFile", {
+    fileId: shareFileTarget.value.id,
+    ttlHours: parseInt(shareTtlHours.value),
+    onSuccess: (response) => {
+      const url = response.data.value.url;
+      shareUrl.value = `${window.location.origin}${url}`;
+    },
+    onError: (error) => {
+      displaySonnerError(error);
+    },
+  });
+  isCreatingShare.value = false;
+}
+
+async function copyShareUrl() {
+  try {
+    await navigator.clipboard.writeText(shareUrl.value);
+    shareCopied.value = true;
+    displaySonnerSuccess("Ссылка скопирована");
+    setTimeout(() => { shareCopied.value = false; }, 2000);
+  } catch {
+    displaySonnerError("Не удалось скопировать");
+  }
+}
+
 function extractFileName(file) {
-  const pathComponents = file.fullPath.split("/");
-  return pathComponents[pathComponents.length - 1];
+  return file.fileName || file.fullPath.split("/").pop();
 }
 
 function formatBytes(bytes, decimals = 2) {
@@ -538,6 +584,7 @@ onMounted(() => {
                 class="size-7 opacity-0 group-hover:opacity-100"
                 as="a"
                 :href="file.fullPath"
+                :download="!file.contentType.startsWith('image/') ? extractFileName(file) : undefined"
                 target="_blank"
                 @click.stop
               >
@@ -594,6 +641,13 @@ onMounted(() => {
               <ArrowDownToLine class="size-4 text-muted-foreground" />
               Скачать
             </a>
+            <button
+              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+              @click="openShareDialog(contextMenu.item); closeContextMenu()"
+            >
+              <Share2 class="size-4 text-muted-foreground" />
+              Поделиться
+            </button>
             <button
               class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
               @click="openMoveFileDialog(contextMenu.item); closeContextMenu()"
@@ -731,6 +785,50 @@ onMounted(() => {
           <Button variant="outline" @click="showMoveFile = false">Отмена</Button>
           <Button @click="moveFile">Переместить</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Share file dialog -->
+    <Dialog :open="showShareDialog" @update:open="showShareDialog = $event">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Поделиться файлом</DialogTitle>
+        </DialogHeader>
+        <p class="text-sm text-muted-foreground mb-2">
+          {{ shareFileTarget ? extractFileName(shareFileTarget) : '' }}
+        </p>
+        <template v-if="!shareUrl">
+          <Select v-model="shareTtlHours">
+            <SelectTrigger>
+              <SelectValue placeholder="Срок действия" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1 час</SelectItem>
+              <SelectItem value="24">1 день</SelectItem>
+              <SelectItem value="168">7 дней</SelectItem>
+              <SelectItem value="720">30 дней</SelectItem>
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" @click="showShareDialog = false">Отмена</Button>
+            <Button @click="createShareLink" :disabled="isCreatingShare">
+              <Loader2 v-if="isCreatingShare" class="size-4 animate-spin mr-1" />
+              Создать ссылку
+            </Button>
+          </DialogFooter>
+        </template>
+        <template v-else>
+          <div class="flex gap-2">
+            <Input :model-value="shareUrl" readonly class="flex-1 text-xs" @click="$event.target.select()" />
+            <Button variant="outline" size="icon" @click="copyShareUrl">
+              <Check v-if="shareCopied" class="size-4 text-green-500" />
+              <Copy v-else class="size-4" />
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" @click="showShareDialog = false">Закрыть</Button>
+          </DialogFooter>
+        </template>
       </DialogContent>
     </Dialog>
 

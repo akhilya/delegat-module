@@ -95,20 +95,20 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
 
     public object MapToDTO(IServiceProvider serviceProvider)
     {
-        var storageService = serviceProvider.GetRequiredService<IStorageService>();
-        string fullPath = storageService.GetFullPath(filePath);
-
         return new
         {
             Id,
             uploadDateTime,
-            fullPath,
+            fullPath = $"/api/files/{Id}/download",
+            fileName = Path.GetFileName(filePath),
             contentType,
             length,
             folderId,
             tags = tags.Select(t => t.MapToDTO(serviceProvider)),
         };
     }
+
+    public string GetDownloadUrl() => $"/api/files/{Id}/download";
 
     public string GetFullPath(IServiceProvider serviceProvider)
     {

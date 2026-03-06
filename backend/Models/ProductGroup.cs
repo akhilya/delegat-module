@@ -128,7 +128,7 @@ public class ProductGroup : IEntity, IMapToDTO<ProductGroup.GroupDTO>,
                         category = m.product?.category != null ? new GroupProductCategoryDTO { name = m.product.category.name } : null,
                         images = m.product?.images?.OrderBy(i => i.index).Select(i => new GroupProductImageDTO
                         {
-                            url = i.file?.GetFullPath(serviceProvider),
+                            url = i.file?.GetDownloadUrl(),
                             thumbnailUrl = i.file != null && i.file.contentType.StartsWith("image/")
                                 ? $"/api/files/{i.file.Id}/thumbnail?w=128"
                                 : null

@@ -37,6 +37,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
 
+    // File sharing
+    public DbSet<FileShareToken> fileShareTokens { get; set; }
+
     // System versioning
     public DbSet<SystemVersion> systemVersions { get; set; }
 
@@ -206,5 +209,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(rt => rt.token).IsUnique();
         builder.Entity<RefreshToken>()
             .HasIndex(rt => rt.userId);
+
+        // FileShareToken indexes
+        builder.Entity<FileShareToken>()
+            .HasIndex(fst => fst.token).IsUnique();
+        builder.Entity<FileShareToken>()
+            .HasIndex(fst => fst.fileId);
     }
 }
