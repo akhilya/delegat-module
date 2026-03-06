@@ -72,8 +72,9 @@ public class FileController : ControllerBase
         var fileName = Path.GetFileName(file.filePath);
         var isImage = file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
+        var encodedFileName = Uri.EscapeDataString(fileName);
 
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{fileName}\"";
+        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
         return File(stream, file.contentType);
     }
 
@@ -420,8 +421,9 @@ public class SharedFileController : ControllerBase
         var fileName = Path.GetFileName(shareToken.file.filePath);
         var isImage = shareToken.file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
+        var encodedFileName = Uri.EscapeDataString(fileName);
 
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{fileName}\"";
+        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
         return File(stream, shareToken.file.contentType);
     }
 }
