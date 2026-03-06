@@ -1319,6 +1319,7 @@ public class ProductSyncController : ControllerBase
             productName = product.name,
             categoryId = product.categoryId,
             categoryName = product.category?.name,
+            hasSizes = product.category?.hasSizes ?? false,
             allConnections = result
         });
     }

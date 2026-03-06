@@ -34,6 +34,7 @@ import {
   Upload,
   X,
   EllipsisVertical,
+  Search,
 } from "lucide-vue-next";
 import {
   Tooltip,
@@ -41,6 +42,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   Card,
   CardContent,
@@ -151,6 +157,10 @@ export default {
     Upload,
     X,
     EllipsisVertical,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    Search,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -309,6 +319,7 @@ export default {
             ...fm,
             rawTextMode: false,
             _newStaticValue: "",
+            _optionSearch: "",
             parsedOptions: fm.externalFieldOptions
               ? (() => { try { return JSON.parse(fm.externalFieldOptions); } catch { return []; } })()
               : [],
@@ -466,6 +477,12 @@ export default {
     getAvailableOptions(fm) {
       const selected = this._parseMultiselectValue(fm.staticValue);
       return (fm.parsedOptions || []).filter((o) => !selected.includes(o.value));
+    },
+
+    filterOptions(fm, options) {
+      if (!fm._optionSearch) return options.slice(0, 100);
+      const q = fm._optionSearch.toLowerCase();
+      return options.filter(o => o.label.toLowerCase().includes(q)).slice(0, 200);
     },
 
     addFreeformStaticValue(fm) {
@@ -1206,27 +1223,51 @@ export default {
                   <!-- Multiselect field with chip/tag UI -->
                   <template v-else-if="fm.externalFieldType === 'multiselect'">
                     <div class="flex items-center gap-2">
-                      <!-- С опциями маркетплейса: chips + SearchableSelect -->
+                      <!-- С опциями маркетплейса: chips + Plus popover -->
                       <template v-if="fm.parsedOptions?.length">
-                        <div class="flex-1 flex flex-col gap-1.5">
-                          <div v-if="getStaticValues(fm).length" class="flex flex-wrap gap-1">
-                            <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
-                                   class="flex items-center gap-1 pl-2 pr-1 py-0.5">
-                              <span class="text-xs">{{ v.label }}</span>
-                              <button type="button" @click="removeStaticValue(fm, i)"
-                                      class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
-                                <X class="size-3" />
-                              </button>
-                            </Badge>
-                          </div>
-                          <SearchableSelect
-                            :options="getAvailableOptions(fm)"
-                            model-value=""
-                            @update:modelValue="v => addStaticValue(fm, v)"
-                            placeholder="Добавить значение..."
-                            :disabled="!fm.isEnabled"
-                          />
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background">
+                          <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
+                                 class="flex items-center gap-1 pl-2 pr-1 py-0.5">
+                            <span class="text-xs">{{ v.label }}</span>
+                            <button type="button" @click="removeStaticValue(fm, i)"
+                                    class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
+                              <X class="size-3" />
+                            </button>
+                          </Badge>
+                          <span v-if="!getStaticValues(fm).length" class="text-sm text-muted-foreground">Нет значений</span>
                         </div>
+                        <Popover @update:open="open => { if (!open) fm._optionSearch = '' }">
+                          <PopoverTrigger as-child>
+                            <Button variant="outline" size="icon" class="shrink-0" :disabled="!fm.isEnabled || !getAvailableOptions(fm).length">
+                              <Plus class="size-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" class="w-[250px] p-0 max-h-72 overflow-hidden flex flex-col">
+                            <div v-if="getAvailableOptions(fm).length > 5" class="p-2 border-b">
+                              <div class="relative">
+                                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                <input
+                                  type="text"
+                                  v-model="fm._optionSearch"
+                                  placeholder="Поиск..."
+                                  class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                  @click.stop
+                                />
+                              </div>
+                            </div>
+                            <div class="overflow-auto flex-1 p-1">
+                              <div v-for="option in filterOptions(fm, getAvailableOptions(fm))"
+                                   :key="option.value"
+                                   class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                                   @click="addStaticValue(fm, option.value)">
+                                <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
+                              </div>
+                              <div v-if="!filterOptions(fm, getAvailableOptions(fm)).length" class="p-3 text-sm text-muted-foreground text-center">
+                                Ничего не найдено
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </template>
                       <!-- Без опций: chips внутри поля ввода -->
                       <template v-else>

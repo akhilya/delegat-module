@@ -21,7 +21,7 @@ import {
   Plus,
   RefreshCw,
   EllipsisVertical,
-  Layers,
+  Ruler,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -57,6 +57,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Separator from "@/components/ui/separator/Separator.vue";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,7 +125,11 @@ export default {
     DropdownMenuSubTrigger,
     DropdownMenuSubContent,
     EllipsisVertical,
-    Layers,
+    Ruler,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
   },
   props: {
     productId: {
@@ -272,17 +282,16 @@ export default {
 
     // Export to all marketplaces that have category mapping
     async handleExportToAll() {
-      const toExport = this.connectionsWithMapping.filter((c) => !c.isLinked);
-
-      if (toExport.length === 0) {
-        displaySonnerSuccess(
-          "Товар уже экспортирован на все маркетплейсы с маппингом",
-        );
+      const allExportable = this.connectionsWithMapping;
+      if (allExportable.length === 0) {
+        displaySonnerSuccess("Нет подключений с маппингом для экспорта");
         return;
       }
 
-      // Check for connections with multiple mappings but no selection
-      const conflicts = toExport.filter(
+      const toLink = allExportable.filter((c) => !c.isLinked);
+
+      // Check for unlinked connections with multiple mappings but no selection
+      const conflicts = toLink.filter(
         (c) => c.availableMappings?.length > 1 && !this.mappingSelections[c.connectionId],
       );
       if (conflicts.length > 0) {
@@ -292,36 +301,35 @@ export default {
         return;
       }
 
-      const withoutMapping = this.connectionsWithoutMapping.length;
-      if (withoutMapping > 0) {
-        // Could show a warning, but continue with export
-      }
-
       this.isExportingAll = true;
       let successCount = 0;
       let errorCount = 0;
 
-      for (const conn of toExport) {
+      for (const conn of allExportable) {
         try {
-          await this.exportProduct({
-            connectionId: conn.connectionId,
-            productId: this.productId,
-            onSuccess: () => {
-              successCount++;
-            },
-            onError: () => {
-              errorCount++;
-            },
-          });
+          if (conn.isLinked) {
+            // Re-export via existing link
+            await this.exportFromLink({
+              linkId: conn.linkId,
+              onSuccess: () => { successCount++; },
+              onError: () => { errorCount++; },
+            });
+          } else {
+            // First export
+            await this.exportProduct({
+              connectionId: conn.connectionId,
+              productId: this.productId,
+              onSuccess: () => { successCount++; },
+              onError: () => { errorCount++; },
+            });
+          }
         } catch {
           errorCount++;
         }
       }
 
       if (successCount > 0) {
-        displaySonnerSuccess(
-          `Экспортировано на ${successCount} маркетплейс(ов)`,
-        );
+        displaySonnerSuccess(`Экспортировано на ${successCount} маркетплейс(ов)`);
       }
       if (errorCount > 0) {
         displaySonnerError(`Ошибок при экспорте: ${errorCount}`);
@@ -574,7 +582,7 @@ export default {
 
     isConnectionBusy(conn) {
       if (this.exportingConnectionId === conn.connectionId) return true;
-      if (this.isExportingAll && !conn.isLinked && conn.hasMapping && conn.canExport) return true;
+      if (this.isExportingAll && conn.hasMapping && conn.canExport) return true;
       if (conn.isLinked) {
         if (this.importingLinkId === conn.linkId) return true;
         if (this.isApplyingImport && this.previewLinkId === conn.linkId) return true;
@@ -688,7 +696,7 @@ export default {
     <div v-else class="space-y-4">
       <!-- Export all banner -->
       <div
-        v-if="connections?.allConnections?.length > 1 && readyToExportConnections.length > 0"
+        v-if="connectionsWithMapping.length > 0"
         class="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3"
       >
         <div class="flex items-center gap-3 min-w-0">
@@ -698,8 +706,8 @@ export default {
           <div class="min-w-0">
             <div class="text-sm font-medium">Экспорт на все маркетплейсы</div>
             <div class="text-xs text-muted-foreground">
-              {{ readyToExportConnections.length }}
-              {{ readyToExportConnections.length < 5 ? 'подключения готовы' : 'подключений готово' }}
+              {{ connectionsWithMapping.length }}
+              {{ connectionsWithMapping.length < 5 ? 'подключения готовы' : 'подключений готово' }}
               к экспорту
             </div>
           </div>
@@ -748,9 +756,18 @@ export default {
           <component :is="getStatusInfo(conn.linkStatus).icon" class="size-3 mr-1" />
           {{ getStatusInfo(conn.linkStatus).label }}
         </Badge>
-        <Button variant="ghost" size="icon" class="size-8 shrink-0" @click="toggleVariants(conn)">
-          <Layers class="size-4" />
-        </Button>
+        <TooltipProvider v-if="connections?.hasSizes">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Button variant="ghost" size="icon" class="size-8 shrink-0" @click="toggleVariants(conn)">
+                <Ruler class="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>Размеры</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" size="icon" class="size-8 shrink-0">

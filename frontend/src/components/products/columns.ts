@@ -8,6 +8,103 @@ import ImageFile from "../imageFile.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 
+/** Creates a copy icon SVG DOM element. */
+function createCopyIconEl(size = 12): SVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const rect = document.createElementNS(ns, "rect");
+  rect.setAttribute("x", "9"); rect.setAttribute("y", "9");
+  rect.setAttribute("width", "13"); rect.setAttribute("height", "13");
+  rect.setAttribute("rx", "2"); rect.setAttribute("ry", "2");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1");
+  svg.appendChild(rect);
+  svg.appendChild(path);
+  return svg;
+}
+
+/** Creates a check icon SVG DOM element. */
+function createCheckIconEl(size = 12): SVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M20 6 9 17l-5-5");
+  svg.appendChild(path);
+  return svg;
+}
+
+/** Renders a copy icon (Lucide copy) via h(). */
+function renderCopyIcon(size = 12) {
+  return h("svg", {
+    xmlns: "http://www.w3.org/2000/svg", width: String(size), height: String(size),
+    viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+    "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round",
+  }, [
+    h("rect", { x: "9", y: "9", width: "13", height: "13", rx: "2", ry: "2" }),
+    h("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }),
+  ]);
+}
+
+/** Renders a clickable SKU badge that copies to clipboard with visual feedback. */
+function renderCopyableSku(sku: string, extraClass = "") {
+  const baseClass = "font-mono text-sm group-hover:bg-muted rounded-md px-2 py-0.5 cursor-pointer transition-colors inline-flex items-center gap-1.5";
+  return h("span", {
+    class: `${baseClass} ${extraClass}`.trim(),
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(sku);
+      const el = e.currentTarget as HTMLElement;
+      const iconEl = el.querySelector(".sku-copy-icon") as HTMLElement;
+      if (iconEl) {
+        // Swap to check icon
+        iconEl.replaceChildren(createCheckIconEl());
+        iconEl.classList.remove("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
+        iconEl.classList.add("opacity-100", "text-green-600");
+        setTimeout(() => {
+          // Restore copy icon
+          iconEl.replaceChildren(createCopyIconEl());
+          iconEl.classList.add("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
+          iconEl.classList.remove("opacity-100", "text-green-600");
+        }, 800);
+      }
+    },
+    title: "Копировать артикул",
+  }, [
+    sku,
+    h("span", {
+      class: "sku-copy-icon opacity-0 group-hover:opacity-50 transition-opacity shrink-0 text-muted-foreground",
+    }, [renderCopyIcon()]),
+  ]);
+}
+
+/** Renders a date value as two lines: date on top, time below in muted text. */
+function renderDateCell(val: string | null | undefined) {
+  if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
+  const d = new Date(val);
+  const date = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return h("div", { class: "flex flex-col" }, [
+    h("span", { class: "text-sm tabular-nums" }, date),
+    h("span", { class: "text-xs tabular-nums text-muted-foreground" }, time),
+  ]);
+}
+
 /** A single store attribute value assigned to a product. */
 export interface StoreAttributeValue {
   id: number;
@@ -110,8 +207,7 @@ export const columns: ProductColumnDef[] = [
     header: "Артикул",
     accessorKey: "sku",
     size: 80,
-    cell: ({ row }) =>
-      h("span", { class: "font-mono text-sm" }, row.original.sku),
+    cell: ({ row }) => renderCopyableSku(row.original.sku),
   },
   {
     id: "barcode",
@@ -190,12 +286,7 @@ export const columns: ProductColumnDef[] = [
     hideable: true,
     header: "Создан",
     size: 130,
-    cell: ({ row }) => {
-      const val = row.original.createdAt;
-      if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
-      const d = new Date(val);
-      return h("span", { class: "text-sm tabular-nums" }, d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
-    },
+    cell: ({ row }) => renderDateCell(row.original.createdAt),
   },
   {
     id: "updatedAt",
@@ -203,12 +294,7 @@ export const columns: ProductColumnDef[] = [
     hideable: true,
     header: "Изменён",
     size: 130,
-    cell: ({ row }) => {
-      const val = row.original.updatedAt;
-      if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
-      const d = new Date(val);
-      return h("span", { class: "text-sm tabular-nums" }, d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
-    },
+    cell: ({ row }) => renderDateCell(row.original.updatedAt),
   },
 ];
 
@@ -397,11 +483,7 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
             { class: "font-medium text-sm leading-tight break-words" },
             row.original.name,
           ),
-          h(
-            "span",
-            { class: "font-mono text-xs text-muted-foreground break-all" },
-            row.original.sku,
-          ),
+          renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
           row.original.categoryName
             ? h(
                 "span",
@@ -427,11 +509,7 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
           { class: "font-medium text-sm leading-tight break-words" },
           row.original.name,
         ),
-        h(
-          "span",
-          { class: "font-mono text-xs text-muted-foreground break-all" },
-          row.original.sku,
-        ),
+        renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
       ]);
     },
   },
@@ -456,11 +534,7 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
               row.original.categoryName,
             )
           : null,
-        h(
-          "span",
-          { class: "font-mono text-xs text-muted-foreground break-all" },
-          row.original.sku,
-        ),
+        renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
       ]);
     },
   },

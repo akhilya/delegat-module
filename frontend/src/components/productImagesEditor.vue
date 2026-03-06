@@ -2,21 +2,19 @@
 // ProductImagesEditor - Drag-and-drop editor for reordering product card images and managing unused images.
 import draggableComponent from "vuedraggable";
 import ImageFile from "./imageFile.vue";
-import Separator from "@/components/ui/separator/Separator.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
-import Button from "./ui/button/Button.vue";
-import { Image, ImageOff, Loader2, Save } from "lucide-vue-next";
+import { Image, ImageOff, Loader2 } from "lucide-vue-next";
+import { useStore } from "vuex";
+import { useDebounceFn } from "@vueuse/core";
+import { displaySonnerError } from "@/store/sonnerHelper";
 
 export default {
   components: {
     draggableComponent,
     ImageFile,
-    Separator,
     Badge,
-    Button,
     Image,
     ImageOff,
-    Save,
     Loader2,
   },
   props: {
@@ -28,7 +26,10 @@ export default {
       type: Array,
       required: true,
     },
-    isSaving: Boolean,
+    productId: {
+      type: Number,
+      required: true,
+    },
   },
   watch: {
     files: {
@@ -60,65 +61,115 @@ export default {
     return {
       usedImages: [],
       unusedImages: [],
+      isSaving: false,
     };
   },
-  mounted() {},
+  setup() {
+    const store = useStore();
+
+    const debouncedSave = useDebounceFn(async function (vm) {
+      vm.isSaving = true;
+      await store.dispatch("postProductImages", {
+        productId: vm.productId,
+        files: vm.usedImages.map((f) => f.id),
+        onSuccess: () => {},
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      vm.isSaving = false;
+    }, 400);
+
+    return { debouncedSave };
+  },
+  methods: {
+    thumbnailUrl(file) {
+      return `/api/files/${file.id}/thumbnail?w=512`;
+    },
+    onDragChange() {
+      this.debouncedSave(this);
+    },
+  },
 };
 </script>
 
 <template>
-  <div class="grow flex flex-col">
-    <p class="font-medium m-4 flex items-center gap-2">
-      <Image class="size-4" />
-      Прикрепленные изображения к карточке товара
-    </p>
-    <draggableComponent
-      :list="usedImages"
-      group="images"
-      @change=""
-      itemKey="id"
-      class="flex flex-wrap min-h-96 overflow-x-auto gap-4 mx-4"
-    >
-      <template #item="{ element, index }">
-        <ImageFile :file="element" class="size-64">
-          <Badge class="text-sm absolute left-2 top-2">
-            {{ index + 1 }}
-          </Badge>
-        </ImageFile>
-      </template>
-    </draggableComponent>
-
-    <div class="flex m-4">
-      <Button
-        class="ml-[auto]"
-        @click="$emit('onOrderSave', usedImages)"
-        :disabled="isSaving"
+  <div class="grow flex flex-col min-h-0">
+    <!-- Attached images section -->
+    <div class="flex-1 min-h-0 flex flex-col">
+      <p class="font-medium mx-4 mt-4 mb-2 flex items-center gap-2 shrink-0">
+        <Image class="size-4" />
+        Прикрепленные изображения к карточке товара
+        <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
+        <span v-if="!isSaving" class="text-xs text-muted-foreground font-normal">— перетащите для сортировки</span>
+      </p>
+      <draggableComponent
+        :list="usedImages"
+        group="images"
+        @change="onDragChange"
+        itemKey="id"
+        :animation="200"
+        ghostClass="drag-ghost"
+        chosenClass="drag-chosen"
+        dragClass="drag-active"
+        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-2"
       >
-        <template v-if="!isSaving">
-          <Save class="size-4" />
-          Сохранить порядок
+        <template #item="{ element, index }">
+          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-64 cursor-grab active:cursor-grabbing">
+            <Badge class="text-sm absolute left-2 top-2">
+              {{ index + 1 }}
+            </Badge>
+          </ImageFile>
         </template>
-        <Loader2 v-else class="animate-spin" />
-      </Button>
+      </draggableComponent>
     </div>
 
-    <Separator class="" />
-
-    <p class="mx-4 font-medium m-4 flex items-center gap-2">
-      <ImageOff class="size-4" />
-      Остальные изображения
-    </p>
-
-    <draggableComponent
-      :list="unusedImages"
-      group="images"
-      @change=""
-      itemKey="id"
-      class="flex flex-wrap w-full h-full mx-4 mb-4 gap-4"
-    >
-      <template #item="{ element, index }">
-        <ImageFile :file="element" class="size-64" />
-      </template>
-    </draggableComponent>
+    <!-- Other images section -->
+    <div class="flex-1 min-h-0 flex flex-col border-t">
+      <p class="font-medium mx-4 mt-4 mb-2 flex items-center gap-2 shrink-0">
+        <ImageOff class="size-4" />
+        Остальные изображения
+      </p>
+      <draggableComponent
+        :list="unusedImages"
+        group="images"
+        @change="onDragChange"
+        itemKey="id"
+        :animation="200"
+        ghostClass="drag-ghost"
+        chosenClass="drag-chosen"
+        dragClass="drag-active"
+        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-4"
+      >
+        <template #item="{ element, index }">
+          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-64 cursor-grab active:cursor-grabbing" />
+        </template>
+      </draggableComponent>
+    </div>
   </div>
 </template>
+
+<style>
+/* Ghost: the placeholder left behind in the list */
+.drag-ghost {
+  opacity: 0.3;
+  border: 2px dashed hsl(var(--primary));
+  border-radius: 0.5rem;
+}
+
+/* Chosen: the element being picked up (before moving) */
+.drag-chosen {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 0.5rem;
+}
+
+/* Active: the clone that follows the cursor */
+.drag-active {
+  opacity: 1 !important;
+  transform: scale(1.05) rotate(2deg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  cursor: grabbing !important;
+  z-index: 50;
+}
+</style>

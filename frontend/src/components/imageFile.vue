@@ -8,6 +8,12 @@ export default {
   },
   props: {
     file: Object,
+    thumbnailUrl: String,
+  },
+  computed: {
+    resolvedSrc() {
+      return this.thumbnailUrl || this.file?.fullPath;
+    },
   },
   data() {
     return {
@@ -18,7 +24,7 @@ export default {
     this.checkImageCache();
   },
   watch: {
-    'file.fullPath': {
+    resolvedSrc: {
       handler() {
         this.checkImageCache();
       },
@@ -26,13 +32,13 @@ export default {
   },
   methods: {
     checkImageCache() {
-      if (!this.file?.fullPath) {
+      if (!this.resolvedSrc) {
         this.isLoading = false;
         return;
       }
       // Check if image is already cached
       const img = new window.Image();
-      img.src = this.file.fullPath;
+      img.src = this.resolvedSrc;
       if (img.complete) {
         this.isLoading = false;
       } else {
@@ -59,7 +65,7 @@ export default {
   >
     <!--
     <img
-      :src="file.fullPath"
+      :src="resolvedSrc"
       class="absolute top-0 left-0 w-full h-full blur-3xl"
       v-show="!isLoading"
     />
@@ -67,7 +73,7 @@ export default {
     <img
       @load="onImageLoad"
       @error="onImageError"
-      :src="file.fullPath"
+      :src="resolvedSrc"
       class="absolute w-full h-full object-contain"
       v-show="!isLoading"
     />
