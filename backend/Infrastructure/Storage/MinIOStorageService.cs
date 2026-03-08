@@ -12,6 +12,7 @@ namespace PrintO.Infrastructure.Storage;
 public class MinIOStorageService : IStorageService
 {
     private readonly IMinioClient _client;
+    private readonly IMinioClient _publicClient;
     private readonly string _bucket;
     private readonly string _endpoint;
     private readonly bool _secure;
@@ -41,6 +42,12 @@ public class MinIOStorageService : IStorageService
             .WithEndpoint(settings.Endpoint)
             .WithCredentials(settings.AccessKey, settings.SecretKey)
             .WithSSL(settings.Secure)
+            .Build();
+
+        _publicClient = new MinioClient()
+            .WithEndpoint(_publicEndpoint)
+            .WithCredentials(settings.AccessKey, settings.SecretKey)
+            .WithSSL(_publicSecure)
             .Build();
     }
 
@@ -273,6 +280,18 @@ public class MinIOStorageService : IStorageService
             .WithObject(path)
             .WithExpiry(expirySeconds);
         return await _client.PresignedGetObjectAsync(args);
+    }
+
+    /// <summary>
+    /// Generate a presigned (temporary) URL using the public endpoint for external consumers
+    /// </summary>
+    public async Task<string> GetPublicPresignedUrlAsync(string path, int expirySeconds = 3600)
+    {
+        var args = new PresignedGetObjectArgs()
+            .WithBucket(_bucket)
+            .WithObject(path)
+            .WithExpiry(expirySeconds);
+        return await _publicClient.PresignedGetObjectAsync(args);
     }
 
     /// <summary>

@@ -56,9 +56,14 @@ public interface IStorageService
     Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default);
 
     /// <summary>
-    /// Generate a presigned (temporary) URL for a file
+    /// Generate a presigned (temporary) URL for a file (uses internal endpoint)
     /// </summary>
     Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600);
+
+    /// <summary>
+    /// Generate a presigned (temporary) URL using the public endpoint (for external consumers like marketplaces)
+    /// </summary>
+    Task<string> GetPublicPresignedUrlAsync(string path, int expirySeconds = 3600);
 
     /// <summary>
     /// Get the bucket name
