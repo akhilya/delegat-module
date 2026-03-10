@@ -487,6 +487,11 @@ export default {
     productColumns() {
       return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset);
     },
+    sortableColumnIds() {
+      const base = ['name', 'sku', 'price', 'storageQuantity', 'category', 'createdAt', 'updatedAt'];
+      const storeAttrIds = (this.storeAttributes || []).map((a) => `storeAttr_${a.id}`);
+      return [...base, ...storeAttrIds];
+    },
     lastPossiblePage() {
       return Math.max(1, Math.ceil(this.totalCount / this.pageSize));
     },
@@ -624,7 +629,7 @@ export default {
         :start-index="startIndex"
         :sort-by="sortBy"
         :sort-desc="sortDesc"
-        :sortable-columns="['name', 'sku', 'price', 'storageQuantity', 'category', 'createdAt', 'updatedAt']"
+        :sortable-columns="sortableColumnIds"
         @update:row-selection="rowSelection = $event"
         @update:column-visibility="onColumnVisibilityChange"
         @update:column-order="onColumnOrderChange"

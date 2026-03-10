@@ -93,17 +93,38 @@ public class ProductController : ControllerBase
 
         // Build sort expression
         // When searching, prioritize exact matches (name == query or sku == query) first
-        Func<IQueryable<Product>, IOrderedQueryable<Product>> secondarySort = sortBy?.ToLower() switch
+        var sortByLower = sortBy?.ToLower();
+
+        // Check if sorting by a store attribute (storeattr_<id>)
+        int? storeAttrSortId = null;
+        if (sortByLower != null && sortByLower.StartsWith("storeattr_") &&
+            int.TryParse(sortByLower["storeattr_".Length..], out var parsedAttrId))
         {
-            "name" => sortDesc ? q => q.OrderByDescending(p => p.name) : q => q.OrderBy(p => p.name),
-            "sku" => sortDesc ? q => q.OrderByDescending(p => p.sku) : q => q.OrderBy(p => p.sku),
-            "price" => sortDesc ? q => q.OrderByDescending(p => p.price) : q => q.OrderBy(p => p.price),
-            "storagequantity" => sortDesc ? q => q.OrderByDescending(p => p.storageQuantity) : q => q.OrderBy(p => p.storageQuantity),
-            "category" => sortDesc ? q => q.OrderByDescending(p => p.category!.name) : q => q.OrderBy(p => p.category!.name),
-            "createdat" => sortDesc ? q => q.OrderByDescending(p => p.createdAt) : q => q.OrderBy(p => p.createdAt),
-            "updatedat" => sortDesc ? q => q.OrderByDescending(p => p.updatedAt) : q => q.OrderBy(p => p.updatedAt),
-            _ => sortDesc ? q => q.OrderByDescending(p => p.Id) : q => q.OrderBy(p => p.Id),
-        };
+            storeAttrSortId = parsedAttrId;
+        }
+
+        Func<IQueryable<Product>, IOrderedQueryable<Product>> secondarySort;
+        if (storeAttrSortId.HasValue)
+        {
+            var attrId = storeAttrSortId.Value;
+            secondarySort = sortDesc
+                ? q => q.OrderByDescending(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault())
+                : q => q.OrderBy(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault());
+        }
+        else
+        {
+            secondarySort = sortByLower switch
+            {
+                "name" => sortDesc ? q => q.OrderByDescending(p => p.name) : q => q.OrderBy(p => p.name),
+                "sku" => sortDesc ? q => q.OrderByDescending(p => p.sku) : q => q.OrderBy(p => p.sku),
+                "price" => sortDesc ? q => q.OrderByDescending(p => p.price) : q => q.OrderBy(p => p.price),
+                "storagequantity" => sortDesc ? q => q.OrderByDescending(p => p.storageQuantity) : q => q.OrderBy(p => p.storageQuantity),
+                "category" => sortDesc ? q => q.OrderByDescending(p => p.category!.name) : q => q.OrderBy(p => p.category!.name),
+                "createdat" => sortDesc ? q => q.OrderByDescending(p => p.createdAt) : q => q.OrderBy(p => p.createdAt),
+                "updatedat" => sortDesc ? q => q.OrderByDescending(p => p.updatedAt) : q => q.OrderBy(p => p.updatedAt),
+                _ => sortDesc ? q => q.OrderByDescending(p => p.Id) : q => q.OrderBy(p => p.Id),
+            };
+        }
 
         Func<IQueryable<Product>, IOrderedQueryable<Product>> orderBy;
         if (hasSearch)
@@ -112,7 +133,14 @@ public class ProductController : ControllerBase
             {
                 var ordered = q.OrderByDescending(p => p.name == searchQuery || p.sku == searchQuery)
                                .ThenByDescending(p => p.name.StartsWith(searchQuery!) || p.sku.StartsWith(searchQuery!));
-                return sortBy?.ToLower() switch
+                if (storeAttrSortId.HasValue)
+                {
+                    var attrId = storeAttrSortId.Value;
+                    return sortDesc
+                        ? ordered.ThenByDescending(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault())
+                        : ordered.ThenBy(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault());
+                }
+                return sortByLower switch
                 {
                     "name" => sortDesc ? ordered.ThenByDescending(p => p.name) : ordered.ThenBy(p => p.name),
                     "sku" => sortDesc ? ordered.ThenByDescending(p => p.sku) : ordered.ThenBy(p => p.sku),

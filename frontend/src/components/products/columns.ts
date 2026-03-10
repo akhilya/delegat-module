@@ -7,6 +7,7 @@ import { h } from "vue";
 import ImageFile from "../imageFile.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Check, X } from "lucide-vue-next";
 
 /** Creates a copy icon SVG DOM element. */
 function createCopyIconEl(size = 12): SVGElement {
@@ -119,7 +120,7 @@ export interface StoreAttribute {
   id: number;
   key: string;
   name: string;
-  attributeType: number;
+  type: number;
 }
 
 /** Product row data model used by the products table. */
@@ -324,17 +325,27 @@ export function getHideableColumns(): { id: string; label: string }[] {
 export function createStoreAttributeColumn(
   attr: StoreAttribute,
 ): ProductColumnDef {
+  const isBoolean = attr.type === 2 || attr.type === "Boolean" as any;
   return {
     id: `storeAttr_${attr.id}`,
     label: attr.name,
     hideable: true,
     header: attr.name,
+    size: isBoolean ? 80 : 120,
     cell: ({ row }) => {
       const attrValue = row.original.storeAttributeValues?.find(
         (v) => v.storeAttributeId === attr.id,
       );
       if (!attrValue?.value) {
         return h("span", { class: "text-muted-foreground text-sm" }, "—");
+      }
+      // Detect boolean values by content or attribute type
+      const val = attrValue.value.toLowerCase();
+      if (isBoolean || val === "true" || val === "false") {
+        const isTrue = val === "true" || val === "1";
+        return isTrue
+          ? h(Check, { class: "size-5 text-muted-foreground" })
+          : h(X, { class: "size-5 text-muted-foreground" });
       }
       return h("span", { class: "text-sm" }, attrValue.value);
     },

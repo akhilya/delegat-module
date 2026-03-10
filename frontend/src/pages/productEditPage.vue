@@ -58,16 +58,20 @@ import {
   ArrowRightLeft,
   Plus,
   Copy,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS, setPageTitle } from "@/router";
 import { useStore } from "vuex";
 import { useRoute } from "vue-router";
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useDebounceFn } from "@vueuse/core";
+import draggable from "vuedraggable";
 import { http, router } from "@/main";
 
 export default {
@@ -125,10 +129,14 @@ export default {
     ArrowRightLeft,
     Plus,
     Copy,
+    X,
+    ChevronLeft,
+    ChevronRight,
     ContextMenu,
     ContextMenuContent,
     ContextMenuItem,
     ContextMenuTrigger,
+    draggable,
   },
   data() {
     return {
@@ -598,6 +606,120 @@ export default {
       }
     }
 
+    // Image gallery lightbox & reordering
+    const lightboxIndex = ref(null);
+    const sortedImages = ref([]);
+
+    watch(images, (val) => {
+      sortedImages.value = val?.slice().sort((a, b) => a.index - b.index) ?? [];
+    }, { immediate: true });
+
+    const debouncedSaveImages = useDebounceFn(async () => {
+      const fileIds = sortedImages.value.map((img) => img.fileId);
+      await store.dispatch("postProductImages", {
+        productId: productId.value,
+        files: fileIds,
+        onSuccess: () => {},
+        onError: (error) => { displaySonnerError(error); },
+      });
+    }, 400);
+
+    function onGalleryDragChange() {
+      // Update indices after drag
+      sortedImages.value.forEach((img, idx) => { img.index = idx; });
+      // Sync back to images ref
+      images.value = sortedImages.value.map((img) => ({ ...img }));
+      debouncedSaveImages();
+    }
+
+    function removeGalleryImage(index) {
+      sortedImages.value.splice(index, 1);
+      sortedImages.value.forEach((img, idx) => { img.index = idx; });
+      images.value = sortedImages.value.map((img) => ({ ...img }));
+      debouncedSaveImages();
+    }
+
+    // All image files for lightbox (attached first, then unattached)
+    const lightboxImages = computed(() => {
+      const imageFiles = files.value?.filter((f) => f.contentType?.includes("image")) ?? [];
+      const attachedIds = new Set(sortedImages.value.map((img) => img.fileId));
+      const attached = sortedImages.value.map((img) => img.fileId);
+      const unattached = imageFiles.filter((f) => !attachedIds.has(f.id)).map((f) => f.id);
+      return [...attached, ...unattached];
+    });
+
+    // Gallery image upload
+    const galleryFileInput = ref(null);
+    const isUploadingGallery = ref(false);
+
+    function triggerGalleryUpload() {
+      galleryFileInput.value?.click();
+    }
+
+    async function handleGalleryUpload(event) {
+      const fileList = event.target.files;
+      if (!fileList?.length) return;
+
+      isUploadingGallery.value = true;
+      try {
+        // Upload each file
+        const newFileIds = [];
+        for (const file of fileList) {
+          const formData = new FormData();
+          formData.append('files', file);
+          const response = await http({
+            url: `/products/${productId.value}/files`,
+            method: 'PUT',
+            data: formData,
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 60 * 60 * 1000,
+          });
+          if (response.data) {
+            const uploaded = Array.isArray(response.data) ? response.data : [response.data];
+            newFileIds.push(...uploaded.map((f) => f.id));
+          }
+        }
+
+        // Attach new files as images at end of current list
+        const existingFileIds = sortedImages.value.map((img) => img.fileId);
+        const allFileIds = [...existingFileIds, ...newFileIds];
+        await store.dispatch("postProductImages", {
+          productId: productId.value,
+          files: allFileIds,
+          onSuccess: () => {},
+          onError: (error) => { displaySonnerError(error); },
+        });
+
+        // Refresh product to sync everything
+        await fetchProduct();
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        isUploadingGallery.value = false;
+        // Reset input so the same file can be selected again
+        if (galleryFileInput.value) galleryFileInput.value.value = '';
+      }
+    }
+
+    function openLightbox(idx) { lightboxIndex.value = idx; }
+    function openLightboxByFileId(fileId) {
+      const idx = lightboxImages.value.indexOf(fileId);
+      if (idx !== -1) lightboxIndex.value = idx;
+    }
+    function closeLightbox() { lightboxIndex.value = null; }
+    function nextImage() { if (lightboxIndex.value < lightboxImages.value.length - 1) lightboxIndex.value++; }
+    function prevImage() { if (lightboxIndex.value > 0) lightboxIndex.value--; }
+
+    function handleLightboxKeydown(e) {
+      if (lightboxIndex.value == null) return;
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowRight') nextImage();
+      else if (e.key === 'ArrowLeft') prevImage();
+    }
+
+    onMounted(() => window.addEventListener('keydown', handleLightboxKeydown));
+    onUnmounted(() => window.removeEventListener('keydown', handleLightboxKeydown));
+
     return {
       productSKU,
       form,
@@ -643,6 +765,20 @@ export default {
       autoResizeDescription,
       duplicateProductUrl,
       getDuplicateUrl,
+      lightboxIndex,
+      sortedImages,
+      lightboxImages,
+      openLightbox,
+      openLightboxByFileId,
+      closeLightbox,
+      nextImage,
+      prevImage,
+      onGalleryDragChange,
+      removeGalleryImage,
+      galleryFileInput,
+      isUploadingGallery,
+      triggerGalleryUpload,
+      handleGalleryUpload,
     };
   },
 };
@@ -743,12 +879,72 @@ export default {
             @submit.prevent="onSubmit"
             class="space-y-6 flex flex-col"
           >
+            <!-- Image gallery (above main fields card) -->
+            <input
+              ref="galleryFileInput"
+              type="file"
+              accept="image/*"
+              multiple
+              class="hidden"
+              @change="handleGalleryUpload"
+            />
+            <draggable
+              v-if="sortedImages?.length"
+              :list="sortedImages"
+              item-key="fileId"
+              :animation="200"
+              ghost-class="drag-ghost"
+              chosen-class="drag-chosen"
+              drag-class="drag-active"
+              class="flex flex-wrap gap-2"
+              @change="onGalleryDragChange"
+            >
+              <template #item="{ element, index }">
+                <div
+                  :class="[
+                    'gallery-item group size-48 rounded-lg overflow-hidden bg-secondary cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
+                    index === 0 ? 'ring-2 ring-primary' : ''
+                  ]"
+                  @click="openLightbox(index)"
+                >
+                  <img
+                    :src="`/api/files/${element.fileId}/thumbnail?w=256`"
+                    class="size-full object-contain pointer-events-none"
+                  />
+                  <div v-if="index === 0" class="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded font-medium">
+                    Главное
+                  </div>
+                  <button
+                    class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    @click.stop="removeGalleryImage(index)"
+                  >
+                    <X class="size-3 text-white" />
+                  </button>
+                </div>
+              </template>
+              <template #footer>
+                <div
+                  class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                  @click="triggerGalleryUpload"
+                >
+                  <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
+                  <Plus v-else class="size-6 text-muted-foreground" />
+                </div>
+              </template>
+            </draggable>
+            <div v-else class="flex flex-wrap gap-2">
+              <div
+                class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                @click="triggerGalleryUpload"
+              >
+                <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
+                <Plus v-else class="size-6 text-muted-foreground" />
+              </div>
+            </div>
+
             <!-- Card 1: Main fields + Group sidebar -->
             <Card>
-              <CardHeader>
-                <CardTitle class="text-base">Основные поля</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent class="pt-0">
                 <!-- Left: fields -->
                 <div class="space-y-4">
                   <!-- Category (read-only) -->
@@ -1034,8 +1230,9 @@ export default {
         <div v-show="tab == 'images'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductImagesEditor
             :files="files"
-            :images="images"
+            v-model:images="images"
             :productId="productId"
+            @preview="openLightboxByFileId"
           />
         </div>
 
@@ -1084,5 +1281,55 @@ export default {
       </div>
 
     </div>
+    <!-- Lightbox overlay -->
+    <Teleport to="body">
+      <div
+        v-if="lightboxIndex != null"
+        class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+        @click.self="closeLightbox"
+      >
+        <!-- Close button -->
+        <button class="absolute top-4 right-4 text-white/70 hover:text-white" @click="closeLightbox">
+          <X class="size-8" />
+        </button>
+        <!-- Prev -->
+        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" @click="prevImage">
+          <ChevronLeft class="size-10" />
+        </button>
+        <!-- Image -->
+        <img
+          :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
+          class="max-h-[90vh] max-w-[90vw] object-contain"
+        />
+        <!-- Next -->
+        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" @click="nextImage">
+          <ChevronRight class="size-10" />
+        </button>
+        <!-- Counter -->
+        <div class="absolute bottom-4 text-white/60 text-sm">
+          {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}
+        </div>
+      </div>
+    </Teleport>
   </Page>
 </template>
+
+<style>
+.drag-ghost {
+  opacity: 0.3;
+  border: 2px dashed hsl(var(--primary));
+  border-radius: 0.5rem;
+}
+.drag-chosen {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 0.5rem;
+}
+.drag-active {
+  opacity: 1 !important;
+  transform: scale(1.05) rotate(2deg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  cursor: grabbing !important;
+  z-index: 50;
+}
+</style>

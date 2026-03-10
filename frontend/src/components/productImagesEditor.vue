@@ -17,6 +17,7 @@ export default {
     ImageOff,
     Loader2,
   },
+  emits: ['update:images', 'preview'],
   props: {
     files: {
       type: Array,
@@ -33,28 +34,11 @@ export default {
   },
   watch: {
     files: {
-      handler(newVal) {
-        const imageFiles = [];
-        newVal.forEach((file) => {
-          if (file.contentType.includes("image")) {
-            imageFiles.push(file);
-          }
-        });
-        this.usedImages = [];
-        this.unusedImages = [];
-        for (let imageKey in imageFiles) {
-          let imageFile = imageFiles[imageKey];
-
-          let image = this.images.find((i) => i.fileId == imageFile.id);
-          if (image != undefined) {
-            this.usedImages.push({ ...imageFile, index: image.index });
-          } else {
-            this.unusedImages.push(imageFile);
-          }
-        }
-        this.usedImages = this.usedImages.sort((a, b) => a.index - b.index);
-      },
+      handler() { this.rebuildImageLists(); },
       immediate: true,
+    },
+    images: {
+      handler() { this.rebuildImageLists(); },
     },
   },
   data() {
@@ -86,8 +70,33 @@ export default {
     thumbnailUrl(file) {
       return `/api/files/${file.id}/thumbnail?w=512`;
     },
+    rebuildImageLists() {
+      const imageFiles = [];
+      this.files.forEach((file) => {
+        if (file.contentType.includes("image")) {
+          imageFiles.push(file);
+        }
+      });
+      this.usedImages = [];
+      this.unusedImages = [];
+      for (let imageKey in imageFiles) {
+        let imageFile = imageFiles[imageKey];
+        let image = this.images.find((i) => i.fileId == imageFile.id);
+        if (image != undefined) {
+          this.usedImages.push({ ...imageFile, index: image.index });
+        } else {
+          this.unusedImages.push(imageFile);
+        }
+      }
+      this.usedImages = this.usedImages.sort((a, b) => a.index - b.index);
+    },
     onDragChange() {
       this.debouncedSave(this);
+      this.$emit('update:images', this.usedImages.map((f, idx) => ({
+        id: f.id,
+        fileId: f.id,
+        index: idx,
+      })));
     },
   },
 };
@@ -115,7 +124,7 @@ export default {
         class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-2"
       >
         <template #item="{ element, index }">
-          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-64 cursor-grab active:cursor-grabbing">
+          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)">
             <Badge class="text-sm absolute left-2 top-2">
               {{ index + 1 }}
             </Badge>
@@ -142,7 +151,7 @@ export default {
         class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-4"
       >
         <template #item="{ element, index }">
-          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-64 cursor-grab active:cursor-grabbing" />
+          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)" />
         </template>
       </draggableComponent>
     </div>

@@ -506,10 +506,7 @@ export default {
       <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
         <!-- Card 1: Main fields -->
         <Card>
-          <CardHeader>
-            <CardTitle class="text-base">Основные поля</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
+          <CardContent class="pt-0 space-y-4">
             <!-- Category Selection -->
             <div class="space-y-2">
               <Label>Категория <span class="text-destructive">*</span></Label>
