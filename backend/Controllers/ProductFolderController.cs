@@ -1,5 +1,8 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using PrintO.Infrastructure.Auth;
 using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
@@ -256,5 +259,224 @@ public class ProductFolderController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { folder.Id, folder.parentFolderId });
+    }
+
+    [HttpGet]
+    [Route("/products/{productId}/folders/{id}/download")]
+    public async Task DownloadFolder(int productId, string id)
+    {
+        await GetAndValidateProduct(productId);
+
+        int? folderId = id == "root" ? null : int.Parse(id);
+        await StreamFolderZip(productId, folderId);
+    }
+
+    public record ShareFolderRequest(int ttlHours);
+
+    [HttpPost]
+    [Route("/products/{productId}/folders/{id}/share")]
+    public async Task<IActionResult> ShareFolder(int productId, string id, [FromBody] ShareFolderRequest request)
+    {
+        var allowedTtl = new[] { 1, 24, 168, 720 };
+        if (!allowedTtl.Contains(request.ttlHours))
+            throw ApiException.BadRequest("Недопустимый TTL");
+
+        await GetAndValidateProduct(productId);
+
+        int? folderId = id == "root" ? null : int.Parse(id);
+
+        if (folderId.HasValue)
+        {
+            var folder = await _context.productFolders.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId);
+            if (folder == null) throw ApiException.NotFound("Папка не найдена");
+        }
+
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null) throw ApiException.Unauthorized();
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var token = Base64UrlEncoder.Encode(tokenBytes);
+
+        var shareToken = new FolderShareToken
+        {
+            productId = productId,
+            folderId = folderId,
+            token = token,
+            expiresAt = DateTime.UtcNow.AddHours(request.ttlHours),
+            createdAt = DateTime.UtcNow,
+            createdByUserId = user.Id
+        };
+
+        _context.folderShareTokens.Add(shareToken);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            url = $"/api/shared/folder/{token}",
+            expiresAt = shareToken.expiresAt
+        });
+    }
+
+    /// <summary>
+    /// Streams a zip archive of files in the given folder scope to Response.Body.
+    /// </summary>
+    internal async Task StreamFolderZip(int productId, int? folderId)
+    {
+        string folderName;
+        var allFolderIds = new List<int>();
+
+        if (folderId.HasValue)
+        {
+            var folder = await _context.productFolders.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId);
+            if (folder == null) throw ApiException.NotFound("Папка не найдена");
+            folderName = folder.name;
+            allFolderIds.Add(folderId.Value);
+            await CollectDescendantFolderIds(folderId.Value, productId, allFolderIds);
+        }
+        else
+        {
+            folderName = "files";
+        }
+
+        // Get files in target scope
+        List<Models.File> files;
+        if (folderId.HasValue)
+        {
+            files = await _context.files.AsNoTracking()
+                .Where(f => f.productId == productId && f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value))
+                .ToListAsync();
+        }
+        else
+        {
+            files = await _context.files.AsNoTracking()
+                .Where(f => f.productId == productId)
+                .ToListAsync();
+        }
+
+        // Build folder ID → relative path map
+        var allFolders = await _context.productFolders.AsNoTracking()
+            .Where(f => f.productId == productId)
+            .Select(f => new { f.Id, f.name, f.parentFolderId })
+            .ToListAsync();
+
+        var folderPathCache = new Dictionary<int, string>();
+
+        string BuildFolderPath(int fId)
+        {
+            if (folderPathCache.TryGetValue(fId, out var cached)) return cached;
+
+            var parts = new List<string>();
+            int? cur = fId;
+            while (cur.HasValue)
+            {
+                var f = allFolders.FirstOrDefault(x => x.Id == cur.Value);
+                if (f == null) break;
+                parts.Insert(0, f.name);
+                cur = f.parentFolderId;
+            }
+
+            if (folderId.HasValue)
+            {
+                var targetParts = new List<string>();
+                int? tc = folderId.Value;
+                while (tc.HasValue)
+                {
+                    var tf = allFolders.FirstOrDefault(x => x.Id == tc.Value);
+                    if (tf == null) break;
+                    targetParts.Insert(0, tf.name);
+                    tc = tf.parentFolderId;
+                }
+
+                if (parts.Count > targetParts.Count)
+                    parts = parts.Skip(targetParts.Count).ToList();
+                else
+                    parts.Clear();
+            }
+
+            var path = string.Join("/", parts);
+            folderPathCache[fId] = path;
+            return path;
+        }
+
+        var encodedName = Uri.EscapeDataString(folderName);
+        Response.ContentType = "application/zip";
+        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{encodedName}.zip\"; filename*=UTF-8''{encodedName}.zip";
+
+        var bodyStream = Response.BodyWriter.AsStream();
+        using (var archive = new ZipArchive(bodyStream, ZipArchiveMode.Create, leaveOpen: false))
+        {
+            // Add empty folder entries to preserve folder structure
+            foreach (var fId in allFolderIds)
+            {
+                var hasFiles = files.Any(f => f.folderId == fId);
+                if (!hasFiles)
+                {
+                    var folderPath = BuildFolderPath(fId);
+                    if (!string.IsNullOrEmpty(folderPath))
+                        archive.CreateEntry(folderPath + "/");
+                }
+            }
+
+            foreach (var file in files)
+            {
+                var fileName = Path.GetFileName(file.filePath);
+                string entryName;
+                if (file.folderId.HasValue)
+                {
+                    var folderPath = BuildFolderPath(file.folderId.Value);
+                    entryName = string.IsNullOrEmpty(folderPath) ? fileName : $"{folderPath}/{fileName}";
+                }
+                else
+                {
+                    entryName = fileName;
+                }
+
+                try
+                {
+                    var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
+                    using var entryStream = entry.Open();
+                    await _storageService.StreamToAsync(file.filePath, entryStream);
+                }
+                catch
+                {
+                    // File was deleted/moved from storage during archive formation — skip it
+                }
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Public controller for accessing shared folder links (no auth required).
+/// </summary>
+[ApiController]
+public class SharedFolderController : ControllerBase
+{
+    private readonly DataContext _db;
+    private readonly IStorageService _storageService;
+
+    public SharedFolderController(DataContext db, IStorageService storageService)
+    {
+        _db = db;
+        _storageService = storageService;
+    }
+
+    [HttpGet]
+    [Route("/shared/folder/{token}")]
+    public async Task GetSharedFolder(string token)
+    {
+        var shareToken = await _db.folderShareTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.token == token);
+
+        if (shareToken == null || shareToken.IsExpired)
+            throw ApiException.NotFound("Ссылка не найдена или истекла");
+
+        // Reuse the zip streaming logic from ProductFolderController
+        var folderController = HttpContext.RequestServices.GetRequiredService<ProductFolderController>();
+        folderController.ControllerContext = ControllerContext;
+        await folderController.StreamFolderZip(shareToken.productId, shareToken.folderId);
     }
 }

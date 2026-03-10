@@ -39,6 +39,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
     // File sharing
     public DbSet<FileShareToken> fileShareTokens { get; set; }
+    public DbSet<FolderShareToken> folderShareTokens { get; set; }
 
     // System versioning
     public DbSet<SystemVersion> systemVersions { get; set; }
@@ -215,5 +216,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(fst => fst.token).IsUnique();
         builder.Entity<FileShareToken>()
             .HasIndex(fst => fst.fileId);
+
+        // FolderShareToken indexes
+        builder.Entity<FolderShareToken>()
+            .HasIndex(fst => fst.token).IsUnique();
     }
 }

@@ -306,6 +306,43 @@ public class FileController : ControllerBase
         return Ok(file.MapToDTO(_serviceProvider));
     }
 
+    public record RenameFileRequest(string name);
+
+    [HttpPatch]
+    [Route("/products/{productId}/files/{id}/rename")]
+    public async Task<IActionResult> RenameFile(int productId, int id, [FromBody] RenameFileRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.name))
+            throw ApiException.BadRequest("Имя файла обязательно");
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdAsync(productId);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var file = await fileRepo.GetByIdTrackingAsync(id);
+
+        if (file == null || file.productId != productId)
+            throw ApiException.NotFound("Файл не найден");
+
+        // Update the last segment of the storage path
+        var dir = Path.GetDirectoryName(file.filePath)!.Replace('\\', '/');
+        var sanitizedName = request.name.Trim();
+        file.filePath = $"{dir}/{sanitizedName}";
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(file.MapToDTO(_serviceProvider));
+    }
+
     [HttpDelete]
     [Route("/products/{productId}/files/{id}")]
     public async Task<IActionResult> DeleteProductFile(int productId, int id)

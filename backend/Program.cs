@@ -10,6 +10,7 @@ using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
 using PrintO.Infrastructure.Storage;
 using PrintO.Models;
+using PrintO.Controllers;
 using PrintO.Services;
 using PrintO.Services.DataMigrations;
 using PrintO.Services.Marketplace;
@@ -145,6 +146,9 @@ builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredS
 
 // Plugin HostedService (loads plugins at startup)
 builder.Services.AddHostedService<PluginHostedService>();
+
+// Controllers resolved via DI (for cross-controller reuse)
+builder.Services.AddScoped<ProductFolderController>();
 
 // Quotas
 builder.Services.AddScoped<QuotaService>();

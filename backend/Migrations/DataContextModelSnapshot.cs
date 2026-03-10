@@ -274,6 +274,47 @@ namespace PrintO.Migrations
                     b.ToTable("tags");
                 });
 
+            modelBuilder.Entity("PrintO.Models.FolderShareToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("createdByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("expiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("createdByUserId");
+
+                    b.HasIndex("folderId");
+
+                    b.HasIndex("productId");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.ToTable("folderShareTokens");
+                });
+
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>
                 {
                     b.Property<int>("Id")
@@ -1388,6 +1429,31 @@ namespace PrintO.Migrations
                         .IsRequired();
 
                     b.Navigation("file");
+                });
+
+            modelBuilder.Entity("PrintO.Models.FolderShareToken", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "createdByUser")
+                        .WithMany()
+                        .HasForeignKey("createdByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.ProductFolder", "folder")
+                        .WithMany()
+                        .HasForeignKey("folderId");
+
+                    b.HasOne("PrintO.Models.Products.Product", "product")
+                        .WithMany()
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("createdByUser");
+
+                    b.Navigation("folder");
+
+                    b.Navigation("product");
                 });
 
             modelBuilder.Entity("PrintO.Models.ImageReference", b =>

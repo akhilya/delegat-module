@@ -194,8 +194,35 @@ export default {
     <div
       v-for="attribute in sortedAttributes"
       :key="attribute.id"
-      class="space-y-2"
+      :class="isType(attribute.type, 'boolean') ? 'flex flex-col justify-end' : 'space-y-2'"
     >
+      <!-- Boolean (type 2): compact switch + inline label, no top label -->
+      <div
+        v-if="isType(attribute.type, 'boolean')"
+        class="flex items-center gap-3 h-9"
+      >
+        <Switch
+          :id="'store-attr-' + attribute.id"
+          :model-value="getValue(attribute.id) === 'true'"
+          @update:model-value="setValue(attribute.id, $event ? 'true' : 'false')"
+        />
+        <Label :for="'store-attr-' + attribute.id" class="leading-none cursor-pointer">
+          {{ attribute.name }}
+          <span v-if="attribute.isRequired" class="text-destructive">*</span>
+        </Label>
+        <TooltipProvider v-if="attribute.description">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Info class="size-3.5 text-muted-foreground cursor-help shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="top" class="max-w-xs">
+              <p>{{ attribute.description }}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      <template v-else>
       <div class="flex items-center gap-1.5">
         <Label class="leading-none">
           {{ attribute.name }}
@@ -234,22 +261,6 @@ export default {
         :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
       />
 
-      <!-- Boolean (type 2) -->
-      <div
-        v-else-if="isType(attribute.type, 'boolean')"
-        class="flex items-center gap-2"
-      >
-        <Switch
-          :model-value="getValue(attribute.id) === 'true'"
-          @update:model-value="
-            setValue(attribute.id, $event ? 'true' : 'false')
-          "
-        />
-        <span class="text-sm text-muted-foreground">
-          {{ getValue(attribute.id) === "true" ? "Да" : "Нет" }}
-        </span>
-      </div>
-
       <!-- Select (type 3) - with search for large option lists -->
       <SearchableSelect
         v-else-if="isType(attribute.type, 'select')"
@@ -285,6 +296,7 @@ export default {
         :placeholder="`Неизвестный тип: ${attribute.type}`"
         :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
       />
+      </template>
 
       <!-- Error message -->
       <p v-if="getError(attribute.id)" class="text-sm text-destructive mt-1">

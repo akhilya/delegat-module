@@ -67,6 +67,17 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async renameProductFile(ctx, { productId, fileId, name, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/files/${fileId}/rename`,
+        { method: "PATCH", data: { name }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     async getProductFolders(ctx, { productId, onSuccess, onError }) {
       return await useAxios(
         `/products/${productId}/folders`,
@@ -114,6 +125,18 @@ export default {
     async shareFile(ctx, { fileId, ttlHours, onSuccess, onError }) {
       return await useAxios(
         `/files/${fileId}/share`,
+        { method: "POST", data: { ttlHours }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async shareFolder(ctx, { productId, folderId, ttlHours, onSuccess, onError }) {
+      const id = folderId ?? 'root';
+      return await useAxios(
+        `/products/${productId}/folders/${id}/share`,
         { method: "POST", data: { ttlHours }, cache: false },
         http,
         { immediate: true, abortPrevious: true },

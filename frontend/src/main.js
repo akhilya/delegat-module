@@ -23,16 +23,23 @@ export const http = setupCache(
   }),
 );
 
-// Token refresh state
-let isRefreshing = false;
-let failedQueue = [];
+// Shared refresh with promise deduplication — prevents race conditions
+// when both the router guard and interceptor trigger refresh simultaneously.
+let refreshPromise = null;
 
-function processQueue(error) {
-  failedQueue.forEach((p) => {
-    if (error) p.reject(error);
-    else p.resolve();
-  });
-  failedQueue = [];
+function refreshTokens() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = axios
+    .post(`${import.meta.env.VITE_API_SERVER}/auth/refresh`, null, {
+      withCredentials: true,
+      headers: { "X-CSRF": "1" },
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
 }
 
 http.interceptors.response.use(undefined, async (error) => {
@@ -40,30 +47,15 @@ http.interceptors.response.use(undefined, async (error) => {
 
   // Auto-refresh on 401
   if (error.response?.status === 401 && !originalRequest._retry) {
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
-      }).then(() => http(originalRequest));
-    }
-
     originalRequest._retry = true;
-    isRefreshing = true;
 
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_SERVER}/auth/refresh`,
-        null,
-        { withCredentials: true, headers: { "X-CSRF": "1" } },
-      );
-      processQueue(null);
+      await refreshTokens();
       return http(originalRequest);
     } catch (refreshError) {
-      processQueue(refreshError);
       resetAuthCache();
       router.push("/signIn");
       return Promise.reject(refreshError);
-    } finally {
-      isRefreshing = false;
     }
   }
 
@@ -105,11 +97,7 @@ router.beforeEach(async (to) => {
   if (!isAuthenticated) {
     // Try refresh before redirecting to signIn
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_SERVER}/auth/refresh`,
-        null,
-        { withCredentials: true, headers: { "X-CSRF": "1" } },
-      );
+      await refreshTokens();
       isAuthenticated = true;
       return true;
     } catch {
