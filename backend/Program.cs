@@ -31,14 +31,9 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 // Configure Kestrel for large file uploads
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 5 * 1024 * 1024; // 5MB default
+    options.Limits.MaxRequestBodySize = null; // No limit (endpoint-level control via attributes)
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
-});
-
-builder.Services.Configure<FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = 5 * 1024 * 1024; // 5MB default for forms
 });
 
 // Configuration from environment variables
@@ -120,7 +115,7 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddHttpClient("MinIOStorage", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromMinutes(10);
 });
 builder.Services.AddSingleton<IStorageService>(sp =>
 {
