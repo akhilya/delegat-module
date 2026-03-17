@@ -305,6 +305,42 @@ public class ProductSyncService
 
             await _context.SaveChangesAsync(ct);
 
+            // Auto-export price after successful product export
+            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) && product.price.HasValue)
+            {
+                try
+                {
+                    var priceInfo = new PriceInfo(
+                        existingLink.externalProductId,
+                        product.price,
+                        null,
+                        product.storageQuantity
+                    );
+                    await adapter.ExportPricesAsync(connection, new List<PriceInfo> { priceInfo }, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Auto price export failed for product {ProductId}", productId);
+                }
+            }
+
+            // Auto-export stock after successful product export
+            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks))
+            {
+                try
+                {
+                    var stockInfo = new StockInfo(
+                        existingLink.externalProductId,
+                        product.storageQuantity ?? 0
+                    );
+                    await adapter.ExportStocksAsync(connection, new List<StockInfo> { stockInfo }, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Auto stock export failed for product {ProductId}", productId);
+                }
+            }
+
             return ProductExportResult.Success(
                 existingLink.Id,
                 result.ExternalProductId!,

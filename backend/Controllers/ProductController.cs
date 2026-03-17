@@ -645,36 +645,52 @@ public class ProductController : ControllerBase
 
                 if (request.updates.attributeValues != null)
                 {
-                    attrValueRepo.DeleteRange(product.attributeValues.ToList());
-
                     foreach (var av in request.updates.attributeValues)
                     {
-                        var attrValue = new ProductAttributeValue();
-                        attrValue.AddFill(new ProductAttributeValue.AddForm
+                        var existing = product.attributeValues
+                            .FirstOrDefault(a => a.attributeId == av.attributeId);
+                        if (existing != null)
                         {
-                            productId = product.Id,
-                            attributeId = av.attributeId,
-                            value = av.value
-                        });
-                        await attrValueRepo.AddWithoutSaveAsync(attrValue);
+                            existing.value = av.value;
+                        }
+                        else
+                        {
+                            var attrValue = new ProductAttributeValue();
+                            attrValue.AddFill(new ProductAttributeValue.AddForm
+                            {
+                                productId = product.Id,
+                                attributeId = av.attributeId,
+                                value = av.value
+                            });
+                            await attrValueRepo.AddWithoutSaveAsync(attrValue);
+                        }
                     }
+                    hasChanges = true;
                 }
 
                 if (request.updates.storeAttributeValues != null)
                 {
-                    storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
-
                     foreach (var sav in request.updates.storeAttributeValues)
                     {
-                        var storeAttrValue = new StoreProductAttributeValue();
-                        storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
+                        var existing = product.storeAttributeValues
+                            .FirstOrDefault(a => a.storeAttributeId == sav.storeAttributeId);
+                        if (existing != null)
                         {
-                            productId = product.Id,
-                            storeAttributeId = sav.storeAttributeId,
-                            value = sav.value
-                        });
-                        await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
+                            existing.value = sav.value;
+                        }
+                        else
+                        {
+                            var storeAttrValue = new StoreProductAttributeValue();
+                            storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
+                            {
+                                productId = product.Id,
+                                storeAttributeId = sav.storeAttributeId,
+                                value = sav.value
+                            });
+                            await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
+                        }
                     }
+                    hasChanges = true;
                 }
 
                 updatedCount++;
