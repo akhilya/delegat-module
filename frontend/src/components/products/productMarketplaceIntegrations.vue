@@ -654,12 +654,9 @@ export default {
   <div class="p-4 space-y-6">
     <!-- Header -->
     <div>
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <Link2 class="size-5" />
-        Маркетплейсы
-      </h2>
-      <p class="text-sm text-muted-foreground">
-        Управление связями товара с маркетплейсами
+      <p class="font-medium flex items-center gap-2">
+        <Link2 class="size-4" />
+        Связи с маркетплейсами
       </p>
     </div>
 

@@ -108,7 +108,7 @@ export default {
     <div class="flex-1 min-h-0 flex flex-col">
       <p class="font-medium mx-4 mt-4 mb-2 flex items-center gap-2 shrink-0">
         <Image class="size-4" />
-        Прикрепленные изображения к карточке товара
+        Изображения товара
         <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
         <span v-if="!isSaving" class="text-xs text-muted-foreground font-normal">— перетащите для сортировки</span>
       </p>
