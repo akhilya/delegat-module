@@ -42,6 +42,7 @@ import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import Note from "@/components/note.vue";
 
 import {
@@ -838,6 +839,7 @@ export default {
               size="icon"
               class="size-7"
               title="Сменить группу"
+              aria-label="Сменить группу"
               type="button"
               @click="openGroupDialog"
             >
@@ -847,6 +849,7 @@ export default {
               :to="`/product-groups/${productGroup.id}/edit`"
               class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
               title="Редактировать группу"
+              aria-label="Редактировать группу"
             >
               <ExternalLink class="size-3.5 text-muted-foreground" />
             </router-link>
@@ -989,6 +992,7 @@ export default {
                         size="icon"
                         class="shrink-0 size-9"
                         title="Изменить артикул"
+                        aria-label="Изменить артикул"
                         type="button"
                         @click="openSkuDialog"
                       >
@@ -1273,11 +1277,15 @@ export default {
         <!-- Notes tab -->
         <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
           <div class="p-4 flex flex-col gap-4">
-            <div v-if="notes.length === 0" class="text-center py-8 text-muted-foreground">
-              <NotebookPen class="size-12 mx-auto mb-3 opacity-50" />
-              <p>Нет заметок</p>
-              <p class="text-sm">Добавьте заметку для этого товара</p>
-            </div>
+            <EmptyState v-if="notes.length === 0" title="Нет заметок" description="Заметки помогают фиксировать важную информацию о товаре">
+              <template #icon>
+                <NotebookPen class="size-12 mb-4 text-muted-foreground" />
+              </template>
+              <Button variant="outline" @click="addNote">
+                <NotebookPen class="size-4 mr-2" />
+                Добавить заметку
+              </Button>
+            </EmptyState>
             <div v-for="(note, index) in notes" :key="note.id || index">
               <Note
                 v-model:note="notes[index]"
