@@ -899,7 +899,7 @@ export default {
             v-if="form"
             v-show="tab == 'properties'"
             @submit.prevent="onSubmit"
-            class="space-y-6 flex flex-col"
+            class="flex flex-col gap-6"
           >
             <!-- Image gallery (above main fields card) -->
             <input
@@ -924,7 +924,7 @@ export default {
               <template #item="{ element, index }">
                 <div
                   :class="[
-                    'gallery-item group size-48 rounded-lg overflow-hidden bg-secondary cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
+                    'gallery-item group size-32 sm:size-40 lg:size-48 rounded-lg overflow-hidden bg-secondary cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
                     index === 0 ? 'ring-2 ring-primary' : ''
                   ]"
                   @click="openLightbox(index)"
@@ -947,7 +947,7 @@ export default {
               </template>
               <template #footer>
                 <div
-                  class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                  class="size-32 sm:size-40 lg:size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
                   @click="triggerGalleryUpload"
                 >
                   <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
@@ -957,7 +957,7 @@ export default {
             </draggable>
             <div v-else class="flex flex-wrap gap-2">
               <div
-                class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                class="size-32 sm:size-40 lg:size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
                 @click="triggerGalleryUpload"
               >
                 <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
@@ -1185,7 +1185,7 @@ export default {
           </Card>
 
           <!-- Actions row: Delete + Duplicate on left, Save on right -->
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between sticky bottom-0 bg-background py-3 -mx-px border-t mt-2">
             <div class="flex items-center gap-2">
               <AlertDialog>
                 <AlertDialogTrigger as-child>
