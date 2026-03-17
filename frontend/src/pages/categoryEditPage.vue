@@ -582,7 +582,7 @@ export default {
                       </span>
                       <span
                         v-if="attribute.isRequired"
-                        class="text-xs text-red-500"
+                        class="text-xs text-destructive"
                       >
                         *
                       </span>

@@ -17,7 +17,7 @@ import { loadingBarState } from "@/composables/useLoadingBar";
   left: 0;
   height: 3px;
   background: var(--color-primary, var(--primary));
-  z-index: 50;
+  z-index: var(--z-overlay, 50);
   transition:
     width 2s cubic-bezier(0.1, 0.5, 0.3, 1),
     opacity 0.3s ease;

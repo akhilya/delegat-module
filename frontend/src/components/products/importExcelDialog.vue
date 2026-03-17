@@ -50,13 +50,13 @@
           <div class="bg-muted rounded px-3 py-1.5">
             Всего строк: <span class="font-medium">{{ changeset.summary.totalRows }}</span>
           </div>
-          <div class="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 rounded px-3 py-1.5">
+          <div class="bg-success-muted text-success-foreground rounded px-3 py-1.5">
             Изменено: <span class="font-medium">{{ changeset.summary.changedProducts }}</span>
           </div>
           <div v-if="changeset.summary.unchangedProducts > 0" class="bg-muted rounded px-3 py-1.5">
             Без изменений: <span class="font-medium">{{ changeset.summary.unchangedProducts }}</span>
           </div>
-          <div v-if="changeset.summary.errorCount > 0" class="bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 rounded px-3 py-1.5">
+          <div v-if="changeset.summary.errorCount > 0" class="bg-error-muted text-error-foreground rounded px-3 py-1.5">
             Ошибок: <span class="font-medium">{{ changeset.summary.errorCount }}</span>
           </div>
         </div>
@@ -67,7 +67,7 @@
           <div
             v-for="(err, i) in changeset.errors"
             :key="i"
-            class="text-sm bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 rounded px-3 py-1.5"
+            class="text-sm bg-error-muted text-error-foreground rounded px-3 py-1.5"
           >
             Строка {{ err.row }}<template v-if="err.productId"> (ID {{ err.productId }})</template>:
             {{ err.field }} &mdash; {{ err.message }}
@@ -100,12 +100,12 @@
                 >
                   <td class="px-3 py-1.5 text-muted-foreground">{{ change.fieldName }}</td>
                   <td class="px-3 py-1.5">
-                    <span class="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-1 rounded text-xs break-all">
+                    <span class="bg-error/15 text-error-foreground px-1 rounded text-xs break-all">
                       {{ truncate(change.oldValue, 100) || '(пусто)' }}
                     </span>
                   </td>
                   <td class="px-3 py-1.5">
-                    <span class="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-1 rounded text-xs break-all">
+                    <span class="bg-success/15 text-success-foreground px-1 rounded text-xs break-all">
                       {{ truncate(change.newValue, 100) || '(пусто)' }}
                     </span>
                   </td>
@@ -130,7 +130,7 @@
       <div v-else-if="step === 'result'" class="flex-1 flex flex-col items-center justify-center py-8">
         <template v-if="applyResult">
           <div class="text-center space-y-2">
-            <CheckCircle2 class="h-10 w-10 mx-auto text-green-600" />
+            <CheckCircle2 class="h-10 w-10 mx-auto text-success" />
             <p class="text-lg font-medium">
               Обновлено товаров: {{ applyResult.appliedCount }}
             </p>

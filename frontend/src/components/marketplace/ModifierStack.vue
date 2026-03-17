@@ -226,7 +226,7 @@ export default {
         </span>
         <span
           v-if="!isReversible(mod.type)"
-          class="inline-flex items-center gap-0.5 text-amber-500 shrink-0"
+          class="inline-flex items-center gap-0.5 text-warning shrink-0"
           title="При импорте значение не будет восстановлено"
         >
           <AlertTriangle class="size-3" />

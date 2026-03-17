@@ -1194,7 +1194,7 @@ export default {
             <div class="flex items-center gap-4">
               <!-- Save status indicator -->
               <div v-if="lastSavedAt" class="text-sm text-muted-foreground flex items-center gap-2">
-                <Check class="size-4 text-green-500" />
+                <Check class="size-4 text-success" />
                 <span>Сохранено</span>
               </div>
               <div v-else-if="hasUnsavedChanges && !isSubmitting" class="text-sm text-muted-foreground">

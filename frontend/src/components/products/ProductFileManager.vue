@@ -1010,11 +1010,11 @@ watch(() => props.productId, () => {
             v-for="entry in currentPendingUploads"
             :key="'upload-' + entry.id"
             class="border-b h-11"
-            :class="entry.status === 'done' ? 'bg-green-500/5' : 'animate-pulse bg-muted/40'"
+            :class="entry.status === 'done' ? 'bg-success/5' : 'animate-pulse bg-muted/40'"
           >
             <td class="pl-4 pr-3 w-8">
               <Loader2 v-if="entry.status === 'uploading'" class="size-4 text-muted-foreground animate-spin" />
-              <Check v-else-if="entry.status === 'done'" class="size-4 text-green-500" />
+              <Check v-else-if="entry.status === 'done'" class="size-4 text-success" />
               <FileIcon v-else class="size-4 text-muted-foreground" />
             </td>
             <td class="text-muted-foreground relative">
@@ -1227,7 +1227,7 @@ watch(() => props.productId, () => {
           <div class="flex gap-2">
             <Input :model-value="shareUrl" readonly class="flex-1 text-xs" @click="$event.target.select()" />
             <Button variant="outline" size="icon" @click="copyShareUrl">
-              <Check v-if="shareCopied" class="size-4 text-green-500" />
+              <Check v-if="shareCopied" class="size-4 text-success" />
               <Copy v-else class="size-4" />
             </Button>
           </div>

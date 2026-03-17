@@ -107,7 +107,7 @@ export default {
       <div class="p-3">
         <!-- Header -->
         <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2 cursor-pointer" @click="toggleCollapse">
+          <button type="button" class="flex items-center gap-2 cursor-pointer" @click="toggleCollapse">
             <Loader2 v-if="!isExportFinished" class="size-4 animate-spin text-primary" />
             <CheckCircle v-else class="size-4 text-success" />
             <span class="font-medium text-sm">
@@ -115,7 +115,7 @@ export default {
             </span>
             <ChevronUp v-if="!isCollapsed" class="size-4 text-muted-foreground" />
             <ChevronDown v-else class="size-4 text-muted-foreground" />
-          </div>
+          </button>
           <Button variant="ghost" size="icon" class="h-6 w-6" @click="handleClose">
             <X class="size-4" />
           </Button>

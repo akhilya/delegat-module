@@ -28,6 +28,7 @@ export default {
   <nav class="flex items-center gap-1 text-sm text-muted-foreground mb-4">
     <button
       @click="navigate('/')"
+      aria-label="Главная"
       class="flex items-center hover:text-foreground transition-colors"
     >
       <Home class="w-4 h-4" />

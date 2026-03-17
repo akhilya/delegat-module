@@ -962,8 +962,8 @@ export default {
               :class="[
                 'size-5',
                 requiredFieldsMapped === totalRequiredFields
-                  ? 'text-green-500'
-                  : 'text-amber-500',
+                  ? 'text-success'
+                  : 'text-warning',
               ]"
             />
             Обязательные поля: {{ requiredFieldsMapped }} / {{ totalRequiredFields }}
@@ -1032,7 +1032,7 @@ export default {
               :class="[
                 { 'opacity-50': !fm.isEnabled },
                 { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) },
-                { 'bg-amber-500/5 border-l-2 border-l-amber-500': isUnmappedOptional(fm) },
+                { 'bg-warning/5 border-l-2 border-l-warning': isUnmappedOptional(fm) },
                 { '!border-b-0': previewProductId && shouldShowInlinePreview(fm.externalFieldKey) }
               ]"
             >
@@ -1349,12 +1349,12 @@ export default {
               <TableCell>
                 <Badge
                   :variant="hasValidSource(fm) && fm.isEnabled ? 'default' : isUnmappedRequired(fm) ? 'destructive' : 'outline'"
-                  :class="isUnmappedOptional(fm) ? 'border-amber-500 text-amber-600' : ''"
+                  :class="isUnmappedOptional(fm) ? 'border-warning text-warning-foreground' : ''"
                   :title="!fm.isEnabled ? 'Поле отключено' : !hasValidSource(fm) ? 'Выберите источник данных' : getCurrentSourceLabel(fm)"
                 >
                   <component
                     :is="hasValidSource(fm) && fm.isEnabled ? CheckCircle : AlertCircle"
-                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-amber-500' : '']"
+                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-warning' : '']"
                   />
                   {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : isUnmappedOptional(fm) ? "Не заполнено" : "Не настроено" }}
                 </Badge>
@@ -1506,7 +1506,7 @@ export default {
             class="rounded-md border p-3 text-sm"
             :class="{
               'bg-destructive/10 border-l-2 border-l-destructive': item.error,
-              'bg-amber-500/10 border-l-2 border-l-amber-500': item.isChanged,
+              'bg-warning/10 border-l-2 border-l-warning': item.isChanged,
             }"
           >
             <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>

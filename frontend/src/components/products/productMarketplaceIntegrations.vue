@@ -598,7 +598,7 @@ export default {
             variant: "default",
             icon: CheckCircle,
             label: "Синхронизирован",
-            color: "text-green-500",
+            color: "text-success",
           };
         case "NotSynced":
           return {
@@ -612,14 +612,14 @@ export default {
             variant: "destructive",
             icon: XCircle,
             label: "Ошибка",
-            color: "text-red-500",
+            color: "text-error",
           };
         case "Modified":
           return {
             variant: "outline",
             icon: AlertTriangle,
             label: "Изменён",
-            color: "text-orange-500",
+            color: "text-warning",
           };
         default:
           return {
@@ -671,9 +671,9 @@ export default {
     <!-- No category warning -->
     <div
       v-else-if="connections && !connections.categoryId"
-      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-orange-50 dark:bg-orange-950/20"
+      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-warning-muted"
     >
-      <AlertTriangle class="size-12 mb-4 text-orange-500" />
+      <AlertTriangle class="size-12 mb-4 text-warning" />
       <h3 class="font-medium mb-1">Товар не привязан к категории</h3>
       <p class="text-sm text-muted-foreground">
         Укажите категорию товара для экспорта на маркетплейсы
@@ -882,7 +882,7 @@ export default {
             </router-link>
           </div>
         </div>
-        <Badge variant="outline" class="text-green-600 border-green-600 shrink-0">
+        <Badge variant="outline" class="text-success border-success shrink-0">
           <CheckCircle class="size-3 mr-1" />
           Готов
         </Badge>
@@ -925,10 +925,10 @@ export default {
       <div
         v-for="conn in connectionsWithoutMapping"
         :key="conn.connectionId"
-        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-orange-300 bg-orange-50 dark:bg-orange-950/20"
+        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-warning/30 bg-warning-muted"
       >
-        <div class="size-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-          <AlertTriangle class="size-4 text-orange-500" />
+        <div class="size-9 rounded-lg bg-warning/15 flex items-center justify-center shrink-0">
+          <AlertTriangle class="size-4 text-warning" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -984,7 +984,7 @@ export default {
           <!-- Warning banner for irreversible fields -->
           <div
             v-if="hasIrreversibleFields()"
-            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200 text-sm"
+            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-warning-muted border border-warning/30 text-warning-foreground text-sm"
           >
             <AlertTriangle class="size-4 mt-0.5 shrink-0" />
             <span>Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную.</span>
@@ -1020,7 +1020,7 @@ export default {
                     {{ getFieldLabel(field) }}
                     <span
                       v-if="isFieldIrreversible(field)"
-                      class="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"
+                      class="inline-flex items-center gap-0.5 text-warning-foreground"
                       title="Необратимые модификаторы"
                     >
                       <AlertTriangle class="size-3.5" />
@@ -1030,7 +1030,7 @@ export default {
                 <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                   {{ formatFieldValue(field, importPreviewData.oldValues[field]) }}
                 </td>
-                <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
                   {{ formatFieldValue(field, importPreviewData.newValues[field]) }}
                 </td>
               </tr>

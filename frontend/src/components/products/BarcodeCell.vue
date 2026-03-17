@@ -74,7 +74,7 @@ export default {
       </button>
     </PopoverTrigger>
     <PopoverContent class="w-auto p-2" align="center">
-      <div class="bg-white rounded p-1">
+      <div class="bg-background rounded p-1">
         <svg ref="largeSvg"></svg>
       </div>
     </PopoverContent>

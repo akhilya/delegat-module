@@ -247,7 +247,7 @@ export default {
         :model-value="modelValue"
         @update:model-value="onInput"
         placeholder="EAN-8 / EAN-13"
-        :class="{ 'border-red-500 focus-visible:ring-red-500': modelValue && !isValid }"
+        :class="{ 'border-destructive focus-visible:ring-destructive': modelValue && !isValid }"
       />
       <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" title="Сгенерировать" @click="generate">
         <Dices class="size-4" />
@@ -258,14 +258,14 @@ export default {
         <PopoverTrigger as-child>
           <button
             type="button"
-            class="shrink-0 h-9 bg-white border rounded px-1.5 flex items-center cursor-pointer hover:border-foreground/30 transition-colors"
+            class="shrink-0 h-9 bg-background border rounded px-1.5 flex items-center cursor-pointer hover:border-foreground/30 transition-colors"
             title="Нажмите для увеличения"
           >
             <svg ref="svgRef" class="h-6 block"></svg>
           </button>
         </PopoverTrigger>
         <PopoverContent class="w-auto p-2" align="end">
-          <div class="bg-white rounded flex flex-col items-center gap-2">
+          <div class="bg-background rounded flex flex-col items-center gap-2">
             <svg ref="largeSvgRef"></svg>
             <Button
               type="button"
@@ -282,7 +282,7 @@ export default {
       </Popover>
     </div>
 
-    <p v-if="errorMessage" class="text-xs text-red-500 mt-1">
+    <p v-if="errorMessage" class="text-xs text-destructive mt-1">
       {{ errorMessage }}
     </p>
 
