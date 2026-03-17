@@ -801,6 +801,19 @@ export default {
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
+    <!-- Mobile tabs (visible below sm where center slot is hidden) -->
+    <div class="sm:hidden mb-4 overflow-x-auto">
+      <Tabs v-model="tab">
+        <TabsList>
+          <TabsTrigger value="properties">Свойства</TabsTrigger>
+          <TabsTrigger value="notes">Заметки</TabsTrigger>
+          <TabsTrigger value="files">Файлы</TabsTrigger>
+          <TabsTrigger value="images">Фото</TabsTrigger>
+          <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
+          <TabsTrigger value="marketplaces">МП</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
       <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
@@ -909,6 +922,7 @@ export default {
                 >
                   <img
                     :src="`/api/files/${element.fileId}/thumbnail?w=256`"
+                    :alt="element.displayName || 'Фото товара'"
                     class="size-full object-contain pointer-events-none"
                   />
                   <div v-if="index === 0" class="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded font-medium">
@@ -1173,14 +1187,15 @@ export default {
                 </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Вы уверены что хотите удалить товар {{ productSKU }}?
-                  </AlertDialogTitle>
+                  <AlertDialogTitle>Удалить товар {{ productSKU }}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Товар будет перемещён в корзину. Его можно будет восстановить.
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Назад</AlertDialogCancel>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
                   <AlertDialogAction @click="handleDeleteProduct">
-                    Подтвердить
+                    В корзину
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -1289,20 +1304,21 @@ export default {
         @click.self="closeLightbox"
       >
         <!-- Close button -->
-        <button class="absolute top-4 right-4 text-white/70 hover:text-white" @click="closeLightbox">
+        <button class="absolute top-4 right-4 text-white/70 hover:text-white" aria-label="Закрыть" @click="closeLightbox">
           <X class="size-8" />
         </button>
         <!-- Prev -->
-        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" @click="prevImage">
+        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" aria-label="Предыдущее фото" @click="prevImage">
           <ChevronLeft class="size-10" />
         </button>
         <!-- Image -->
         <img
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
+          alt="Фото товара"
           class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
-        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" @click="nextImage">
+        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" aria-label="Следующее фото" @click="nextImage">
           <ChevronRight class="size-10" />
         </button>
         <!-- Counter -->
