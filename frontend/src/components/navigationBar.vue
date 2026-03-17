@@ -230,7 +230,7 @@ export default {
         </template>
         <template v-else>
           <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-32 sm:w-48">
-            <AlertCircle class="w-3 h-3 shrink-0" />
+            <AlertCircle class="size-3 shrink-0" />
             <span class="truncate">Нет магазинов</span>
           </div>
         </template>
@@ -250,27 +250,27 @@ export default {
             <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem @select="goToProductCreation">
-              <Plus class="w-4 h-4 mr-2" />
+              <Plus class="size-4 mr-2" />
               Добавить товар
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToTrash">
-              <Trash2 class="w-4 h-4 mr-2" />
+              <Trash2 class="size-4 mr-2" />
               Корзина
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <template v-if="me?.isAdmin">
               <DropdownMenuItem @select="goToAdminStores">
-                <Store class="w-4 h-4 mr-2" />
+                <Store class="size-4 mr-2" />
                 Магазины
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToAdminTokens">
-                <Key class="w-4 h-4 mr-2" />
+                <Key class="size-4 mr-2" />
                 Токены
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </template>
             <DropdownMenuItem @select="postLogOut">
-              <LogOut class="w-4 h-4 mr-2" />
+              <LogOut class="size-4 mr-2" />
               Выйти
             </DropdownMenuItem>
             <template v-if="platformVersion">
