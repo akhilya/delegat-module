@@ -61,6 +61,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 
@@ -117,6 +118,7 @@ export default {
     X,
     ExternalLink,
     draggable,
+    EmptyState,
   },
   data() {
     const groupId = this.$route.params.id ? parseInt(this.$route.params.id) : null;
@@ -477,11 +479,15 @@ export default {
               </Button>
             </div>
 
-            <div v-if="members.length === 0" class="flex flex-col items-center justify-center py-12 text-center border rounded-lg">
-              <Package class="size-12 mb-4 text-muted-foreground" />
-              <h3 class="font-medium mb-1">Нет товаров</h3>
-              <p class="text-sm text-muted-foreground">Добавьте товары в группу для синхронизации</p>
-            </div>
+            <EmptyState
+              v-if="members.length === 0"
+              title="Нет товаров"
+              description="Добавьте товары в группу для синхронизации"
+            >
+              <template #icon>
+                <Package class="size-12 mb-4 text-muted-foreground" />
+              </template>
+            </EmptyState>
 
             <draggable
               v-else

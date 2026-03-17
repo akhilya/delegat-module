@@ -2,6 +2,8 @@
 import Page from "@/components/page.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -52,6 +54,8 @@ export default {
     Page,
     NavigationBar,
     Breadcrumbs,
+    PageHeader,
+    EmptyState,
     Button,
     Input,
     Label,
@@ -235,14 +239,10 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Плагины</h1>
-        <p class="text-sm text-muted-foreground">
-          Управление DLL-плагинами для интеграции с маркетплейсами
-        </p>
-      </div>
-
+    <PageHeader
+      title="Плагины"
+      description="Управление DLL-плагинами для интеграции с маркетплейсами"
+    >
       <Dialog v-model:open="showUploadDialog">
         <DialogTrigger as-child>
           <Button>
@@ -319,23 +319,19 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div
+      <EmptyState v-if="isLoading" loading />
+      <EmptyState
         v-else-if="plugins.length === 0"
-        class="flex flex-col items-center justify-center py-12 text-center"
+        title="Нет установленных плагинов"
+        description="Загрузите DLL-плагин для интеграции с маркетплейсом"
       >
-        <Puzzle class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет установленных плагинов</h3>
-        <p class="text-sm text-muted-foreground">
-          Загрузите DLL-плагин для интеграции с маркетплейсом
-        </p>
-      </div>
+        <template #icon>
+          <Puzzle class="size-12 mb-4 text-muted-foreground" />
+        </template>
+      </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card v-for="plugin in plugins" :key="plugin.key" class="group">

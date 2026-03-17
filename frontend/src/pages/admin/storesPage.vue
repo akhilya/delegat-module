@@ -24,6 +24,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
   components: {
@@ -50,6 +52,8 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
+    PageHeader,
+    EmptyState,
   },
   data() {
     return {
@@ -114,14 +118,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Магазины</h1>
-        <p class="text-sm text-muted-foreground">
-          Управление магазинами системы
-        </p>
-      </div>
-
+    <PageHeader title="Магазины" description="Управление магазинами системы">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -154,21 +151,19 @@ export default {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div
+      <EmptyState v-if="isLoading" loading />
+      <EmptyState
         v-else-if="stores.length === 0"
-        class="flex flex-col items-center justify-center py-12 text-center"
+        title="Нет магазинов"
+        description="Создайте первый магазин"
       >
-        <Store class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет магазинов</h3>
-        <p class="text-sm text-muted-foreground">Создайте первый магазин</p>
-      </div>
+        <template #icon>
+          <Store class="size-12 mb-4 text-muted-foreground" />
+        </template>
+      </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card

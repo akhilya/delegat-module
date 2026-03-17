@@ -18,17 +18,9 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -60,15 +52,9 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+    PageHeader,
+    EmptyState,
+    ConfirmDialog,
     Card,
     CardContent,
     CardDescription,
@@ -161,14 +147,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Категории</h1>
-        <p class="text-sm text-muted-foreground">
-          Управление категориями товаров и их атрибутами
-        </p>
-      </div>
-
+    <PageHeader title="Категории" description="Управление категориями товаров и их атрибутами">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -205,18 +184,15 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div v-else-if="categories.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-        <FolderOpen class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет категорий</h3>
-        <p class="text-sm text-muted-foreground">Создайте первую категорию для товаров</p>
-      </div>
+      <EmptyState v-if="isLoading" loading />
+      <EmptyState v-else-if="categories.length === 0" title="Нет категорий" description="Создайте первую категорию для товаров">
+        <template #icon>
+          <FolderOpen class="size-12 mb-4 text-muted-foreground" />
+        </template>
+      </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card
@@ -246,37 +222,19 @@ export default {
                 {{ category.attributesCount || 0 }} атрибутов
               </span>
             </div>
-            <AlertDialog>
-              <AlertDialogTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="opacity-0 group-hover:opacity-100 transition-opacity"
-                  @click.stop
-                >
+            <ConfirmDialog
+              title="Удалить категорию?"
+              :description="`Вы уверены что хотите удалить категорию &quot;${category.name}&quot;? Это действие нельзя отменить.`"
+              confirm-label="Удалить"
+              :loading="isDeleting"
+              @confirm="handleDeleteCategory(category.id)"
+            >
+              <template #trigger>
+                <Button variant="ghost" size="icon" class="opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
                   <Trash2 class="size-4 text-destructive" />
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Удалить категорию?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Вы уверены что хотите удалить категорию "{{ category.name }}"?
-                    Это действие нельзя отменить.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction
-                    @click="handleDeleteCategory(category.id)"
-                    :disabled="isDeleting"
-                  >
-                    <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                    Удалить
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              </template>
+            </ConfirmDialog>
           </CardContent>
         </Card>
       </div>

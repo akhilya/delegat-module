@@ -53,6 +53,7 @@ import {
   Pencil,
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_CATEGORIES, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
@@ -129,6 +130,7 @@ export default {
     Pencil,
     draggable,
     SearchableSelect,
+    EmptyState,
   },
   data() {
     const categoryId = parseInt(this.$route.params.id);
@@ -543,11 +545,15 @@ export default {
             </Button>
           </div>
 
-          <div v-if="attributes.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-            <Settings2 class="size-12 mb-4 text-muted-foreground" />
-            <h3 class="font-medium mb-1">Нет атрибутов</h3>
-            <p class="text-sm text-muted-foreground">Добавьте атрибуты для товаров этой категории</p>
-          </div>
+          <EmptyState
+            v-if="attributes.length === 0"
+            title="Нет атрибутов"
+            description="Добавьте атрибуты для товаров этой категории"
+          >
+            <template #icon>
+              <Settings2 class="size-12 mb-4 text-muted-foreground" />
+            </template>
+          </EmptyState>
 
           <draggable
             v-else

@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Badge from "@/components/ui/badge/Badge.vue";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
   components: {
@@ -35,6 +37,8 @@ export default {
     TableHeader,
     TableRow,
     Badge,
+    PageHeader,
+    EmptyState,
   },
   data() {
     return {
@@ -113,27 +117,20 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Токены приглашения</h1>
-        <p class="text-sm text-muted-foreground">
-          Управление токенами для регистрации пользователей
-        </p>
-      </div>
-
+    <PageHeader title="Токены приглашения" description="Управление токенами для регистрации пользователей">
       <Button @click="handleCreateToken" :disabled="isCreating">
         <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
         <Plus v-else class="size-4 mr-2" />
         Создать токен
       </Button>
-    </div>
+    </PageHeader>
 
     <!-- Last created token highlight -->
     <div
       v-if="lastCreatedToken"
-      class="mb-4 p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg"
+      class="mb-4 p-4 bg-success-muted border border-success/30 rounded-lg"
     >
-      <p class="text-sm text-green-800 dark:text-green-200 mb-2 font-medium">
+      <p class="text-sm text-success-foreground mb-2 font-medium">
         Новый токен создан:
       </p>
       <div class="flex items-center gap-2">
@@ -152,18 +149,12 @@ export default {
     </div>
 
     <div class="border rounded-lg h-full w-full grow mb-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div
-        v-else-if="tokens.length === 0"
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <Key class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет токенов</h3>
-        <p class="text-sm text-muted-foreground">Создайте первый токен приглашения</p>
-      </div>
+      <EmptyState v-if="isLoading" loading />
+      <EmptyState v-else-if="tokens.length === 0" title="Нет токенов" description="Создайте первый токен приглашения">
+        <template #icon>
+          <Key class="size-12 mb-4 text-muted-foreground" />
+        </template>
+      </EmptyState>
 
       <div v-else>
         <Table>
