@@ -36,6 +36,7 @@ import {
   Filter,
   Check,
   FileSpreadsheet,
+  Undo2,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -102,6 +103,7 @@ export default {
     Filter,
     Check,
     FileSpreadsheet,
+    Undo2,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -140,9 +142,14 @@ export default {
       "exportProductsTemplate",
       "importProductsPreview",
       "importProductsApply",
+      "getTrashProducts",
+      "getTrashCount",
+      "bulkRestoreProducts",
+      "bulkPermanentDeleteProducts",
     ]),
 
     onRowClick(product) {
+      if (this.isTrashMode) return;
       this.$router.push({
         name: PAGE_PRODUCT_EDIT,
         params: { id: product.id },
@@ -264,6 +271,7 @@ export default {
           this.rowSelection = {};
           this.selectedProductsMap = {};
           this.fetchProducts();
+          this.fetchTrashCount();
         },
         onError: (error) => {
           toast.error(
@@ -273,6 +281,72 @@ export default {
       });
 
       this.isDeleting = false;
+    },
+
+    async fetchTrashProducts() {
+      this.isTrashLoading = true;
+      this.trashProducts = [];
+      await this.getTrashProducts({
+        startIndex: this.trashStartIndex,
+        pageSize: this.pageSize,
+        searchQuery: this.trashSearchQuery,
+        onSuccess: (response) => {
+          this.trashProducts = response.data.value.items;
+          this.trashLastPage = response.data.value.lastPage;
+          this.trashTotalCount = response.data.value.totalCount;
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+      this.isTrashLoading = false;
+    },
+
+    async fetchTrashCount() {
+      await this.getTrashCount({
+        onSuccess: (response) => {
+          this.trashCount = response.data.value.count;
+        },
+        onError: () => { this.trashCount = 0; },
+      });
+    },
+
+    toggleTrashMode() {
+      this.isTrashMode = !this.isTrashMode;
+      this.clearSelection();
+      if (this.isTrashMode) {
+        this.trashStartIndex = 0;
+        this.fetchTrashProducts();
+      }
+    },
+
+    async handleBulkRestore() {
+      this.isRestoring = true;
+      await this.bulkRestoreProducts({
+        productIds: this.selectedProductIds,
+        onSuccess: ({ data }) => {
+          toast.success(`Восстановлено товаров: ${data.value.restoredCount}`);
+          this.clearSelection();
+          this.fetchTrashProducts();
+          this.fetchTrashCount();
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+      this.isRestoring = false;
+    },
+
+    async handleBulkPermanentDelete() {
+      this.isPermanentDeleting = true;
+      await this.bulkPermanentDeleteProducts({
+        productIds: this.selectedProductIds,
+        onSuccess: ({ data }) => {
+          toast.success(`Удалено навсегда: ${data.value.deletedCount}`);
+          this.isBulkPermanentDeleteDialogOpen = false;
+          this.clearSelection();
+          this.fetchTrashProducts();
+          this.fetchTrashCount();
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+      this.isPermanentDeleting = false;
     },
 
     handleBulkEditSaved() {
@@ -408,6 +482,21 @@ export default {
       isDeleting: false,
       isExporting: false,
 
+      // Trash mode
+      isTrashMode: false,
+      trashProducts: [],
+      isTrashLoading: false,
+      trashLastPage: false,
+      trashStartIndex: 0,
+      trashTotalCount: 0,
+      trashSearchQuery: "",
+      trashCount: 0,
+
+      // Trash dialogs
+      isBulkPermanentDeleteDialogOpen: false,
+      isPermanentDeleting: false,
+      isRestoring: false,
+
       // Cross-page selection cache: { productId: productObject }
       selectedProductsMap: {},
 
@@ -419,6 +508,9 @@ export default {
   watch: {
     startIndex() {
       this.fetchProducts();
+    },
+    trashStartIndex() {
+      if (this.isTrashMode) this.fetchTrashProducts();
     },
     searchQuery(newVal, oldVal) {
       let queryReplace = newVal;
@@ -495,6 +587,17 @@ export default {
     lastPossiblePage() {
       return Math.max(1, Math.ceil(this.totalCount / this.pageSize));
     },
+    trashPage: {
+      get() {
+        return this.trashStartIndex / this.pageSize + 1;
+      },
+      set(value) {
+        this.trashStartIndex = (value - 1) * this.pageSize;
+      },
+    },
+    trashLastPossiblePage() {
+      return Math.max(1, Math.ceil(this.trashTotalCount / this.pageSize));
+    },
     page: {
       get() {
         return this.startIndex / this.pageSize + 1;
@@ -536,6 +639,7 @@ export default {
     await Promise.all([
       this.fetchStoreAttributes(),
       this.fetchCategories(),
+      this.fetchTrashCount(),
     ]);
 
     // Load column visibility from localStorage (now includes store attributes)
@@ -611,6 +715,21 @@ export default {
               </div>
             </PopoverContent>
           </Popover>
+          <Button
+            variant="outline"
+            size="icon"
+            class="h-9 w-9 shrink-0 relative"
+            :class="isTrashMode ? 'border-destructive text-destructive' : ''"
+            @click="toggleTrashMode"
+          >
+            <Trash2 class="size-4" />
+            <span
+              v-if="trashCount > 0 && !isTrashMode"
+              class="absolute -top-1.5 -right-1.5 bg-destructive text-white text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
+            >
+              {{ trashCount > 99 ? '99+' : trashCount }}
+            </span>
+          </Button>
         </div>
       </template>
     </NavigationBar>
@@ -620,9 +739,9 @@ export default {
       class="border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-hidden"
     >
       <ProductsTable
-        :data="products"
+        :data="isTrashMode ? trashProducts : products"
         :columns="productColumns"
-        :is-loading="isProductsLoading"
+        :is-loading="isTrashMode ? isTrashLoading : isProductsLoading"
         :column-visibility="columnVisibility"
         :column-order="columnOrder"
         :row-selection="rowSelection"
@@ -647,7 +766,7 @@ export default {
           />
         </template>
         <template #rowActions="{ row }">
-          <ProductRowActionButtons :id="row.original.id" />
+          <ProductRowActionButtons v-if="!isTrashMode" :id="row.original.id" />
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
@@ -685,67 +804,62 @@ export default {
             <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
               <X class="h-4 w-4" />
             </Button>
-            <div class="flex">
-              <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
-                <Pencil class="h-4 w-4 mr-1" />
-                Изменить
+
+            <!-- Normal mode actions -->
+            <template v-if="!isTrashMode">
+              <div class="flex">
+                <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
+                  <Pencil class="h-4 w-4 mr-1" />
+                  Изменить
+                </Button>
+                <Button variant="outline" size="sm" class="h-8 rounded-l-none" @click="isExcelDialogOpen = true">
+                  <FileSpreadsheet class="h-4 w-4 mr-1" />
+                  Редактирование из таблицы
+                </Button>
+              </div>
+              <Button variant="destructive" size="sm" class="h-8" @click="openBulkDeleteDialog">
+                <Trash2 class="h-4 w-4 mr-1" />
+                Удалить
               </Button>
-              <Button variant="outline" size="sm" class="h-8 rounded-l-none" @click="isExcelDialogOpen = true">
-                <FileSpreadsheet class="h-4 w-4 mr-1" />
-                Редактирование из таблицы
+            </template>
+
+            <!-- Trash mode actions -->
+            <template v-else>
+              <Button variant="outline" size="sm" class="h-8" :disabled="isRestoring" @click="handleBulkRestore">
+                <Undo2 class="h-4 w-4 mr-1" />
+                {{ isRestoring ? 'Восстановление...' : 'Восстановить' }}
               </Button>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              class="h-8"
-              @click="openBulkDeleteDialog"
-            >
-              <Trash2 class="h-4 w-4 mr-1" />
-              Удалить
-            </Button>
+              <Button variant="destructive" size="sm" class="h-8" @click="isBulkPermanentDeleteDialogOpen = true">
+                <Trash2 class="h-4 w-4 mr-1" />
+                Удалить навсегда
+              </Button>
+            </template>
           </template>
         </div>
 
         <!-- Right: Pagination -->
         <div class="flex items-center gap-2">
           <p class="text-sm text-muted-foreground mr-2">
-            {{ page }} / {{ lastPossiblePage }}
+            {{ isTrashMode ? trashPage : page }} / {{ isTrashMode ? trashLastPossiblePage : lastPossiblePage }}
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 w-8 p-0"
-            :disabled="page - 1 <= 0"
-            @click="page = 1"
-          >
+          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
+            :disabled="(isTrashMode ? trashPage : page) <= 1"
+            @click="isTrashMode ? trashPage = 1 : page = 1">
             <ChevronsLeft class="size-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 w-8 p-0"
-            :disabled="page - 1 <= 0"
-            @click="page--"
-          >
+          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
+            :disabled="(isTrashMode ? trashPage : page) <= 1"
+            @click="isTrashMode ? trashPage-- : page--">
             <ChevronLeft class="size-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 w-8 p-0"
-            :disabled="lastPage"
-            @click="page++"
-          >
+          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
+            :disabled="isTrashMode ? trashLastPage : lastPage"
+            @click="isTrashMode ? trashPage++ : page++">
             <ChevronRight class="size-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 w-8 p-0"
-            :disabled="lastPage"
-            @click="page = lastPossiblePage"
-          >
+          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
+            :disabled="isTrashMode ? trashLastPage : lastPage"
+            @click="isTrashMode ? (trashPage = trashLastPossiblePage) : (page = lastPossiblePage)">
             <ChevronsRight class="size-4" />
           </Button>
         </div>
@@ -797,8 +911,8 @@ export default {
         <AlertDialogHeader>
           <AlertDialogTitle>Удалить товары?</AlertDialogTitle>
           <AlertDialogDescription>
-            Вы собираетесь удалить {{ selectedProductIds.length }} товаров. Это
-            действие нельзя отменить.
+            Вы собираетесь удалить {{ selectedProductIds.length }} товаров в корзину.
+            Их можно будет восстановить из корзины.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -809,6 +923,29 @@ export default {
             class="bg-destructive text-white hover:bg-destructive/90"
           >
             {{ isDeleting ? "Удаление..." : "Удалить" }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Permanent Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="isBulkPermanentDeleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Вы собираетесь безвозвратно удалить {{ selectedProductIds.length }} товаров.
+            Все файлы, фото, заметки и данные маркетплейсов будут удалены. Это действие нельзя отменить.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="isPermanentDeleting">Отмена</AlertDialogCancel>
+          <AlertDialogAction
+            @click.prevent="handleBulkPermanentDelete"
+            :disabled="isPermanentDeleting"
+            class="bg-destructive text-white hover:bg-destructive/90"
+          >
+            {{ isPermanentDeleting ? "Удаление..." : "Удалить навсегда" }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
