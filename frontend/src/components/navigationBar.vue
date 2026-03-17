@@ -22,7 +22,7 @@ import Button from "./ui/button/Button.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers } from "lucide-vue-next";
+import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2 } from "lucide-vue-next";
 import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
@@ -54,6 +54,7 @@ export default {
     FolderOpen,
     Globe,
     Layers,
+    Trash2,
   },
   data() {
     return {
@@ -128,6 +129,9 @@ export default {
     goToStoreAttributes() {
       this.$router.push(PAGE_STORE_ATTRIBUTES);
     },
+    goToTrash() {
+      this.$router.push({ path: PAGE_PRODUCTS, query: { trash: '1' } });
+    },
   },
   async mounted() {
     this.isLoading = true;
@@ -157,6 +161,15 @@ export default {
         displaySonnerError(error);
       },
     });
+
+    // Auto-select first store if current selection is invalid
+    if (this.memberships.length > 0 && (
+      !this.me?.selectedStoreId ||
+      !this.memberships.some(s => s.id === this.me.selectedStoreId)
+    )) {
+      await this.selectStore(this.memberships[0].id);
+    }
+
     this.isLoading = false;
 
     http.get("/health").then(r => {
@@ -234,6 +247,10 @@ export default {
             <DropdownMenuItem @select="goToStoreAttributes">
               <Globe class="w-4 h-4 mr-2" />
               Глобальные атрибуты
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="goToTrash">
+              <Trash2 class="w-4 h-4 mr-2" />
+              Корзина
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem @select="goToMarketplace">

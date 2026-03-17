@@ -146,6 +146,8 @@ export default {
       "getTrashCount",
       "bulkRestoreProducts",
       "bulkPermanentDeleteProducts",
+      "restoreProduct",
+      "permanentDeleteProduct",
     ]),
 
     onRowClick(product) {
@@ -309,13 +311,44 @@ export default {
       });
     },
 
+    async handleRestoreOne(productId) {
+      await this.restoreProduct({
+        productId,
+        onSuccess: () => {
+          toast.success("Товар восстановлен");
+          this.fetchTrashProducts();
+          this.fetchTrashCount();
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+    },
+
+    async handlePermanentDeleteOne(productId) {
+      await this.permanentDeleteProduct({
+        productId,
+        onSuccess: () => {
+          toast.success("Товар удалён навсегда");
+          this.fetchTrashProducts();
+          this.fetchTrashCount();
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+    },
+
     toggleTrashMode() {
       this.isTrashMode = !this.isTrashMode;
       this.clearSelection();
+      // Sync query param
+      const query = { ...this.$route.query };
       if (this.isTrashMode) {
+        query.trash = '1';
         this.trashStartIndex = 0;
         this.fetchTrashProducts();
+      } else {
+        delete query.trash;
+        this.fetchProducts();
       }
+      this.$router.replace({ query });
     },
 
     async handleBulkRestore() {
@@ -645,9 +678,14 @@ export default {
     // Load column visibility from localStorage (now includes store attributes)
     this.columnVisibility = this.loadColumnVisibility();
 
-    await this.fetchProducts();
-
-    if (this.page > this.lastPossiblePage) this.page = this.lastPossiblePage;
+    // Activate trash mode if ?trash=1 query param present
+    if (this.$route.query.trash === '1') {
+      this.isTrashMode = true;
+      await this.fetchTrashProducts();
+    } else {
+      await this.fetchProducts();
+      if (this.page > this.lastPossiblePage) this.page = this.lastPossiblePage;
+    }
   },
 };
 </script>
@@ -715,21 +753,6 @@ export default {
               </div>
             </PopoverContent>
           </Popover>
-          <Button
-            variant="outline"
-            size="icon"
-            class="h-9 w-9 shrink-0 relative"
-            :class="isTrashMode ? 'border-destructive text-destructive' : ''"
-            @click="toggleTrashMode"
-          >
-            <Trash2 class="size-4" />
-            <span
-              v-if="trashCount > 0 && !isTrashMode"
-              class="absolute -top-1.5 -right-1.5 bg-destructive text-white text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
-            >
-              {{ trashCount > 99 ? '99+' : trashCount }}
-            </span>
-          </Button>
         </div>
       </template>
     </NavigationBar>
@@ -767,6 +790,14 @@ export default {
         </template>
         <template #rowActions="{ row }">
           <ProductRowActionButtons v-if="!isTrashMode" :id="row.original.id" />
+          <div v-else class="flex items-center gap-0.5 px-1">
+            <Button variant="ghost" size="icon" class="h-7 w-7" title="Восстановить" @click.stop="handleRestoreOne(row.original.id)">
+              <Undo2 class="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive hover:text-destructive" title="Удалить навсегда" @click.stop="handlePermanentDeleteOne(row.original.id)">
+              <Trash2 class="size-3.5" />
+            </Button>
+          </div>
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
