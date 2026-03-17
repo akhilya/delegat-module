@@ -22,6 +22,7 @@ import Button from "./ui/button/Button.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
+import { Separator } from "@/components/ui/separator";
 import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2 } from "lucide-vue-next";
 import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
@@ -41,6 +42,7 @@ export default {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
     Button,
+    Separator,
     UserRound,
     Loader2,
     Store,
@@ -63,6 +65,19 @@ export default {
       memberships: [],
       platformVersion: null,
     };
+  },
+  computed: {
+    navLinks() {
+      return [
+        { label: "Товары", to: PAGE_PRODUCTS, match: ["/", "/products"] },
+        { label: "Категории", to: PAGE_CATEGORIES, match: ["/categories"] },
+        { label: "Группы", to: PAGE_PRODUCT_GROUPS, match: ["/product-groups"] },
+        { label: "Атрибуты", to: PAGE_STORE_ATTRIBUTES, match: ["/store-attributes"] },
+        { type: "separator" },
+        { label: "Маркетплейсы", to: PAGE_MARKETPLACE, match: ["/marketplace"] },
+        { label: "Плагины", to: PAGE_MARKETPLACE_PLUGINS, match: ["/marketplace/plugins"] },
+      ];
+    },
   },
   methods: {
     ...mapActions([
@@ -132,6 +147,11 @@ export default {
     goToTrash() {
       this.$router.push({ path: PAGE_PRODUCTS, query: { trash: '1' } });
     },
+    isNavActive(link) {
+      const path = this.$route.path;
+      if (!link.match) return false;
+      return link.match.some(m => m === path || (m !== "/" && path.startsWith(m)));
+    },
   },
   async mounted() {
     this.isLoading = true;
@@ -181,7 +201,8 @@ export default {
 
 <template>
   <div class="w-screen h-20 backdrop-blur-lg fixed left-0 top-0 z-sticky" />
-  <div class="w-full h-20 sticky top-0 left-0 grid grid-cols-3 z-sticky">
+  <div class="w-full sticky top-0 left-0 z-sticky">
+  <div class="h-12 grid grid-cols-3">
     <template v-if="!isLoading">
       <div class="flex items-center justify-start gap-2">
         <template v-if="memberships.length > 0">
@@ -228,38 +249,13 @@ export default {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem @select="goToProducts">
-              <House class="w-4 h-4 mr-2" />
-              Товары
-            </DropdownMenuItem>
             <DropdownMenuItem @select="goToProductCreation">
               <Plus class="w-4 h-4 mr-2" />
               Добавить товар
             </DropdownMenuItem>
-            <DropdownMenuItem @select="goToCategories">
-              <FolderOpen class="w-4 h-4 mr-2" />
-              Категории
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToProductGroups">
-              <Layers class="w-4 h-4 mr-2" />
-              Группы товаров
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToStoreAttributes">
-              <Globe class="w-4 h-4 mr-2" />
-              Глобальные атрибуты
-            </DropdownMenuItem>
             <DropdownMenuItem @select="goToTrash">
               <Trash2 class="w-4 h-4 mr-2" />
               Корзина
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @select="goToMarketplace">
-              <ShoppingBag class="w-4 h-4 mr-2" />
-              Маркетплейсы
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToPlugins">
-              <Puzzle class="w-4 h-4 mr-2" />
-              Плагины
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <template v-if="me?.isAdmin">
@@ -292,6 +288,25 @@ export default {
         <Loader2 class="size-4 animate-spin" />
       </div>
     </template>
+  </div>
+  <!-- Navigation links row -->
+  <nav v-if="!isLoading" class="hidden md:flex items-center gap-1 h-8 text-sm">
+    <template v-for="(link, i) in navLinks" :key="i">
+      <Separator v-if="link.type === 'separator'" orientation="vertical" class="h-4 mx-1" />
+      <router-link
+        v-else
+        :to="link.to"
+        :class="[
+          'px-2.5 py-1 rounded-md transition-colors',
+          isNavActive(link)
+            ? 'text-foreground font-medium bg-accent'
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+        ]"
+      >
+        {{ link.label }}
+      </router-link>
+    </template>
+  </nav>
   </div>
 
 </template>
