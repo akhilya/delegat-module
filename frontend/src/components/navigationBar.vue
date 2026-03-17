@@ -189,7 +189,7 @@ export default {
             :model-value="String(me?.selectedStoreId ?? '')"
             @update:model-value="selectStore(Number($event))"
           >
-            <SelectTrigger class="bg-primary-foreground w-48">
+            <SelectTrigger class="bg-primary-foreground w-32 sm:w-48">
               <SelectValue placeholder="Выберите магазин..." />
             </SelectTrigger>
             <SelectContent>
@@ -208,13 +208,13 @@ export default {
           </Select>
         </template>
         <template v-else>
-          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-48">
+          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-32 sm:w-48">
             <AlertCircle class="w-3 h-3 shrink-0" />
             <span class="truncate">Нет магазинов</span>
           </div>
         </template>
       </div>
-      <div class="flex items-center justify-center">
+      <div class="hidden sm:flex items-center justify-center">
         <slot name="center" />
       </div>
       <div class="flex items-center justify-end gap-2">

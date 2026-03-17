@@ -159,7 +159,7 @@ export default {
         <button
           v-if="index > 0 && !disabled"
           type="button"
-          class="p-0 h-5 text-muted-foreground hover:text-foreground cursor-pointer"
+          class="p-0.5 h-6 text-muted-foreground hover:text-foreground cursor-pointer"
           @click="moveModifier(index, -1)"
           title="Переместить влево"
         >
@@ -210,7 +210,7 @@ export default {
         <button
           v-if="index < modifiers.length - 1 && !disabled"
           type="button"
-          class="p-0 h-5 text-muted-foreground hover:text-foreground cursor-pointer"
+          class="p-0.5 h-6 text-muted-foreground hover:text-foreground cursor-pointer"
           @click="moveModifier(index, 1)"
           title="Переместить вправо"
         >
