@@ -201,6 +201,9 @@ export default {
         ...ATTRIBUTE_GROUP_OPTIONS.map((g) => ({ value: g, label: g })),
       ];
     },
+    parsedFormOptions() {
+      return this.parseOptions(this.attributeForm.options);
+    },
   },
   methods: {
     ...mapActions([
@@ -746,7 +749,7 @@ export default {
               <SelectContent>
                 <SelectItem value="__none__">Не выбрано</SelectItem>
                 <SelectItem
-                  v-for="option in parseOptions(attributeForm.options)"
+                  v-for="option in parsedFormOptions"
                   :key="option.value"
                   :value="option.value"
                 >

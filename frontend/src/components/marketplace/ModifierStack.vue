@@ -205,7 +205,7 @@ export default {
     <!-- Modifier cards -->
     <div
       v-for="(mod, index) in modifiers"
-      :key="index"
+      :key="mod.type + '-' + index"
       :class="[
         'rounded-md border border-l-[3px] bg-card text-card-foreground',
         getCategoryBorderColor(mod.type),

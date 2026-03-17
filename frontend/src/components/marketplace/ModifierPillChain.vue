@@ -153,7 +153,7 @@ export default {
 <template>
   <div v-if="modifiers.length > 0 || !disabled" class="flex flex-wrap items-center gap-1.5">
     <!-- Modifier pills -->
-    <template v-for="(mod, index) in modifiers" :key="index">
+    <template v-for="(mod, index) in modifiers" :key="mod.type + '-' + index">
       <div class="flex items-center gap-0">
         <!-- Reorder buttons -->
         <button

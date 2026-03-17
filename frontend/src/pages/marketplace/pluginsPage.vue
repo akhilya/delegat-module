@@ -91,6 +91,14 @@ export default {
     CardHeader,
     CardTitle,
   },
+  computed: {
+    pluginsWithCapabilities() {
+      return this.plugins.map((plugin) => ({
+        ...plugin,
+        formattedCapabilities: this.formatCapabilities(plugin.capabilities),
+      }));
+    },
+  },
   data() {
     return {
       plugins: [],
@@ -334,7 +342,7 @@ export default {
       </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card v-for="plugin in plugins" :key="plugin.key" class="group">
+        <Card v-for="plugin in pluginsWithCapabilities" :key="plugin.key" class="group">
           <CardHeader>
             <CardTitle class="flex items-center justify-between">
               <span class="flex items-center gap-2">
@@ -352,11 +360,11 @@ export default {
           <CardContent>
             <div class="space-y-3">
               <!-- Capabilities -->
-              <div v-if="formatCapabilities(plugin.capabilities).length > 0">
+              <div v-if="plugin.formattedCapabilities.length > 0">
                 <p class="text-xs text-muted-foreground mb-2">Возможности:</p>
                 <div class="flex flex-wrap gap-1">
                   <Badge
-                    v-for="cap in formatCapabilities(plugin.capabilities)"
+                    v-for="cap in plugin.formattedCapabilities"
                     :key="cap"
                     variant="secondary"
                     class="text-xs"

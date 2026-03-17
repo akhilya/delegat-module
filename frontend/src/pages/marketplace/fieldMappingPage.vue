@@ -1256,15 +1256,17 @@ export default {
                               </div>
                             </div>
                             <div class="overflow-auto flex-1 p-1">
-                              <div v-for="option in filterOptions(fm, getAvailableOptions(fm))"
-                                   :key="option.value"
-                                   class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
-                                   @click="addStaticValue(fm, option.value)">
-                                <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
-                              </div>
-                              <div v-if="!filterOptions(fm, getAvailableOptions(fm)).length" class="p-3 text-sm text-muted-foreground text-center">
-                                Ничего не найдено
-                              </div>
+                              <template v-for="filteredOpts in [filterOptions(fm, getAvailableOptions(fm))]" :key="0">
+                                <div v-for="option in filteredOpts"
+                                     :key="option.value"
+                                     class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                                     @click="addStaticValue(fm, option.value)">
+                                  <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
+                                </div>
+                                <div v-if="!filteredOpts.length" class="p-3 text-sm text-muted-foreground text-center">
+                                  Ничего не найдено
+                                </div>
+                              </template>
                             </div>
                           </PopoverContent>
                         </Popover>
