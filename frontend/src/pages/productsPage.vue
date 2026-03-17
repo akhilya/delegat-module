@@ -4,6 +4,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
 import ProductRowActionButtons from "@/components/products/productRowActionButtons.vue";
+import TrashRowActionButtons from "@/components/products/trashRowActionButtons.vue";
 import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
@@ -83,6 +84,7 @@ export default {
     Breadcrumbs,
     ProductsTable,
     ProductRowActionButtons,
+    TrashRowActionButtons,
     ColumnSelector,
     BulkEditDialog,
     ImportExcelDialog,
@@ -790,14 +792,7 @@ export default {
         </template>
         <template #rowActions="{ row }">
           <ProductRowActionButtons v-if="!isTrashMode" :id="row.original.id" />
-          <div v-else class="flex items-center gap-0.5 px-1">
-            <Button variant="ghost" size="icon" class="h-7 w-7" title="Восстановить" @click.stop="handleRestoreOne(row.original.id)">
-              <Undo2 class="size-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive hover:text-destructive" title="Удалить навсегда" @click.stop="handlePermanentDeleteOne(row.original.id)">
-              <Trash2 class="size-3.5" />
-            </Button>
-          </div>
+          <TrashRowActionButtons v-else :id="row.original.id" @restore="handleRestoreOne" @permanent-delete="handlePermanentDeleteOne" />
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
