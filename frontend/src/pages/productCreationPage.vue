@@ -448,7 +448,7 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="groupDetail" class="w-80 shrink-0 hidden lg:flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
+      <div v-if="groupDetail" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b">
           <div class="flex items-center gap-2 min-w-0">
