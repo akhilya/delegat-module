@@ -1008,7 +1008,7 @@ export default {
                       </AlertDialogHeader>
                       <div class="space-y-3 py-2">
                         <div class="space-y-1">
-                          <Label class="text-sm opacity-60">Текущий артикул</Label>
+                          <Label class="text-sm text-muted-foreground">Текущий артикул</Label>
                           <Input type="text" disabled :model-value="productSKU" />
                         </div>
                         <div class="space-y-1">

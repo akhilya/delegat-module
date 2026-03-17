@@ -190,6 +190,11 @@ input, select, textarea {
   color-scheme: light;
 }
 
+/* Tabular numerals for number inputs — digits align vertically */
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Thin scrollbar for custom scroll areas */
 .thin-scrollbar::-webkit-scrollbar {
   width: 4px;
