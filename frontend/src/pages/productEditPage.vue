@@ -814,9 +814,18 @@ export default {
         </TabsList>
       </Tabs>
     </div>
+    <!-- Mobile group link (visible when sidebar is hidden) -->
+    <div v-if="productGroup" class="lg:hidden flex items-center gap-2 mb-3 text-sm">
+      <Layers class="size-4 text-muted-foreground" />
+      <router-link :to="`/product-groups/${productGroup.id}/edit`" class="text-muted-foreground hover:text-foreground transition-colors">
+        {{ productGroup.name }}
+      </router-link>
+      <span class="text-muted-foreground/50">&middot;</span>
+      <span class="text-muted-foreground">{{ productGroup.members?.length || 0 }} товаров</span>
+    </div>
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
+      <div v-if="productGroup" class="w-80 shrink-0 hidden lg:flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b">
           <div class="flex items-center gap-2 min-w-0">
