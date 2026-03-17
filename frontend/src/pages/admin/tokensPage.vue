@@ -150,7 +150,7 @@ export default {
 
     <div class="border rounded-lg h-full w-full grow mb-4">
       <EmptyState v-if="isLoading" loading />
-      <EmptyState v-else-if="tokens.length === 0" title="Нет токенов" description="Создайте первый токен приглашения">
+      <EmptyState v-else-if="tokens.length === 0" title="Нет токенов" description="Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину">
         <template #icon>
           <Key class="size-12 mb-4 text-muted-foreground" />
         </template>

@@ -381,7 +381,7 @@ export default {
         <EmptyState
           v-if="attributes.length === 0"
           title="Нет глобальных атрибутов"
-          description="Добавьте атрибуты, которые будут применяться ко всем товарам"
+          description="Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
         >
           <template #icon>
             <Settings2 class="size-12 mb-4 text-muted-foreground" />

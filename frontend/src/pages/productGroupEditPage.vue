@@ -482,7 +482,7 @@ export default {
             <EmptyState
               v-if="members.length === 0"
               title="Нет товаров"
-              description="Добавьте товары в группу для синхронизации"
+              description="Товары в группе синхронизируются на маркетплейсы как единое предложение"
             >
               <template #icon>
                 <Package class="size-12 mb-4 text-muted-foreground" />
@@ -539,7 +539,7 @@ export default {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Удалить товар из группы?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Вы уверены что хотите удалить "{{ member.product.name }}" из группы?
+                              Товар останется в каталоге, но будет исключён из группы.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

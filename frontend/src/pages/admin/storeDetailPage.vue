@@ -241,7 +241,7 @@ export default {
         <EmptyState
           v-if="store.members.length === 0"
           title="Нет участников"
-          description="Добавьте первого участника"
+          description="Пригласите участников через токены, чтобы они могли работать с товарами магазина"
         >
           <template #icon>
             <Users class="size-12 mb-4 text-muted-foreground" />

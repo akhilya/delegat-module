@@ -845,7 +845,7 @@ export default {
               </div>
               <Button variant="destructive" size="sm" class="h-8" @click="openBulkDeleteDialog">
                 <Trash2 class="h-4 w-4 mr-1" />
-                Удалить
+                В корзину
               </Button>
             </template>
 
@@ -935,10 +935,9 @@ export default {
     <AlertDialog v-model:open="isBulkDeleteDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить товары?</AlertDialogTitle>
+          <AlertDialogTitle>Отправить в корзину?</AlertDialogTitle>
           <AlertDialogDescription>
-            Вы собираетесь удалить {{ selectedProductIds.length }} товаров в корзину.
-            Их можно будет восстановить из корзины.
+            Выбранные товары будут перемещены в корзину. Их можно будет восстановить.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -948,7 +947,7 @@ export default {
             :disabled="isDeleting"
             class="bg-destructive text-white hover:bg-destructive/90"
           >
-            {{ isDeleting ? "Удаление..." : "Удалить" }}
+            {{ isDeleting ? "Перемещение..." : "В корзину" }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

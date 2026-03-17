@@ -183,7 +183,7 @@ export default {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader
-              >Вы уверены что хотите удалить заметку?</AlertDialogHeader
+              >Заметка будет удалена безвозвратно.</AlertDialogHeader
             >
             <AlertDialogFooter>
               <AlertDialogCancel>Назад</AlertDialogCancel>
@@ -195,6 +195,6 @@ export default {
         </AlertDialog>
       </div>
     </div>
-    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" />
+    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" placeholder="Текст заметки..." />
   </span>
 </template>

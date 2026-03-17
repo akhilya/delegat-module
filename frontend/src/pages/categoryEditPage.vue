@@ -551,7 +551,7 @@ export default {
           <EmptyState
             v-if="attributes.length === 0"
             title="Нет атрибутов"
-            description="Добавьте атрибуты для товаров этой категории"
+            description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
           >
             <template #icon>
               <Settings2 class="size-12 mb-4 text-muted-foreground" />

@@ -158,7 +158,7 @@ export default {
       <EmptyState
         v-else-if="stores.length === 0"
         title="Нет магазинов"
-        description="Создайте первый магазин"
+        description="Магазин — это рабочее пространство для управления товарами и синхронизации с маркетплейсами"
       >
         <template #icon>
           <Store class="size-12 mb-4 text-muted-foreground" />
