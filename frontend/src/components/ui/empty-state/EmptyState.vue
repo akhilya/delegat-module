@@ -15,7 +15,7 @@ defineProps({
   <div v-else class="flex flex-col items-center justify-center py-12 text-center">
     <slot name="icon" />
     <h3 v-if="title" class="font-medium mb-1">{{ title }}</h3>
-    <p v-if="description" class="text-sm text-muted-foreground">{{ description }}</p>
+    <p v-if="description" class="text-sm text-muted-foreground mb-4">{{ description }}</p>
     <slot />
   </div>
 </template>

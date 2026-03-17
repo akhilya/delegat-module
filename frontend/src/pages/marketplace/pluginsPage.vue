@@ -339,6 +339,10 @@ export default {
         <template #icon>
           <Puzzle class="size-12 mb-4 text-muted-foreground" />
         </template>
+        <Button @click="showUploadDialog = true">
+          <Upload class="size-4 mr-2" />
+          Загрузить плагин
+        </Button>
       </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

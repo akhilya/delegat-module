@@ -386,6 +386,10 @@ export default {
           <template #icon>
             <Settings2 class="size-12 mb-4 text-muted-foreground" />
           </template>
+          <Button @click="openAddAttributeDialog">
+            <Plus class="size-4 mr-2" />
+            Добавить атрибут
+          </Button>
         </EmptyState>
 
         <draggable

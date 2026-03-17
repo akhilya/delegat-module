@@ -163,6 +163,10 @@ export default {
         <template #icon>
           <Store class="size-12 mb-4 text-muted-foreground" />
         </template>
+        <Button @click="showCreateDialog = true">
+          <Plus class="size-4 mr-2" />
+          Создать магазин
+        </Button>
       </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

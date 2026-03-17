@@ -192,6 +192,10 @@ export default {
         <template #icon>
           <FolderOpen class="size-12 mb-4 text-muted-foreground" />
         </template>
+        <Button @click="showCreateDialog = true">
+          <Plus class="size-4 mr-2" />
+          Добавить категорию
+        </Button>
       </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

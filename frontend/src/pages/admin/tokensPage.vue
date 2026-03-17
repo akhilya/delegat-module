@@ -154,6 +154,10 @@ export default {
         <template #icon>
           <Key class="size-12 mb-4 text-muted-foreground" />
         </template>
+        <Button @click="handleCreateToken" :disabled="isCreating">
+          <Plus class="size-4 mr-2" />
+          Создать токен
+        </Button>
       </EmptyState>
 
       <div v-else>
