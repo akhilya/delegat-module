@@ -146,6 +146,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<Product>()
             .HasIndex(p => p.storeId);
 
+        builder.Entity<Product>()
+            .HasQueryFilter(p => p.deletedAt == null);
+
+        builder.Entity<Product>()
+            .HasIndex(p => new { p.storeId, p.deletedAt });
+
         builder.Entity<Category>()
             .HasIndex(c => c.storeId);
 
