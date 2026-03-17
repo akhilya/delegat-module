@@ -74,13 +74,14 @@ export default {
       @load="onImageLoad"
       @error="onImageError"
       :src="resolvedSrc"
+      :alt="file?.displayName || file?.fileName || 'Изображение товара'"
       class="absolute w-full h-full object-contain"
       v-show="!isLoading"
     />
     <slot />
   </div>
   <div v-else class="bg-secondary rounded-lg flex items-center justify-center">
-    <Image class="text-secondary-foreground size-[25%]" />
+    <Image class="text-secondary-foreground size-[25%]" aria-hidden="true" />
     <slot />
   </div>
 </template>

@@ -247,6 +247,7 @@ export default {
         :model-value="modelValue"
         @update:model-value="onInput"
         placeholder="EAN-8 / EAN-13"
+        aria-label="Штрихкод (EAN-8 / EAN-13)"
         :class="{ 'border-destructive focus-visible:ring-destructive': modelValue && !isValid }"
       />
       <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" title="Сгенерировать" @click="generate">

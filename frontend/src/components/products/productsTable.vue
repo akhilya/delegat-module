@@ -399,7 +399,7 @@ export default {
         </table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div :class="['sticky right-0 z-20 shrink-0 flex flex-col bg-background transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
+        <div :class="['sticky right-0 z-10 shrink-0 flex flex-col bg-background transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
           <!-- Header: ColumnSelector slot -->
           <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background border-b">
             <slot name="headerActions" />
