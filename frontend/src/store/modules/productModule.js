@@ -271,6 +271,77 @@ export default {
         if (onError) onError(error);
       }
     },
+
+    async getTrashProducts(ctx, { searchQuery, startIndex, pageSize, onSuccess, onError }) {
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("searchQuery", searchQuery);
+      params.set("startIndex", startIndex);
+      params.set("pageSize", pageSize);
+
+      return await useAxios(
+        `/products/trash?${params.toString()}`,
+        { method: "GET", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async getTrashCount(ctx, { onSuccess, onError }) {
+      return await useAxios(
+        `/products/trash/count`,
+        { method: "GET", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async restoreProduct(ctx, { productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/restore`,
+        { method: "POST" },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async bulkRestoreProducts(ctx, { productIds, onSuccess, onError }) {
+      return await useAxios(
+        `/products/bulk-restore`,
+        { method: "POST", data: { productIds } },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async permanentDeleteProduct(ctx, { productId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/permanent`,
+        { method: "DELETE" },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async bulkPermanentDeleteProducts(ctx, { productIds, onSuccess, onError }) {
+      return await useAxios(
+        `/products/bulk-permanent-delete`,
+        { method: "POST", data: { productIds } },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
   },
   mutations: {},
   state: {},
