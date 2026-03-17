@@ -737,7 +737,7 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes a product and all its related entities (files, images, notes, attributes, group memberships).
+    /// Soft-deletes a product by setting its deletedAt timestamp.
     /// </summary>
     /// <param name="productId">The product identifier.</param>
     /// <returns>A redirect path to the products list.</returns>
@@ -749,61 +749,20 @@ public class ProductController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
-        var productRepo = _unitOfWork.Repository<Product>();
-
-        var product = await productRepo.FindAsync(
-            p => p.Id == productId && p.storeId == selectedStoreId.Value,
-            query => query
-                .Include(p => p.files)
-                .Include(p => p.images)
-                .Include(p => p.notes)
-                .Include(p => p.attributeValues)
-                .Include(p => p.storeAttributeValues));
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value);
 
         if (product == null)
             throw ApiException.NotFound("Товар не найден");
 
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            // Batch delete related entities using ExecuteDeleteAsync (single SQL DELETE per table)
-            await _context.pendingProductImports
-                .Where(pi => pi.importedProductId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.pendingImageDownloads
-                .Where(pid => pid.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productMarketplaceLinks
-                .Where(ml => ml.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productGroupMembers
-                .Where(gm => gm.productId == productId)
-                .ExecuteDeleteAsync();
-
-            // Delete tracked related entities in batch
-            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
-            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-            var noteRepo = _unitOfWork.Repository<Note>();
-            var imageRepo = _unitOfWork.Repository<ImageReference>();
-            var fileRepo = _unitOfWork.Repository<Models.File>();
-
-            storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
-            attrValueRepo.DeleteRange(product.attributeValues.ToList());
-            noteRepo.DeleteRange(product.notes.ToList());
-            imageRepo.DeleteRange(product.images.ToList());
-            fileRepo.DeleteRange(product.files.ToList());
-            productRepo.DeleteWithoutSave(product);
-
-            await _unitOfWork.SaveChangesAsync();
-        });
+        product.deletedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
 
         return Ok(new { next = "/products" });
     }
 
     /// <summary>
-    /// Bulk deletes multiple products and all their related entities within a transaction.
+    /// Soft-deletes multiple products by setting their deletedAt timestamp.
     /// </summary>
     /// <param name="request">The list of product IDs to delete.</param>
     /// <returns>A success indicator with the count of deleted products.</returns>
@@ -818,63 +777,15 @@ public class ProductController : ControllerBase
         if (request.productIds == null || request.productIds.Count == 0)
             throw ApiException.BadRequest("Товары не указаны");
 
+        var now = DateTime.UtcNow;
+        var deletedCount = await _context.products
+            .Where(p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.deletedAt, now));
 
-        // Verify all products belong to the current store
-        var productRepo = _unitOfWork.Repository<Product>();
-        var products = await productRepo.FindAllAsync(
-            p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value,
-            query => query
-                .Include(p => p.files)
-                .Include(p => p.images)
-                .Include(p => p.notes)
-                .Include(p => p.attributeValues)
-                .Include(p => p.storeAttributeValues));
+        if (deletedCount == 0)
+            throw ApiException.NotFound("Товары не найдены");
 
-        var foundIds = products.Select(p => p.Id).ToList();
-        var notFoundIds = request.productIds.Except(foundIds).ToList();
-        if (notFoundIds.Any())
-            throw ApiException.NotFound($"Товары не найдены: {string.Join(", ", notFoundIds)}");
-
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            // Batch delete related entities using ExecuteDeleteAsync
-            await _context.pendingProductImports
-                .Where(pi => foundIds.Contains(pi.importedProductId ?? 0))
-                .ExecuteDeleteAsync();
-
-            await _context.pendingImageDownloads
-                .Where(pid => foundIds.Contains(pid.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.productMarketplaceLinks
-                .Where(ml => foundIds.Contains(ml.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.productGroupMembers
-                .Where(gm => foundIds.Contains(gm.productId))
-                .ExecuteDeleteAsync();
-
-            // Delete tracked related entities in batch
-            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
-            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-            var noteRepo = _unitOfWork.Repository<Note>();
-            var imageRepo = _unitOfWork.Repository<ImageReference>();
-            var fileRepo = _unitOfWork.Repository<Models.File>();
-
-            foreach (var product in products)
-            {
-                storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
-                attrValueRepo.DeleteRange(product.attributeValues.ToList());
-                noteRepo.DeleteRange(product.notes.ToList());
-                imageRepo.DeleteRange(product.images.ToList());
-                fileRepo.DeleteRange(product.files.ToList());
-                productRepo.DeleteWithoutSave(product);
-            }
-
-            await _unitOfWork.SaveChangesAsync();
-        });
-
-        return Ok(new { success = true, deletedCount = products.Count });
+        return Ok(new { success = true, deletedCount });
     }
 
     /// <summary>
