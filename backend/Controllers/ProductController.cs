@@ -789,6 +789,331 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves a paginated list of soft-deleted products for the current store.
+    /// </summary>
+    [HttpGet]
+    [Route("/products/trash")]
+    public async Task<IActionResult> GetTrash(string? searchQuery, int startIndex = 0, int pageSize = 25)
+    {
+        if (startIndex < 0) startIndex = 0;
+        if (pageSize < 1) pageSize = 25;
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var query = _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => p.storeId == selectedStoreId.Value && p.deletedAt != null);
+
+        if (!string.IsNullOrEmpty(searchQuery))
+            query = query.Where(p => p.name.Contains(searchQuery) || p.sku.Contains(searchQuery));
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(p => p.deletedAt)
+            .Skip(startIndex)
+            .Take(pageSize)
+            .Include(p => p.category)
+            .Include(p => p.images.OrderBy(i => i.index).Take(1))
+                .ThenInclude(i => i.file)
+            .Include(p => p.files.Where(f => f.contentType.StartsWith("image/")).Take(1))
+            .Include(p => p.storeAttributeValues)
+            .Select(p => ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider))
+            .ToListAsync();
+
+        return Ok(new
+        {
+            items,
+            totalCount,
+            lastPage = startIndex + pageSize >= totalCount
+        });
+    }
+
+    /// <summary>
+    /// Returns the count of soft-deleted products for the current store.
+    /// </summary>
+    [HttpGet]
+    [Route("/products/trash/count")]
+    public async Task<IActionResult> GetTrashCount()
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            return Ok(new { count = 0 });
+
+        var count = await _context.products
+            .IgnoreQueryFilters()
+            .CountAsync(p => p.storeId == selectedStoreId.Value && p.deletedAt != null);
+
+        return Ok(new { count });
+    }
+
+    /// <summary>
+    /// Restores a soft-deleted product.
+    /// </summary>
+    [HttpPost]
+    [Route("/products/{productId}/restore")]
+    public async Task<IActionResult> RestoreProduct(int productId)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value && p.deletedAt != null);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден в корзине");
+
+        product.deletedAt = null;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Restores multiple soft-deleted products.
+    /// </summary>
+    [HttpPost]
+    [Route("/products/bulk-restore")]
+    public async Task<IActionResult> BulkRestore([FromBody] BulkDeleteRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        if (request.productIds == null || request.productIds.Count == 0)
+            throw ApiException.BadRequest("Товары не указаны");
+
+        var restoredCount = await _context.products
+            .IgnoreQueryFilters()
+            .Where(p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value && p.deletedAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.deletedAt, (DateTime?)null));
+
+        return Ok(new { success = true, restoredCount });
+    }
+
+    /// <summary>
+    /// Permanently deletes a soft-deleted product and all its related data.
+    /// </summary>
+    [HttpDelete]
+    [Route("/products/{productId}/permanent")]
+    public async Task<IActionResult> PermanentDeleteProduct(int productId)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .Include(p => p.files)
+            .Include(p => p.images)
+            .Include(p => p.notes)
+            .Include(p => p.attributeValues)
+            .Include(p => p.storeAttributeValues)
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value && p.deletedAt != null);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден в корзине");
+
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            await _context.Set<PendingProductExport>()
+                .Where(pe => pe.productId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.pendingProductImports
+                .Where(pi => pi.importedProductId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.pendingImageDownloads
+                .Where(pid => pid.productId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.productVariantLinks
+                .Where(vl => vl.variant.productId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.productVariants
+                .Where(v => v.productId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.productMarketplaceLinks
+                .Where(ml => ml.productId == productId)
+                .ExecuteDeleteAsync();
+
+            await _context.productGroupMembers
+                .Where(gm => gm.productId == productId)
+                .ExecuteDeleteAsync();
+
+            // Delete file share tokens
+            var fileIds = product.files.Select(f => f.Id).ToList();
+            if (fileIds.Any())
+            {
+                await _context.fileShareTokens
+                    .Where(fst => fileIds.Contains(fst.fileId))
+                    .ExecuteDeleteAsync();
+                await _context.tags
+                    .Where(t => fileIds.Contains(t.fileId))
+                    .ExecuteDeleteAsync();
+            }
+
+            // Delete folder share tokens
+            var folderIds = await _context.productFolders
+                .Where(pf => pf.productId == productId)
+                .Select(pf => pf.Id)
+                .ToListAsync();
+            if (folderIds.Any())
+            {
+                await _context.folderShareTokens
+                    .Where(fst => fst.folderId.HasValue && folderIds.Contains(fst.folderId.Value))
+                    .ExecuteDeleteAsync();
+            }
+
+            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
+            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
+            var noteRepo = _unitOfWork.Repository<Note>();
+            var imageRepo = _unitOfWork.Repository<ImageReference>();
+            var fileRepo = _unitOfWork.Repository<Models.File>();
+            var productRepo = _unitOfWork.Repository<Product>();
+
+            storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
+            attrValueRepo.DeleteRange(product.attributeValues.ToList());
+            noteRepo.DeleteRange(product.notes.ToList());
+            imageRepo.DeleteRange(product.images.ToList());
+            fileRepo.DeleteRange(product.files.ToList());
+
+            // Delete folders (children first due to Restrict)
+            await _context.productFolders
+                .Where(pf => pf.productId == productId && pf.parentFolderId != null)
+                .ExecuteDeleteAsync();
+            await _context.productFolders
+                .Where(pf => pf.productId == productId)
+                .ExecuteDeleteAsync();
+
+            productRepo.DeleteWithoutSave(product);
+            await _unitOfWork.SaveChangesAsync();
+        });
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Permanently deletes multiple soft-deleted products.
+    /// </summary>
+    [HttpPost]
+    [Route("/products/bulk-permanent-delete")]
+    public async Task<IActionResult> BulkPermanentDelete([FromBody] BulkDeleteRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        if (request.productIds == null || request.productIds.Count == 0)
+            throw ApiException.BadRequest("Товары не указаны");
+
+        var products = await _context.products
+            .IgnoreQueryFilters()
+            .Include(p => p.files)
+            .Include(p => p.images)
+            .Include(p => p.notes)
+            .Include(p => p.attributeValues)
+            .Include(p => p.storeAttributeValues)
+            .Where(p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value && p.deletedAt != null)
+            .ToListAsync();
+
+        if (!products.Any())
+            throw ApiException.NotFound("Товары не найдены в корзине");
+
+        var foundIds = products.Select(p => p.Id).ToList();
+
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            await _context.Set<PendingProductExport>()
+                .Where(pe => foundIds.Contains(pe.productId))
+                .ExecuteDeleteAsync();
+
+            await _context.pendingProductImports
+                .Where(pi => foundIds.Contains(pi.importedProductId ?? 0))
+                .ExecuteDeleteAsync();
+
+            await _context.pendingImageDownloads
+                .Where(pid => foundIds.Contains(pid.productId))
+                .ExecuteDeleteAsync();
+
+            await _context.productVariantLinks
+                .Where(vl => foundIds.Contains(vl.variant.productId))
+                .ExecuteDeleteAsync();
+
+            await _context.productVariants
+                .Where(v => foundIds.Contains(v.productId))
+                .ExecuteDeleteAsync();
+
+            await _context.productMarketplaceLinks
+                .Where(ml => foundIds.Contains(ml.productId))
+                .ExecuteDeleteAsync();
+
+            await _context.productGroupMembers
+                .Where(gm => foundIds.Contains(gm.productId))
+                .ExecuteDeleteAsync();
+
+            var allFileIds = products.SelectMany(p => p.files.Select(f => f.Id)).ToList();
+            if (allFileIds.Any())
+            {
+                await _context.fileShareTokens
+                    .Where(fst => allFileIds.Contains(fst.fileId))
+                    .ExecuteDeleteAsync();
+                await _context.tags
+                    .Where(t => allFileIds.Contains(t.fileId))
+                    .ExecuteDeleteAsync();
+            }
+
+            var allFolderIds = await _context.productFolders
+                .Where(pf => foundIds.Contains(pf.productId))
+                .Select(pf => pf.Id)
+                .ToListAsync();
+            if (allFolderIds.Any())
+            {
+                await _context.folderShareTokens
+                    .Where(fst => fst.folderId.HasValue && allFolderIds.Contains(fst.folderId.Value))
+                    .ExecuteDeleteAsync();
+            }
+
+            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
+            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
+            var noteRepo = _unitOfWork.Repository<Note>();
+            var imageRepo = _unitOfWork.Repository<ImageReference>();
+            var fileRepo = _unitOfWork.Repository<Models.File>();
+            var productRepo = _unitOfWork.Repository<Product>();
+
+            foreach (var product in products)
+            {
+                storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
+                attrValueRepo.DeleteRange(product.attributeValues.ToList());
+                noteRepo.DeleteRange(product.notes.ToList());
+                imageRepo.DeleteRange(product.images.ToList());
+                fileRepo.DeleteRange(product.files.ToList());
+                productRepo.DeleteWithoutSave(product);
+            }
+
+            // Delete folders (children first due to Restrict)
+            await _context.productFolders
+                .Where(pf => foundIds.Contains(pf.productId) && pf.parentFolderId != null)
+                .ExecuteDeleteAsync();
+            await _context.productFolders
+                .Where(pf => foundIds.Contains(pf.productId))
+                .ExecuteDeleteAsync();
+
+            await _unitOfWork.SaveChangesAsync();
+        });
+
+        return Ok(new { success = true, deletedCount = products.Count });
+    }
+
+    /// <summary>
     /// Exports selected products to an Excel file (.xlsx).
     /// </summary>
     [HttpPost]
