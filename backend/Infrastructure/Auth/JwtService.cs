@@ -42,7 +42,7 @@ public class JwtService : IJwtService
             ValidateAudience = true,
             ValidAudience = _settings.Audience,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
         _refreshValidationParameters = new TokenValidationParameters
         {
@@ -53,7 +53,7 @@ public class JwtService : IJwtService
             ValidateAudience = true,
             ValidAudience = _settings.Audience,
             ValidateLifetime = false,
-            ClockSkew = TimeSpan.Zero
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
     }
 

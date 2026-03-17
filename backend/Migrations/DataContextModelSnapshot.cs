@@ -971,6 +971,9 @@ namespace PrintO.Migrations
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("deletedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("description")
                         .IsRequired()
                         .HasMaxLength(5000)
@@ -1003,6 +1006,8 @@ namespace PrintO.Migrations
                     b.HasIndex("categoryId");
 
                     b.HasIndex("storeId");
+
+                    b.HasIndex("storeId", "deletedAt");
 
                     b.ToTable("products");
                 });

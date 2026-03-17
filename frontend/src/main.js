@@ -13,7 +13,7 @@ export const http = setupCache(
     baseURL: import.meta.env.VITE_API_SERVER,
     adapter: axios.defaults.adapter,
     withCredentials: true,
-    timeout: 5000,
+    timeout: 30000,
     headers: {
       common: {
         "Cache-Control": "no-cache",

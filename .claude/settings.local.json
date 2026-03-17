@@ -112,7 +112,9 @@
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
       "Bash(node:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(find /c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\( -name \"*.vue\" -o -name \"*.ts\" \\\\\\) 2>/dev/null | head -30)",
+      "Bash(find C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\(-name *store* -o -name *dropdown* -o -name *selector* \\\\\\))"
     ]
   }
 }

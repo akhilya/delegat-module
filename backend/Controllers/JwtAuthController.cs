@@ -131,6 +131,10 @@ public class JwtAuthController : ControllerBase
         if (user == null)
             throw ApiException.NotFound("Пользователь не найден");
 
+        // Sync selected_store_id cookie with DB value
+        if (user.selectedStoreId != null)
+            SetSelectedStoreCookie(user.selectedStoreId.Value);
+
         return Ok(user.MapToDTO(_serviceProvider));
     }
 
@@ -145,12 +149,16 @@ public class JwtAuthController : ControllerBase
             var refreshRepo = _unitOfWork.Repository<RefreshToken>();
             var tokens = await refreshRepo.FindAllAsync(rt => rt.userId == userId && rt.revokedAt == null);
             foreach (var rt in tokens)
+            {
                 rt.revokedAt = DateTime.UtcNow;
+                refreshRepo.UpdateWithoutSave(rt);
+            }
             await _unitOfWork.SaveChangesAsync();
         }
 
         Response.Cookies.Delete(ACCESS_COOKIE, new CookieOptions { Path = "/" });
         Response.Cookies.Delete(REFRESH_COOKIE, new CookieOptions { Path = "/" });
+        Response.Cookies.Delete("selected_store_id");
 
         return Ok(new { next = "/signIn", success = true });
     }
@@ -160,28 +168,52 @@ public class JwtAuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> PostRefresh()
     {
-        // Read refresh token from cookie
         if (!Request.Cookies.TryGetValue(REFRESH_COOKIE, out var refreshTokenValue) || string.IsNullOrEmpty(refreshTokenValue))
             throw ApiException.Unauthorized("Refresh token отсутствует");
 
-        // Find refresh token in DB
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
         var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
-        if (refreshToken == null || !refreshToken.IsActive)
+
+        if (refreshToken == null || refreshToken.IsExpired)
             throw ApiException.Unauthorized("Refresh token недействителен");
 
         var userId = refreshToken.userId;
-
-        // Verify user still exists
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null)
             throw ApiException.Unauthorized("Пользователь не найден");
 
-        // Rotation: revoke old, create new
-        refreshToken.revokedAt = DateTime.UtcNow;
         var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
-        var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
 
+        // CASE 1: Token already revoked — check grace period (multi-tab scenario)
+        if (refreshToken.IsRevoked)
+        {
+            var timeSinceRevoked = DateTime.UtcNow - refreshToken.revokedAt!.Value;
+            if (timeSinceRevoked.TotalSeconds > 30)
+                throw ApiException.Unauthorized("Refresh token недействителен");
+
+            // Find the replacement token created during the original rotation
+            var replacementToken = await refreshRepo.FindAsync(rt =>
+                rt.userId == userId &&
+                rt.createdAt >= refreshToken.revokedAt.Value.AddSeconds(-2) &&
+                rt.revokedAt == null &&
+                rt.expiresAt > DateTime.UtcNow &&
+                rt.Id != refreshToken.Id);
+
+            if (replacementToken == null)
+                throw ApiException.Unauthorized("Refresh token недействителен");
+
+            // Reissue access token + set cookies to the replacement token
+            var accessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+            SetAccessTokenCookie(accessToken, rememberMe);
+            SetRefreshTokenCookie(replacementToken.token, rememberMe);
+            return Ok();
+        }
+
+        // CASE 2: Token is active — normal rotation
+        refreshToken.revokedAt = DateTime.UtcNow;
+        refreshRepo.UpdateWithoutSave(refreshToken);
+
+        var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
         var newRefreshToken = new RefreshToken
         {
             userId = userId,
@@ -189,10 +221,18 @@ public class JwtAuthController : ControllerBase
             expiresAt = newRefreshExpiresAt,
             createdAt = DateTime.UtcNow
         };
-        await refreshRepo.AddAsync(newRefreshToken);
+        await refreshRepo.AddWithoutSaveAsync(newRefreshToken);
+
+        // Cleanup stale revoked tokens (older than 1 day)
+        var staleTokens = await refreshRepo.FindAllAsync(rt =>
+            rt.userId == userId &&
+            rt.revokedAt != null &&
+            rt.revokedAt < DateTime.UtcNow.AddDays(-1));
+        if (staleTokens.Any())
+            refreshRepo.DeleteRange(staleTokens);
+
         await _unitOfWork.SaveChangesAsync();
 
-        // Issue new access token
         var newAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
         SetAccessTokenCookie(newAccessToken, rememberMe);
         SetRefreshTokenCookie(newRefreshTokenValue, rememberMe);
@@ -249,6 +289,18 @@ public class JwtAuthController : ControllerBase
             SameSite = SameSiteMode.Lax,
             Path = "/",
             Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
+        });
+    }
+
+    private void SetSelectedStoreCookie(int storeId)
+    {
+        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
+        Response.Cookies.Append("selected_store_id", storeId.ToString(), new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isProduction,
+            SameSite = SameSiteMode.Lax,
+            Expires = DateTime.UtcNow.AddDays(30)
         });
     }
 
