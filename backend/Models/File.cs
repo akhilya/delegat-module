@@ -41,9 +41,15 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public Products.Product product { get; set; } = null!;
 
     /// <summary>
-    /// Relative storage path in object storage.
+    /// Relative storage path in object storage (the actual MinIO object key — never changes after upload).
     /// </summary>
     public string filePath { get; set; } = null!;
+
+    /// <summary>
+    /// User-facing display name. Set when the user renames a file.
+    /// Null means use the filename from filePath.
+    /// </summary>
+    public string? displayName { get; set; }
 
     /// <summary>
     /// Timestamp when the file was uploaded.
@@ -100,7 +106,7 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
             Id,
             uploadDateTime,
             fullPath = $"/api/files/{Id}/download",
-            fileName = Path.GetFileName(filePath),
+            fileName = displayName ?? Path.GetFileName(filePath),
             contentType,
             length,
             folderId,

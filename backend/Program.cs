@@ -159,6 +159,9 @@ builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
 
+// One-time startup repair for files broken by old rename behavior
+builder.Services.AddHostedService<FileRepairService>();
+
 // Background services
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();

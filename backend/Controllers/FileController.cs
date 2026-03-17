@@ -69,7 +69,7 @@ public class FileController : ControllerBase
         if (!await _storageService.ExistsAsync(file.filePath))
             throw ApiException.NotFound("Файл не найден в хранилище");
 
-        var fileName = Path.GetFileName(file.filePath);
+        var fileName = file.displayName ?? Path.GetFileName(file.filePath);
         var isImage = file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
         var encodedFileName = Uri.EscapeDataString(fileName);
@@ -334,10 +334,8 @@ public class FileController : ControllerBase
         if (file == null || file.productId != productId)
             throw ApiException.NotFound("Файл не найден");
 
-        // Update the last segment of the storage path
-        var dir = Path.GetDirectoryName(file.filePath)!.Replace('\\', '/');
         var sanitizedName = request.name.Trim();
-        file.filePath = $"{dir}/{sanitizedName}";
+        file.displayName = sanitizedName;
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(file.MapToDTO(_serviceProvider));
@@ -458,7 +456,7 @@ public class SharedFileController : ControllerBase
         if (!await _storageService.ExistsAsync(shareToken.file.filePath))
             throw ApiException.NotFound("Файл не найден в хранилище");
 
-        var fileName = Path.GetFileName(shareToken.file.filePath);
+        var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
         var isImage = shareToken.file.contentType.StartsWith("image/");
         var disposition = isImage ? "inline" : "attachment";
         var encodedFileName = Uri.EscapeDataString(fileName);

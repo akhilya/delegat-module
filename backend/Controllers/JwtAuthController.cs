@@ -184,28 +184,22 @@ public class JwtAuthController : ControllerBase
 
         var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
 
-        // CASE 1: Token already revoked — check grace period (multi-tab scenario)
+        // CASE 1: Token already revoked — find latest active token (multi-tab scenario)
+        // Another tab already rotated this token; just hand the client the current active one.
         if (refreshToken.IsRevoked)
         {
-            var timeSinceRevoked = DateTime.UtcNow - refreshToken.revokedAt!.Value;
-            if (timeSinceRevoked.TotalSeconds > 30)
-                throw ApiException.Unauthorized("Refresh token недействителен");
-
-            // Find the replacement token created during the original rotation
-            var replacementToken = await refreshRepo.FindAsync(rt =>
+            var activeToken = await refreshRepo.FindAsync(rt =>
                 rt.userId == userId &&
-                rt.createdAt >= refreshToken.revokedAt.Value.AddSeconds(-2) &&
                 rt.revokedAt == null &&
-                rt.expiresAt > DateTime.UtcNow &&
-                rt.Id != refreshToken.Id);
+                rt.expiresAt > DateTime.UtcNow);
 
-            if (replacementToken == null)
+            if (activeToken == null)
                 throw ApiException.Unauthorized("Refresh token недействителен");
 
-            // Reissue access token + set cookies to the replacement token
+            // Reissue access token + set cookies to the active token
             var accessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
             SetAccessTokenCookie(accessToken, rememberMe);
-            SetRefreshTokenCookie(replacementToken.token, rememberMe);
+            SetRefreshTokenCookie(activeToken.token, rememberMe);
             return Ok();
         }
 

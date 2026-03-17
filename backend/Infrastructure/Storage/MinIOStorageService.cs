@@ -295,6 +295,27 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
+    /// List all object keys under a given prefix
+    /// </summary>
+    public async Task<List<string>> ListObjectsByPrefixAsync(string prefix, CancellationToken ct = default)
+    {
+        await EnsureBucketExistsAsync(ct);
+
+        var keys = new List<string>();
+        var args = new ListObjectsArgs()
+            .WithBucket(_bucket)
+            .WithPrefix(prefix)
+            .WithRecursive(false);
+
+        await foreach (var item in _client.ListObjectsEnumAsync(args, ct))
+        {
+            keys.Add(item.Key);
+        }
+
+        return keys;
+    }
+
+    /// <summary>
     /// Ensure the bucket exists and has private access policy (no public listing or download).
     /// </summary>
     private async Task EnsureBucketExistsAsync(CancellationToken ct = default)

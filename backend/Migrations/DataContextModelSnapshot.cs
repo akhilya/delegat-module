@@ -182,6 +182,9 @@ namespace PrintO.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("displayName")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("filePath")
                         .IsRequired()
                         .HasColumnType("longtext");

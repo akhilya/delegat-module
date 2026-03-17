@@ -66,6 +66,11 @@ public interface IStorageService
     Task<string> GetPublicPresignedUrlAsync(string path, int expirySeconds = 3600);
 
     /// <summary>
+    /// List all object keys under a given prefix
+    /// </summary>
+    Task<List<string>> ListObjectsByPrefixAsync(string prefix, CancellationToken ct = default);
+
+    /// <summary>
     /// Get the bucket name
     /// </summary>
     string Bucket { get; }
