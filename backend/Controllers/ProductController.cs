@@ -812,17 +812,38 @@ public class ProductController : ControllerBase
 
         var totalCount = await query.CountAsync();
 
-        var items = await query
+        var products = await query
             .OrderByDescending(p => p.deletedAt)
             .Skip(startIndex)
             .Take(pageSize)
-            .Include(p => p.category)
-            .Include(p => p.images.OrderBy(i => i.index).Take(1))
+            .AsSplitQuery()
+            .Include(p => p.files)
+            .Include(p => p.images)
                 .ThenInclude(i => i.file)
-            .Include(p => p.files.Where(f => f.contentType.StartsWith("image/")).Take(1))
+            .Include(p => p.category)
             .Include(p => p.storeAttributeValues)
-            .Select(p => ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider))
+                .ThenInclude(sav => sav.storeAttribute)
             .ToListAsync();
+
+        var thumbnailService = _serviceProvider.GetRequiredService<ThumbnailService>();
+        var items = new List<Product.ProductReviewDTO>();
+        foreach (var p in products)
+        {
+            var dto = ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider);
+
+            var primaryImageRef = p.images.OrderBy(i => i.index).FirstOrDefault();
+            var primaryImageFile = primaryImageRef?.file
+                ?? p.files.FirstOrDefault(f => f.contentType.StartsWith("image/"));
+
+            if (primaryImageFile is not null)
+            {
+                var base64 = await thumbnailService.GetOrGenerateAsBase64Async(primaryImageFile.filePath, 128, HttpContext.RequestAborted);
+                if (base64 is not null)
+                    dto.primaryImageThumbnail = base64;
+            }
+
+            items.Add(dto);
+        }
 
         return Ok(new
         {
