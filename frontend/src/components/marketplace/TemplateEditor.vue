@@ -103,15 +103,15 @@ export default {
             class="text-xs cursor-pointer py-1"
             @click="insertValue()"
           >
-            <span class="font-mono text-[11px] text-muted-foreground shrink-0" v-text="valueLabel"></span>
-            <span class="ml-auto text-muted-foreground text-[11px]">значение поля</span>
+            <span class="font-mono text-xs text-muted-foreground shrink-0" v-text="valueLabel"></span>
+            <span class="ml-auto text-muted-foreground text-xs">значение поля</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
 
         <!-- Product fields -->
         <template v-if="availableSources.productFields?.length">
-          <DropdownMenuLabel class="text-[11px] py-0.5">Поля товара</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">Поля товара</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="field in availableSources.productFields"
@@ -120,7 +120,7 @@ export default {
               @click="insertField(field.key)"
             >
               {{ field.displayName }}
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">{{ field.key }}</span>
+              <span class="ml-auto font-mono text-xs text-muted-foreground">{{ field.key }}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
@@ -128,7 +128,7 @@ export default {
 
         <!-- Category attributes -->
         <template v-if="availableSources.categoryAttributes?.length">
-          <DropdownMenuLabel class="text-[11px] py-0.5">Атрибуты категории</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">Атрибуты категории</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="attr in availableSources.categoryAttributes"
@@ -137,7 +137,7 @@ export default {
               @click="insertAttr(attr.id)"
             >
               {{ attr.name }}
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">attr:{{ attr.id }}</span>
+              <span class="ml-auto font-mono text-xs text-muted-foreground">attr:{{ attr.id }}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
@@ -145,7 +145,7 @@ export default {
 
         <!-- Store attributes -->
         <template v-if="availableSources.storeAttributes?.length">
-          <DropdownMenuLabel class="text-[11px] py-0.5">Атрибуты магазина</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">Атрибуты магазина</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="attr in availableSources.storeAttributes"
@@ -154,7 +154,7 @@ export default {
               @click="insertStoreAttr(attr.id)"
             >
               {{ attr.name }}
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">storeAttr:{{ attr.id }}</span>
+              <span class="ml-auto font-mono text-xs text-muted-foreground">storeAttr:{{ attr.id }}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </template>

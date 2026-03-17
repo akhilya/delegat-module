@@ -1400,7 +1400,7 @@ export default {
               class="border-t-0 !border-b hover:bg-transparent"
             >
               <TableCell :colspan="6" class="pt-0 pb-1.5 px-4">
-                <div class="flex items-center gap-1.5 text-[11px] leading-none min-w-0">
+                <div class="flex items-center gap-1.5 text-xs leading-none min-w-0">
                   <Eye class="size-3 shrink-0 text-muted-foreground" />
                   <template v-if="getPreviewForField(fm.externalFieldKey).error">
                     <span class="text-destructive truncate">{{ getPreviewForField(fm.externalFieldKey).error }}</span>

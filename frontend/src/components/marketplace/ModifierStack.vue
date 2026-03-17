@@ -230,7 +230,7 @@ export default {
           title="При импорте значение не будет восстановлено"
         >
           <AlertTriangle class="size-3" />
-          <span class="text-[10px] leading-none">необратимый</span>
+          <span class="text-xs leading-none">необратимый</span>
         </span>
         <div v-if="!disabled" class="flex items-center gap-0.5 shrink-0">
           <button

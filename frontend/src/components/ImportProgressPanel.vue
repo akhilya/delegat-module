@@ -122,19 +122,19 @@ export default {
           <div class="grid grid-cols-4 gap-1.5 text-center text-xs mb-2">
             <div class="bg-muted/50 rounded p-1.5">
               <div class="font-medium">{{ batchProgress?.total || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Всего</div>
+              <div class="text-xs text-muted-foreground">Всего</div>
             </div>
             <div class="bg-warning/10 rounded p-1.5">
               <div class="font-medium text-warning-foreground">{{ pendingCount }}</div>
-              <div class="text-[10px] text-muted-foreground">В очереди</div>
+              <div class="text-xs text-muted-foreground">В очереди</div>
             </div>
             <div class="bg-success/10 rounded p-1.5">
               <div class="font-medium text-success-foreground">{{ batchProgress?.completed || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Готово</div>
+              <div class="text-xs text-muted-foreground">Готово</div>
             </div>
             <div class="bg-error/10 rounded p-1.5">
               <div class="font-medium text-error-foreground">{{ batchProgress?.failed || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Ошибки</div>
+              <div class="text-xs text-muted-foreground">Ошибки</div>
             </div>
           </div>
 
