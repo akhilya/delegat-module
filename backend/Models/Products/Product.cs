@@ -63,6 +63,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public DateTime updatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Timestamp when the product was soft-deleted. Null means active.
+    /// </summary>
+    public DateTime? deletedAt { get; set; }
+
+    /// <summary>
     /// Foreign key to the owning store.
     /// </summary>
     [ForeignKey(nameof(store))]
@@ -221,6 +226,7 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             price = price,
             createdAt = createdAt,
             updatedAt = updatedAt,
+            deletedAt = deletedAt,
             storeAttributeValues = storeAttributeValues?.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
         };
     }
@@ -436,6 +442,8 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Timestamp when the product was last updated.
         /// </summary>
         public DateTime updatedAt { get; set; }
+
+        public DateTime? deletedAt { get; set; }
 
         /// <summary>
         /// Store-level attribute values for table columns.
