@@ -1294,7 +1294,7 @@ export default {
               />
             </div>
           </div>
-          <div class="mt-auto p-4">
+          <div v-if="notes.length > 0" class="mt-auto p-4">
             <Button variant="outline" @click="addNote">
               <NotebookPen class="size-4 mr-2" />
               Добавить заметку
