@@ -207,9 +207,13 @@ export default {
     FieldChangesTable,
   },
   data() {
+    const validTabs = ["settings", "mappings", "products"];
+    const validViews = ["external", "local"];
+    const queryTab = this.$route.query.tab;
+    const queryView = this.$route.query.view;
     return {
       // Tab state
-      activeTab: "settings",
+      activeTab: validTabs.includes(queryTab) ? queryTab : "settings",
 
       // Connection settings
       connection: null,
@@ -283,7 +287,7 @@ export default {
       searchDebounceTimer: null,
 
       // === Local products for export ===
-      productsViewMode: "external",
+      productsViewMode: validViews.includes(queryView) ? queryView : "external",
       localProducts: [],
       isLoadingLocalProducts: false,
       localTotalCount: 0,
@@ -349,6 +353,15 @@ export default {
   watch: {
     activeTab(newVal) {
       this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
+    },
+    productsViewMode(newVal) {
+      const query = { ...this.$route.query };
+      if (newVal === "external") {
+        delete query.view;
+      } else {
+        query.view = newVal;
+      }
+      this.$router.replace({ query });
     },
     searchQuery(newValue) {
       // Debounce search: wait 500ms after user stops typing
@@ -572,6 +585,9 @@ export default {
       // If products tab was restored from URL, fetch products now
       if (this.activeTab === "products") {
         this.onProductsTabActivated();
+        if (this.productsViewMode === "local") {
+          this.fetchLocalProducts();
+        }
       }
     },
 
@@ -943,7 +959,6 @@ export default {
 
     async fetchProducts(forceRefresh = false) {
       if (forceRefresh) {
-        this.products = [];
         this.nextCursor = null;
         this.hasMoreProducts = false;
       }
@@ -1554,7 +1569,7 @@ export default {
     switchProductsView(mode) {
       if (this.productsViewMode === mode) return;
       this.productsViewMode = mode;
-      if (mode === "local" && this.localProducts.length === 0) {
+      if (mode === "local") {
         this.fetchLocalProducts();
       }
     },
@@ -1822,7 +1837,7 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar>
       <template v-if="connection" #center>
-        <Tabs v-model="activeTab" default-value="settings">
+        <Tabs v-model="activeTab">
           <TabsList>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
             <TabsTrigger value="mappings">Маппинги</TabsTrigger>
@@ -1853,7 +1868,7 @@ export default {
         </div>
       </div>
 
-      <Tabs v-model="activeTab" default-value="settings" class="w-full flex-1 flex flex-col">
+      <Tabs v-model="activeTab"  class="w-full flex-1 flex flex-col">
         <!-- Settings Tab -->
         <TabsContent value="settings" class="space-y-4">
           <Card>
@@ -2218,14 +2233,12 @@ export default {
           <div class="flex items-center gap-2">
             <Button
               :variant="productsViewMode === 'external' ? 'default' : 'outline'"
-              size="sm"
               @click="switchProductsView('external')"
             >
               МП товары
             </Button>
             <Button
               :variant="productsViewMode === 'local' ? 'default' : 'outline'"
-              size="sm"
               @click="switchProductsView('local')"
             >
               Локальные для экспорта
@@ -2292,7 +2305,13 @@ export default {
                       />
                     </TableCell>
                     <TableCell>
-                      <div class="font-medium">{{ product.name }}</div>
+                      <RouterLink
+                        v-if="product.localProductId"
+                        :to="`/products/${product.localProductId}/edit`"
+                        class="font-medium hover:underline underline-offset-2"
+                        @click.stop
+                      >{{ product.name }}</RouterLink>
+                      <div v-else class="font-medium">{{ product.name }}</div>
                       <div v-if="product.sku" class="text-xs text-muted-foreground">
                         SKU: {{ product.sku }}
                       </div>
@@ -2499,7 +2518,10 @@ export default {
                       />
                     </TableCell>
                     <TableCell>
-                      <div class="font-medium">{{ product.name }}</div>
+                      <RouterLink
+                        :to="`/products/${product.id}/edit`"
+                        class="font-medium hover:underline underline-offset-2"
+                      >{{ product.name }}</RouterLink>
                     </TableCell>
                     <TableCell>
                       <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.sku }}</code>
