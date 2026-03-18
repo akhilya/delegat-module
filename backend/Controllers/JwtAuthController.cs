@@ -173,8 +173,12 @@ public class JwtAuthController : ControllerBase
 
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
 
-        await _unitOfWork.BeginTransactionAsync();
-        try
+        // Capture results from within the transaction
+        string resultAccessToken = null!;
+        string resultRefreshToken = null!;
+        bool resultRememberMe = false;
+
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
@@ -187,6 +191,7 @@ public class JwtAuthController : ControllerBase
                 throw ApiException.Unauthorized("Пользователь не найден");
 
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
+            resultRememberMe = rememberMe;
 
             // CASE 1: Token already revoked — find latest active token (multi-tab scenario)
             // Another tab already rotated this token; just hand the client the current active one.
@@ -200,13 +205,9 @@ public class JwtAuthController : ControllerBase
                 if (activeToken == null)
                     throw ApiException.Unauthorized("Refresh token недействителен");
 
-                await _unitOfWork.CommitTransactionAsync();
-
-                // Reissue access token + set cookies to the active token
-                var accessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-                SetAccessTokenCookie(accessToken, rememberMe);
-                SetRefreshTokenCookie(activeToken.token, rememberMe);
-                return Ok();
+                resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+                resultRefreshToken = activeToken.token;
+                return;
             }
 
             // CASE 2: Token is active — normal rotation
@@ -232,19 +233,14 @@ public class JwtAuthController : ControllerBase
                 refreshRepo.DeleteRange(staleTokens);
 
             await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
 
-            var newAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-            SetAccessTokenCookie(newAccessToken, rememberMe);
-            SetRefreshTokenCookie(newRefreshTokenValue, rememberMe);
+            resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+            resultRefreshToken = newRefreshTokenValue;
+        });
 
-            return Ok();
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+        SetAccessTokenCookie(resultAccessToken, resultRememberMe);
+        SetRefreshTokenCookie(resultRefreshToken, resultRememberMe);
+        return Ok();
     }
 
     private async Task IssueTokens(int userId, string userName, bool rememberMe)
