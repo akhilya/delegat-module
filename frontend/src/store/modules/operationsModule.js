@@ -373,7 +373,7 @@ const actions = {
     const completed = state.operations.filter((o) => o.status !== "running");
     commit("CLEAR_COMPLETED");
     await Promise.allSettled(
-      completed.map((o) => http.delete(`/operations/${o.operationId}`).catch(() => {}))
+      completed.map((o) => http.delete(`/operations/${o.id}`).catch(() => {}))
     );
   },
 
