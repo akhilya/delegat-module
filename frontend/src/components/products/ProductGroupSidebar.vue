@@ -55,7 +55,7 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
 
 <template>
   <div
-    class="w-96 shrink-0 hidden lg:flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start"
+    class="w-96 shrink-0 hidden lg:flex flex-col bg-card text-card-foreground border rounded-xl overflow-hidden sticky top-[5.5rem] self-start"
     style="max-height: calc(100dvh - 5.5rem - 2rem)"
   >
     <!-- Loading state -->

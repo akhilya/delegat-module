@@ -761,7 +761,7 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <div
-      class="border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-hidden"
+      class="bg-card text-card-foreground border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-hidden"
     >
       <ProductsTable
         :data="isTrashMode ? trashProducts : products"

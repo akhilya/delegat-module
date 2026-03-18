@@ -106,12 +106,14 @@ export default {
   <div class="grow flex flex-col min-h-0">
     <!-- Attached images section -->
     <div class="flex-1 min-h-0 flex flex-col">
-      <p class="font-medium mx-4 mt-4 mb-2 flex items-center gap-2 shrink-0">
-        <Image class="size-4" />
-        Изображения товара
+      <div class="flex items-center gap-2 px-4 h-11 border-b shrink-0">
+        <p class="text-sm font-medium flex items-center gap-2">
+          <Image class="size-4" />
+          Изображения товара
+        </p>
         <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
-        <span v-if="!isSaving" class="text-xs text-muted-foreground font-normal">— перетащите для сортировки</span>
-      </p>
+        <span v-if="!isSaving" class="text-xs text-muted-foreground">— перетащите для сортировки</span>
+      </div>
       <draggableComponent
         :list="usedImages"
         group="images"
@@ -121,7 +123,7 @@ export default {
         ghostClass="drag-ghost"
         chosenClass="drag-chosen"
         dragClass="drag-active"
-        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-2"
+        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 p-4"
       >
         <template #item="{ element, index }">
           <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)">
@@ -134,11 +136,13 @@ export default {
     </div>
 
     <!-- Other images section -->
-    <div class="flex-1 min-h-0 flex flex-col border-t">
-      <p class="font-medium mx-4 mt-4 mb-2 flex items-center gap-2 shrink-0">
-        <ImageOff class="size-4" />
-        Остальные изображения
-      </p>
+    <div class="flex-1 min-h-0 flex flex-col">
+      <div class="flex items-center px-4 h-11 border-t border-b shrink-0">
+        <p class="text-sm font-medium flex items-center gap-2">
+          <ImageOff class="size-4" />
+          Остальные изображения
+        </p>
+      </div>
       <draggableComponent
         :list="unusedImages"
         group="images"
@@ -148,7 +152,7 @@ export default {
         ghostClass="drag-ghost"
         chosenClass="drag-chosen"
         dragClass="drag-active"
-        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 mx-4 mb-4"
+        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 p-4"
       >
         <template #item="{ element, index }">
           <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)" />

@@ -188,15 +188,19 @@ export default {
 </script>
 
 <template>
-  <div class="p-4 space-y-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Размеры</h2>
-      <Button variant="outline" size="sm" @click="handleAdd" :disabled="isAdding">
-        <Loader2 v-if="isAdding" class="size-4 mr-2 animate-spin" />
-        <Plus v-else class="size-4 mr-2" />
-        Добавить размер
+  <div class="flex flex-col min-h-0">
+    <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
+      <p class="text-sm font-medium flex items-center gap-2">
+        <Layers class="size-4" />
+        Размеры
+      </p>
+      <Button variant="ghost" size="sm" @click="handleAdd" :disabled="isAdding" class="h-7">
+        <Loader2 v-if="isAdding" class="size-4 mr-1 animate-spin" />
+        <Plus v-else class="size-4 mr-1" />
+        Добавить
       </Button>
     </div>
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
 
     <div v-if="isLoading" class="flex justify-center py-12">
       <Loader2 class="size-8 animate-spin text-muted-foreground" />
@@ -314,6 +318,7 @@ export default {
     <div v-if="Object.keys(pendingSaves).length > 0" class="flex items-center gap-2 text-sm text-muted-foreground">
       <Loader2 class="size-3 animate-spin" />
       <span>Сохранение...</span>
+    </div>
     </div>
   </div>
 </template>

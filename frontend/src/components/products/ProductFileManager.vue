@@ -324,36 +324,20 @@ async function onDrop(e, targetFolderId) {
   dragItems.value = [];
   dropTargetId.value = null;
 
-  const fileItems = items.filter(i => i.type === 'file');
-  const folderItems = items.filter(i => i.type === 'folder');
+  const fileIds = items.filter(i => i.type === 'file').map(i => i.id);
+  const folderIds = items.filter(i => i.type === 'folder').map(i => i.id);
 
-  // Move files
-  for (const item of fileItems) {
-    await store.dispatch("moveProductFile", {
-      productId: props.productId,
-      fileId: item.id,
-      folderId: targetFolderId,
-      onSuccess: () => {},
-      onError: (error) => { displaySonnerError(error); },
-    });
-  }
+  await store.dispatch("bulkMove", {
+    productId: props.productId,
+    targetFolderId,
+    fileIds,
+    folderIds,
+    onSuccess: () => {},
+    onError: (error) => { displaySonnerError(error); },
+  });
 
-  // Move folders
-  for (const item of folderItems) {
-    await store.dispatch("moveProductFolder", {
-      productId: props.productId,
-      folderId: item.id,
-      newParentFolderId: targetFolderId,
-      onSuccess: () => {},
-      onError: (error) => { displaySonnerError(error); },
-    });
-  }
-
-  if (fileItems.length > 0) {
-    emit("filesChanged");
-    loadFolders();
-  }
-  if (folderItems.length > 0) await loadFolders();
+  if (fileIds.length > 0) emit("filesChanged");
+  await loadFolders();
   clearSelection();
 }
 
@@ -792,9 +776,10 @@ watch(() => props.productId, () => {
   <div class="flex flex-col h-full">
     <!-- Path bar (Windows Explorer style) -->
     <div
-      class="flex items-center gap-1 text-sm min-w-0 h-11 pl-4 pr-2 border-b cursor-text"
+      class="flex items-center gap-2 text-sm min-w-0 h-11 px-4 border-b cursor-text"
       @click.self="startPathEdit"
     >
+      <FolderOpen class="size-4 shrink-0" />
       <template v-if="isEditingPath">
         <input
           ref="pathInputRef"

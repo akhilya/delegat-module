@@ -56,6 +56,17 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async bulkMove(ctx, { productId, targetFolderId, fileIds, folderIds, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/bulk-move`,
+        { method: "POST", data: { targetFolderId, fileIds, folderIds }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     async moveProductFile(ctx, { productId, fileId, folderId, onSuccess, onError }) {
       return await useAxios(
         `/products/${productId}/files/${fileId}/move`,

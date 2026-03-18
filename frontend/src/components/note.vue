@@ -171,7 +171,17 @@ export default {
       </span>
       <div class="flex items-center gap-4">
         <Loader2 class="size-4 animate-spin" v-show="isUpdating" />
-        <AlertDialog>
+        <!-- Empty notes: delete immediately without confirmation -->
+        <Button
+          v-if="!noteValue.text?.trim()"
+          size="icon"
+          variant="ghost"
+          class="opacity-0 duration-75 group-hover:opacity-100"
+          @click="deleteThisNote"
+        >
+          <Trash2 class="size-4" />
+        </Button>
+        <AlertDialog v-else>
           <AlertDialogTrigger as-child>
             <Button
               size="icon"

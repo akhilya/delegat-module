@@ -172,65 +172,74 @@ public class JwtAuthController : ControllerBase
             throw ApiException.Unauthorized("Refresh token отсутствует");
 
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
-        var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
-        if (refreshToken == null || refreshToken.IsExpired)
-            throw ApiException.Unauthorized("Refresh token недействителен");
+        // Capture results from within the transaction
+        string resultAccessToken = null!;
+        string resultRefreshToken = null!;
+        bool resultRememberMe = false;
 
-        var userId = refreshToken.userId;
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user == null)
-            throw ApiException.Unauthorized("Пользователь не найден");
-
-        var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
-
-        // CASE 1: Token already revoked — find latest active token (multi-tab scenario)
-        // Another tab already rotated this token; just hand the client the current active one.
-        if (refreshToken.IsRevoked)
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            var activeToken = await refreshRepo.FindAsync(rt =>
-                rt.userId == userId &&
-                rt.revokedAt == null &&
-                rt.expiresAt > DateTime.UtcNow);
+            var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
-            if (activeToken == null)
+            if (refreshToken == null || refreshToken.IsExpired)
                 throw ApiException.Unauthorized("Refresh token недействителен");
 
-            // Reissue access token + set cookies to the active token
-            var accessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-            SetAccessTokenCookie(accessToken, rememberMe);
-            SetRefreshTokenCookie(activeToken.token, rememberMe);
-            return Ok();
-        }
+            var userId = refreshToken.userId;
+            var user = await _userManager.FindByIdAsync(userId.ToString());
+            if (user == null)
+                throw ApiException.Unauthorized("Пользователь не найден");
 
-        // CASE 2: Token is active — normal rotation
-        refreshToken.revokedAt = DateTime.UtcNow;
-        refreshRepo.UpdateWithoutSave(refreshToken);
+            var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
+            resultRememberMe = rememberMe;
 
-        var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
-        var newRefreshToken = new RefreshToken
-        {
-            userId = userId,
-            token = newRefreshTokenValue,
-            expiresAt = newRefreshExpiresAt,
-            createdAt = DateTime.UtcNow
-        };
-        await refreshRepo.AddWithoutSaveAsync(newRefreshToken);
+            // CASE 1: Token already revoked — find latest active token (multi-tab scenario)
+            // Another tab already rotated this token; just hand the client the current active one.
+            if (refreshToken.IsRevoked)
+            {
+                var activeToken = await refreshRepo.FindAsync(rt =>
+                    rt.userId == userId &&
+                    rt.revokedAt == null &&
+                    rt.expiresAt > DateTime.UtcNow);
 
-        // Cleanup stale revoked tokens (older than 1 day)
-        var staleTokens = await refreshRepo.FindAllAsync(rt =>
-            rt.userId == userId &&
-            rt.revokedAt != null &&
-            rt.revokedAt < DateTime.UtcNow.AddDays(-1));
-        if (staleTokens.Any())
-            refreshRepo.DeleteRange(staleTokens);
+                if (activeToken == null)
+                    throw ApiException.Unauthorized("Refresh token недействителен");
 
-        await _unitOfWork.SaveChangesAsync();
+                resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+                resultRefreshToken = activeToken.token;
+                return;
+            }
 
-        var newAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-        SetAccessTokenCookie(newAccessToken, rememberMe);
-        SetRefreshTokenCookie(newRefreshTokenValue, rememberMe);
+            // CASE 2: Token is active — normal rotation
+            refreshToken.revokedAt = DateTime.UtcNow;
+            refreshRepo.UpdateWithoutSave(refreshToken);
 
+            var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
+            var newRefreshToken = new RefreshToken
+            {
+                userId = userId,
+                token = newRefreshTokenValue,
+                expiresAt = newRefreshExpiresAt,
+                createdAt = DateTime.UtcNow
+            };
+            await refreshRepo.AddWithoutSaveAsync(newRefreshToken);
+
+            // Cleanup stale revoked tokens (older than 1 day)
+            var staleTokens = await refreshRepo.FindAllAsync(rt =>
+                rt.userId == userId &&
+                rt.revokedAt != null &&
+                rt.revokedAt < DateTime.UtcNow.AddDays(-1));
+            if (staleTokens.Any())
+                refreshRepo.DeleteRange(staleTokens);
+
+            await _unitOfWork.SaveChangesAsync();
+
+            resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
+            resultRefreshToken = newRefreshTokenValue;
+        });
+
+        SetAccessTokenCookie(resultAccessToken, resultRememberMe);
+        SetRefreshTokenCookie(resultRefreshToken, resultRememberMe);
         return Ok();
     }
 
@@ -242,9 +251,12 @@ public class JwtAuthController : ControllerBase
         // Save refresh token to DB
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
 
-        // Cleanup old refresh tokens for this user
-        var oldTokens = await refreshRepo.FindAllAsync(rt => rt.userId == userId);
-        refreshRepo.DeleteRange(oldTokens);
+        // Cleanup only expired or revoked tokens (preserve active sessions on other devices)
+        var deadTokens = await refreshRepo.FindAllAsync(rt =>
+            rt.userId == userId &&
+            (rt.revokedAt != null || rt.expiresAt <= DateTime.UtcNow));
+        if (deadTokens.Any())
+            refreshRepo.DeleteRange(deadTokens);
 
         var refreshToken = new RefreshToken
         {

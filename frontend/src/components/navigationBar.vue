@@ -22,7 +22,8 @@ import Button from "./ui/button/Button.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2 } from "lucide-vue-next";
+import { useDark, useToggle } from "@vueuse/core";
+import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2, Sun, Moon } from "lucide-vue-next";
 import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
@@ -55,6 +56,13 @@ export default {
     Globe,
     Layers,
     Trash2,
+    Sun,
+    Moon,
+  },
+  setup() {
+    const isDark = useDark();
+    const toggleDark = useToggle(isDark);
+    return { isDark, toggleDark };
   },
   data() {
     return {
@@ -273,6 +281,11 @@ export default {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </template>
+            <DropdownMenuItem @select="toggleDark()">
+              <Sun v-if="isDark" class="size-4 mr-2" />
+              <Moon v-else class="size-4 mr-2" />
+              {{ isDark ? 'Светлая тема' : 'Тёмная тема' }}
+            </DropdownMenuItem>
             <DropdownMenuItem @select="postLogOut">
               <LogOut class="size-4 mr-2" />
               Выйти
