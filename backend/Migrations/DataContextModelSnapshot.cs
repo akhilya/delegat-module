@@ -659,6 +659,106 @@ namespace PrintO.Migrations
                     b.ToTable("notes");
                 });
 
+            modelBuilder.Entity("PrintO.Models.Operation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("batchType")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("completedItems")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("connectionName")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("failedItems")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("summary")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("totalItems")
+                        .HasColumnType("int");
+
+                    b.Property<string>("type")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("operationId")
+                        .IsUnique();
+
+                    b.HasIndex("storeId", "createdAt");
+
+                    b.ToTable("operations");
+                });
+
+            modelBuilder.Entity("PrintO.Models.OperationLogEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("level")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("message")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("timestamp")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("operationId");
+
+                    b.ToTable("operationLogEntries");
+                });
+
             modelBuilder.Entity("PrintO.Models.PendingImageDownload", b =>
                 {
                     b.Property<int>("Id")

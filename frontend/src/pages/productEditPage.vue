@@ -25,6 +25,15 @@ import {
   AlertDialogTrigger,
   AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ContextMenu,
@@ -97,6 +106,13 @@ export default {
     AlertDialogTitle,
     AlertDialogTrigger,
     AlertDialogDescription,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DialogClose,
     Tabs,
     TabsContent,
     TabsList,
@@ -952,14 +968,14 @@ export default {
                   </div>
 
                   <!-- SKU change dialog -->
-                  <AlertDialog :open="showSkuDialog" @update:open="showSkuDialog = $event">
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Изменить артикул</AlertDialogTitle>
-                        <AlertDialogDescription>
+                  <Dialog v-model:open="showSkuDialog">
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Изменить артикул</DialogTitle>
+                        <DialogDescription>
                           Артикул будет изменён локально и на всех привязанных маркетплейсах.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
+                        </DialogDescription>
+                      </DialogHeader>
                       <div class="space-y-3 py-2">
                         <div class="space-y-1">
                           <Label class="text-sm text-muted-foreground">Текущий артикул</Label>
@@ -976,8 +992,8 @@ export default {
                           />
                         </div>
                       </div>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel :disabled="isUpdatingSku">Отмена</AlertDialogCancel>
+                      <DialogFooter>
+                        <DialogClose as-child><Button variant="outline" :disabled="isUpdatingSku">Отмена</Button></DialogClose>
                         <Button
                           @click="submitSkuChange"
                           :disabled="isUpdatingSku || !newSkuValue.trim() || newSkuValue.trim() === productSKU"
@@ -985,9 +1001,9 @@ export default {
                           <Loader2 v-if="isUpdatingSku" class="size-4 mr-2 animate-spin" />
                           Изменить
                         </Button>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
 
                   <!-- Barcode -->
                   <FormField v-slot="{ value, setValue }" name="product.barcode">
@@ -1062,14 +1078,14 @@ export default {
             </Card>
 
             <!-- Group change dialog -->
-            <AlertDialog :open="showGroupDialog" @update:open="showGroupDialog = $event">
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Сменить группу товаров</AlertDialogTitle>
-                  <AlertDialogDescription>
+            <Dialog v-model:open="showGroupDialog">
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Сменить группу товаров</DialogTitle>
+                  <DialogDescription>
                     Товар будет перемещён в выбранную группу.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
+                  </DialogDescription>
+                </DialogHeader>
                 <div class="py-2">
                   <SearchableSelect
                     :model-value="selectedGroupId"
@@ -1078,8 +1094,8 @@ export default {
                     placeholder="Выберите группу..."
                   />
                 </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel :disabled="isChangingGroup">Отмена</AlertDialogCancel>
+                <DialogFooter>
+                  <DialogClose as-child><Button variant="outline" :disabled="isChangingGroup">Отмена</Button></DialogClose>
                   <Button
                     @click="submitGroupChange"
                     :disabled="isChangingGroup"
@@ -1088,9 +1104,9 @@ export default {
                     <Loader2 v-if="isChangingGroup" class="size-4 mr-2 animate-spin" />
                     Применить
                   </Button>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
           <!-- Card 2: Category Attributes -->
           <Card v-if="category">
@@ -1157,7 +1173,7 @@ export default {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction @click="handleDeleteProduct">
+                  <AlertDialogAction @click="handleDeleteProduct" class="bg-destructive text-white hover:bg-destructive/90">
                     В корзину
                   </AlertDialogAction>
                 </AlertDialogFooter>

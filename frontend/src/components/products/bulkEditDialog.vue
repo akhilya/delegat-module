@@ -341,13 +341,13 @@
         </div>
       </Tabs>
 
-      <DialogFooter class="mt-4">
-        <Button variant="outline" @click="isOpen = false">Отмена</Button>
+      <DialogFooter>
+        <DialogClose as-child><Button variant="outline">Отмена</Button></DialogClose>
         <Button
           @click="handleSubmit"
           :disabled="!hasAnyEnabled || isSubmitting"
         >
-          <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+          <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
           Сохранить
         </Button>
       </DialogFooter>
@@ -362,6 +362,7 @@ import { useStore } from "vuex";
 import { Loader2 } from "lucide-vue-next";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,

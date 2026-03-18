@@ -21,6 +21,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PrintO.Infrastructure.Security;
+using PrintO.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,12 +96,19 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.FromSeconds(30)
     };
 
-    // Read token from cookie
+    // Read token from cookie (or query string for SignalR WebSocket)
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
-            if (context.Request.Cookies.TryGetValue("access_token", out var token))
+            // SignalR sends token via query string for WebSocket connections
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            else if (context.Request.Cookies.TryGetValue("access_token", out var token))
             {
                 context.Token = token;
             }
@@ -166,6 +174,10 @@ builder.Services.AddHostedService<FileRepairService>();
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
+
+// SignalR for real-time operation logs
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IOperationLogger, OperationLogger>();
 
 // Marketplace adapters are now loaded as DLL plugins from ./plugins/ directory
 // See: PrintO.Marketplace.SDK for plugin development
@@ -316,6 +328,7 @@ app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<OperationHub>("/hubs/operations");
 app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>

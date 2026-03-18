@@ -12,11 +12,12 @@ public class ProductImportBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProductImportBackgroundService> _logger;
+    private readonly IOperationLogger _operationLogger;
 
     // Settings
-    private const int BATCH_SIZE = 3;                 // Products to process per batch
-    private const int DELAY_BETWEEN_PRODUCTS_MS = 1000;  // Delay between products (ms)
-    private const int POLL_INTERVAL_MS = 3000;        // Queue poll interval (ms)
+    private const int BATCH_SIZE = 10;                // Products to process per batch
+    private const int DELAY_BETWEEN_PRODUCTS_MS = 200;   // Delay between products (ms)
+    private const int POLL_INTERVAL_MS = 1500;        // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 10000;         // Delay after error (ms)
 
     /// <summary>
@@ -26,10 +27,12 @@ public class ProductImportBackgroundService : BackgroundService
     /// <param name="logger">Logger instance.</param>
     public ProductImportBackgroundService(
         IServiceScopeFactory scopeFactory,
-        ILogger<ProductImportBackgroundService> logger)
+        ILogger<ProductImportBackgroundService> logger,
+        IOperationLogger operationLogger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -124,13 +127,15 @@ public class ProductImportBackgroundService : BackgroundService
 
         try
         {
-            // Импортируем товар
+            // Импортируем товар (detailed logging happens inside ImportProductAsync)
             var result = await productSyncService.ImportProductAsync(
                 pending.connectionId,
                 pending.externalProductId,
                 pending.targetCategoryId,
                 pending.authorUserId,
-                ct);
+                ct,
+                batchId: pending.batchId,
+                batchStoreId: pending.storeId);
 
             _logger.LogInformation(
                 "Результат импорта товара {Id}: IsSuccess={IsSuccess}, AlreadyLinked={AlreadyLinked}, Error={Error}",
@@ -156,6 +161,13 @@ public class ProductImportBackgroundService : BackgroundService
                         "Импортирован товар {ProductName} (ID: {ProductId}) из очереди",
                         result.ProductName, result.ProductId);
                 }
+
+                if (pending.batchId != null)
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId,
+                        result.AlreadyLinked ? "warning" : "success",
+                        result.AlreadyLinked
+                            ? $"Уже импортирован: {pending.productName ?? pending.externalProductId}"
+                            : $"Импортирован: {result.ProductName ?? pending.externalProductId} (ID: {result.ProductId})");
             }
             else
             {
@@ -165,9 +177,31 @@ public class ProductImportBackgroundService : BackgroundService
                 _logger.LogWarning(
                     "Не удалось импортировать товар {ExternalId}: {Error} (попытка {Retry})",
                     pending.externalProductId, pending.lastError, pending.retryCount);
+
+                if (pending.batchId != null)
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
+                        $"Ошибка: {pending.productName ?? pending.externalProductId} — {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);
+
+            // Emit progress via SignalR
+            if (pending.batchId != null)
+            {
+                var batchItems = await context.pendingProductImports
+                    .AsNoTracking()
+                    .Where(p => p.batchId == pending.batchId)
+                    .ToListAsync(ct);
+                var total = batchItems.Count;
+                var completed = batchItems.Count(p => p.status == ProductImportStatus.Completed);
+                var failed = batchItems.Count(p => p.status == ProductImportStatus.Failed);
+                await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
+
+                if (total == completed + failed)
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
+                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+                        $"Импортировано: {completed} успешно, {failed} ошибок");
+            }
 
             _logger.LogInformation(
                 "Товар {Id}:{ExternalId} обработан, финальный статус: {Status}",

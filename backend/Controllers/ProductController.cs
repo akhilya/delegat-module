@@ -26,6 +26,7 @@ public class ProductController : ControllerBase
     private readonly DataContext _context;
     private readonly ExcelProductService _excelService;
     private readonly QuotaService _quotaService;
+    private readonly IOperationLogger _operationLogger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
@@ -37,7 +38,8 @@ public class ProductController : ControllerBase
         ILogger<ProductController> logger,
         DataContext context,
         ExcelProductService excelService,
-        QuotaService quotaService)
+        QuotaService quotaService,
+        IOperationLogger operationLogger)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -46,6 +48,7 @@ public class ProductController : ControllerBase
         _context = context;
         _excelService = excelService;
         _quotaService = quotaService;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -1231,6 +1234,7 @@ public class ProductController : ControllerBase
     [Route("/products/import-apply")]
     public async Task<IActionResult> ImportApply(IFormFile file)
     {
+        var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
@@ -1238,11 +1242,21 @@ public class ProductController : ControllerBase
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest("Файл не загружен");
 
+        var operationId = Guid.NewGuid().ToString("N");
+        var storeId = selectedStoreId.Value;
+        await _operationLogger.StartAsync(operationId, storeId, userId, "excel-import",
+            $"Импорт из Excel: {file.FileName}");
+
         using var stream = file.OpenReadStream();
         var parsed = _excelService.ParseImportFile(stream);
 
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Найдено строк: {parsed.Rows.Count}");
+
         if (parsed.Rows.Count == 0)
+        {
+            await _operationLogger.FinishAsync(operationId, storeId, "completed", "Нет данных для импорта");
             return Ok(new ImportApplyResult());
+        }
 
         var productIds = parsed.Rows.Select(r => r.ProductId).Distinct().ToList();
         var productRepo = _unitOfWork.Repository<Product>();
@@ -1260,8 +1274,13 @@ public class ProductController : ControllerBase
         var productsList = products.ToList();
         var changeset = _excelService.BuildChangeset(parsed, productsList);
 
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Изменений: {changeset.Changes.Count}");
+
         if (changeset.Changes.Count == 0)
+        {
+            await _operationLogger.FinishAsync(operationId, storeId, "completed", "Изменений не обнаружено");
             return Ok(new ImportApplyResult());
+        }
 
         // Re-load with tracking enabled for applying changes
         var trackedProducts = await _context.products
@@ -1271,11 +1290,17 @@ public class ProductController : ControllerBase
             .Where(p => productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value)
             .ToListAsync();
 
+        await _operationLogger.LogAsync(operationId, storeId, "info", "Применение изменений...");
+
         ImportApplyResult result = null!;
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             result = await _excelService.ApplyChangeset(changeset, trackedProducts, _unitOfWork);
         });
+
+        await _operationLogger.FinishAsync(operationId, storeId,
+            result.Errors.Count == 0 ? "completed" : "partial",
+            $"Применено: {result.AppliedCount}, ошибок: {result.Errors.Count}");
 
         return Ok(result);
     }

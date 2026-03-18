@@ -29,7 +29,7 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.7.3";
+    public override string Version => "1.7.4";
     public override bool IsSystem => true;
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
@@ -446,6 +446,102 @@ public class WildberriesPlugin : MarketplacePluginBase
     #endregion
 
     #region Product Import
+
+    /// <summary>
+    /// Batch-load products by nmIDs — fetches all cards via paginated API and filters locally.
+    /// Much faster than N individual requests (typically 1-3 API calls instead of N).
+    /// </summary>
+    public override async Task<List<ExternalProduct>> ImportProductsBatchAsync(
+        ConnectionContext context, List<string> externalProductIds, CancellationToken ct = default)
+    {
+        if (externalProductIds.Count == 0)
+            return new List<ExternalProduct>();
+
+        // Parse requested nmIDs into a HashSet for O(1) lookup
+        var requestedNmIds = new HashSet<int>();
+        foreach (var id in externalProductIds)
+        {
+            if (int.TryParse(id, out var nmId))
+                requestedNmIds.Add(nmId);
+        }
+
+        if (requestedNmIds.Count == 0)
+            return new List<ExternalProduct>();
+
+        var client = CreateClient(context);
+        var allCards = new List<WbCard>();
+        string? cursorUpdatedAt = null;
+        int? cursorNmId = null;
+        var foundAll = false;
+
+        // Paginate through all cards until we find all requested ones
+        while (!ct.IsCancellationRequested)
+        {
+            var request = new WbCardsListRequest
+            {
+                Settings = new WbCardsListSettings
+                {
+                    Sort = new WbCardsListSort { Ascending = false },
+                    Filter = new WbCardsListFilter { WithPhoto = -1 },
+                    Cursor = new WbCardsListCursor
+                    {
+                        Limit = 100,
+                        UpdatedAt = cursorUpdatedAt,
+                        NmId = cursorNmId
+                    }
+                }
+            };
+
+            var response = await client.GetCardsListAsync(request, ct);
+            var cards = response.Cards ?? new List<WbCard>();
+
+            foreach (var card in cards)
+            {
+                if (requestedNmIds.Contains(card.NmId))
+                    allCards.Add(card);
+            }
+
+            // Stop if we found all requested cards or no more pages
+            if (allCards.Count >= requestedNmIds.Count)
+            {
+                foundAll = true;
+                break;
+            }
+
+            if (response.Cursor == null || cards.Count < 100)
+                break;
+
+            cursorUpdatedAt = response.Cursor.UpdatedAt;
+            cursorNmId = response.Cursor.NmId;
+        }
+
+        context.Logger?.LogInformation(
+            "[WB] ImportProductsBatchAsync: requested {Requested}, found {Found} in catalog scan, scannedAll={FoundAll}",
+            requestedNmIds.Count, allCards.Count, foundAll);
+
+        // If we didn't find all cards via scan, fetch missing ones individually (sequentially — WB rate limiter)
+        if (!foundAll)
+        {
+            var foundNmIds = new HashSet<int>(allCards.Select(c => c.NmId));
+            var missingIds = externalProductIds.Where(id =>
+                int.TryParse(id, out var nmId) && !foundNmIds.Contains(nmId)).ToList();
+
+            if (missingIds.Count > 0)
+            {
+                context.Logger?.LogInformation("[WB] Fetching {Count} missing cards individually", missingIds.Count);
+                var extraProducts = new List<ExternalProduct>();
+                foreach (var id in missingIds)
+                {
+                    var product = await ImportProductAsync(context, id, ct);
+                    if (product != null)
+                        extraProducts.Add(product);
+                }
+                return allCards.Select(MapCardToProduct).Concat(extraProducts).ToList();
+            }
+        }
+
+        return allCards.Select(MapCardToProduct).ToList();
+    }
 
     public override async Task<ExternalProduct?> ImportProductAsync(
         ConnectionContext context, string externalProductId, CancellationToken ct = default)

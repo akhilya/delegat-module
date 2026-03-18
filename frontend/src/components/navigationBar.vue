@@ -90,6 +90,8 @@ export default {
             onSuccess: (r) => { this.me = r.data.value; },
             onError: () => {},
           });
+          // Reconnect SignalR to new store group
+          this.$store.dispatch("operations/reconnectSignalR");
           // Force re-render all page components via appKey
           this.$store.commit("incrementAppKey");
           // Navigate to the target path (usually current page)

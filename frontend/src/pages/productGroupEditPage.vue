@@ -547,6 +547,7 @@ export default {
                             <AlertDialogAction
                               @click="handleRemoveProduct(member.product.id)"
                               :disabled="isRemovingProduct"
+                              class="bg-destructive text-white hover:bg-destructive/90"
                             >
                               <Loader2 v-if="isRemovingProduct" class="size-4 mr-2 animate-spin" />
                               Удалить
@@ -705,7 +706,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="border-t pt-4">
+        <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline">Отмена</Button>
           </DialogClose>
