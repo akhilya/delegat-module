@@ -58,40 +58,19 @@ public class ImageController : ControllerBase
             throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
 
         var imageRepo = _unitOfWork.Repository<ImageReference>();
-        var initialImages = (await imageRepo.FindAllAsync(i => i.productId == productId)).ToArray();
-        var initialImagesCount = initialImages.Length;
+        var existingImages = await imageRepo.FindAllAsync(i => i.productId == productId);
 
-        // Remove excess images
-        if (initialImagesCount > files.Length)
-        {
-            for (int i = 0; i < initialImagesCount - files.Length; i++)
-            {
-                var imageToRemove = initialImages[initialImages.Length - i - 1];
-                await imageRepo.DeleteAsync(imageToRemove);
-            }
-        }
+        // Replace all: delete existing, then recreate in the desired order.
+        // This is idempotent and avoids concurrency issues with stale entities
+        // when multiple drag-and-drop requests arrive in quick succession.
+        if (existingImages.Any())
+            imageRepo.DeleteRange(existingImages);
 
-        // Add new images
-        int orderCounter = 0;
-        if (initialImagesCount < files.Length)
+        for (int i = 0; i < files.Length; i++)
         {
-            for (int i = 0; i < files.Length - initialImagesCount; i++)
-            {
-                var imageIndex = files.Length - (++orderCounter);
-                var addForm = new ImageReference.AddForm(files[files.Length - i - 1], productId, imageIndex);
-                var newImage = new ImageReference();
-                newImage.AddFill(addForm);
-                await imageRepo.AddAsync(newImage);
-            }
-        }
-
-        // Update existing images
-        for (int i = 0; i < Math.Min(initialImagesCount, files.Length); i++)
-        {
-            var imageIndex = orderCounter++;
-            var updateForm = new ImageReference.UpdateForm(i, files[i]);
-            initialImages[i].UpdateFill(updateForm);
-            await imageRepo.UpdateAsync(initialImages[i]);
+            var newImage = new ImageReference();
+            newImage.AddFill(new ImageReference.AddForm(files[i], productId, i));
+            await imageRepo.AddWithoutSaveAsync(newImage);
         }
 
         await _unitOfWork.SaveChangesAsync();
