@@ -24,7 +24,7 @@ import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useDark, useToggle } from "@vueuse/core";
 import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2, Sun, Moon } from "lucide-vue-next";
-import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
+import { PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
   components: {
@@ -78,7 +78,6 @@ export default {
       "postLogOut",
       "getMyMemberships",
       "postSelectStore",
-      "getIsAuthenticated",
     ]),
     async selectStore(storeId) {
       this.$store.commit("setSwitchingStore", true);
@@ -143,15 +142,6 @@ export default {
   },
   async mounted() {
     this.isLoading = true;
-    await this.getIsAuthenticated({
-      onSuccess: (response) => {
-        const isAuthenticated = response.data.value.isAuthenticated;
-        if (!isAuthenticated) this.$router.push(PAGE_SIGN_IN);
-      },
-      onError: (error) => {
-        displaySonnerError(error);
-      },
-    });
     await this.getMe({
       onSuccess: (response) => {
         this.me = response.data.value;

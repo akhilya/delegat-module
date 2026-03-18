@@ -18,7 +18,7 @@ import { z } from "zod";
 import { useForm } from "vee-validate";
 import { useStore } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { ref } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import { PAGE_SIGN_UP } from "@/router";
@@ -41,6 +41,7 @@ export default {
   setup() {
     const store = useStore();
     const router = useRouter();
+    const route = useRoute();
     const isSubmitting = ref(false);
 
     const formSchema = toTypedSchema(
@@ -64,7 +65,7 @@ export default {
         input: values,
         onSuccess: (response) => {
           displaySonnerSuccess("Успешный вход.");
-          router.push("/");
+          router.push(route.query.redirect || "/");
         },
         onError: (error) => {
           if (error?.response?.data?.errors)

@@ -65,7 +65,7 @@ http.interceptors.response.use(undefined, async (error) => {
         }
       }
       resetAuthCache();
-      router.push("/signIn");
+      router.push({ path: "/signIn", query: { redirect: router.currentRoute.value.fullPath } });
       return Promise.reject(refreshError);
     }
   }
@@ -113,7 +113,7 @@ router.beforeEach(async (to) => {
       return true;
     } catch {
       isAuthenticated = null;
-      return { path: "/signIn" };
+      return { path: "/signIn", query: { redirect: to.fullPath } };
     }
   }
 
