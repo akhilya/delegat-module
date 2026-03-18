@@ -199,6 +199,9 @@ export default {
       showMappingSettings: false,
       settingsName: "",
       isSavingSettings: false,
+      // Cache for lazily-loaded attribute options (keyed "category:<id>" or "store:<id>")
+      _attributeOptionsCache: {},
+      _attributeOptionsLoading: {},
       // Для добавления нового поля
       showAddField: false,
       newField: {
@@ -263,24 +266,12 @@ export default {
     editingSourceFieldOptions() {
       const fm = this.editingFieldMapping;
       if (!fm) return [];
-      let optionsJson = null;
       if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
-        const attr = this.availableSources.categoryAttributes?.find(
-          (a) => a.id === fm.sourceAttributeId
-        );
-        optionsJson = attr?.options;
+        return this._attributeOptionsCache[`category:${fm.sourceAttributeId}`] || [];
       } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
-        const attr = this.availableSources.storeAttributes?.find(
-          (a) => a.id === fm.sourceAttributeId
-        );
-        optionsJson = attr?.options;
+        return this._attributeOptionsCache[`store:${fm.sourceAttributeId}`] || [];
       }
-      if (!optionsJson) return [];
-      try {
-        return JSON.parse(optionsJson);
-      } catch {
-        return [];
-      }
+      return [];
     },
   },
   methods: {
@@ -294,6 +285,7 @@ export default {
       "previewFieldMappings",
       "getAllProducts",
       "updateCategoryMapping",
+      "getAttributeOptions",
     ]),
 
     async fetchData() {
@@ -627,6 +619,41 @@ export default {
     openModifierSheet(fieldMapping) {
       this.editingFieldMapping = fieldMapping;
       this.showModifierSheet = true;
+      this.ensureAttributeOptionsLoaded(fieldMapping);
+    },
+
+    ensureAttributeOptionsLoaded(fm) {
+      let type = null;
+      let id = null;
+      if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
+        type = "category";
+        id = fm.sourceAttributeId;
+      } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
+        type = "store";
+        id = fm.sourceAttributeId;
+      }
+      if (!type || !id) return;
+
+      const cacheKey = `${type}:${id}`;
+      if (this._attributeOptionsCache[cacheKey] || this._attributeOptionsLoading[cacheKey]) return;
+
+      this._attributeOptionsLoading[cacheKey] = true;
+      this.getAttributeOptions({
+        type,
+        id,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          let parsed = [];
+          if (data.options) {
+            try { parsed = JSON.parse(data.options); } catch {}
+          }
+          this._attributeOptionsCache = { ...this._attributeOptionsCache, [cacheKey]: parsed };
+          this._attributeOptionsLoading[cacheKey] = false;
+        },
+        onError: () => {
+          this._attributeOptionsLoading[cacheKey] = false;
+        },
+      });
     },
 
     closeModifierSheet() {
@@ -1225,7 +1252,7 @@ export default {
                     <div class="flex items-center gap-2">
                       <!-- С опциями маркетплейса: chips + Plus popover -->
                       <template v-if="fm.parsedOptions?.length">
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background">
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs">
                           <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
                                  class="flex items-center gap-1 pl-2 pr-1 py-0.5">
                             <span class="text-xs">{{ v.label }}</span>
@@ -1273,7 +1300,7 @@ export default {
                       </template>
                       <!-- Без опций: chips внутри поля ввода -->
                       <template v-else>
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background focus-within:ring-1 focus-within:ring-ring">
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs focus-within:ring-1 focus-within:ring-ring">
                           <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
                                  class="flex items-center gap-1 pl-2 pr-1 py-0.5">
                             <span class="text-xs">{{ v.label }}</span>

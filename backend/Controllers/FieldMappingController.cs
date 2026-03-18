@@ -121,7 +121,8 @@ public class FieldMappingController : ControllerBase
             transformExpression = fm.transformExpression,
             modifiersJson = fm.modifiersJson,
             externalFieldType = fm.externalFieldType,
-            externalFieldOptions = fm.externalFieldOptions,
+            externalFieldOptions = (fm.externalFieldType == "select" || fm.externalFieldType == "multiselect")
+                ? fm.externalFieldOptions : null,
             sortOrder = fm.sortOrder
         }).ToList();
 
@@ -306,7 +307,7 @@ public class FieldMappingController : ControllerBase
                 key = a.key,
                 name = a.name,
                 type = a.type.ToString(),
-                options = a.options
+                isRequired = a.isRequired
             }) ?? Enumerable.Empty<object>(),
             storeAttributes = storeAttributes.Select(sa => new
             {
@@ -314,9 +315,40 @@ public class FieldMappingController : ControllerBase
                 key = sa.key,
                 name = sa.name,
                 type = sa.type.ToString(),
-                options = sa.options
+                isRequired = sa.isRequired
             })
         });
+    }
+
+    /// <summary>
+    /// Get options for a single attribute (category or store) on demand
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/attribute-options")]
+    public async Task<IActionResult> GetAttributeOptions(
+        [FromQuery] string type,
+        [FromQuery] int id)
+    {
+        string? options = null;
+
+        if (type == "category")
+        {
+            var repo = _unitOfWork.Repository<CategoryAttribute>();
+            var attr = await repo.FindAsync(a => a.Id == id);
+            options = attr?.options;
+        }
+        else if (type == "store")
+        {
+            var repo = _unitOfWork.Repository<StoreAttribute>();
+            var attr = await repo.FindAsync(a => a.Id == id);
+            options = attr?.options;
+        }
+        else
+        {
+            throw ApiException.BadRequest("Invalid type. Expected 'category' or 'store'.");
+        }
+
+        return Ok(new { options });
     }
 
     /// <summary>
