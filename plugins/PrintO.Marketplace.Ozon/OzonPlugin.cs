@@ -15,7 +15,7 @@ public class OzonPlugin : MarketplacePluginBase
 
     public override string Key => "ozon";
     public override string DisplayName => "Ozon";
-    public override string Version => "1.1.3";
+    public override string Version => "1.1.4";
     public override bool IsSystem => true;
     public override string? Description => "Integration with Ozon Seller API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/9/91/Ozon_logo.svg";
@@ -551,6 +551,15 @@ public class OzonPlugin : MarketplacePluginBase
                 Description: "Старая цена до скидки (для отображения зачёркнутой цены)",
                 Group: "Основные поля",
                 SortOrder: -97
+            ),
+            new ExternalField(
+                Key: "minPrice",
+                Name: "Минимальная цена",
+                IsRequired: false,
+                Type: "number",
+                Description: "Минимальная цена товара. Если покупатель найдёт товар дешевле, Ozon снизит цену до указанного минимума.",
+                Group: "Основные поля",
+                SortOrder: -96
             ),
             new ExternalField(
                 Key: "weight",
@@ -1565,6 +1574,12 @@ public class OzonPlugin : MarketplacePluginBase
             item.OldPrice = oldPrice.Value.ToString("F0");
         }
 
+        var minPrice = GetDecimal(productData, "minPrice") ?? GetDecimal(productData, "min_price");
+        if (minPrice.HasValue && minPrice.Value > 0)
+        {
+            item.MinPrice = minPrice.Value.ToString("F0");
+        }
+
         // Dimensions - check literal keys AND Ozon attribute IDs
         item.Weight = GetInt(productData, "weight") ?? GetInt(productData, OzonAttrWeight);
         item.Height = GetInt(productData, "height") ?? GetInt(productData, OzonAttrHeight);
@@ -1879,14 +1894,18 @@ public class OzonPlugin : MarketplacePluginBase
                 decimal? price = null;
                 decimal? oldPrice = null;
 
+                decimal? minPrice = null;
+
                 if (decimal.TryParse(item.Price.CurrentPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var p)) price = p;
                 if (decimal.TryParse(item.Price.OldPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var op) && op > 0) oldPrice = op;
+                if (decimal.TryParse(item.Price.MinPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var mp) && mp > 0) minPrice = mp;
 
                 result.Add(new PriceInfo(
                     ExternalProductId: item.ProductId.ToString(),
                     Price: price,
                     OldPrice: oldPrice,
-                    Currency: item.Price.CurrencyCode
+                    Currency: item.Price.CurrencyCode,
+                    MinPrice: minPrice
                 ));
             }
 
@@ -1912,6 +1931,7 @@ public class OzonPlugin : MarketplacePluginBase
             ProductId = long.TryParse(p.ExternalProductId, out var id) ? id : null,
             Price = p.Price?.ToString("F0") ?? "0",
             OldPrice = p.OldPrice?.ToString("F0"),
+            MinPrice = p.MinPrice?.ToString("F0"),
             CurrencyCode = p.Currency
         }).ToList();
 

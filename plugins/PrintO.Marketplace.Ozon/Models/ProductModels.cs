@@ -132,6 +132,9 @@ public class ProductImportItem
     [JsonPropertyName("offer_id")]
     public string OfferId { get; set; } = "";
 
+    [JsonPropertyName("min_price")]
+    public string? MinPrice { get; set; }
+
     [JsonPropertyName("old_price")]
     public string? OldPrice { get; set; }
 

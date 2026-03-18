@@ -64,7 +64,8 @@
   <Target Name="CopyPlugins" AfterTargets="Build">
     <ItemGroup>
       <!-- Get all DLLs from plugin build outputs -->
-      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll" />
+      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll"
+                  Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\PrintO.Marketplace.SDK.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />
   </Target>

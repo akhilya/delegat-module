@@ -37,7 +37,12 @@ public record PriceInfo(
     /// <summary>
     /// Variant identifier for multi-size products (e.g. chrtId for WB).
     /// </summary>
-    string? VariantId = null
+    string? VariantId = null,
+
+    /// <summary>
+    /// Minimum price (floor price for marketplace discounts)
+    /// </summary>
+    decimal? MinPrice = null
 );
 
 /// <summary>
