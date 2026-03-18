@@ -53,6 +53,17 @@ http.interceptors.response.use(undefined, async (error) => {
       await refreshTokens();
       return http(originalRequest);
     } catch (refreshError) {
+      // Retry once after a short delay — another tab may have just rotated the token
+      if (!originalRequest._retryAfterRefresh) {
+        originalRequest._retryAfterRefresh = true;
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          await refreshTokens();
+          return http(originalRequest);
+        } catch {
+          // fall through to redirect
+        }
+      }
       resetAuthCache();
       router.push("/signIn");
       return Promise.reject(refreshError);
