@@ -38,6 +38,7 @@ import ProductAttributeForm from "@/components/products/productAttributeForm.vue
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
 import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.vue";
+import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import Separator from "@/components/ui/separator/Separator.vue";
@@ -109,6 +110,7 @@ export default {
     StoreAttributeForm,
     ProductMarketplaceIntegrations,
     ProductVariantsEditor,
+    ProductGroupSidebar,
     BarcodeInput,
     SearchableSelect,
     Separator,
@@ -159,6 +161,9 @@ export default {
   watch: {
     tab(newVal) {
       this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
+      if (newVal === 'properties') {
+        this.$nextTick(() => this.autoResizeDescription());
+      }
     },
   },
   setup() {
@@ -192,13 +197,12 @@ export default {
     const selectedGroupId = ref(null);
     const isChangingGroup = ref(false);
     const descriptionRef = ref(null);
-    const sidebarScrollRef = ref(null);
+    const groupSidebarRef = ref(null);
     const mainScrollRef = ref(null);
 
     // Reload product data when switching between group members (component is reused)
-    // Preserve both sidebar and page scroll positions across navigation
+    // Preserve page scroll position; sidebar scroll is handled by scrollCurrentMemberIntoView
     watch(productId, () => {
-      const savedSidebarScroll = sidebarScrollRef.value?.scrollTop ?? 0;
       const savedPageScroll = window.scrollY;
 
       // Lock scroll position while data loads to prevent jumps
@@ -208,9 +212,6 @@ export default {
       fetchProduct().then(() => {
         nextTick(() => {
           window.removeEventListener('scroll', lockScroll);
-          if (sidebarScrollRef.value) {
-            sidebarScrollRef.value.scrollTop = savedSidebarScroll;
-          }
           window.scrollTo(0, savedPageScroll);
         });
       });
@@ -225,6 +226,11 @@ export default {
       el.style.height = el.scrollHeight + 'px';
     }
 
+    // Scroll the current product into view in the sidebar
+    function scrollCurrentMemberIntoView() {
+      groupSidebarRef.value?.scrollCurrentIntoView();
+    }
+
     // Fetch product group
     async function fetchProductGroup() {
       isLoadingGroup.value = true;
@@ -236,6 +242,7 @@ export default {
             productGroup.value = null;
           } else {
             productGroup.value = data.group;
+            scrollCurrentMemberIntoView();
           }
         },
         onError: () => {
@@ -761,7 +768,7 @@ export default {
       groupOptions,
       submitGroupChange,
       descriptionRef,
-      sidebarScrollRef,
+      groupSidebarRef,
       mainScrollRef,
       autoResizeDescription,
       duplicateProductUrl,
@@ -826,75 +833,18 @@ export default {
     </div>
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="productGroup" class="w-80 shrink-0 hidden lg:flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b">
-          <div class="flex items-center gap-2 min-w-0">
-            <Layers class="size-4 text-muted-foreground shrink-0" />
-            <span class="text-sm font-medium truncate">{{ productGroup.name }}</span>
-          </div>
-          <div class="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7"
-              title="Сменить группу"
-              aria-label="Сменить группу"
-              type="button"
-              @click="openGroupDialog"
-            >
-              <ArrowRightLeft class="size-3.5 text-muted-foreground" />
-            </Button>
-            <router-link
-              :to="`/product-groups/${productGroup.id}/edit`"
-              class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
-              title="Редактировать группу"
-              aria-label="Редактировать группу"
-            >
-              <ExternalLink class="size-3.5 text-muted-foreground" />
-            </router-link>
-          </div>
-        </div>
-        <!-- Scrollable product list -->
-        <div ref="sidebarScrollRef" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5" :class="{ 'pointer-events-none opacity-50': isProductLoading }">
-          <!-- Add product button -->
-          <router-link
-            :to="duplicateProductUrl"
-            class="flex items-center justify-center p-2 h-16 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
-          >
-            <Plus class="size-4 text-muted-foreground" />
-          </router-link>
-          <ContextMenu v-for="member in productGroup.members" :key="member.productId">
-            <ContextMenuTrigger as-child>
-              <router-link
-                :to="{ path: `/products/${member.productId}/edit`, query: { tab } }"
-                class="flex items-center gap-3 p-2 rounded-lg transition-colors"
-                :class="member.isCurrent ? 'bg-accent' : 'hover:bg-accent/50'"
-              >
-                <img
-                  v-if="member.imageThumbnailUrl || member.imageUrl"
-                  :src="member.imageThumbnailUrl ?? member.imageUrl"
-                  class="size-12 rounded-md object-cover shrink-0"
-                  :alt="member.productName"
-                />
-                <div v-else class="size-12 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <Layers class="size-5 text-muted-foreground" />
-                </div>
-                <div class="min-w-0">
-                  <p class="text-sm truncate" :class="member.isCurrent ? 'font-medium' : ''">{{ member.productName || member.productSku }}</p>
-                  <p class="text-xs text-muted-foreground">{{ member.productSku }}</p>
-                </div>
-              </router-link>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
-                <Copy class="size-4 mr-2" />
-                Дублировать
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        </div>
-      </div>
+      <ProductGroupSidebar
+        v-if="productGroup || isLoadingGroup"
+        ref="groupSidebarRef"
+        :group="productGroup"
+        :loading="isLoadingGroup"
+        :disabled="isProductLoading"
+        :add-url="duplicateProductUrl"
+        :tab="tab"
+        :show-change-group="true"
+        :get-duplicate-url="getDuplicateUrl"
+        @change-group="openGroupDialog"
+      />
       <!-- Main content -->
       <div ref="mainScrollRef" class="grow flex flex-col min-w-0">
         <div v-show="!isProductLoading" class="grow flex flex-col">
@@ -1265,40 +1215,44 @@ export default {
         </div>
 
         <!-- Sizes tab -->
-        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
+        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductVariantsEditor :productId="productId" />
         </div>
 
         <!-- Marketplaces tab -->
-        <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
+        <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
         </div>
 
         <!-- Notes tab -->
-        <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
-          <div class="p-4 flex flex-col gap-4">
+        <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
+            <p class="text-sm font-medium flex items-center gap-2">
+              <NotebookPen class="size-4" />
+              Заметки
+            </p>
+            <Button variant="ghost" size="sm" @click="addNote" class="h-7">
+              <Plus class="size-4 mr-1" />
+              Добавить
+            </Button>
+          </div>
+          <!-- Content -->
+          <div class="flex-1 overflow-y-auto">
             <EmptyState v-if="notes.length === 0" title="Нет заметок" description="Заметки помогают фиксировать важную информацию о товаре">
               <template #icon>
                 <NotebookPen class="size-12 mb-4 text-muted-foreground" />
               </template>
-              <Button variant="outline" @click="addNote">
-                <NotebookPen class="size-4 mr-2" />
-                Добавить заметку
-              </Button>
             </EmptyState>
-            <div v-for="(note, index) in notes" :key="note.id || index">
-              <Note
-                v-model:note="notes[index]"
-                :productId="productId"
-                @onDelete="notes.splice(index, 1)"
-              />
+            <div v-else class="p-4 flex flex-col gap-4">
+              <div v-for="(note, index) in notes" :key="note.id || index">
+                <Note
+                  v-model:note="notes[index]"
+                  :productId="productId"
+                  @onDelete="notes.splice(index, 1)"
+                />
+              </div>
             </div>
-          </div>
-          <div v-if="notes.length > 0" class="mt-auto p-4">
-            <Button variant="outline" @click="addNote">
-              <NotebookPen class="size-4 mr-2" />
-              Добавить заметку
-            </Button>
           </div>
         </div>
       </div>

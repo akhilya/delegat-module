@@ -27,12 +27,7 @@ import {
 import Separator from "@/components/ui/separator/Separator.vue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import { Loader2, FolderOpen, Globe, Layers, ExternalLink, Plus, Copy } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
@@ -78,10 +73,7 @@ export default {
     CardContent,
     CardHeader,
     CardTitle,
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
+    ProductGroupSidebar,
   },
   data() {
     return {
@@ -448,59 +440,12 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="groupDetail" class="w-80 shrink-0 hidden lg:flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b">
-          <div class="flex items-center gap-2 min-w-0">
-            <Layers class="size-4 text-muted-foreground shrink-0" />
-            <span class="text-sm font-medium truncate">{{ groupDetail.name }}</span>
-          </div>
-          <div class="flex items-center gap-1 shrink-0">
-            <router-link
-              :to="`/product-groups/${groupDetail.id}/edit`"
-              class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
-              title="Редактировать группу"
-            >
-              <ExternalLink class="size-3.5 text-muted-foreground" />
-            </router-link>
-          </div>
-        </div>
-        <!-- Scrollable product list -->
-        <div class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5" :class="{ 'pointer-events-none opacity-50': isSubmitting }">
-          <!-- Add product button (current — highlighted) -->
-          <div class="flex items-center justify-center p-2 h-16 rounded-lg bg-accent">
-            <Plus class="size-4 text-muted-foreground" />
-          </div>
-          <ContextMenu v-for="member in groupDetail.members" :key="member.productId">
-            <ContextMenuTrigger as-child>
-              <router-link
-                :to="`/products/${member.productId}/edit`"
-                class="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <img
-                  v-if="member.imageThumbnailUrl || member.imageUrl"
-                  :src="member.imageThumbnailUrl ?? member.imageUrl"
-                  class="size-12 rounded-md object-cover shrink-0"
-                  :alt="member.productName"
-                />
-                <div v-else class="size-12 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <Layers class="size-5 text-muted-foreground" />
-                </div>
-                <div class="min-w-0">
-                  <p class="text-sm truncate">{{ member.productName || member.productSku }}</p>
-                  <p class="text-xs text-muted-foreground">{{ member.productSku }}</p>
-                </div>
-              </router-link>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
-                <Copy class="size-4 mr-2" />
-                Дублировать
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        </div>
-      </div>
+      <ProductGroupSidebar
+        v-if="groupDetail"
+        :group="groupDetail"
+        :disabled="isSubmitting"
+        :get-duplicate-url="getDuplicateUrl"
+      />
       <!-- Main content -->
       <div class="grow flex flex-col min-w-0">
       <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
