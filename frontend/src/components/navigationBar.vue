@@ -22,7 +22,8 @@ import Button from "./ui/button/Button.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2 } from "lucide-vue-next";
+import { useDark, useToggle } from "@vueuse/core";
+import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2, Sun, Moon } from "lucide-vue-next";
 import { PAGE_SIGN_IN, PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
@@ -55,6 +56,13 @@ export default {
     Globe,
     Layers,
     Trash2,
+    Sun,
+    Moon,
+  },
+  setup() {
+    const isDark = useDark();
+    const toggleDark = useToggle(isDark);
+    return { isDark, toggleDark };
   },
   data() {
     return {
@@ -180,8 +188,8 @@ export default {
 </script>
 
 <template>
-  <div class="w-screen h-20 backdrop-blur-lg fixed left-0 top-0 z-20" />
-  <div class="w-full h-20 sticky top-0 left-0 grid grid-cols-3 z-20">
+  <div class="w-screen h-20 backdrop-blur-lg fixed left-0 top-0 z-30" />
+  <div class="w-full h-20 sticky top-0 left-0 grid grid-cols-3 z-30">
     <template v-if="!isLoading">
       <div class="flex items-center justify-start gap-2">
         <template v-if="memberships.length > 0">
@@ -189,7 +197,7 @@ export default {
             :model-value="String(me?.selectedStoreId ?? '')"
             @update:model-value="selectStore(Number($event))"
           >
-            <SelectTrigger class="bg-primary-foreground w-48">
+            <SelectTrigger class="bg-primary-foreground w-32 sm:w-48">
               <SelectValue placeholder="Выберите магазин..." />
             </SelectTrigger>
             <SelectContent>
@@ -208,13 +216,13 @@ export default {
           </Select>
         </template>
         <template v-else>
-          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-48">
-            <AlertCircle class="w-3 h-3 shrink-0" />
+          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-32 sm:w-48">
+            <AlertCircle class="size-3 shrink-0" />
             <span class="truncate">Нет магазинов</span>
           </div>
         </template>
       </div>
-      <div class="flex items-center justify-center">
+      <div class="hidden sm:flex items-center justify-center">
         <slot name="center" />
       </div>
       <div class="flex items-center justify-end gap-2">
@@ -229,52 +237,57 @@ export default {
             <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem @select="goToProducts">
-              <House class="w-4 h-4 mr-2" />
+              <House class="size-4 mr-2" />
               Товары
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToProductCreation">
-              <Plus class="w-4 h-4 mr-2" />
+              <Plus class="size-4 mr-2" />
               Добавить товар
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToCategories">
-              <FolderOpen class="w-4 h-4 mr-2" />
+              <FolderOpen class="size-4 mr-2" />
               Категории
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToProductGroups">
-              <Layers class="w-4 h-4 mr-2" />
+              <Layers class="size-4 mr-2" />
               Группы товаров
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToStoreAttributes">
-              <Globe class="w-4 h-4 mr-2" />
+              <Globe class="size-4 mr-2" />
               Глобальные атрибуты
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToTrash">
-              <Trash2 class="w-4 h-4 mr-2" />
+              <Trash2 class="size-4 mr-2" />
               Корзина
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem @select="goToMarketplace">
-              <ShoppingBag class="w-4 h-4 mr-2" />
+              <ShoppingBag class="size-4 mr-2" />
               Маркетплейсы
             </DropdownMenuItem>
             <DropdownMenuItem @select="goToPlugins">
-              <Puzzle class="w-4 h-4 mr-2" />
+              <Puzzle class="size-4 mr-2" />
               Плагины
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <template v-if="me?.isAdmin">
               <DropdownMenuItem @select="goToAdminStores">
-                <Store class="w-4 h-4 mr-2" />
+                <Store class="size-4 mr-2" />
                 Магазины
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToAdminTokens">
-                <Key class="w-4 h-4 mr-2" />
+                <Key class="size-4 mr-2" />
                 Токены
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </template>
+            <DropdownMenuItem @select="toggleDark()">
+              <Sun v-if="isDark" class="size-4 mr-2" />
+              <Moon v-else class="size-4 mr-2" />
+              {{ isDark ? 'Светлая тема' : 'Тёмная тема' }}
+            </DropdownMenuItem>
             <DropdownMenuItem @select="postLogOut">
-              <LogOut class="w-4 h-4 mr-2" />
+              <LogOut class="size-4 mr-2" />
               Выйти
             </DropdownMenuItem>
             <template v-if="platformVersion">

@@ -45,6 +45,91 @@ public class FileController : ControllerBase
         _quotaService = quotaService;
     }
 
+    public record BulkMoveRequest(int? targetFolderId, int[] fileIds, int[] folderIds);
+
+    [HttpPost]
+    [Route("/products/{productId}/bulk-move")]
+    public async Task<IActionResult> BulkMove(int productId, [FromBody] BulkMoveRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdAsync(productId);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
+
+        // Validate target folder
+        if (request.targetFolderId.HasValue)
+        {
+            var targetFolder = await folderRepo.GetByIdAsync(request.targetFolderId.Value);
+            if (targetFolder == null || targetFolder.productId != productId)
+                throw ApiException.NotFound("Целевая папка не найдена");
+        }
+
+        // Move files
+        if (request.fileIds is { Length: > 0 })
+        {
+            var fileRepo = _unitOfWork.Repository<Models.File>();
+            var files = await fileRepo.FindAllAsync(
+                f => request.fileIds.Contains(f.Id) && f.productId == productId);
+
+            if (files.Count != request.fileIds.Length)
+                throw ApiException.NotFound("Один или несколько файлов не найдены");
+
+            foreach (var file in files)
+            {
+                file.folderId = request.targetFolderId;
+                fileRepo.UpdateWithoutSave(file);
+            }
+        }
+
+        // Move folders
+        if (request.folderIds is { Length: > 0 })
+        {
+            var folders = await folderRepo.FindAllAsync(
+                f => request.folderIds.Contains(f.Id) && f.productId == productId);
+
+            if (folders.Count != request.folderIds.Length)
+                throw ApiException.NotFound("Одна или несколько папок не найдены");
+
+            var movingIds = new HashSet<int>(request.folderIds);
+
+            foreach (var folder in folders)
+            {
+                if (request.targetFolderId == folder.Id)
+                    throw ApiException.BadRequest("Нельзя переместить папку в саму себя");
+
+                // Cycle detection: walk up from target, if we hit any folder being moved — cycle
+                if (request.targetFolderId.HasValue)
+                {
+                    var currentId = request.targetFolderId;
+                    while (currentId.HasValue)
+                    {
+                        if (movingIds.Contains(currentId.Value))
+                            throw ApiException.BadRequest("Нельзя переместить папку в своего потомка");
+
+                        var parentFolder = await folderRepo.GetByIdAsync(currentId.Value);
+                        currentId = parentFolder?.parentFolderId;
+                    }
+                }
+
+                folder.parentFolderId = request.targetFolderId;
+                folderRepo.UpdateWithoutSave(folder);
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        return Ok();
+    }
+
     /// <summary>
     /// Downloads a file by id, proxying through backend with JWT authorization.
     /// </summary>

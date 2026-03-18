@@ -53,6 +53,7 @@ import {
   Pencil,
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_CATEGORIES, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
@@ -129,6 +130,7 @@ export default {
     Pencil,
     draggable,
     SearchableSelect,
+    EmptyState,
   },
   data() {
     const categoryId = parseInt(this.$route.params.id);
@@ -198,6 +200,9 @@ export default {
         { value: "", label: "Без группы (Прочее)" },
         ...ATTRIBUTE_GROUP_OPTIONS.map((g) => ({ value: g, label: g })),
       ];
+    },
+    parsedFormOptions() {
+      return this.parseOptions(this.attributeForm.options);
     },
   },
   methods: {
@@ -543,11 +548,15 @@ export default {
             </Button>
           </div>
 
-          <div v-if="attributes.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-            <Settings2 class="size-12 mb-4 text-muted-foreground" />
-            <h3 class="font-medium mb-1">Нет атрибутов</h3>
-            <p class="text-sm text-muted-foreground">Добавьте атрибуты для товаров этой категории</p>
-          </div>
+          <EmptyState
+            v-if="attributes.length === 0"
+            title="Нет атрибутов"
+            description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
+          >
+            <template #icon>
+              <Settings2 class="size-12 mb-4 text-muted-foreground" />
+            </template>
+          </EmptyState>
 
           <draggable
             v-else
@@ -576,7 +585,7 @@ export default {
                       </span>
                       <span
                         v-if="attribute.isRequired"
-                        class="text-xs text-red-500"
+                        class="text-xs text-destructive"
                       >
                         *
                       </span>
@@ -740,7 +749,7 @@ export default {
               <SelectContent>
                 <SelectItem value="__none__">Не выбрано</SelectItem>
                 <SelectItem
-                  v-for="option in parseOptions(attributeForm.options)"
+                  v-for="option in parsedFormOptions"
                   :key="option.value"
                   :value="option.value"
                 >

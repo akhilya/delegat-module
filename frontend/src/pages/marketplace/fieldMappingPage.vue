@@ -199,6 +199,9 @@ export default {
       showMappingSettings: false,
       settingsName: "",
       isSavingSettings: false,
+      // Cache for lazily-loaded attribute options (keyed "category:<id>" or "store:<id>")
+      _attributeOptionsCache: {},
+      _attributeOptionsLoading: {},
       // Для добавления нового поля
       showAddField: false,
       newField: {
@@ -263,24 +266,12 @@ export default {
     editingSourceFieldOptions() {
       const fm = this.editingFieldMapping;
       if (!fm) return [];
-      let optionsJson = null;
       if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
-        const attr = this.availableSources.categoryAttributes?.find(
-          (a) => a.id === fm.sourceAttributeId
-        );
-        optionsJson = attr?.options;
+        return this._attributeOptionsCache[`category:${fm.sourceAttributeId}`] || [];
       } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
-        const attr = this.availableSources.storeAttributes?.find(
-          (a) => a.id === fm.sourceAttributeId
-        );
-        optionsJson = attr?.options;
+        return this._attributeOptionsCache[`store:${fm.sourceAttributeId}`] || [];
       }
-      if (!optionsJson) return [];
-      try {
-        return JSON.parse(optionsJson);
-      } catch {
-        return [];
-      }
+      return [];
     },
   },
   methods: {
@@ -294,6 +285,7 @@ export default {
       "previewFieldMappings",
       "getAllProducts",
       "updateCategoryMapping",
+      "getAttributeOptions",
     ]),
 
     async fetchData() {
@@ -627,6 +619,41 @@ export default {
     openModifierSheet(fieldMapping) {
       this.editingFieldMapping = fieldMapping;
       this.showModifierSheet = true;
+      this.ensureAttributeOptionsLoaded(fieldMapping);
+    },
+
+    ensureAttributeOptionsLoaded(fm) {
+      let type = null;
+      let id = null;
+      if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
+        type = "category";
+        id = fm.sourceAttributeId;
+      } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
+        type = "store";
+        id = fm.sourceAttributeId;
+      }
+      if (!type || !id) return;
+
+      const cacheKey = `${type}:${id}`;
+      if (this._attributeOptionsCache[cacheKey] || this._attributeOptionsLoading[cacheKey]) return;
+
+      this._attributeOptionsLoading[cacheKey] = true;
+      this.getAttributeOptions({
+        type,
+        id,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          let parsed = [];
+          if (data.options) {
+            try { parsed = JSON.parse(data.options); } catch {}
+          }
+          this._attributeOptionsCache = { ...this._attributeOptionsCache, [cacheKey]: parsed };
+          this._attributeOptionsLoading[cacheKey] = false;
+        },
+        onError: () => {
+          this._attributeOptionsLoading[cacheKey] = false;
+        },
+      });
     },
 
     closeModifierSheet() {
@@ -962,8 +989,8 @@ export default {
               :class="[
                 'size-5',
                 requiredFieldsMapped === totalRequiredFields
-                  ? 'text-green-500'
-                  : 'text-amber-500',
+                  ? 'text-success'
+                  : 'text-warning',
               ]"
             />
             Обязательные поля: {{ requiredFieldsMapped }} / {{ totalRequiredFields }}
@@ -1032,7 +1059,7 @@ export default {
               :class="[
                 { 'opacity-50': !fm.isEnabled },
                 { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) },
-                { 'bg-amber-500/5 border-l-2 border-l-amber-500': isUnmappedOptional(fm) },
+                { 'bg-warning/5 border-l-2 border-l-warning': isUnmappedOptional(fm) },
                 { '!border-b-0': previewProductId && shouldShowInlinePreview(fm.externalFieldKey) }
               ]"
             >
@@ -1225,7 +1252,7 @@ export default {
                     <div class="flex items-center gap-2">
                       <!-- С опциями маркетплейса: chips + Plus popover -->
                       <template v-if="fm.parsedOptions?.length">
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background">
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs">
                           <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
                                  class="flex items-center gap-1 pl-2 pr-1 py-0.5">
                             <span class="text-xs">{{ v.label }}</span>
@@ -1256,22 +1283,24 @@ export default {
                               </div>
                             </div>
                             <div class="overflow-auto flex-1 p-1">
-                              <div v-for="option in filterOptions(fm, getAvailableOptions(fm))"
-                                   :key="option.value"
-                                   class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
-                                   @click="addStaticValue(fm, option.value)">
-                                <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
-                              </div>
-                              <div v-if="!filterOptions(fm, getAvailableOptions(fm)).length" class="p-3 text-sm text-muted-foreground text-center">
-                                Ничего не найдено
-                              </div>
+                              <template v-for="filteredOpts in [filterOptions(fm, getAvailableOptions(fm))]" :key="0">
+                                <div v-for="option in filteredOpts"
+                                     :key="option.value"
+                                     class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                                     @click="addStaticValue(fm, option.value)">
+                                  <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
+                                </div>
+                                <div v-if="!filteredOpts.length" class="p-3 text-sm text-muted-foreground text-center">
+                                  Ничего не найдено
+                                </div>
+                              </template>
                             </div>
                           </PopoverContent>
                         </Popover>
                       </template>
                       <!-- Без опций: chips внутри поля ввода -->
                       <template v-else>
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border rounded-md px-2 py-1.5 min-h-9 bg-background focus-within:ring-1 focus-within:ring-ring">
+                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs focus-within:ring-1 focus-within:ring-ring">
                           <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
                                  class="flex items-center gap-1 pl-2 pr-1 py-0.5">
                             <span class="text-xs">{{ v.label }}</span>
@@ -1349,12 +1378,12 @@ export default {
               <TableCell>
                 <Badge
                   :variant="hasValidSource(fm) && fm.isEnabled ? 'default' : isUnmappedRequired(fm) ? 'destructive' : 'outline'"
-                  :class="isUnmappedOptional(fm) ? 'border-amber-500 text-amber-600' : ''"
+                  :class="isUnmappedOptional(fm) ? 'border-warning text-warning-foreground' : ''"
                   :title="!fm.isEnabled ? 'Поле отключено' : !hasValidSource(fm) ? 'Выберите источник данных' : getCurrentSourceLabel(fm)"
                 >
                   <component
                     :is="hasValidSource(fm) && fm.isEnabled ? CheckCircle : AlertCircle"
-                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-amber-500' : '']"
+                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-warning' : '']"
                   />
                   {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : isUnmappedOptional(fm) ? "Не заполнено" : "Не настроено" }}
                 </Badge>
@@ -1398,7 +1427,7 @@ export default {
               class="border-t-0 !border-b hover:bg-transparent"
             >
               <TableCell :colspan="6" class="pt-0 pb-1.5 px-4">
-                <div class="flex items-center gap-1.5 text-[11px] leading-none min-w-0">
+                <div class="flex items-center gap-1.5 text-xs leading-none min-w-0">
                   <Eye class="size-3 shrink-0 text-muted-foreground" />
                   <template v-if="getPreviewForField(fm.externalFieldKey).error">
                     <span class="text-destructive truncate">{{ getPreviewForField(fm.externalFieldKey).error }}</span>
@@ -1506,7 +1535,7 @@ export default {
             class="rounded-md border p-3 text-sm"
             :class="{
               'bg-destructive/10 border-l-2 border-l-destructive': item.error,
-              'bg-amber-500/10 border-l-2 border-l-amber-500': item.isChanged,
+              'bg-warning/10 border-l-2 border-l-warning': item.isChanged,
             }"
           >
             <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>

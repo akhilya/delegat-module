@@ -76,12 +76,12 @@ function renderCopyableSku(sku: string, extraClass = "") {
         // Swap to check icon
         iconEl.replaceChildren(createCheckIconEl());
         iconEl.classList.remove("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
-        iconEl.classList.add("opacity-100", "text-green-600");
+        iconEl.classList.add("opacity-100", "text-success-foreground");
         setTimeout(() => {
           // Restore copy icon
           iconEl.replaceChildren(createCopyIconEl());
           iconEl.classList.add("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
-          iconEl.classList.remove("opacity-100", "text-green-600");
+          iconEl.classList.remove("opacity-100", "text-success-foreground");
         }, 800);
       }
     },

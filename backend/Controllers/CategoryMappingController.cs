@@ -91,22 +91,19 @@ public class CategoryMappingController : ControllerBase
 
         var repo = _unitOfWork.Repository<CategoryMapping>();
 
-        var mappings = await repo.FindAllAsync(
-            m => m.connectionId == connectionId,
-            query => query
-                .Include(m => m.localCategory)
-                .Include(m => m.fieldMappings));
-
-        var result = mappings.Select(m => new
-        {
-            id = m.Id,
-            name = m.name,
-            localCategoryId = m.localCategoryId,
-            localCategoryName = m.localCategory?.name,
-            externalCategoryId = m.externalCategoryId,
-            externalCategoryName = m.externalCategoryName,
-            fieldMappingsCount = m.fieldMappings?.Count ?? 0
-        }).ToList();
+        var result = await repo.Query()
+            .Where(m => m.connectionId == connectionId)
+            .Select(m => new
+            {
+                id = m.Id,
+                name = m.name,
+                localCategoryId = m.localCategoryId,
+                localCategoryName = m.localCategory.name,
+                externalCategoryId = m.externalCategoryId,
+                externalCategoryName = m.externalCategoryName,
+                fieldMappingsCount = m.fieldMappings.Count
+            })
+            .ToListAsync();
 
         return Ok(result);
     }

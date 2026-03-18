@@ -205,7 +205,7 @@ export default {
     <!-- Modifier cards -->
     <div
       v-for="(mod, index) in modifiers"
-      :key="index"
+      :key="mod.type + '-' + index"
       :class="[
         'rounded-md border border-l-[3px] bg-card text-card-foreground',
         getCategoryBorderColor(mod.type),
@@ -226,11 +226,11 @@ export default {
         </span>
         <span
           v-if="!isReversible(mod.type)"
-          class="inline-flex items-center gap-0.5 text-amber-500 shrink-0"
+          class="inline-flex items-center gap-0.5 text-warning shrink-0"
           title="При импорте значение не будет восстановлено"
         >
           <AlertTriangle class="size-3" />
-          <span class="text-[10px] leading-none">необратимый</span>
+          <span class="text-xs leading-none">необратимый</span>
         </span>
         <div v-if="!disabled" class="flex items-center gap-0.5 shrink-0">
           <button

@@ -678,6 +678,20 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async getAttributeOptions(ctx, { type, id, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/attribute-options?type=${encodeURIComponent(type)}&id=${id}`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: false,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     // === Field Mapping Preview ===
 
     /**
@@ -766,6 +780,28 @@ export default {
           immediate: true,
           abortPrevious: true,
         },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async linkProduct(ctx, { connectionId, productId, externalProductId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/products/${productId}/link`,
+        { method: "POST", data: { externalProductId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async relinkProduct(ctx, { linkId, externalProductId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/relink`,
+        { method: "POST", data: { externalProductId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
       )
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));

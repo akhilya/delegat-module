@@ -213,6 +213,106 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
+    /// Manually link a product to an existing marketplace product by external ID.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/products/{productId}/link")]
+    public async Task<IActionResult> LinkProduct(
+        int connectionId,
+        int productId,
+        [FromBody] LinkProductInput input,
+        CancellationToken ct)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+
+        if (string.IsNullOrWhiteSpace(input.externalProductId) || input.externalProductId.Length > 100)
+            throw ApiException.BadRequest("externalProductId обязателен (макс. 100 символов)");
+
+        // Check product exists and belongs to the same store
+        var product = await _context.products
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == connection.storeId, ct);
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        // Check no existing link
+        var alreadyLinked = await _context.productMarketplaceLinks
+            .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+        if (alreadyLinked)
+            throw ApiException.BadRequest("Товар уже привязан к этому подключению");
+
+        // Resolve category mapping (optional — same logic as available-connections)
+        int? categoryMappingId = null;
+        if (product.categoryId.HasValue)
+        {
+            var mapping = await _context.categoryMappings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.connectionId == connectionId
+                    && m.localCategoryId == product.categoryId.Value, ct);
+            categoryMappingId = mapping?.Id;
+        }
+
+        var link = new ProductMarketplaceLink();
+        link.AddFill(new ProductMarketplaceLink.AddForm
+        {
+            productId = productId,
+            connectionId = connectionId,
+            externalProductId = input.externalProductId.Trim(),
+            status = ProductMarketplaceStatus.NotSynced,
+            categoryMappingId = categoryMappingId
+        });
+
+        _context.productMarketplaceLinks.Add(link);
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            linkId = link.Id,
+            externalProductId = link.externalProductId,
+            status = link.status.ToString()
+        });
+    }
+
+    /// <summary>
+    /// Re-link a product to a different external marketplace product.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/relink")]
+    public async Task<IActionResult> RelinkProduct(
+        int linkId,
+        [FromBody] LinkProductInput input,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(input.externalProductId) || input.externalProductId.Length > 100)
+            throw ApiException.BadRequest("externalProductId обязателен (макс. 100 символов)");
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var link = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.connection.storeId == selectedStoreId.Value, ct);
+
+        if (link == null)
+            throw ApiException.NotFound("Связь не найдена");
+
+        link.externalProductId = input.externalProductId.Trim();
+        link.externalSku = null;
+        link.status = ProductMarketplaceStatus.NotSynced;
+        link.lastErrorMessage = null;
+
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            linkId = link.Id,
+            externalProductId = link.externalProductId,
+            status = link.status.ToString()
+        });
+    }
+
+    /// <summary>
     /// Bulk export products
     /// </summary>
     [HttpPost]
@@ -1305,6 +1405,7 @@ public class ProductSyncController : ControllerBase
                     linkId = link?.Id,
                     linkStatus = link?.status.ToString(),
                     externalProductId = link?.externalProductId,
+                    externalSku = link?.externalSku,
                     // Возможности
                     canExport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct) ?? false,
                     canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false,
@@ -2322,6 +2423,11 @@ public class ProductSyncController : ControllerBase
     #endregion
 
     #region Input DTOs
+
+    public struct LinkProductInput
+    {
+        public string externalProductId { get; set; }
+    }
 
     public struct ExportBulkInput
     {

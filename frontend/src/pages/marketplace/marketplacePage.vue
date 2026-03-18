@@ -56,6 +56,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Switch from "@/components/ui/switch/Switch.vue";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
   components: {
@@ -104,6 +106,8 @@ export default {
     SelectTrigger,
     SelectValue,
     Switch,
+    PageHeader,
+    EmptyState,
   },
   data() {
     return {
@@ -261,14 +265,10 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Маркетплейсы</h1>
-        <p class="text-sm text-muted-foreground">
-          Управление подключениями к маркетплейсам для синхронизации товаров
-        </p>
-      </div>
-
+    <PageHeader
+      title="Маркетплейсы"
+      description="Управление подключениями к маркетплейсам для синхронизации товаров"
+    >
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -285,17 +285,18 @@ export default {
           </DialogHeader>
           <div class="py-4 space-y-4">
             <!-- No plugins available -->
-            <div v-if="adapters.length === 0" class="flex flex-col items-center justify-center py-8 text-center">
-              <Package class="size-12 mb-4 text-muted-foreground" />
-              <h3 class="font-medium mb-1">Нет доступных плагинов</h3>
-              <p class="text-sm text-muted-foreground">
-                Для подключения к маркетплейсам необходимо установить соответствующие плагины.
-                Перейдите в раздел "Плагины" для установки.
-              </p>
+            <EmptyState
+              v-if="adapters.length === 0"
+              title="Нет доступных плагинов"
+              description='Для подключения к маркетплейсам необходимо установить соответствующие плагины. Перейдите в раздел "Плагины" для установки.'
+            >
+              <template #icon>
+                <Package class="size-12 mb-4 text-muted-foreground" />
+              </template>
               <Button variant="outline" class="mt-4" @click="$router.push('/marketplace/plugins')">
                 Перейти к плагинам
               </Button>
-            </div>
+            </EmptyState>
 
             <template v-else>
               <div class="space-y-2">
@@ -371,21 +372,19 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div
-        v-else-if="connections.length === 0"
-        class="flex flex-col items-center justify-center py-12 text-center"
+      <EmptyState
+        v-if="isLoading || connections.length === 0"
+        :loading="isLoading"
+        title="Нет подключений к маркетплейсам"
+        description="Добавьте первое подключение для синхронизации товаров"
       >
-        <Store class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет подключений к маркетплейсам</h3>
-        <p class="text-sm text-muted-foreground">Добавьте первое подключение для синхронизации товаров</p>
-      </div>
+        <template #icon>
+          <Store class="size-12 mb-4 text-muted-foreground" />
+        </template>
+      </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card

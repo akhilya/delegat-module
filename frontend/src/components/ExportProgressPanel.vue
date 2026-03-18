@@ -102,21 +102,21 @@ export default {
   <Teleport to="body">
     <div
       v-if="hasActiveExport"
-      :class="['fixed right-4 w-80 bg-background border rounded-lg shadow-lg z-[9999]', panelTopClass]"
+      :class="['fixed right-4 w-80 bg-background border rounded-lg shadow-lg z-toast', panelTopClass]"
     >
       <div class="p-3">
         <!-- Header -->
         <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2 cursor-pointer" @click="toggleCollapse">
+          <button type="button" class="flex items-center gap-2 cursor-pointer" @click="toggleCollapse">
             <Loader2 v-if="!isExportFinished" class="size-4 animate-spin text-primary" />
-            <CheckCircle v-else class="size-4 text-green-500" />
+            <CheckCircle v-else class="size-4 text-success" />
             <span class="font-medium text-sm">
               {{ isExportFinished ? 'Экспорт завершён' : 'Экспорт товаров...' }}
             </span>
             <ChevronUp v-if="!isCollapsed" class="size-4 text-muted-foreground" />
             <ChevronDown v-else class="size-4 text-muted-foreground" />
-          </div>
-          <Button variant="ghost" size="icon" class="h-6 w-6" @click="handleClose">
+          </button>
+          <Button variant="ghost" size="icon" class="h-7 w-7" @click="handleClose">
             <X class="size-4" />
           </Button>
         </div>
@@ -130,19 +130,19 @@ export default {
           <div class="grid grid-cols-4 gap-1.5 text-center text-xs mb-2">
             <div class="bg-muted/50 rounded p-1.5">
               <div class="font-medium">{{ batchProgress?.total || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Всего</div>
+              <div class="text-xs text-muted-foreground">Всего</div>
             </div>
-            <div class="bg-amber-500/10 rounded p-1.5">
-              <div class="font-medium text-amber-600">{{ pendingCount }}</div>
-              <div class="text-[10px] text-muted-foreground">В очереди</div>
+            <div class="bg-warning/10 rounded p-1.5">
+              <div class="font-medium text-warning-foreground">{{ pendingCount }}</div>
+              <div class="text-xs text-muted-foreground">В очереди</div>
             </div>
-            <div class="bg-green-500/10 rounded p-1.5">
-              <div class="font-medium text-green-600">{{ batchProgress?.completed || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Готово</div>
+            <div class="bg-success/10 rounded p-1.5">
+              <div class="font-medium text-success-foreground">{{ batchProgress?.completed || 0 }}</div>
+              <div class="text-xs text-muted-foreground">Готово</div>
             </div>
-            <div class="bg-red-500/10 rounded p-1.5">
-              <div class="font-medium text-red-600">{{ batchProgress?.failed || 0 }}</div>
-              <div class="text-[10px] text-muted-foreground">Ошибки</div>
+            <div class="bg-error/10 rounded p-1.5">
+              <div class="font-medium text-error-foreground">{{ batchProgress?.failed || 0 }}</div>
+              <div class="text-xs text-muted-foreground">Ошибки</div>
             </div>
           </div>
 
@@ -158,20 +158,20 @@ export default {
               ref="productItems"
               class="flex items-center gap-1.5 py-1 px-1.5 rounded"
               :class="{
-                'bg-green-500/10': product.status === 'Completed',
-                'bg-red-500/10': product.status === 'Failed',
-                'bg-amber-500/10': product.status === 'InProgress',
+                'bg-success/10': product.status === 'Completed',
+                'bg-error/10': product.status === 'Failed',
+                'bg-warning/10': product.status === 'InProgress',
                 'bg-muted/30': product.status === 'Pending'
               }"
             >
-              <CheckCircle v-if="product.status === 'Completed'" class="size-3 text-green-500 flex-shrink-0" />
-              <XCircle v-else-if="product.status === 'Failed'" class="size-3 text-red-500 flex-shrink-0" />
-              <Loader2 v-else-if="product.status === 'InProgress'" class="size-3 animate-spin text-amber-500 flex-shrink-0" />
+              <CheckCircle v-if="product.status === 'Completed'" class="size-3 text-success flex-shrink-0" />
+              <XCircle v-else-if="product.status === 'Failed'" class="size-3 text-error flex-shrink-0" />
+              <Loader2 v-else-if="product.status === 'InProgress'" class="size-3 animate-spin text-warning flex-shrink-0" />
               <Clock v-else class="size-3 text-muted-foreground flex-shrink-0" />
               <span class="truncate flex-1">{{ product.productName || product.productId }}</span>
               <span
                 v-if="product.status === 'Failed' && product.lastError"
-                class="text-red-500 truncate max-w-[80px]"
+                class="text-error truncate max-w-[80px]"
                 :title="product.lastError"
               >
                 {{ product.lastError }}

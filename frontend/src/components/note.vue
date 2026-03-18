@@ -171,7 +171,17 @@ export default {
       </span>
       <div class="flex items-center gap-4">
         <Loader2 class="size-4 animate-spin" v-show="isUpdating" />
-        <AlertDialog>
+        <!-- Empty notes: delete immediately without confirmation -->
+        <Button
+          v-if="!noteValue.text?.trim()"
+          size="icon"
+          variant="ghost"
+          class="opacity-0 duration-75 group-hover:opacity-100"
+          @click="deleteThisNote"
+        >
+          <Trash2 class="size-4" />
+        </Button>
+        <AlertDialog v-else>
           <AlertDialogTrigger as-child>
             <Button
               size="icon"
@@ -183,7 +193,7 @@ export default {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader
-              >Вы уверены что хотите удалить заметку?</AlertDialogHeader
+              >Заметка будет удалена безвозвратно.</AlertDialogHeader
             >
             <AlertDialogFooter>
               <AlertDialogCancel>Назад</AlertDialogCancel>
@@ -195,6 +205,6 @@ export default {
         </AlertDialog>
       </div>
     </div>
-    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" />
+    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" placeholder="Текст заметки..." />
   </span>
 </template>

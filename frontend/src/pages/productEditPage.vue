@@ -38,10 +38,12 @@ import ProductAttributeForm from "@/components/products/productAttributeForm.vue
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
 import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.vue";
+import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import Note from "@/components/note.vue";
 
 import {
@@ -108,6 +110,7 @@ export default {
     StoreAttributeForm,
     ProductMarketplaceIntegrations,
     ProductVariantsEditor,
+    ProductGroupSidebar,
     BarcodeInput,
     SearchableSelect,
     Separator,
@@ -158,6 +161,9 @@ export default {
   watch: {
     tab(newVal) {
       this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
+      if (newVal === 'properties') {
+        this.$nextTick(() => this.autoResizeDescription());
+      }
     },
   },
   setup() {
@@ -191,13 +197,12 @@ export default {
     const selectedGroupId = ref(null);
     const isChangingGroup = ref(false);
     const descriptionRef = ref(null);
-    const sidebarScrollRef = ref(null);
+    const groupSidebarRef = ref(null);
     const mainScrollRef = ref(null);
 
     // Reload product data when switching between group members (component is reused)
-    // Preserve both sidebar and page scroll positions across navigation
+    // Preserve page scroll position; sidebar scroll is handled by scrollCurrentMemberIntoView
     watch(productId, () => {
-      const savedSidebarScroll = sidebarScrollRef.value?.scrollTop ?? 0;
       const savedPageScroll = window.scrollY;
 
       // Lock scroll position while data loads to prevent jumps
@@ -207,9 +212,6 @@ export default {
       fetchProduct().then(() => {
         nextTick(() => {
           window.removeEventListener('scroll', lockScroll);
-          if (sidebarScrollRef.value) {
-            sidebarScrollRef.value.scrollTop = savedSidebarScroll;
-          }
           window.scrollTo(0, savedPageScroll);
         });
       });
@@ -224,6 +226,11 @@ export default {
       el.style.height = el.scrollHeight + 'px';
     }
 
+    // Scroll the current product into view in the sidebar
+    function scrollCurrentMemberIntoView() {
+      groupSidebarRef.value?.scrollCurrentIntoView();
+    }
+
     // Fetch product group
     async function fetchProductGroup() {
       isLoadingGroup.value = true;
@@ -235,6 +242,7 @@ export default {
             productGroup.value = null;
           } else {
             productGroup.value = data.group;
+            scrollCurrentMemberIntoView();
           }
         },
         onError: () => {
@@ -760,7 +768,7 @@ export default {
       groupOptions,
       submitGroupChange,
       descriptionRef,
-      sidebarScrollRef,
+      groupSidebarRef,
       mainScrollRef,
       autoResizeDescription,
       duplicateProductUrl,
@@ -801,75 +809,42 @@ export default {
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
+    <!-- Mobile tabs (visible below sm where center slot is hidden) -->
+    <div class="sm:hidden mb-4 overflow-x-auto">
+      <Tabs v-model="tab">
+        <TabsList>
+          <TabsTrigger value="properties">Свойства</TabsTrigger>
+          <TabsTrigger value="notes">Заметки</TabsTrigger>
+          <TabsTrigger value="files">Файлы</TabsTrigger>
+          <TabsTrigger value="images">Фото</TabsTrigger>
+          <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
+          <TabsTrigger value="marketplaces">МП</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
+    <!-- Mobile group link (visible when sidebar is hidden) -->
+    <div v-if="productGroup" class="lg:hidden flex items-center gap-2 mb-3 text-sm">
+      <Layers class="size-4 text-muted-foreground" />
+      <router-link :to="`/product-groups/${productGroup.id}/edit`" class="text-muted-foreground hover:text-foreground transition-colors">
+        {{ productGroup.name }}
+      </router-link>
+      <span class="text-muted-foreground/50">&middot;</span>
+      <span class="text-muted-foreground">{{ productGroup.members?.length || 0 }} товаров</span>
+    </div>
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
-      <div v-if="productGroup" class="w-80 shrink-0 flex flex-col border rounded-xl overflow-hidden sticky top-[5.5rem] self-start" style="height: calc(100vh - 8.5rem)">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b">
-          <div class="flex items-center gap-2 min-w-0">
-            <Layers class="size-4 text-muted-foreground shrink-0" />
-            <span class="text-sm font-medium truncate">{{ productGroup.name }}</span>
-          </div>
-          <div class="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7"
-              title="Сменить группу"
-              type="button"
-              @click="openGroupDialog"
-            >
-              <ArrowRightLeft class="size-3.5 text-muted-foreground" />
-            </Button>
-            <router-link
-              :to="`/product-groups/${productGroup.id}/edit`"
-              class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent transition-colors"
-              title="Редактировать группу"
-            >
-              <ExternalLink class="size-3.5 text-muted-foreground" />
-            </router-link>
-          </div>
-        </div>
-        <!-- Scrollable product list -->
-        <div ref="sidebarScrollRef" class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5" :class="{ 'pointer-events-none opacity-50': isProductLoading }">
-          <!-- Add product button -->
-          <router-link
-            :to="duplicateProductUrl"
-            class="flex items-center justify-center p-2 h-16 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
-          >
-            <Plus class="size-4 text-muted-foreground" />
-          </router-link>
-          <ContextMenu v-for="member in productGroup.members" :key="member.productId">
-            <ContextMenuTrigger as-child>
-              <router-link
-                :to="{ path: `/products/${member.productId}/edit`, query: { tab } }"
-                class="flex items-center gap-3 p-2 rounded-lg transition-colors"
-                :class="member.isCurrent ? 'bg-accent' : 'hover:bg-accent/50'"
-              >
-                <img
-                  v-if="member.imageThumbnailUrl || member.imageUrl"
-                  :src="member.imageThumbnailUrl ?? member.imageUrl"
-                  class="size-12 rounded-md object-cover shrink-0"
-                  :alt="member.productName"
-                />
-                <div v-else class="size-12 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <Layers class="size-5 text-muted-foreground" />
-                </div>
-                <div class="min-w-0">
-                  <p class="text-sm truncate" :class="member.isCurrent ? 'font-medium' : ''">{{ member.productName || member.productSku }}</p>
-                  <p class="text-xs text-muted-foreground">{{ member.productSku }}</p>
-                </div>
-              </router-link>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
-                <Copy class="size-4 mr-2" />
-                Дублировать
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        </div>
-      </div>
+      <ProductGroupSidebar
+        v-if="productGroup || isLoadingGroup"
+        ref="groupSidebarRef"
+        :group="productGroup"
+        :loading="isLoadingGroup"
+        :disabled="isProductLoading"
+        :add-url="duplicateProductUrl"
+        :tab="tab"
+        :show-change-group="true"
+        :get-duplicate-url="getDuplicateUrl"
+        @change-group="openGroupDialog"
+      />
       <!-- Main content -->
       <div ref="mainScrollRef" class="grow flex flex-col min-w-0">
         <div v-show="!isProductLoading" class="grow flex flex-col">
@@ -877,7 +852,7 @@ export default {
             v-if="form"
             v-show="tab == 'properties'"
             @submit.prevent="onSubmit"
-            class="space-y-6 flex flex-col"
+            class="flex flex-col gap-6"
           >
             <!-- Image gallery (above main fields card) -->
             <input
@@ -902,13 +877,14 @@ export default {
               <template #item="{ element, index }">
                 <div
                   :class="[
-                    'gallery-item group size-48 rounded-lg overflow-hidden bg-secondary cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
+                    'gallery-item group size-32 sm:size-40 lg:size-48 rounded-lg overflow-hidden bg-secondary cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
                     index === 0 ? 'ring-2 ring-primary' : ''
                   ]"
                   @click="openLightbox(index)"
                 >
                   <img
                     :src="`/api/files/${element.fileId}/thumbnail?w=256`"
+                    :alt="element.displayName || 'Фото товара'"
                     class="size-full object-contain pointer-events-none"
                   />
                   <div v-if="index === 0" class="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded font-medium">
@@ -924,7 +900,7 @@ export default {
               </template>
               <template #footer>
                 <div
-                  class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                  class="size-32 sm:size-40 lg:size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
                   @click="triggerGalleryUpload"
                 >
                   <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
@@ -934,7 +910,7 @@ export default {
             </draggable>
             <div v-else class="flex flex-wrap gap-2">
               <div
-                class="size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                class="size-32 sm:size-40 lg:size-48 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
                 @click="triggerGalleryUpload"
               >
                 <Loader2 v-if="isUploadingGallery" class="size-6 text-muted-foreground animate-spin" />
@@ -966,6 +942,7 @@ export default {
                         size="icon"
                         class="shrink-0 size-9"
                         title="Изменить артикул"
+                        aria-label="Изменить артикул"
                         type="button"
                         @click="openSkuDialog"
                       >
@@ -985,7 +962,7 @@ export default {
                       </AlertDialogHeader>
                       <div class="space-y-3 py-2">
                         <div class="space-y-1">
-                          <Label class="text-sm opacity-60">Текущий артикул</Label>
+                          <Label class="text-sm text-muted-foreground">Текущий артикул</Label>
                           <Input type="text" disabled :model-value="productSKU" />
                         </div>
                         <div class="space-y-1">
@@ -1162,7 +1139,7 @@ export default {
           </Card>
 
           <!-- Actions row: Delete + Duplicate on left, Save on right -->
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between sticky bottom-0 bg-background py-3 -mx-px border-t mt-2">
             <div class="flex items-center gap-2">
               <AlertDialog>
                 <AlertDialogTrigger as-child>
@@ -1173,14 +1150,15 @@ export default {
                 </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Вы уверены что хотите удалить товар {{ productSKU }}?
-                  </AlertDialogTitle>
+                  <AlertDialogTitle>Удалить товар {{ productSKU }}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Товар будет перемещён в корзину. Его можно будет восстановить.
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Назад</AlertDialogCancel>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
                   <AlertDialogAction @click="handleDeleteProduct">
-                    Подтвердить
+                    В корзину
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -1194,7 +1172,7 @@ export default {
             <div class="flex items-center gap-4">
               <!-- Save status indicator -->
               <div v-if="lastSavedAt" class="text-sm text-muted-foreground flex items-center gap-2">
-                <Check class="size-4 text-green-500" />
+                <Check class="size-4 text-success" />
                 <span>Сохранено</span>
               </div>
               <div v-else-if="hasUnsavedChanges && !isSubmitting" class="text-sm text-muted-foreground">
@@ -1237,36 +1215,44 @@ export default {
         </div>
 
         <!-- Sizes tab -->
-        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
+        <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductVariantsEditor :productId="productId" />
         </div>
 
         <!-- Marketplaces tab -->
-        <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
+        <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
           <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
         </div>
 
         <!-- Notes tab -->
-        <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
-          <div class="p-4 flex flex-col gap-4">
-            <div v-if="notes.length === 0" class="text-center py-8 text-muted-foreground">
-              <NotebookPen class="size-12 mx-auto mb-3 opacity-50" />
-              <p>Нет заметок</p>
-              <p class="text-sm">Добавьте заметку для этого товара</p>
-            </div>
-            <div v-for="(note, index) in notes" :key="note.id || index">
-              <Note
-                v-model:note="notes[index]"
-                :productId="productId"
-                @onDelete="notes.splice(index, 1)"
-              />
-            </div>
-          </div>
-          <div class="mt-auto p-4">
-            <Button variant="outline" @click="addNote">
-              <NotebookPen class="size-4 mr-2" />
-              Добавить заметку
+        <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
+            <p class="text-sm font-medium flex items-center gap-2">
+              <NotebookPen class="size-4" />
+              Заметки
+            </p>
+            <Button variant="ghost" size="sm" @click="addNote" class="h-7">
+              <Plus class="size-4 mr-1" />
+              Добавить
             </Button>
+          </div>
+          <!-- Content -->
+          <div class="flex-1 overflow-y-auto">
+            <EmptyState v-if="notes.length === 0" title="Нет заметок" description="Заметки помогают фиксировать важную информацию о товаре">
+              <template #icon>
+                <NotebookPen class="size-12 mb-4 text-muted-foreground" />
+              </template>
+            </EmptyState>
+            <div v-else class="p-4 flex flex-col gap-4">
+              <div v-for="(note, index) in notes" :key="note.id || index">
+                <Note
+                  v-model:note="notes[index]"
+                  :productId="productId"
+                  @onDelete="notes.splice(index, 1)"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1289,20 +1275,21 @@ export default {
         @click.self="closeLightbox"
       >
         <!-- Close button -->
-        <button class="absolute top-4 right-4 text-white/70 hover:text-white" @click="closeLightbox">
+        <button class="absolute top-4 right-4 text-white/70 hover:text-white" aria-label="Закрыть" @click="closeLightbox">
           <X class="size-8" />
         </button>
         <!-- Prev -->
-        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" @click="prevImage">
+        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" aria-label="Предыдущее фото" @click="prevImage">
           <ChevronLeft class="size-10" />
         </button>
         <!-- Image -->
         <img
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
+          alt="Фото товара"
           class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
-        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" @click="nextImage">
+        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" aria-label="Следующее фото" @click="nextImage">
           <ChevronRight class="size-10" />
         </button>
         <!-- Counter -->

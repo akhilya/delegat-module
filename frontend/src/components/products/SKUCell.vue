@@ -10,11 +10,11 @@ export default {
 
 <template>
   <div class="flex flex-col items-center">
-    <h>
+    <span>
       {{ newSKU }}
-    </h>
-    <h class="text-muted-foreground text-sm">
+    </span>
+    <span class="text-muted-foreground text-sm">
       {{ oldSKU }}
-    </h>
+    </span>
   </div>
 </template>

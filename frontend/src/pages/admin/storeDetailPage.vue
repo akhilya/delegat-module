@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_ADMIN_STORES, setPageTitle } from "@/router";
 
 export default {
@@ -67,6 +68,7 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
+    EmptyState,
   },
   data() {
     return {
@@ -236,14 +238,15 @@ export default {
           </Dialog>
         </div>
 
-        <div
+        <EmptyState
           v-if="store.members.length === 0"
-          class="flex flex-col items-center justify-center py-12 text-center border rounded-lg"
+          title="Нет участников"
+          description="Пригласите участников через токены, чтобы они могли работать с товарами магазина"
         >
-          <Users class="size-12 mb-4 text-muted-foreground" />
-          <h3 class="font-medium mb-1">Нет участников</h3>
-          <p class="text-sm text-muted-foreground">Добавьте первого участника</p>
-        </div>
+          <template #icon>
+            <Users class="size-12 mb-4 text-muted-foreground" />
+          </template>
+        </EmptyState>
 
         <div v-else class="border rounded-lg">
           <Table>

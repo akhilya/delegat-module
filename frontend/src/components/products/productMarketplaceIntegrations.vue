@@ -22,6 +22,7 @@ import {
   RefreshCw,
   EllipsisVertical,
   Ruler,
+  Layers,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -126,6 +127,7 @@ export default {
     DropdownMenuSubContent,
     EllipsisVertical,
     Ruler,
+    Layers,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -164,6 +166,12 @@ export default {
       variantsData: {},
       // Bulk mapping dialog
       showBulkMappingDialog: false,
+      // Manual link dialog
+      showLinkDialog: false,
+      linkConn: null,
+      linkExternalId: "",
+      isLinking: false,
+      isRelinking: false,
       bulkMappingConflicts: [],
       bulkMappingSelections: {}, // temp selections in dialog
     };
@@ -211,6 +219,8 @@ export default {
       "saveMappingSelections",
       "getProductVariants",
       "updateProductVariant",
+      "linkProduct",
+      "relinkProduct",
     ]),
 
     async fetchData() {
@@ -559,6 +569,49 @@ export default {
       this.isRecreating = false;
     },
 
+    openLinkDialog(conn, isRelink = false) {
+      this.linkConn = conn;
+      this.linkExternalId = isRelink ? conn.externalProductId || "" : "";
+      this.isRelinking = isRelink;
+      this.showLinkDialog = true;
+    },
+
+    async submitLink() {
+      if (!this.linkConn || !this.linkExternalId.trim()) return;
+      this.isLinking = true;
+      if (this.isRelinking) {
+        await this.relinkProduct({
+          linkId: this.linkConn.linkId,
+          externalProductId: this.linkExternalId.trim(),
+          onSuccess: () => {
+            displaySonnerSuccess(`Товар перепривязан на ${this.linkConn.adapterName}`);
+            this.showLinkDialog = false;
+            this.linkConn = null;
+            this.fetchData();
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+          },
+        });
+      } else {
+        await this.linkProduct({
+          connectionId: this.linkConn.connectionId,
+          productId: this.productId,
+          externalProductId: this.linkExternalId.trim(),
+          onSuccess: () => {
+            displaySonnerSuccess(`Товар привязан к ${this.linkConn.adapterName}`);
+            this.showLinkDialog = false;
+            this.linkConn = null;
+            this.fetchData();
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+          },
+        });
+      }
+      this.isLinking = false;
+    },
+
     getSelectedMapping(conn) {
       const selectedId = this.mappingSelections[conn.connectionId];
       if (!selectedId || !conn.availableMappings) return null;
@@ -591,6 +644,19 @@ export default {
       return false;
     },
 
+    getMarketplaceProductUrl(conn) {
+      if (!conn.externalProductId) return null;
+      const id = conn.externalProductId;
+      switch (conn.adapterKey) {
+        case "ozon":
+          return `https://seller.ozon.ru/app/products/${id}/edit/general-info`;
+        case "wildberries":
+          return `https://seller.wildberries.ru/new-goods/card?nmID=${id}&type=EXIST_CARD`;
+        default:
+          return null;
+      }
+    },
+
     getStatusInfo(status) {
       switch (status) {
         case "Synced":
@@ -598,7 +664,7 @@ export default {
             variant: "default",
             icon: CheckCircle,
             label: "Синхронизирован",
-            color: "text-green-500",
+            color: "text-success",
           };
         case "NotSynced":
           return {
@@ -612,14 +678,14 @@ export default {
             variant: "destructive",
             icon: XCircle,
             label: "Ошибка",
-            color: "text-red-500",
+            color: "text-error",
           };
         case "Modified":
           return {
             variant: "outline",
             icon: AlertTriangle,
             label: "Изменён",
-            color: "text-orange-500",
+            color: "text-warning",
           };
         default:
           return {
@@ -644,6 +710,14 @@ export default {
       return d.toLocaleDateString("ru-RU");
     },
   },
+  watch: {
+    productId() {
+      this.connections = null;
+      this.variantsData = {};
+      this.mappingSelections = {};
+      this.fetchData();
+    },
+  },
   mounted() {
     this.fetchData();
   },
@@ -651,18 +725,16 @@ export default {
 </script>
 
 <template>
-  <div class="p-4 space-y-6">
+  <div class="flex flex-col min-h-0">
     <!-- Header -->
-    <div>
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <Link2 class="size-5" />
-        Маркетплейсы
-      </h2>
-      <p class="text-sm text-muted-foreground">
-        Управление связями товара с маркетплейсами
+    <div class="flex items-center px-4 h-11 border-b shrink-0">
+      <p class="text-sm font-medium flex items-center gap-2">
+        <Link2 class="size-4" />
+        Связи с маркетплейсами
       </p>
     </div>
 
+    <div class="flex-1 overflow-y-auto p-4 space-y-6">
     <!-- Loading state -->
     <div v-if="isLoading" class="flex justify-center py-12">
       <Loader2 class="size-8 animate-spin text-muted-foreground" />
@@ -671,9 +743,9 @@ export default {
     <!-- No category warning -->
     <div
       v-else-if="connections && !connections.categoryId"
-      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-orange-50 dark:bg-orange-950/20"
+      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-warning-muted"
     >
-      <AlertTriangle class="size-12 mb-4 text-orange-500" />
+      <AlertTriangle class="size-12 mb-4 text-warning" />
       <h3 class="font-medium mb-1">Товар не привязан к категории</h3>
       <p class="text-sm text-muted-foreground">
         Укажите категорию товара для экспорта на маркетплейсы
@@ -733,7 +805,17 @@ export default {
         <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
           <Loader2 class="size-5 animate-spin text-primary" />
         </div>
-        <div class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+        <a
+          v-if="getMarketplaceProductUrl(conn)"
+          :href="getMarketplaceProductUrl(conn)"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 hover:bg-primary/20 transition-colors"
+          title="Открыть на маркетплейсе"
+        >
+          <ExternalLink class="size-4 text-primary" />
+        </a>
+        <div v-else class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <ExternalLink class="size-4 text-primary" />
         </div>
         <div class="min-w-0 flex-1">
@@ -743,6 +825,9 @@ export default {
           </div>
           <div class="flex items-center gap-2 mt-0.5">
             <code class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{{ conn.externalProductId }}</code>
+            <span v-if="conn.externalSku" class="text-xs text-muted-foreground">
+              · арт. {{ conn.externalSku }}
+            </span>
             <router-link
               v-if="getMappingRoute(conn)"
               :to="getMappingRoute(conn)"
@@ -807,6 +892,11 @@ export default {
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @click="openLinkDialog(conn, true)">
+              <Link2 class="size-4 mr-2" />
+              Перепривязать
+            </DropdownMenuItem>
             <DropdownMenuSeparator v-if="conn.canArchive && conn.canExport" />
             <DropdownMenuItem
               v-if="conn.canArchive && conn.canExport"
@@ -882,7 +972,7 @@ export default {
             </router-link>
           </div>
         </div>
-        <Badge variant="outline" class="text-green-600 border-green-600 shrink-0">
+        <Badge variant="outline" class="text-success border-success shrink-0">
           <CheckCircle class="size-3 mr-1" />
           Готов
         </Badge>
@@ -899,6 +989,10 @@ export default {
             >
               <Upload class="size-4 mr-2" />
               Экспортировать
+            </DropdownMenuItem>
+            <DropdownMenuItem @click="openLinkDialog(conn)">
+              <Link2 class="size-4 mr-2" />
+              Привязать вручную
             </DropdownMenuItem>
             <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
               <DropdownMenuSubTrigger>
@@ -925,10 +1019,10 @@ export default {
       <div
         v-for="conn in connectionsWithoutMapping"
         :key="conn.connectionId"
-        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-orange-300 bg-orange-50 dark:bg-orange-950/20"
+        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-warning/30 bg-warning-muted"
       >
-        <div class="size-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-          <AlertTriangle class="size-4 text-orange-500" />
+        <div class="size-9 rounded-lg bg-warning/15 flex items-center justify-center shrink-0">
+          <AlertTriangle class="size-4 text-warning" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -984,7 +1078,7 @@ export default {
           <!-- Warning banner for irreversible fields -->
           <div
             v-if="hasIrreversibleFields()"
-            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200 text-sm"
+            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-warning-muted border border-warning/30 text-warning-foreground text-sm"
           >
             <AlertTriangle class="size-4 mt-0.5 shrink-0" />
             <span>Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную.</span>
@@ -1020,7 +1114,7 @@ export default {
                     {{ getFieldLabel(field) }}
                     <span
                       v-if="isFieldIrreversible(field)"
-                      class="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"
+                      class="inline-flex items-center gap-0.5 text-warning-foreground"
                       title="Необратимые модификаторы"
                     >
                       <AlertTriangle class="size-3.5" />
@@ -1030,7 +1124,7 @@ export default {
                 <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                   {{ formatFieldValue(field, importPreviewData.oldValues[field]) }}
                 </td>
-                <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
                   {{ formatFieldValue(field, importPreviewData.newValues[field]) }}
                 </td>
               </tr>
@@ -1126,5 +1220,31 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Manual Link Dialog -->
+    <Dialog v-model:open="showLinkDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ isRelinking ? 'Перепривязать товар' : 'Привязать товар' }}</DialogTitle>
+          <DialogDescription>
+            {{ isRelinking ? 'Введите новый ID товара' : 'Введите ID существующего товара' }} на {{ linkConn?.adapterName }} для {{ isRelinking ? 'перепривязки' : 'ручной привязки' }}.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-2">
+          <Label for="link-external-id">ID товара на маркетплейсе</Label>
+          <Input id="link-external-id" v-model="linkExternalId" maxlength="100"
+            placeholder="Например: 12345678" @keyup.enter="submitLink" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="showLinkDialog = false" :disabled="isLinking">Отмена</Button>
+          <Button @click="submitLink" :disabled="isLinking || !linkExternalId.trim()">
+            <Loader2 v-if="isLinking" class="size-4 mr-2 animate-spin" />
+            <Link2 v-else class="size-4 mr-2" />
+            {{ isRelinking ? 'Перепривязать' : 'Привязать' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </div>
   </div>
 </template>

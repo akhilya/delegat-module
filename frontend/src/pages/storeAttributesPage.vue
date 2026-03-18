@@ -2,6 +2,8 @@
 import Page from "@/components/page.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
@@ -82,6 +84,8 @@ export default {
     Page,
     NavigationBar,
     Breadcrumbs,
+    PageHeader,
+    EmptyState,
     Button,
     Input,
     Textarea,
@@ -360,31 +364,33 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Глобальные атрибуты</h1>
-        <p class="text-sm text-muted-foreground">
-          Атрибуты, применяемые ко всем товарам магазина независимо от категории
-        </p>
-      </div>
-
+    <PageHeader
+      title="Глобальные атрибуты"
+      description="Атрибуты, применяемые ко всем товарам магазина независимо от категории"
+    >
       <Button @click="openAddAttributeDialog">
         <Plus class="size-4 mr-2" />
         Добавить атрибут
       </Button>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 flex flex-col">
-      <div v-if="isLoading" class="grow flex items-center justify-center">
-        <Loader2 class="text-primary size-8 animate-spin" />
-      </div>
+      <EmptyState v-if="isLoading" loading />
 
       <div v-else class="grow flex flex-col p-4">
-        <div v-if="attributes.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-          <Settings2 class="size-12 mb-4 text-muted-foreground" />
-          <h3 class="font-medium mb-1">Нет глобальных атрибутов</h3>
-          <p class="text-sm text-muted-foreground">Добавьте атрибуты, которые будут применяться ко всем товарам</p>
-        </div>
+        <EmptyState
+          v-if="attributes.length === 0"
+          title="Нет глобальных атрибутов"
+          description="Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
+        >
+          <template #icon>
+            <Settings2 class="size-12 mb-4 text-muted-foreground" />
+          </template>
+          <Button @click="openAddAttributeDialog">
+            <Plus class="size-4 mr-2" />
+            Добавить атрибут
+          </Button>
+        </EmptyState>
 
         <draggable
             v-else
@@ -407,7 +413,7 @@ export default {
                       </span>
                       <span
                         v-if="attribute.isRequired"
-                        class="text-xs text-red-500"
+                        class="text-xs text-destructive"
                       >
                         *
                       </span>

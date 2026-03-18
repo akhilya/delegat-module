@@ -19,17 +19,9 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -64,15 +56,9 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+    PageHeader,
+    EmptyState,
+    ConfirmDialog,
     Card,
     CardContent,
     CardDescription,
@@ -192,14 +178,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex justify-between items-center mb-4">
-      <div>
-        <h1 class="text-lg font-semibold">Группы товаров</h1>
-        <p class="text-sm text-muted-foreground">
-          Объединение товаров для синхронизации с маркетплейсами
-        </p>
-      </div>
-
+    <PageHeader title="Группы товаров" description="Объединение товаров для синхронизации с маркетплейсами">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -236,18 +215,19 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageHeader>
 
     <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div v-else-if="groups.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-        <Layers class="size-12 mb-4 text-muted-foreground" />
-        <h3 class="font-medium mb-1">Нет групп товаров</h3>
-        <p class="text-sm text-muted-foreground">Создайте первую группу для объединения товаров</p>
-      </div>
+      <EmptyState v-if="isLoading" loading />
+      <EmptyState v-else-if="groups.length === 0" title="Нет групп товаров" description="Создайте первую группу для объединения товаров">
+        <template #icon>
+          <Layers class="size-12 mb-4 text-muted-foreground" />
+        </template>
+        <Button @click="showCreateDialog = true">
+          <Plus class="size-4 mr-2" />
+          Создать группу
+        </Button>
+      </EmptyState>
 
       <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card
@@ -288,8 +268,14 @@ export default {
             </div>
 
             <div class="flex justify-end">
-              <AlertDialog>
-                <AlertDialogTrigger as-child>
+              <ConfirmDialog
+                title="Удалить группу?"
+                :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с маркетплейсами также будут удалены.`"
+                confirm-label="Удалить"
+                :loading="isDeleting"
+                @confirm="handleDeleteGroup(group.id)"
+              >
+                <template #trigger>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -298,27 +284,8 @@ export default {
                   >
                     <Trash2 class="size-4 text-destructive" />
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Удалить группу?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Вы уверены что хотите удалить группу "{{ group.name }}"?
-                      Это действие нельзя отменить. Связи с маркетплейсами также будут удалены.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Отмена</AlertDialogCancel>
-                    <AlertDialogAction
-                      @click="handleDeleteGroup(group.id)"
-                      :disabled="isDeleting"
-                    >
-                      <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                      Удалить
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                </template>
+              </ConfirmDialog>
             </div>
           </CardContent>
         </Card>

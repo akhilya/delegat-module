@@ -623,17 +623,17 @@ export default {
 
     getRpsColor(current, max) {
       const ratio = current / max;
-      if (ratio < 0.5) return "bg-green-500";
+      if (ratio < 0.5) return "bg-success";
       if (ratio < 0.8) return "bg-yellow-500";
-      return "bg-red-500";
+      return "bg-error";
     },
 
     getQuotaColor(usage, limit) {
-      if (limit <= 0) return "bg-green-500";
+      if (limit <= 0) return "bg-success";
       const ratio = usage / limit;
-      if (ratio < 0.5) return "bg-green-500";
+      if (ratio < 0.5) return "bg-success";
       if (ratio < 0.8) return "bg-yellow-500";
-      return "bg-red-500";
+      return "bg-error";
     },
 
     formatQuotaResetTime(resetsAt) {
@@ -1741,13 +1741,13 @@ export default {
       }
       switch (product.linkStatus) {
         case "Synced":
-          return { variant: "default", icon: CheckCircle, label: "Синхронизирован", color: "text-green-500" };
+          return { variant: "default", icon: CheckCircle, label: "Синхронизирован", color: "text-success" };
         case "NotSynced":
           return { variant: "secondary", icon: AlertTriangle, label: "Не синхронизирован", color: "text-muted-foreground" };
         case "SyncError":
-          return { variant: "destructive", icon: XCircle, label: "Ошибка", color: "text-red-500" };
+          return { variant: "destructive", icon: XCircle, label: "Ошибка", color: "text-error" };
         case "Modified":
-          return { variant: "outline", icon: AlertTriangle, label: "Изменён", color: "text-orange-500" };
+          return { variant: "outline", icon: AlertTriangle, label: "Изменён", color: "text-warning" };
         default:
           return { variant: "secondary", icon: Package, label: product.linkStatus || "—", color: "text-muted-foreground" };
       }
@@ -1981,11 +1981,11 @@ export default {
                 </Dialog>
               </div>
 
-              <div v-if="testResult" class="mt-4 p-4 rounded-lg" :class="testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'">
+              <div v-if="testResult" class="mt-4 p-4 rounded-lg" :class="testResult.success ? 'bg-success-muted border-success/30' : 'bg-error-muted border-error/30'">
                 <div class="flex items-center gap-2">
-                  <CheckCircle v-if="testResult.success" class="size-5 text-green-600" />
-                  <XCircle v-else class="size-5 text-red-600" />
-                  <span :class="testResult.success ? 'text-green-700' : 'text-red-700'">
+                  <CheckCircle v-if="testResult.success" class="size-5 text-success-foreground" />
+                  <XCircle v-else class="size-5 text-error-foreground" />
+                  <span :class="testResult.success ? 'text-success-foreground' : 'text-error-foreground'">
                     {{ testResult.success ? testResult.message || 'Подключение успешно' : testResult.errorMessage || 'Ошибка подключения' }}
                   </span>
                 </div>
@@ -2000,8 +2000,8 @@ export default {
             <CardContent>
               <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
                 <div v-for="(value, key) in capabilities.capabilities" :key="key" class="flex items-center gap-2">
-                  <CheckCircle v-if="value" class="size-4 text-green-600" />
-                  <XCircle v-else class="size-4 text-gray-300" />
+                  <CheckCircle v-if="value" class="size-4 text-success-foreground" />
+                  <XCircle v-else class="size-4 text-muted-foreground/50" />
                   <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
                 </div>
               </div>
@@ -2305,7 +2305,7 @@ export default {
                     </TableCell>
                     <TableCell>
                       <div v-if="product.isLinked" class="flex items-center gap-1.5">
-                        <Link2 class="size-3 text-green-500" />
+                        <Link2 class="size-3 text-success" />
                         <code class="text-sm">{{ product.localProductSku }}</code>
                       </div>
                       <span v-else class="text-muted-foreground">—</span>
@@ -2702,7 +2702,7 @@ export default {
                 <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                   {{ formatImportFieldValue(field, singleImportPreviewData.oldValues[field]) }}
                 </td>
-                <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
                   {{ formatImportFieldValue(field, singleImportPreviewData.newValues[field]) }}
                 </td>
               </tr>
@@ -2752,7 +2752,7 @@ export default {
                     <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
                       {{ formatImportFieldValue(field, item.oldValues[field]) }}
                     </td>
-                    <td class="py-2 px-2 text-green-600 font-medium break-words whitespace-pre-wrap align-top">
+                    <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
                       {{ formatImportFieldValue(field, item.newValues[field]) }}
                     </td>
                   </tr>
@@ -2835,7 +2835,7 @@ export default {
                         :value="cat.id.toString()"
                       >
                         {{ cat.name }}
-                        <span v-if="getExistingMappingForCategory(group.externalCategoryId)?.localCategoryId === cat.id" class="text-green-500 ml-1">
+                        <span v-if="getExistingMappingForCategory(group.externalCategoryId)?.localCategoryId === cat.id" class="text-success ml-1">
                           (маппинг)
                         </span>
                       </SelectItem>
@@ -2846,7 +2846,7 @@ export default {
                 <div class="flex items-start gap-3">
                   <RadioGroupItem value="new" :id="`new-${group.externalCategoryId || '__none__'}`" class="mt-0.5 shrink-0" />
                   <Label :for="`new-${group.externalCategoryId || '__none__'}`" class="flex items-start gap-2 cursor-pointer">
-                    <Sparkles class="size-4 text-amber-500 mt-0.5 shrink-0" />
+                    <Sparkles class="size-4 text-warning mt-0.5 shrink-0" />
                     <span v-if="group.externalCategoryId">Создать новую из МП: "{{ group.externalCategoryName }}"</span>
                     <span v-else>Создать новую категорию:</span>
                   </Label>

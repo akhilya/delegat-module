@@ -125,7 +125,7 @@ export default {
       <Button
         variant="ghost"
         size="icon"
-        class="size-6 shrink-0 text-destructive hover:text-destructive"
+        class="size-7 shrink-0 text-destructive hover:text-destructive"
         @click="removeRow(index)"
       >
         <Trash2 class="size-3" />
@@ -137,7 +137,7 @@ export default {
       Добавить соответствие
     </Button>
 
-    <div v-if="unmappedOptions.length > 0" class="flex items-start gap-1.5 text-[11px] text-amber-600 bg-amber-500/10 rounded px-2 py-1.5">
+    <div v-if="unmappedOptions.length > 0" class="flex items-start gap-1.5 text-xs text-warning-foreground bg-warning/10 rounded px-2 py-1.5">
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>Не указаны соответствия для {{ unmappedOptions.length }} из {{ externalFieldOptions.length }} значений</span>
     </div>
