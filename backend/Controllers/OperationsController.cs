@@ -386,4 +386,27 @@ public class OperationsController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpDelete]
+    [Route("/operations/bulk")]
+    public async Task<IActionResult> DeleteOperationsBulk([FromBody] List<string> operationIds, CancellationToken ct)
+    {
+        var storeId = _currentUserService.GetSelectedStoreId();
+        if (storeId == null)
+            return BadRequest(new { message = "Не выбран магазин" });
+
+        if (operationIds == null || operationIds.Count == 0)
+            return NoContent();
+
+        // Delete logs first (FK)
+        await _context.operationLogEntries
+            .Where(e => operationIds.Contains(e.operationId))
+            .ExecuteDeleteAsync(ct);
+
+        await _context.operations
+            .Where(o => operationIds.Contains(o.operationId) && o.storeId == storeId.Value)
+            .ExecuteDeleteAsync(ct);
+
+        return NoContent();
+    }
 }

@@ -371,10 +371,11 @@ const actions = {
 
   async clearCompleted({ state, commit }) {
     const completed = state.operations.filter((o) => o.status !== "running");
+    const ids = completed.map((o) => o.id);
     commit("CLEAR_COMPLETED");
-    await Promise.allSettled(
-      completed.map((o) => http.delete(`/operations/${o.id}`).catch(() => {}))
-    );
+    if (ids.length) {
+      await http.delete("/operations/bulk", { data: ids }).catch(() => {});
+    }
   },
 
   togglePanel({ commit, state: _state }) {
