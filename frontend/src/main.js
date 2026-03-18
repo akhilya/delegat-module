@@ -65,7 +65,11 @@ http.interceptors.response.use(undefined, async (error) => {
         }
       }
       resetAuthCache();
-      router.push({ path: "/signIn", query: { redirect: router.currentRoute.value.fullPath } });
+      const currentPath = router.currentRoute.value.path;
+      const redirect = currentPath.startsWith("/signIn") || currentPath.startsWith("/signUp")
+        ? undefined
+        : currentPath;
+      router.push({ path: "/signIn", query: redirect ? { redirect } : {} });
       return Promise.reject(refreshError);
     }
   }
@@ -113,7 +117,10 @@ router.beforeEach(async (to) => {
       return true;
     } catch {
       isAuthenticated = null;
-      return { path: "/signIn", query: { redirect: to.fullPath } };
+      const redirect = to.path.startsWith("/signIn") || to.path.startsWith("/signUp")
+        ? undefined
+        : to.path;
+      return { path: "/signIn", query: redirect ? { redirect } : {} };
     }
   }
 
