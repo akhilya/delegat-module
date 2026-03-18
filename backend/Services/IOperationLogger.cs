@@ -8,4 +8,5 @@ public interface IOperationLogger
     Task LogAsync(string operationId, int storeId, string level, string message);
     Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed);
     Task FinishAsync(string operationId, int storeId, string status, string? summary = null);
+    Task UpdateStatusAsync(string operationId, int storeId, string status);
 }

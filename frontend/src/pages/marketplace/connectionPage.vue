@@ -1220,10 +1220,37 @@ export default {
     async handleImportWithCategories() {
       this.isImportingWithCategories = true;
 
+      // Create operation upfront so user sees it immediately
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const totalProducts = this.selectedUnlinkedItems.length;
+      const connectionName = this.connection?.name || "";
+
+      try {
+        await http.post("/operations/start", {
+          operationId,
+          type: "batch-import",
+          title: `Импорт ${totalProducts} товаров`,
+          batchType: "import",
+          connectionId: this.connectionId,
+          connectionName,
+          totalItems: totalProducts,
+        });
+      } catch { /* operation panel will still work via SignalR */ }
+
       try {
         const categoryIdMap = {};
+        let cancelled = false;
 
         for (const group of this.productsByExternalCategory) {
+          // Check if operation was paused or stopped
+          try {
+            const { data } = await http.get(`/operations/${operationId}/status`);
+            if (data.status === "paused" || data.status === "cancelled") {
+              cancelled = true;
+              break;
+            }
+          } catch { /* ignore */ }
+
           const extCatId = group.externalCategoryId;
           const key = extCatId || "__none__";
           const assignment = this.categoryAssignments[key];
@@ -1241,13 +1268,13 @@ export default {
             let createdCategoryId = null;
 
             if (extCatId) {
-              // Есть внешняя категория - используем importCategory для создания маппинга
               await this.importCategory({
                 connectionId: this.connectionId,
                 data: {
                   externalCategoryId: extCatId,
                   externalCategoryName: group.externalCategoryName || categoryName,
                   localCategoryName: categoryName,
+                  operationId,
                 },
                 onSuccess: (response) => {
                   const result = extractResponseData(response, {});
@@ -1258,7 +1285,6 @@ export default {
                 },
               });
             } else {
-              // Нет внешней категории - создаём простую локальную категорию
               await this.createCategory({
                 name: categoryName,
                 description: "",
@@ -1273,6 +1299,12 @@ export default {
             }
             categoryIdMap[key] = createdCategoryId;
           }
+        }
+
+        if (cancelled) {
+          this.showImportDialog = false;
+          this.selectedItems = [];
+          return;
         }
 
         const productsToImport = this.selectedUnlinkedItems.map((p) => {
@@ -1292,6 +1324,7 @@ export default {
         await this.importSelectedProducts({
           connectionId: this.connectionId,
           products: productsToImport,
+          operationId,
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
             if (result.batchId) {
@@ -1299,7 +1332,6 @@ export default {
               this.showImportDialog = false;
               this.selectedItems = [];
             } else {
-              // Старая система (если вдруг)
               displaySonnerSuccess(
                 `Создано: ${result.imported || 0}, пропущено: ${result.skipped || 0}, ошибок: ${result.failed || 0}`
               );

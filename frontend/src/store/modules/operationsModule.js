@@ -188,6 +188,13 @@ const actions = {
       });
     });
 
+    connection.on("OperationStatusChanged", (data) => {
+      commit("UPDATE_OPERATION_STATUS", {
+        id: data.operationId,
+        status: data.status,
+      });
+    });
+
     try {
       await connection.start();
       console.log("[Operations] SignalR connected");
@@ -317,6 +324,22 @@ const actions = {
     return response.data;
   },
 
+  async pauseOperation({ commit }, id) {
+    commit("UPDATE_OPERATION_STATUS", { id, status: "paused" });
+    try { await http.post(`/operations/${id}/pause`); } catch { /* ignore */ }
+  },
+
+  async resumeOperation({ commit }, id) {
+    commit("UPDATE_OPERATION_STATUS", { id, status: "running" });
+    try { await http.post(`/operations/${id}/resume`); } catch { /* ignore */ }
+  },
+
+  async stopOperation({ commit }, id) {
+    try {
+      await http.post(`/operations/${id}/stop`);
+    } catch { /* ignore */ }
+  },
+
   async clearOperation({ commit }, id) {
     commit("REMOVE_OPERATION", id);
     try { await http.delete(`/operations/${id}`); } catch { /* ignore 404 */ }
@@ -341,11 +364,11 @@ const actions = {
 
 const getters = {
   activeOperations: (state) =>
-    state.operations.filter((o) => o.status === "running"),
+    state.operations.filter((o) => o.status === "running" || o.status === "paused"),
 
   historyOperations: (state) =>
     state.operations
-      .filter((o) => o.status !== "running")
+      .filter((o) => o.status !== "running" && o.status !== "paused")
       .sort((a, b) => {
         const aTime = a.finishedAt || a.startedAt;
         const bTime = b.finishedAt || b.startedAt;

@@ -16,6 +16,11 @@ import {
   RefreshCw,
   X,
   Clock,
+  Pause,
+  Play,
+  Square,
+  Ban,
+  ImageDown,
 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
@@ -25,7 +30,7 @@ const props = defineProps({
   operation: { type: Object, required: true },
 });
 
-const emit = defineEmits(["retry", "remove"]);
+const emit = defineEmits(["retry", "remove", "pause", "resume", "stop"]);
 
 const store = useStore();
 const expanded = ref(false);
@@ -63,6 +68,8 @@ const typeIcon = computed(() => {
       return Package;
     case "excel-import":
       return FileSpreadsheet;
+    case "image-download":
+      return ImageDown;
     default:
       return Upload;
   }
@@ -72,12 +79,16 @@ const statusIcon = computed(() => {
   switch (props.operation.status) {
     case "running":
       return Loader2;
+    case "paused":
+      return Pause;
     case "completed":
       return CheckCircle;
     case "failed":
       return XCircle;
     case "partial":
       return AlertTriangle;
+    case "cancelled":
+      return Ban;
     default:
       return Loader2;
   }
@@ -87,12 +98,16 @@ const statusClass = computed(() => {
   switch (props.operation.status) {
     case "running":
       return "text-primary";
+    case "paused":
+      return "text-warning";
     case "completed":
       return "text-success";
     case "failed":
       return "text-error";
     case "partial":
       return "text-warning";
+    case "cancelled":
+      return "text-muted-foreground";
     default:
       return "text-muted-foreground";
   }
@@ -105,8 +120,12 @@ const progressPercent = computed(() => {
 });
 
 const isFinished = computed(() =>
-  ["completed", "failed", "partial"].includes(props.operation.status),
+  ["completed", "failed", "partial", "cancelled"].includes(props.operation.status),
 );
+
+const isRunning = computed(() => props.operation.status === "running");
+const isPaused = computed(() => props.operation.status === "paused");
+const canPauseStop = computed(() => isRunning.value || isPaused.value);
 
 const canExpand = computed(() => !props.operation._fromHistory || props.operation._canExpand !== false);
 
@@ -130,9 +149,11 @@ const elapsed = computed(() => {
 const statusLabel = computed(() => {
   switch (props.operation.status) {
     case "running": return "выполняется";
+    case "paused": return "пауза";
     case "completed": return "завершено";
     case "failed": return "ошибка";
     case "partial": return "частично";
+    case "cancelled": return "остановлено";
     default: return "";
   }
 });
@@ -161,9 +182,10 @@ const statusLabel = computed(() => {
         class="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
         :class="{
           'bg-primary/10 text-primary': operation.status === 'running',
+          'bg-warning/10 text-warning': operation.status === 'paused' || operation.status === 'partial',
           'bg-success/10 text-success': operation.status === 'completed',
           'bg-error/10 text-error': operation.status === 'failed',
-          'bg-warning/10 text-warning': operation.status === 'partial',
+          'bg-muted text-muted-foreground': operation.status === 'cancelled',
         }"
       >
         {{ statusLabel }}
@@ -230,6 +252,36 @@ const statusLabel = computed(() => {
 
       <!-- Actions -->
       <div class="flex items-center gap-1.5 pt-1.5 border-t">
+        <Button
+          v-if="isRunning"
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs"
+          @click="emit('pause', operation.id)"
+        >
+          <Pause class="size-3 mr-1" />
+          Пауза
+        </Button>
+        <Button
+          v-if="isPaused"
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs"
+          @click="emit('resume', operation.id)"
+        >
+          <Play class="size-3 mr-1" />
+          Продолжить
+        </Button>
+        <Button
+          v-if="canPauseStop"
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs text-error hover:text-error"
+          @click="emit('stop', operation.id)"
+        >
+          <Square class="size-3 mr-1" />
+          Остановить
+        </Button>
         <Button
           v-if="isFinished && operation.canRetry && operation.progress?.failed > 0"
           variant="outline"

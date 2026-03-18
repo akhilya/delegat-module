@@ -322,15 +322,15 @@ export default {
       <div class="flex min-w-full w-max">
         <!-- Data table -->
         <table ref="tableEl" class="table-fixed grow shrink-0 text-sm border-separate border-spacing-0">
-          <thead class="sticky top-0 z-10 bg-background">
-            <tr class="bg-background transition-colors">
+          <thead class="sticky top-0 z-10 bg-card">
+            <tr class="bg-card transition-colors">
               <th
                 v-for="header in table.getHeaderGroups()[0]?.headers"
                 :key="header.id"
                 :style="{ width: header.getSize() + 'px' }"
                 :draggable="canDragColumn(header.column.id)"
                 :class="[
-                  'h-9 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap bg-background border-b group/th',
+                  'h-9 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap bg-card border-b group/th',
                   canDragColumn(header.column.id) ? 'cursor-grab active:cursor-grabbing' : '',
                   dragOverColumnId === header.column.id ? 'bg-muted/50' : '',
                   isSortable(header.column.id) ? 'select-none' : '',
@@ -399,9 +399,9 @@ export default {
         </table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div :class="['sticky right-0 z-10 shrink-0 flex flex-col bg-background transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
+        <div :class="['sticky right-0 z-10 shrink-0 flex flex-col bg-card transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
           <!-- Header: ColumnSelector slot -->
-          <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-background border-b">
+          <div class="sticky top-0 z-30 h-9 flex items-center px-1 bg-card border-b">
             <slot name="headerActions" />
           </div>
           <!-- Row action buttons -->

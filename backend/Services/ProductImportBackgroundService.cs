@@ -92,6 +92,21 @@ public class ProductImportBackgroundService : BackgroundService
             if (ct.IsCancellationRequested)
                 break;
 
+            // Check if operation was paused or cancelled
+            if (pending.batchId != null)
+            {
+                var opStatus = await context.operations.AsNoTracking()
+                    .Where(o => o.operationId == pending.batchId)
+                    .Select(o => o.status)
+                    .FirstOrDefaultAsync(ct);
+
+                if (opStatus is "paused" or "cancelled")
+                {
+                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю обработку", pending.batchId, opStatus);
+                    break;
+                }
+            }
+
             try
             {
                 await ProcessSingleImportAsync(context, productSyncService, pending, ct);
@@ -135,7 +150,8 @@ public class ProductImportBackgroundService : BackgroundService
                 pending.authorUserId,
                 ct,
                 batchId: pending.batchId,
-                batchStoreId: pending.storeId);
+                batchStoreId: pending.storeId,
+                imageBatchId: pending.batchId != null ? $"{pending.batchId}-img" : null);
 
             _logger.LogInformation(
                 "Результат импорта товара {Id}: IsSuccess={IsSuccess}, AlreadyLinked={AlreadyLinked}, Error={Error}",

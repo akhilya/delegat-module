@@ -10,7 +10,8 @@ public enum ImageDownloadStatus
     Pending = 0,
     InProgress = 1,
     Completed = 2,
-    Failed = 3
+    Failed = 3,
+    Cancelled = 4
 }
 
 /// <summary>
@@ -82,6 +83,11 @@ public class PendingImageDownload
     /// Timestamp when the download completed successfully.
     /// </summary>
     public DateTime? completedAt { get; set; }
+
+    /// <summary>
+    /// Batch operation ID for grouping and tracking.
+    /// </summary>
+    public string? batchId { get; set; }
 
     /// <summary>
     /// Maximum number of retry attempts allowed.

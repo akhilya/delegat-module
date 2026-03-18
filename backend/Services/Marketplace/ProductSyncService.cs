@@ -915,7 +915,8 @@ public class ProductSyncService
         int? importByUserId = null,
         CancellationToken ct = default,
         string? batchId = null,
-        int? batchStoreId = null)
+        int? batchStoreId = null,
+        string? imageBatchId = null)
     {
         // Helper for operation-level logging (visible in UI)
         async Task Log(string level, string message)
@@ -1019,7 +1020,8 @@ public class ProductSyncService
                     connection.storeId,
                     importByUserId.Value,
                     externalProduct.ImageUrls,
-                    ct);
+                    ct,
+                    imageBatchId: imageBatchId);
                 await Log("info", $"Фото поставлены в очередь");
             }
 
@@ -1559,7 +1561,8 @@ public class ProductSyncService
         int storeId,
         int authorUserId,
         List<string> imageUrls,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? imageBatchId = null)
     {
         var imageIndex = 0;
 
@@ -1584,7 +1587,8 @@ public class ProductSyncService
                 imageUrl = imageUrl,
                 imageIndex = imageIndex,
                 status = ImageDownloadStatus.Pending,
-                createdAt = DateTime.UtcNow
+                createdAt = DateTime.UtcNow,
+                batchId = imageBatchId
             };
 
             _context.pendingImageDownloads.Add(pending);

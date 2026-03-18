@@ -166,4 +166,14 @@ public class OperationLogger : IOperationLogger
                 timestamp
             });
     }
+
+    public async Task UpdateStatusAsync(string operationId, int storeId, string status)
+    {
+        await _hub.Clients.Group($"store-{storeId}")
+            .SendAsync("OperationStatusChanged", new
+            {
+                operationId,
+                status
+            });
+    }
 }

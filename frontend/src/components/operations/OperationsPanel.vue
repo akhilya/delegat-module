@@ -46,6 +46,18 @@ async function handleRetry(id) {
   }
 }
 
+function handlePause(id) {
+  store.dispatch("operations/pauseOperation", id);
+}
+
+function handleResume(id) {
+  store.dispatch("operations/resumeOperation", id);
+}
+
+function handleStop(id) {
+  store.dispatch("operations/stopOperation", id);
+}
+
 function handleRemove(id) {
   store.dispatch("operations/clearOperation", id);
 }
@@ -106,6 +118,9 @@ function handleRemove(id) {
                 :key="op.id"
                 :operation="op"
                 @retry="handleRetry"
+                @pause="handlePause"
+                @resume="handleResume"
+                @stop="handleStop"
                 @remove="handleRemove"
               />
             </div>
@@ -122,6 +137,9 @@ function handleRemove(id) {
                 :key="op.id"
                 :operation="op"
                 @retry="handleRetry"
+                @pause="handlePause"
+                @resume="handleResume"
+                @stop="handleStop"
                 @remove="handleRemove"
               />
             </div>

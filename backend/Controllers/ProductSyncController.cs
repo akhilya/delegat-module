@@ -707,8 +707,8 @@ public class ProductSyncController : ControllerBase
             .GroupBy(m => m.externalCategoryId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        // Generate batch ID
-        var batchId = Guid.NewGuid().ToString("N");
+        // Use provided operationId or generate new batch ID
+        var batchId = !string.IsNullOrEmpty(input.operationId) ? input.operationId : Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
 
@@ -766,10 +766,38 @@ public class ProductSyncController : ControllerBase
 
         if (queued > 0)
         {
-            await _operationLogger.StartAsync(batchId, storeId, userId, "batch-import",
-                $"Импорт {queued} товаров",
-                connectionId: connectionId, connectionName: connection.name,
-                batchId: batchId, batchType: "import", totalItems: queued);
+            // Operation may already exist (created by frontend for cascading flow)
+            var opExists = await _context.operations.AsNoTracking()
+                .AnyAsync(o => o.operationId == batchId, ct);
+            if (opExists)
+            {
+                // Update existing operation with final counts
+                var op = await _context.operations.FirstAsync(o => o.operationId == batchId, ct);
+                op.totalItems = queued;
+                op.title = $"Импорт {queued} товаров";
+                op.batchType = "import";
+                await _context.SaveChangesAsync(ct);
+                await _operationLogger.ProgressAsync(batchId, storeId, queued, 0, 0);
+            }
+            else
+            {
+                await _operationLogger.StartAsync(batchId, storeId, userId, "batch-import",
+                    $"Импорт {queued} товаров",
+                    connectionId: connectionId, connectionName: connection.name,
+                    batchId: batchId, batchType: "import", totalItems: queued);
+            }
+
+            // Pre-create image download operation (will be populated as images are queued)
+            var imageBatchId = $"{batchId}-img";
+            var imgOpExists = await _context.operations.AsNoTracking()
+                .AnyAsync(o => o.operationId == imageBatchId, ct);
+            if (!imgOpExists)
+            {
+                await _operationLogger.StartAsync(imageBatchId, storeId, userId, "image-download",
+                    $"Загрузка изображений",
+                    connectionId: connectionId, connectionName: connection.name,
+                    batchId: imageBatchId, batchType: "image-download", totalItems: 0);
+            }
 
             await _operationLogger.LogAsync(batchId, storeId, "info",
                 $"В очередь добавлено {queued} товаров, ожидание обработки...");
@@ -2600,6 +2628,7 @@ public class ProductSyncController : ControllerBase
     public struct ImportSelectedInput
     {
         public List<ImportSelectedProductInput> products { get; set; }
+        public string? operationId { get; set; }
     }
 
     public struct ImportSelectedProductInput

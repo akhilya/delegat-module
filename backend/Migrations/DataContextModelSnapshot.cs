@@ -770,6 +770,9 @@ namespace PrintO.Migrations
                     b.Property<int>("authorUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("batchId")
+                        .HasColumnType("longtext");
+
                     b.Property<DateTime?>("completedAt")
                         .HasColumnType("datetime(6)");
 
