@@ -26,6 +26,7 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
     public abstract string DisplayName { get; }
     public virtual string? Description => null;
     public virtual string? LogoUrl => null;
+    public virtual string? ProductEditUrlTemplate => null;
     public abstract MarketplaceCapabilities Capabilities { get; }
     public abstract CredentialsSchema GetCredentialsSchema();
 

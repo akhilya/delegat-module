@@ -58,6 +58,9 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
     public virtual string? LogoUrl => null;
 
     /// <inheritdoc />
+    public virtual string? ProductEditUrlTemplate => null;
+
+    /// <inheritdoc />
     public virtual Task<List<ExternalCategory>> GetCategoriesAsync(
         ConnectionContext context,
         string? parentId = null,

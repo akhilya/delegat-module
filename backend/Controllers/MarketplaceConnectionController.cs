@@ -303,6 +303,7 @@ public class MarketplaceConnectionController : ControllerBase
         {
             adapterKey = adapter.Key,
             displayName = adapter.DisplayName,
+            productEditUrlTemplate = adapter.ProductEditUrlTemplate,
             capabilities = new
             {
                 getCategories = capabilities.HasFlag(MarketplaceCapabilities.GetCategories),

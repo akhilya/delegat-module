@@ -716,16 +716,8 @@ export default {
     },
 
     getMarketplaceProductUrl(conn) {
-      if (!conn.externalProductId) return null;
-      const id = conn.externalProductId;
-      switch (conn.adapterKey) {
-        case "ozon":
-          return `https://seller.ozon.ru/app/products/${id}/edit/general-info`;
-        case "wildberries":
-          return `https://seller.wildberries.ru/new-goods/card?nmID=${id}&type=EXIST_CARD`;
-        default:
-          return null;
-      }
+      if (!conn.externalProductId || !conn.productEditUrlTemplate) return null;
+      return conn.productEditUrlTemplate.replace("{externalId}", conn.externalProductId);
     },
 
     getStatusInfo(status) {

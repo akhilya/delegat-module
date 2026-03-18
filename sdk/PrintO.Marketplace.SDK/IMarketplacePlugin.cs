@@ -43,6 +43,12 @@ public interface IMarketplacePlugin
     MarketplaceCapabilities Capabilities { get; }
 
     /// <summary>
+    /// URL template for editing a product on the marketplace.
+    /// Use {externalId} as placeholder (e.g. "https://seller.wildberries.ru/catalog/new/card-detail?nmid={externalId}").
+    /// </summary>
+    string? ProductEditUrlTemplate { get; }
+
+    /// <summary>
     /// Whether this is a built-in system plugin that cannot be deleted.
     /// </summary>
     bool IsSystem { get; }

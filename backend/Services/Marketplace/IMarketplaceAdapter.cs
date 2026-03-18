@@ -39,6 +39,12 @@ public interface IMarketplaceAdapter
     MarketplaceCapabilities Capabilities { get; }
 
     /// <summary>
+    /// URL template for editing a product on the marketplace.
+    /// Use {externalId} as placeholder.
+    /// </summary>
+    string? ProductEditUrlTemplate { get; }
+
+    /// <summary>
     /// Connection settings schema (JSON Schema for UI).
     /// Defines which fields are required for connection (apiKey, clientId, etc.).
     /// </summary>

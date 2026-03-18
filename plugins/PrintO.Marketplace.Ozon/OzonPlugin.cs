@@ -15,10 +15,11 @@ public class OzonPlugin : MarketplacePluginBase
 
     public override string Key => "ozon";
     public override string DisplayName => "Ozon";
-    public override string Version => "1.1.2";
+    public override string Version => "1.1.3";
     public override bool IsSystem => true;
     public override string? Description => "Integration with Ozon Seller API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/9/91/Ozon_logo.svg";
+    public override string? ProductEditUrlTemplate => "https://seller.ozon.ru/app/products/{externalId}/edit/general-info";
 
     public override MarketplaceCapabilities Capabilities =>
         MarketplaceCapabilities.GetCategories |

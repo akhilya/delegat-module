@@ -1446,6 +1446,7 @@ public class ProductSyncController : ControllerBase
                 connectionName = link.connection?.name,
                 adapterKey = link.connection?.adapterKey,
                 adapterName = adapter?.DisplayName ?? link.connection?.adapterKey,
+                productEditUrlTemplate = adapter?.ProductEditUrlTemplate,
                 externalProductId = link.externalProductId,
                 externalSku = link.externalSku,
                 status = link.status.ToString(),
@@ -1518,6 +1519,7 @@ public class ProductSyncController : ControllerBase
                     connectionName = conn.name,
                     adapterKey = conn.adapterKey,
                     adapterName = adapter?.DisplayName ?? conn.adapterKey,
+                    productEditUrlTemplate = adapter?.ProductEditUrlTemplate,
                     // Статус маппинга
                     hasMapping,
                     needsMapping = !hasMapping && product.categoryId.HasValue,

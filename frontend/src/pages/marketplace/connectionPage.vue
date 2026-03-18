@@ -1771,6 +1771,12 @@ export default {
       }
     },
 
+    getMarketplaceProductUrl(externalId) {
+      const template = this.capabilities?.productEditUrlTemplate;
+      if (!template) return null;
+      return template.replace("{externalId}", externalId);
+    },
+
     formatPrice(price) {
       if (price === null || price === undefined) return "—";
       return new Intl.NumberFormat("ru-RU", {
@@ -2317,7 +2323,14 @@ export default {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.externalId }}</code>
+                      <a
+                        v-if="getMarketplaceProductUrl(product.externalId)"
+                        :href="getMarketplaceProductUrl(product.externalId)"
+                        target="_blank"
+                        rel="noopener"
+                        class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
+                      >{{ product.externalId }}</a>
+                      <code v-else class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.externalId }}</code>
                     </TableCell>
                     <TableCell>
                       <div v-if="product.isLinked" class="flex items-center gap-1.5">

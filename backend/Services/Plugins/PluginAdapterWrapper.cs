@@ -32,6 +32,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     public string DisplayName => _plugin.DisplayName;
     public string? Description => _plugin.Description;
     public string? LogoUrl => _plugin.LogoUrl;
+    public string? ProductEditUrlTemplate => _plugin.ProductEditUrlTemplate;
 
     public Marketplace.MarketplaceCapabilities Capabilities =>
         (Marketplace.MarketplaceCapabilities)(int)_plugin.Capabilities;

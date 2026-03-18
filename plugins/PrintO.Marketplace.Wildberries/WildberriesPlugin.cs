@@ -29,10 +29,11 @@ public class WildberriesPlugin : MarketplacePluginBase
 
     public override string Key => "wildberries";
     public override string DisplayName => "Wildberries";
-    public override string Version => "1.7.4";
+    public override string Version => "1.7.5";
     public override bool IsSystem => true;
     public override string? Description => "Integration with Wildberries API for managing products, prices, and stocks";
     public override string? LogoUrl => "https://upload.wikimedia.org/wikipedia/commons/4/43/Wildberries_Logo.svg";
+    public override string? ProductEditUrlTemplate => "https://seller.wildberries.ru/new-goods/card?nmID={externalId}&type=EXIST_CARD";
 
     public override MarketplaceCapabilities Capabilities =>
         MarketplaceCapabilities.GetCategories |
