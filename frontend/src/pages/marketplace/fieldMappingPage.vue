@@ -1564,6 +1564,7 @@ export default {
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Настройки маппинга</DialogTitle>
+          <DialogDescription>Настройте параметры маппинга</DialogDescription>
         </DialogHeader>
         <div class="space-y-4 py-4">
           <div class="space-y-2">

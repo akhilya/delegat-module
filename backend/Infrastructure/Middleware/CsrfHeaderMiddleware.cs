@@ -16,6 +16,7 @@ public class CsrfHeaderMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         if (!SafeMethods.Contains(context.Request.Method)
+            && !context.Request.Path.StartsWithSegments("/hubs")
             && !context.Request.Headers.ContainsKey("X-CSRF"))
         {
             context.Response.StatusCode = 403;

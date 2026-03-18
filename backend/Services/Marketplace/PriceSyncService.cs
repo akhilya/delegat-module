@@ -12,11 +12,13 @@ public class PriceSyncService
 {
     private readonly DataContext _context;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
+    private readonly IOperationLogger _operationLogger;
 
-    public PriceSyncService(DataContext context, IMarketplaceAdapterRegistry adapterRegistry)
+    public PriceSyncService(DataContext context, IMarketplaceAdapterRegistry adapterRegistry, IOperationLogger operationLogger)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -107,7 +109,9 @@ public class PriceSyncService
     public async Task<PriceSyncResult> ImportPricesAsync(
         int connectionId,
         List<int>? linkIds = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? operationId = null,
+        int? storeId = null)
     {
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
@@ -135,11 +139,24 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
 
+        var canLog = operationId != null && storeId != null;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        if (canLog)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                $"Найдено {links.Count} связанных товаров, запрос цен с {connection.adapterKey}...");
+
         try
         {
             // Get prices from the marketplace
             var externalIds = links.Select(l => l.externalProductId).ToList();
+            var apiSw = System.Diagnostics.Stopwatch.StartNew();
             var externalPrices = await adapter.ImportPricesAsync(connection, externalIds, ct);
+            apiSw.Stop();
+
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                    $"Получено {externalPrices.Count} цен с маркетплейса за {apiSw.ElapsedMilliseconds}мс");
 
             int updated = 0;
             int skipped = 0;
@@ -170,12 +187,21 @@ public class PriceSyncService
             }
 
             await _context.SaveChangesAsync(ct);
+            sw.Stop();
 
-            return PriceSyncResult.Success(updated, skipped, $"Обновлено {updated} товаров");
+            var msg = $"Обновлено {updated} товаров, пропущено {skipped} — {sw.ElapsedMilliseconds}мс";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
+            return PriceSyncResult.Success(updated, skipped, msg);
         }
         catch (Exception ex)
         {
-            return PriceSyncResult.Failure($"Ошибка импорта цен: {ex.Message}");
+            sw.Stop();
+            var errMsg = $"Ошибка импорта цен: {ex.Message}";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
+                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+            return PriceSyncResult.Failure(errMsg);
         }
     }
 
@@ -185,7 +211,9 @@ public class PriceSyncService
     public async Task<PriceSyncResult> ExportPricesAsync(
         int connectionId,
         List<int>? linkIds = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? operationId = null,
+        int? storeId = null)
     {
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
@@ -213,6 +241,13 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
 
+        var canLog = operationId != null && storeId != null;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        if (canLog)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                $"Найдено {links.Count} связанных товаров для подключения #{connectionId} ({connection.adapterKey})");
+
         // Build data for export
         var pricesToExport = links
             .Where(l => l.product?.price != null)
@@ -224,12 +259,32 @@ public class PriceSyncService
             ))
             .ToList();
 
+        var skippedNoPrice = links.Count - pricesToExport.Count;
+        if (canLog && skippedNoPrice > 0)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                $"Пропущено {skippedNoPrice} товаров без цены");
+
         if (!pricesToExport.Any())
+        {
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                    $"Нет товаров с ценами для экспорта ({sw.ElapsedMilliseconds}мс)");
             return PriceSyncResult.Success(0, links.Count, "Нет товаров с ценами для экспорта");
+        }
+
+        if (canLog)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                $"Подготовлено {pricesToExport.Count} цен, отправка на {connection.adapterKey}...");
 
         try
         {
+            var apiSw = System.Diagnostics.Stopwatch.StartNew();
             var result = await adapter.ExportPricesAsync(connection, pricesToExport, ct);
+            apiSw.Stop();
+
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                    $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
 
             if (result.IsSuccess)
             {
@@ -241,20 +296,31 @@ public class PriceSyncService
                     link.lastSyncAt = DateTime.UtcNow;
                 }
                 await _context.SaveChangesAsync(ct);
+                sw.Stop();
 
-                return PriceSyncResult.Success(
-                    result.SuccessCount,
-                    result.FailedCount,
-                    $"Экспортировано {result.SuccessCount} цен"
-                );
+                var msg = $"Экспортировано {result.SuccessCount} цен, ошибок: {result.FailedCount} — {sw.ElapsedMilliseconds}мс";
+                if (canLog)
+                    await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
+
+                return PriceSyncResult.Success(result.SuccessCount, result.FailedCount, msg);
             }
 
+            sw.Stop();
             var errorMessages = result.Errors?.Select(e => e.Message).ToList();
-            return PriceSyncResult.Failure(errorMessages?.FirstOrDefault() ?? "Ошибка экспорта цен");
+            var errMsg = errorMessages?.FirstOrDefault() ?? "Ошибка экспорта цен";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
+                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+            return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
         {
-            return PriceSyncResult.Failure($"Ошибка экспорта цен: {ex.Message}");
+            sw.Stop();
+            var errMsg = $"Ошибка экспорта цен: {ex.Message}";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
+                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+            return PriceSyncResult.Failure(errMsg);
         }
     }
 
@@ -264,7 +330,9 @@ public class PriceSyncService
     public async Task<PriceSyncResult> ExportStocksAsync(
         int connectionId,
         List<int>? linkIds = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? operationId = null,
+        int? storeId = null)
     {
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
@@ -335,9 +403,25 @@ public class PriceSyncService
         if (!stocksToExport.Any())
             return PriceSyncResult.Success(0, links.Count, "Нет товаров с остатками для экспорта");
 
+        var canLog = operationId != null && storeId != null;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        if (canLog)
+        {
+            var variantCount = stocksToExport.Count(s => s.VariantId != null);
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                $"Подготовлено {stocksToExport.Count} остатков ({variantCount} вариантов), отправка на {connection.adapterKey}...");
+        }
+
         try
         {
+            var apiSw = System.Diagnostics.Stopwatch.StartNew();
             var result = await adapter.ExportStocksAsync(connection, stocksToExport, ct);
+            apiSw.Stop();
+
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
+                    $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
 
             if (result.IsSuccess)
             {
@@ -348,20 +432,31 @@ public class PriceSyncService
                     link.lastSyncAt = DateTime.UtcNow;
                 }
                 await _context.SaveChangesAsync(ct);
+                sw.Stop();
 
-                return PriceSyncResult.Success(
-                    result.SuccessCount,
-                    result.FailedCount,
-                    $"Экспортировано {result.SuccessCount} остатков"
-                );
+                var msg = $"Экспортировано {result.SuccessCount} остатков, ошибок: {result.FailedCount} — {sw.ElapsedMilliseconds}мс";
+                if (canLog)
+                    await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
+
+                return PriceSyncResult.Success(result.SuccessCount, result.FailedCount, msg);
             }
 
+            sw.Stop();
             var errorMessages = result.Errors?.Select(e => e.Message).ToList();
-            return PriceSyncResult.Failure(errorMessages?.FirstOrDefault() ?? "Ошибка экспорта остатков");
+            var errMsg = errorMessages?.FirstOrDefault() ?? "Ошибка экспорта остатков";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
+                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+            return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
         {
-            return PriceSyncResult.Failure($"Ошибка экспорта остатков: {ex.Message}");
+            sw.Stop();
+            var errMsg = $"Ошибка экспорта остатков: {ex.Message}";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
+                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+            return PriceSyncResult.Failure(errMsg);
         }
     }
 }

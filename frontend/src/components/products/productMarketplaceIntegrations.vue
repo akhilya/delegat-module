@@ -312,25 +312,32 @@ export default {
       }
 
       this.isExportingAll = true;
+
       let successCount = 0;
       let errorCount = 0;
 
       for (const conn of allExportable) {
         try {
           if (conn.isLinked) {
-            // Re-export via existing link
             await this.exportFromLink({
               linkId: conn.linkId,
-              onSuccess: () => { successCount++; },
-              onError: () => { errorCount++; },
+              onSuccess: () => {
+                successCount++;
+              },
+              onError: () => {
+                errorCount++;
+              },
             });
           } else {
-            // First export
             await this.exportProduct({
               connectionId: conn.connectionId,
               productId: this.productId,
-              onSuccess: () => { successCount++; },
-              onError: () => { errorCount++; },
+              onSuccess: () => {
+                successCount++;
+              },
+              onError: () => {
+                errorCount++;
+              },
             });
           }
         } catch {
@@ -442,6 +449,7 @@ export default {
       if (!this.previewLinkId) return;
       this.isApplyingImport = true;
       const excludeFields = [...this.importExcludedFields];
+
       await this.importFromLink({
         linkId: this.previewLinkId,
         excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
@@ -509,7 +517,6 @@ export default {
       this.exportingConnectionId = conn.connectionId;
 
       if (conn.isLinked) {
-        // Already linked - use export via link
         await this.exportFromLink({
           linkId: conn.linkId,
           onSuccess: () => {
@@ -521,7 +528,6 @@ export default {
           },
         });
       } else {
-        // New export (first time)
         await this.exportProduct({
           connectionId: conn.connectionId,
           productId: this.productId,

@@ -898,13 +898,13 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importSelectedProducts(ctx, { connectionId, products, onSuccess, onError }) {
+    async importSelectedProducts(ctx, { connectionId, products, operationId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/import-selected`,
         {
           method: "POST",
           cache: false,
-          data: { products },
+          data: { products, operationId },
           timeout: 5 * 60 * 1000,
         },
         http,

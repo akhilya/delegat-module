@@ -20,6 +20,7 @@ public class ProductSyncService
     private readonly MappingService _mappingService;
     private readonly IStorageService _storageService;
     private readonly ILogger<ProductSyncService> _logger;
+    private readonly IOperationLogger _operationLogger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProductSyncService"/>.
@@ -29,13 +30,15 @@ public class ProductSyncService
         IMarketplaceAdapterRegistry adapterRegistry,
         MappingService mappingService,
         IStorageService storageService,
-        ILogger<ProductSyncService> logger)
+        ILogger<ProductSyncService> logger,
+        IOperationLogger operationLogger)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
         _mappingService = mappingService;
         _storageService = storageService;
         _logger = logger;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -910,8 +913,18 @@ public class ProductSyncService
         string externalProductId,
         int? targetCategoryId = null,
         int? importByUserId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? batchId = null,
+        int? batchStoreId = null,
+        string? imageBatchId = null)
     {
+        // Helper for operation-level logging (visible in UI)
+        async Task Log(string level, string message)
+        {
+            if (batchId != null && batchStoreId != null)
+                await _operationLogger.LogAsync(batchId, batchStoreId.Value, level, message);
+        }
+
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
@@ -928,9 +941,16 @@ public class ProductSyncService
         try
         {
             // Получаем товар с маркетплейса
+            await Log("info", $"Загрузка товара {externalProductId} с маркетплейса...");
             var externalProduct = await adapter.ImportProductAsync(connection, externalProductId, ct);
             if (externalProduct == null)
+            {
+                await Log("error", $"Товар {externalProductId} не найден на маркетплейсе");
                 return ProductImportResult.Failure($"Товар с ID '{externalProductId}' не найден на маркетплейсе");
+            }
+
+            var productLabel = externalProduct.Name ?? externalProductId;
+            await Log("info", $"Получен: {productLabel} | SKU: {externalProduct.Sku ?? "—"} | Цена: {externalProduct.Price} | Остаток: {externalProduct.Quantity} | Атрибутов: {externalProduct.Attributes?.Count ?? 0} | Фото: {externalProduct.ImageUrls?.Count ?? 0} | Вариантов: {externalProduct.Variants?.Count ?? 0}");
 
             _logger.LogInformation(
                 "Импортируем товар {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Attributes={AttrCount}",
@@ -950,6 +970,7 @@ public class ProductSyncService
 
             if (existingLink != null)
             {
+                await Log("warning", $"{productLabel} — уже импортирован (ID: {existingLink.productId})");
                 return ProductImportResult.AlreadyExists(
                     existingLink.productId,
                     existingLink.product?.name ?? "Unknown"
@@ -957,6 +978,7 @@ public class ProductSyncService
             }
 
             // Создаём локальный товар
+            await Log("info", $"Создание товара в базе: {productLabel}...");
             var product = new Product();
             product.AddFill(new Product.AddForm(
                 new Product.UserAddForm
@@ -974,27 +996,33 @@ public class ProductSyncService
 
             _context.products.Add(product);
             await _context.SaveChangesAsync(ct);
+            await Log("info", $"Товар создан (ID: {product.Id})");
 
             // Импортируем атрибуты на основе маппинга категории
             if (targetCategoryId.HasValue && externalProduct.Attributes?.Count > 0)
             {
+                await Log("info", $"Импорт {externalProduct.Attributes.Count} атрибутов...");
                 await ImportProductAttributesAsync(
                     product.Id,
                     connectionId,
                     targetCategoryId.Value,
                     externalProduct.Attributes,
                     ct);
+                await Log("info", $"Атрибуты импортированы");
             }
 
             // Импортируем изображения
             if (externalProduct.ImageUrls?.Any() == true && importByUserId.HasValue)
             {
+                await Log("info", $"Постановка {externalProduct.ImageUrls.Count} фото в очередь загрузки...");
                 await ImportProductImagesAsync(
                     product.Id,
                     connection.storeId,
                     importByUserId.Value,
                     externalProduct.ImageUrls,
-                    ct);
+                    ct,
+                    imageBatchId: imageBatchId);
+                await Log("info", $"Фото поставлены в очередь");
             }
 
             // Создаём связь
@@ -1017,13 +1045,17 @@ public class ProductSyncService
             // Sync variants (sizes) if present
             if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
             {
+                await Log("info", $"Синхронизация {externalProduct.Variants.Count} вариантов (размеров)...");
                 await SyncVariantsAsync(product.Id, connectionId, externalProduct.Variants, ct);
+                await Log("info", $"Варианты синхронизированы");
             }
 
             // Добавляем товар в группу, если GroupId указан
             if (!string.IsNullOrEmpty(externalProduct.GroupId))
             {
+                await Log("info", $"Добавление в группу: {externalProduct.GroupName ?? externalProduct.GroupId}...");
                 await AddProductToGroupAsync(product.Id, connectionId, connection.storeId, externalProduct.GroupId, externalProduct.GroupName, ct);
+                await Log("info", $"Товар добавлен в группу");
             }
 
             return ProductImportResult.Success(
@@ -1036,6 +1068,7 @@ public class ProductSyncService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка импорта товара {ExternalId}", externalProductId);
+            await Log("error", $"Ошибка импорта {externalProductId}: {ex.Message}");
             return ProductImportResult.Failure($"Ошибка импорта: {ex.Message}");
         }
     }
@@ -1528,7 +1561,8 @@ public class ProductSyncService
         int storeId,
         int authorUserId,
         List<string> imageUrls,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? imageBatchId = null)
     {
         var imageIndex = 0;
 
@@ -1553,7 +1587,8 @@ public class ProductSyncService
                 imageUrl = imageUrl,
                 imageIndex = imageIndex,
                 status = ImageDownloadStatus.Pending,
-                createdAt = DateTime.UtcNow
+                createdAt = DateTime.UtcNow,
+                batchId = imageBatchId
             };
 
             _context.pendingImageDownloads.Add(pending);

@@ -13,6 +13,10 @@ public class ImageDownloadBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ImageDownloadBackgroundService> _logger;
+    private readonly IOperationLogger _operationLogger;
+
+    // Track which image batch operations have been started
+    private readonly HashSet<string> _startedImageOps = new();
 
     // Settings
     private const int BATCH_SIZE = 5;              // Images to process per batch
@@ -20,17 +24,14 @@ public class ImageDownloadBackgroundService : BackgroundService
     private const int POLL_INTERVAL_MS = 5000;     // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 30000;      // Delay after error (ms)
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="ImageDownloadBackgroundService"/>.
-    /// </summary>
-    /// <param name="scopeFactory">Factory for creating DI scopes.</param>
-    /// <param name="logger">Logger instance.</param>
     public ImageDownloadBackgroundService(
         IServiceScopeFactory scopeFactory,
-        ILogger<ImageDownloadBackgroundService> logger)
+        ILogger<ImageDownloadBackgroundService> logger,
+        IOperationLogger operationLogger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -88,7 +89,65 @@ public class ImageDownloadBackgroundService : BackgroundService
             if (ct.IsCancellationRequested)
                 break;
 
+            // Check if operation was paused or cancelled
+            if (pending.batchId != null)
+            {
+                var opStatus = await context.operations.AsNoTracking()
+                    .Where(o => o.operationId == pending.batchId)
+                    .Select(o => o.status)
+                    .FirstOrDefaultAsync(ct);
+
+                if (opStatus is "paused" or "cancelled")
+                {
+                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю загрузку", pending.batchId, opStatus);
+                    break;
+                }
+
+                // Update total count on first encounter
+                if (!_startedImageOps.Contains(pending.batchId))
+                {
+                    var totalImages = await context.pendingImageDownloads.AsNoTracking()
+                        .CountAsync(p => p.batchId == pending.batchId, ct);
+
+                    // Operation may already exist (created by controller) or not (legacy)
+                    var existingOp = await context.operations
+                        .FirstOrDefaultAsync(o => o.operationId == pending.batchId, ct);
+                    if (existingOp != null)
+                    {
+                        existingOp.totalItems = totalImages;
+                        existingOp.title = $"Загрузка {totalImages} изображений";
+                        await context.SaveChangesAsync(ct);
+                    }
+                    else
+                    {
+                        await _operationLogger.StartAsync(pending.batchId, pending.storeId, pending.authorUserId,
+                            "image-download", $"Загрузка {totalImages} изображений",
+                            batchId: pending.batchId, batchType: "image-download", totalItems: totalImages);
+                    }
+
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "info",
+                        $"Начата загрузка {totalImages} изображений");
+                    _startedImageOps.Add(pending.batchId);
+                }
+            }
+
             await ProcessSingleImageAsync(context, storageService, pending, ct);
+
+            // Report progress for batched images
+            if (pending.batchId != null)
+            {
+                var batchItems = await context.pendingImageDownloads.AsNoTracking()
+                    .Where(p => p.batchId == pending.batchId).ToListAsync(ct);
+                var total = batchItems.Count;
+                var completed = batchItems.Count(p => p.status == ImageDownloadStatus.Completed);
+                var failed = batchItems.Count(p => p.status == ImageDownloadStatus.Failed);
+                await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
+
+                if (total == completed + failed)
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
+                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+                        $"Загружено: {completed} успешно, {failed} ошибок");
+            }
 
             // Задержка между изображениями чтобы не перегружать CDN
             if (!ct.IsCancellationRequested)

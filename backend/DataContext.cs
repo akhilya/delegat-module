@@ -53,6 +53,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<ProductGroupMember> productGroupMembers { get; set; }
     public DbSet<ProductGroupMarketplaceLink> productGroupMarketplaceLinks { get; set; }
 
+    // Operations history
+    public DbSet<Operation> operations { get; set; }
+    public DbSet<OperationLogEntry> operationLogEntries { get; set; }
+
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
     }
@@ -226,5 +230,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         // FolderShareToken indexes
         builder.Entity<FolderShareToken>()
             .HasIndex(fst => fst.token).IsUnique();
+
+        // Operation indexes
+        builder.Entity<Operation>()
+            .HasIndex(o => o.operationId).IsUnique();
+
+        builder.Entity<Operation>()
+            .HasIndex(o => new { o.storeId, o.createdAt });
+
+        // OperationLogEntry indexes
+        builder.Entity<OperationLogEntry>()
+            .HasIndex(e => e.operationId);
     }
 }

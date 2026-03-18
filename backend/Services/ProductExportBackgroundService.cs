@@ -13,6 +13,7 @@ public class ProductExportBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProductExportBackgroundService> _logger;
+    private readonly IOperationLogger _operationLogger;
 
     // Settings
     private const int BATCH_SIZE = 50;                // Products to process per batch
@@ -26,10 +27,12 @@ public class ProductExportBackgroundService : BackgroundService
     /// <param name="logger">Logger instance.</param>
     public ProductExportBackgroundService(
         IServiceScopeFactory scopeFactory,
-        ILogger<ProductExportBackgroundService> logger)
+        ILogger<ProductExportBackgroundService> logger,
+        IOperationLogger operationLogger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -95,6 +98,22 @@ public class ProductExportBackgroundService : BackgroundService
 
             var connectionId = group.Key;
             var groupItems = group.ToList();
+
+            // Check if any operation in this group is paused or cancelled
+            var batchId = groupItems.FirstOrDefault(i => i.batchId != null)?.batchId;
+            if (batchId != null)
+            {
+                var opStatus = await context.operations.AsNoTracking()
+                    .Where(o => o.operationId == batchId)
+                    .Select(o => o.status)
+                    .FirstOrDefaultAsync(ct);
+
+                if (opStatus is "paused" or "cancelled")
+                {
+                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю экспорт", batchId, opStatus);
+                    continue;
+                }
+            }
 
             // Check if adapter supports bulk export
             var connection = await context.marketplaceConnections
@@ -181,6 +200,10 @@ public class ProductExportBackgroundService : BackgroundService
                     _logger.LogInformation(
                         "Bulk: экспортирован товар {ProductId} -> External={ExternalId}",
                         pending.productId, itemResult.ExternalProductId);
+
+                    if (pending.batchId != null)
+                        await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
+                            $"Экспортирован: {pending.productName ?? pending.productId.ToString()}");
                 }
                 else
                 {
@@ -196,6 +219,10 @@ public class ProductExportBackgroundService : BackgroundService
                     _logger.LogWarning(
                         "Bulk: не удалось экспортировать товар {ProductId}: {Error}",
                         pending.productId, pending.lastError);
+
+                    if (pending.batchId != null)
+                        await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
+                            $"Ошибка: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
                 }
             }
         }
@@ -217,6 +244,26 @@ public class ProductExportBackgroundService : BackgroundService
         }
 
         await context.SaveChangesAsync(ct);
+
+        // Emit progress/finish via SignalR for bulk export
+        var firstItem = pendingItems.First();
+        if (firstItem.batchId != null)
+        {
+            var batchItems = await context.pendingProductExports
+                .AsNoTracking()
+                .Where(p => p.batchId == firstItem.batchId)
+                .ToListAsync(ct);
+            var total = batchItems.Count;
+            var completed = batchItems.Count(p => p.status == ProductExportStatus.Completed);
+            var failed = batchItems.Count(p => p.status == ProductExportStatus.Failed);
+            await _operationLogger.ProgressAsync(firstItem.batchId, firstItem.storeId, total, completed, failed);
+
+            var pending = total - completed - failed;
+            if (pending == 0)
+                await _operationLogger.FinishAsync(firstItem.batchId, firstItem.storeId,
+                    failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+                    $"Экспортировано: {completed} успешно, {failed} ошибок");
+        }
     }
 
     private async Task CancelRemainingExportsAsync(
@@ -299,6 +346,10 @@ public class ProductExportBackgroundService : BackgroundService
                 _logger.LogInformation(
                     "Экспортирован товар {ProductName} (ID: {ProductId}, External: {ExternalId}) из очереди",
                     pending.productName, pending.productId, result.ExternalProductId);
+
+                if (pending.batchId != null)
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
+                        $"Экспортирован: {pending.productName ?? pending.productId.ToString()}");
             }
             else
             {
@@ -311,9 +362,31 @@ public class ProductExportBackgroundService : BackgroundService
                 _logger.LogWarning(
                     "Не удалось экспортировать товар {ProductId}: {Error} (попытка {Retry})",
                     pending.productId, pending.lastError, pending.retryCount);
+
+                if (pending.batchId != null)
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
+                        $"Ошибка: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);
+
+            // Emit progress via SignalR
+            if (pending.batchId != null)
+            {
+                var batchItems = await context.pendingProductExports
+                    .AsNoTracking()
+                    .Where(p => p.batchId == pending.batchId)
+                    .ToListAsync(ct);
+                var total = batchItems.Count;
+                var completed = batchItems.Count(p => p.status == ProductExportStatus.Completed);
+                var failed = batchItems.Count(p => p.status == ProductExportStatus.Failed);
+                await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
+
+                if (total == completed + failed)
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
+                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+                        $"Экспортировано: {completed} успешно, {failed} ошибок");
+            }
 
             _logger.LogInformation(
                 "Товар {Id}:{ProductId} обработан, финальный статус: {Status}",

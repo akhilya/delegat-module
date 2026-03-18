@@ -7,6 +7,7 @@ using PrintO.Infrastructure.Data;
 using PrintO.Infrastructure.Middleware;
 using PrintO.Models;
 using PrintO.Models.Marketplace;
+using PrintO.Services;
 using PrintO.Services.Marketplace;
 
 namespace PrintO.Controllers;
@@ -23,6 +24,8 @@ public class CategoryMappingController : ControllerBase
     private readonly CategoryImportService _categoryImportService;
     private readonly ILogger<CategoryMappingController> _logger;
 
+    private readonly IOperationLogger _operationLogger;
+
     public CategoryMappingController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
@@ -30,7 +33,8 @@ public class CategoryMappingController : ControllerBase
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
         CategoryImportService categoryImportService,
-        ILogger<CategoryMappingController> logger)
+        ILogger<CategoryMappingController> logger,
+        IOperationLogger operationLogger)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -39,6 +43,7 @@ public class CategoryMappingController : ControllerBase
         _adapterRegistry = adapterRegistry;
         _categoryImportService = categoryImportService;
         _logger = logger;
+        _operationLogger = operationLogger;
     }
 
     /// <summary>
@@ -346,6 +351,12 @@ public class CategoryMappingController : ControllerBase
                 throw ApiException.NotFound("Локальная категория не найдена");
         }
 
+        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+
+        if (!string.IsNullOrEmpty(input.operationId))
+            await _operationLogger.LogAsync(input.operationId, storeId, "info",
+                $"Импорт категории: {input.externalCategoryName ?? input.externalCategoryId}...");
+
         var result = await _categoryImportService.ImportExternalCategoryAsync(
             connection,
             input.externalCategoryId,
@@ -356,7 +367,16 @@ public class CategoryMappingController : ControllerBase
             ct);
 
         if (!result.IsSuccess)
+        {
+            if (!string.IsNullOrEmpty(input.operationId))
+                await _operationLogger.LogAsync(input.operationId, storeId, "error",
+                    $"Ошибка импорта категории: {result.ErrorMessage}");
             throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка импорта");
+        }
+
+        if (!string.IsNullOrEmpty(input.operationId))
+            await _operationLogger.LogAsync(input.operationId, storeId, "success",
+                $"Категория импортирована: {result.Message} (атрибутов: {result.AttributesCreated})");
 
         return Ok(new
         {
@@ -752,6 +772,7 @@ public class CategoryMappingController : ControllerBase
         public string? localCategoryName { get; set; }
         public int? localCategoryId { get; set; }
         public List<string>? selectedFieldKeys { get; set; }
+        public string? operationId { get; set; }
     }
 
     #endregion

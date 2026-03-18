@@ -251,10 +251,9 @@ export default {
       totalCount: 0,
       linkedCount: 0,
       hasMoreProducts: false,
-      externalPage: 1,
       externalPageSize: 50,
-      pageCursors: [null],
-      productsPageCache: {}, // { pageNum: { items, hasMore, total, linkedCount } }
+      nextCursor: null,
+      isLoadingMore: false,
 
       // Import dialog state
       showImportDialog: false,
@@ -355,11 +354,7 @@ export default {
         clearTimeout(this.searchDebounceTimer);
       }
       this.searchDebounceTimer = setTimeout(() => {
-        // Reset products and fetch with search
-        this.products = [];
-        this.externalPage = 1;
-        this.clearProductsCache();
-        this.fetchProducts();
+        this.fetchProducts(true);
       }, 500);
     },
     localSearchQuery(newValue) {
@@ -371,17 +366,19 @@ export default {
         this.fetchLocalProducts();
       }, 500);
     },
-    // Обновляем данные после завершения импорта (если импорт был для этого подключения)
-    "$store.state.importProgress.batchProgress": {
-      handler(newVal, oldVal) {
-        if (
-          newVal?.isFinished &&
-          !oldVal?.isFinished &&
-          this.$store.state.importProgress.connectionId === this.connectionId
-        ) {
-          this.fetchProducts(true);
-          this.fetchMappings();
-          this.fetchLocalCategories();
+    // Обновляем данные после завершения операции (если она была для этого подключения)
+    "$store.state.operations.operations": {
+      handler(newOps, oldOps) {
+        if (!newOps || !oldOps) return;
+        for (const op of newOps) {
+          if (op.connectionId !== this.connectionId) continue;
+          const old = oldOps.find((o) => o.id === op.id);
+          if (old && old.status === "running" && op.status !== "running") {
+            this.fetchProducts(true);
+            this.fetchMappings();
+            this.fetchLocalCategories();
+            break;
+          }
         }
       },
       deep: true,
@@ -457,8 +454,8 @@ export default {
     someLocalSelected() {
       return this.selectedLocalIds.length > 0 && !this.allLocalSelected;
     },
-    canGoNextExternal() {
-      return this.hasMoreProducts;
+    canLoadMore() {
+      return this.hasMoreProducts || this.isLoadingMore;
     },
     localLastPage() {
       return Math.max(1, Math.ceil(this.localTotalCount / this.localPageSize));
@@ -547,11 +544,7 @@ export default {
 
       // If products tab was restored from URL, fetch products now
       if (this.activeTab === "products") {
-        if (this.externalPage > 1) {
-          await this.restoreExternalPage(this.externalPage);
-        } else {
-          this.onProductsTabActivated();
-        }
+        this.onProductsTabActivated();
       }
     },
 
@@ -922,29 +915,18 @@ export default {
     // === Products tab methods ===
 
     async fetchProducts(forceRefresh = false) {
-      this.syncPageQuery();
-
       if (forceRefresh) {
-        this.clearProductsCache();
-      }
-
-      // Use cache if available
-      const cached = this.productsPageCache[this.externalPage];
-      if (cached) {
-        this.products = cached.items;
-        this.totalCount = cached.total;
-        this.linkedCount = cached.linkedCount;
-        this.hasMoreProducts = cached.hasMore;
-        return;
+        this.products = [];
+        this.nextCursor = null;
+        this.hasMoreProducts = false;
       }
 
       this.isLoadingProducts = true;
-      const cursor = this.pageCursors[this.externalPage - 1] ?? null;
 
       await this.getExternalProducts({
         connectionId: this.connectionId,
         pageSize: this.externalPageSize,
-        cursor,
+        cursor: null,
         offerIdSearch: this.searchQuery || null,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
@@ -952,17 +934,7 @@ export default {
           this.totalCount = data.total || 0;
           this.linkedCount = data.linkedCount || 0;
           this.hasMoreProducts = !!data.hasMore;
-          // Store cursor for next page
-          if (data.nextCursor && this.pageCursors.length <= this.externalPage) {
-            this.pageCursors.push(data.nextCursor);
-          }
-          // Cache page results
-          this.productsPageCache[this.externalPage] = {
-            items: this.products,
-            total: this.totalCount,
-            linkedCount: this.linkedCount,
-            hasMore: this.hasMoreProducts,
-          };
+          this.nextCursor = data.nextCursor || null;
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -972,32 +944,43 @@ export default {
       this.isLoadingProducts = false;
     },
 
-    async restoreExternalPage(targetPage) {
-      this.isLoadingProducts = true;
-      // Sequentially load pages to rebuild cursor chain + cache
-      for (let p = 1; p <= targetPage; p++) {
-        this.externalPage = p;
-        await this.fetchProducts();
-        if (!this.hasMoreProducts && p < targetPage) {
-          break; // not enough pages exist
-        }
-      }
-      this.isLoadingProducts = false;
-    },
+    async loadMoreProducts() {
+      if (!this.hasMoreProducts || !this.nextCursor || this.isLoadingMore) return;
 
-    clearProductsCache() {
-      this.productsPageCache = {};
-      this.pageCursors = [null];
-      this.hasMoreProducts = false;
+      this.isLoadingMore = true;
+
+      await this.getExternalProducts({
+        connectionId: this.connectionId,
+        pageSize: this.externalPageSize,
+        cursor: this.nextCursor,
+        offerIdSearch: this.searchQuery || null,
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
+          const newItems = data.items || [];
+          // Append without duplicates
+          const existingIds = new Set(this.products.map((p) => p.externalId));
+          for (const item of newItems) {
+            if (!existingIds.has(item.externalId)) {
+              this.products.push(item);
+            }
+          }
+          this.totalCount = data.total || this.totalCount;
+          this.linkedCount = data.linkedCount || this.linkedCount;
+          this.hasMoreProducts = !!data.hasMore;
+          this.nextCursor = data.nextCursor || null;
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+
+      this.isLoadingMore = false;
     },
 
     syncPageQuery() {
       const query = { ...this.$route.query };
       let changed = false;
-      if (this.externalPage > 1 && query.ePage !== String(this.externalPage)) {
-        query.ePage = String(this.externalPage);
-        changed = true;
-      } else if (this.externalPage <= 1 && query.ePage) {
+      if (query.ePage) {
         delete query.ePage;
         changed = true;
       }
@@ -1069,6 +1052,7 @@ export default {
       if (!this.previewLinkId) return;
       this.isApplyingSingleImport = true;
       const excludeFields = [...this.singleImportExcludedFields];
+
       await this.importFromLink({
         linkId: this.previewLinkId,
         excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
@@ -1129,6 +1113,7 @@ export default {
       if (!product.isLinked || !product.linkId) return;
 
       this.exportingLinkId = product.linkId;
+
       await this.exportFromLink({
         linkId: product.linkId,
         onSuccess: () => {
@@ -1235,10 +1220,37 @@ export default {
     async handleImportWithCategories() {
       this.isImportingWithCategories = true;
 
+      // Create operation upfront so user sees it immediately
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const totalProducts = this.selectedUnlinkedItems.length;
+      const connectionName = this.connection?.name || "";
+
+      try {
+        await http.post("/operations/start", {
+          operationId,
+          type: "batch-import",
+          title: `Импорт ${totalProducts} товаров`,
+          batchType: "import",
+          connectionId: this.connectionId,
+          connectionName,
+          totalItems: totalProducts,
+        });
+      } catch { /* operation panel will still work via SignalR */ }
+
       try {
         const categoryIdMap = {};
+        let cancelled = false;
 
         for (const group of this.productsByExternalCategory) {
+          // Check if operation was paused or stopped
+          try {
+            const { data } = await http.get(`/operations/${operationId}/status`);
+            if (data.status === "paused" || data.status === "cancelled") {
+              cancelled = true;
+              break;
+            }
+          } catch { /* ignore */ }
+
           const extCatId = group.externalCategoryId;
           const key = extCatId || "__none__";
           const assignment = this.categoryAssignments[key];
@@ -1256,13 +1268,13 @@ export default {
             let createdCategoryId = null;
 
             if (extCatId) {
-              // Есть внешняя категория - используем importCategory для создания маппинга
               await this.importCategory({
                 connectionId: this.connectionId,
                 data: {
                   externalCategoryId: extCatId,
                   externalCategoryName: group.externalCategoryName || categoryName,
                   localCategoryName: categoryName,
+                  operationId,
                 },
                 onSuccess: (response) => {
                   const result = extractResponseData(response, {});
@@ -1273,7 +1285,6 @@ export default {
                 },
               });
             } else {
-              // Нет внешней категории - создаём простую локальную категорию
               await this.createCategory({
                 name: categoryName,
                 description: "",
@@ -1288,6 +1299,12 @@ export default {
             }
             categoryIdMap[key] = createdCategoryId;
           }
+        }
+
+        if (cancelled) {
+          this.showImportDialog = false;
+          this.selectedItems = [];
+          return;
         }
 
         const productsToImport = this.selectedUnlinkedItems.map((p) => {
@@ -1307,28 +1324,14 @@ export default {
         await this.importSelectedProducts({
           connectionId: this.connectionId,
           products: productsToImport,
+          operationId,
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
             if (result.batchId) {
-              // Новая система с фоновой обработкой - используем глобальный store
-              this.$store.dispatch("importProgress/startImportProgress", {
-                batchId: result.batchId,
-                connectionId: this.connectionId,
-                initialProgress: {
-                  total: result.queued + result.skipped,
-                  queued: result.queued,
-                  pending: result.queued,
-                  completed: 0,
-                  failed: 0,
-                  isFinished: false,
-                  products: [],
-                },
-              });
               displaySonnerSuccess(`Добавлено в очередь: ${result.queued} товаров`);
               this.showImportDialog = false;
               this.selectedItems = [];
             } else {
-              // Старая система (если вдруг)
               displaySonnerSuccess(
                 `Создано: ${result.imported || 0}, пропущено: ${result.skipped || 0}, ошибок: ${result.failed || 0}`
               );
@@ -1384,6 +1387,7 @@ export default {
       if (this.isApplyingBulkImport) return;
       if (this.bulkPreviewLinkIds.length === 0) return;
       this.isApplyingBulkImport = true;
+
       await this.importLinksBulk({
         linkIds: this.bulkPreviewLinkIds,
         onSuccess: (response) => {
@@ -1452,20 +1456,6 @@ export default {
           { productIds }
         );
         const result = response.data;
-
-        this.$store.dispatch("exportProgress/startExportProgress", {
-          batchId: result.batchId,
-          connectionId: this.connectionId,
-          initialProgress: {
-            total: result.queued,
-            pending: result.queued,
-            inProgress: 0,
-            completed: 0,
-            failed: 0,
-            isFinished: false,
-            products: [],
-          },
-        });
 
         displaySonnerSuccess(result.message);
         this.selectedItems = [];
@@ -1638,20 +1628,6 @@ export default {
         );
         const result = response.data;
 
-        this.$store.dispatch("exportProgress/startExportProgress", {
-          batchId: result.batchId,
-          connectionId: this.connectionId,
-          initialProgress: {
-            total: result.queued,
-            pending: result.queued,
-            inProgress: 0,
-            completed: 0,
-            failed: 0,
-            isFinished: false,
-            products: [],
-          },
-        });
-
         displaySonnerSuccess(result.message);
         this.selectedLocalItemsMap = {};
       } catch (error) {
@@ -1770,9 +1746,6 @@ export default {
 
     if (tab) {
       this.activeTab = tab;
-    }
-    if (ePage) {
-      this.externalPage = parseInt(ePage) || 1;
     }
     if (lPage) {
       this.localPage = parseInt(lPage) || 1;
@@ -1915,12 +1888,9 @@ export default {
                   </DialogTrigger>
                   <DialogContent class="sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle class="flex items-center gap-2">
-                        <Activity class="size-5" />
-                        API Лимиты
-                      </DialogTitle>
-                      <DialogDescription v-if="limitsData && !limitsData.supported">
-                        Маркетплейс не поддерживает отслеживание лимитов
+                      <DialogTitle>API Лимиты</DialogTitle>
+                      <DialogDescription>
+                        {{ limitsData && !limitsData.supported ? 'Маркетплейс не поддерживает отслеживание лимитов' : 'Текущие лимиты API маркетплейса' }}
                       </DialogDescription>
                     </DialogHeader>
                     <div v-if="limitsData && limitsData.supported" class="space-y-6">
@@ -2371,60 +2341,17 @@ export default {
               </Table>
             </div>
 
-            <!-- Pagination -->
-            <div v-if="products.length > 0" class="flex items-center justify-between py-3">
-              <div class="flex items-center gap-2">
-                <p class="text-sm text-muted-foreground">по</p>
-                <Select
-                  :model-value="String(externalPageSize)"
-                  @update:model-value="(val) => { externalPageSize = Number(val); externalPage = 1; pageCursors = [null]; clearProductsCache(); fetchProducts(); }"
-                >
-                  <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem as="button" value="10">10</SelectItem>
-                      <SelectItem as="button" value="25">25</SelectItem>
-                      <SelectItem as="button" value="50">50</SelectItem>
-                      <SelectItem as="button" value="100">100</SelectItem>
-                      <SelectItem as="button" value="250">250</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <p class="text-sm text-muted-foreground">
-                  Страница {{ externalPage }}, показано: {{ products.length }}
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="externalPage <= 1"
-                  @click="externalPage = 1; clearProductsCache(); fetchProducts()"
-                >
-                  <ChevronsLeft class="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="externalPage <= 1"
-                  @click="externalPage--; fetchProducts()"
-                >
-                  <ChevronLeft class="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="!canGoNextExternal"
-                  @click="externalPage++; fetchProducts()"
-                >
-                  <ChevronRight class="size-4" />
-                </Button>
-              </div>
+            <!-- Load more -->
+            <div v-if="canLoadMore" class="flex justify-center py-4">
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="isLoadingMore"
+                @click="loadMoreProducts"
+              >
+                <Loader2 v-if="isLoadingMore" class="size-4 mr-2 animate-spin" />
+                {{ isLoadingMore ? 'Загрузка...' : 'Загрузить ещё' }}
+              </Button>
             </div>
 
             <!-- Bulk actions bar -->
@@ -2710,7 +2637,9 @@ export default {
           </table>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="cancelSingleImport">Отменить</Button>
+          <DialogClose as-child>
+            <Button variant="outline" @click="cancelSingleImport">Отмена</Button>
+          </DialogClose>
           <Button @click="confirmSingleImport" :disabled="isApplyingSingleImport || allSingleImportFieldsExcluded()">
             <Loader2 v-if="isApplyingSingleImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
@@ -2762,7 +2691,9 @@ export default {
           </template>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="cancelBulkImport">Отменить</Button>
+          <DialogClose as-child>
+            <Button variant="outline" @click="cancelBulkImport">Отмена</Button>
+          </DialogClose>
           <Button @click="confirmBulkImport" :disabled="isApplyingBulkImport">
             <Loader2 v-if="isApplyingBulkImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
@@ -2870,7 +2801,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="mt-4">
+        <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline">Отмена</Button>
           </DialogClose>
@@ -2890,6 +2821,7 @@ export default {
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Переименовать маппинг</DialogTitle>
+          <DialogDescription>Укажите новое название для маппинга</DialogDescription>
         </DialogHeader>
         <div class="py-4">
           <Input
@@ -2915,6 +2847,7 @@ export default {
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Настройки маппинга</DialogTitle>
+          <DialogDescription>Настройте параметры маппинга категорий</DialogDescription>
         </DialogHeader>
         <div class="space-y-4 py-4">
           <div class="space-y-2">
@@ -3013,7 +2946,9 @@ export default {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="cancelMappingSelection">Отмена</Button>
+          <DialogClose as-child>
+            <Button variant="outline" @click="cancelMappingSelection">Отмена</Button>
+          </DialogClose>
           <Button
             @click="confirmMappingSelections"
             :disabled="isSavingMappingSelections"

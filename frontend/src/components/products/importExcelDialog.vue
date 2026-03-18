@@ -152,14 +152,10 @@
         </template>
       </div>
 
-      <DialogFooter class="mt-4">
-        <Button
-          v-if="step === 'upload' || step === 'result'"
-          variant="outline"
-          @click="isOpen = false"
-        >
-          {{ step === 'result' ? 'Закрыть' : 'Отмена' }}
-        </Button>
+      <DialogFooter>
+        <DialogClose v-if="step === 'upload' || step === 'result'" as-child>
+          <Button variant="outline">{{ step === 'result' ? 'Закрыть' : 'Отмена' }}</Button>
+        </DialogClose>
         <Button
           v-if="step === 'preview'"
           variant="outline"
@@ -184,6 +180,7 @@ import { useStore } from "vuex";
 import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-vue-next";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
