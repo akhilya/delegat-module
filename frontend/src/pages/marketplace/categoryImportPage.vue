@@ -277,7 +277,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(result.message || "Категория импортирована");
-          this.$router.push(`/marketplace/${this.connectionId}?tab=categories`);
+          this.$router.push(`/marketplace/${this.connectionId}?tab=mappings`);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -304,7 +304,7 @@ export default {
     <div v-else class="flex flex-col flex-1 mb-4 space-y-4">
       <!-- Header -->
       <div class="flex items-center gap-4">
-        <Button variant="ghost" size="icon" @click="$router.push(`/marketplace/${connectionId}?tab=categories`)">
+        <Button variant="ghost" size="icon" @click="$router.push(`/marketplace/${connectionId}?tab=mappings`)">
           <ArrowLeft class="size-4" />
         </Button>
         <div>

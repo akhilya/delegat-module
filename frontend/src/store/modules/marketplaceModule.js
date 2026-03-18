@@ -767,11 +767,12 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async exportProduct(ctx, { connectionId, productId, onSuccess, onError }) {
+    async exportProduct(ctx, { connectionId, productId, operationId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/${productId}/export`,
         {
           method: "POST",
+          data: operationId ? { operationId } : undefined,
           cache: false,
           timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
         },
@@ -1235,12 +1236,12 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importFromLink(ctx, { linkId, excludeFields, onSuccess, onError }) {
+    async importFromLink(ctx, { linkId, excludeFields, operationId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/links/${linkId}/import`,
         {
           method: "POST",
-          data: { excludeFields: excludeFields || null },
+          data: { excludeFields: excludeFields || null, operationId: operationId || null },
           cache: false,
         },
         http,
@@ -1298,11 +1299,12 @@ export default {
         .catch((error) => onError(error));
     },
 
-    async exportFromLink(ctx, { linkId, onSuccess, onError }) {
+    async exportFromLink(ctx, { linkId, operationId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/links/${linkId}/export`,
         {
           method: "POST",
+          data: operationId ? { operationId } : undefined,
           cache: false,
           timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
         },

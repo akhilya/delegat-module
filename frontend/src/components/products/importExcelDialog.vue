@@ -1,6 +1,6 @@
 <template>
   <Dialog v-model:open="isOpen">
-    <DialogContent class="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+    <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
       <DialogHeader>
         <DialogTitle>Импорт из Excel</DialogTitle>
         <DialogDescription>
@@ -75,49 +75,7 @@
         </div>
 
         <!-- Changes table -->
-        <div v-if="changeset.changes && changeset.changes.length > 0">
-          <div
-            v-for="product in changeset.changes"
-            :key="product.productId"
-            class="border rounded-lg mb-3"
-          >
-            <div class="px-3 py-2 bg-muted/50 border-b text-sm font-medium">
-              {{ product.productSku }} &mdash; {{ product.productName }}
-            </div>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b text-left text-muted-foreground">
-                  <th class="px-3 py-1.5 font-medium w-1/4">Поле</th>
-                  <th class="px-3 py-1.5 font-medium w-[37.5%]">Было</th>
-                  <th class="px-3 py-1.5 font-medium w-[37.5%]">Стало</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(change, j) in product.changes"
-                  :key="j"
-                  class="border-b last:border-b-0"
-                >
-                  <td class="px-3 py-1.5 text-muted-foreground">{{ change.fieldName }}</td>
-                  <td class="px-3 py-1.5">
-                    <span class="bg-error/15 text-error-foreground px-1 rounded text-xs break-all">
-                      {{ truncate(change.oldValue, 100) || '(пусто)' }}
-                    </span>
-                  </td>
-                  <td class="px-3 py-1.5">
-                    <span class="bg-success/15 text-success-foreground px-1 rounded text-xs break-all">
-                      {{ truncate(change.newValue, 100) || '(пусто)' }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div v-if="!changeset.changes || changeset.changes.length === 0" class="text-center text-sm text-muted-foreground py-8">
-          Изменений не обнаружено
-        </div>
+        <FieldChangesTable :items="changesetItems" />
       </div>
 
       <!-- Applying step -->
@@ -188,6 +146,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { toast } from "vue-sonner";
 
 const props = defineProps({
@@ -214,6 +173,19 @@ function truncate(str, max) {
   if (!str) return str;
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
+
+const changesetItems = computed(() => {
+  if (!changeset.value.changes || changeset.value.changes.length === 0) return [];
+  return changeset.value.changes.map((product) => ({
+    label: `${product.productSku} — ${product.productName}`,
+    fields: product.changes.map((change, j) => ({
+      key: `${product.productId}-${j}`,
+      label: change.fieldName,
+      oldValue: truncate(change.oldValue, 100),
+      newValue: truncate(change.newValue, 100),
+    })),
+  }));
+});
 
 function triggerFileInput() {
   fileInput.value?.click();

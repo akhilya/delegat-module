@@ -258,7 +258,7 @@ export default {
             Загрузить плагин
           </Button>
         </DialogTrigger>
-        <DialogContent class="max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Загрузить плагин</DialogTitle>
             <DialogDescription>

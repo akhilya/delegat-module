@@ -1,11 +1,12 @@
 <script>
-import { RouterView } from "vue-router";
+import { RouterView, useRoute } from "vue-router";
 import { Toaster } from "vue-sonner";
 import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
 import OperationsTriggerButton from "@/components/operations/OperationsTriggerButton.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import { Loader2 } from "lucide-vue-next";
+import { computed } from "vue";
 
 export default {
   components: {
@@ -15,6 +16,11 @@ export default {
     OperationsTriggerButton,
     LoadingBar,
     Loader2,
+  },
+  setup() {
+    const route = useRoute();
+    const isPublicPage = computed(() => !!route.meta?.public);
+    return { isPublicPage };
   },
   computed: {
     appKey() {
@@ -39,8 +45,10 @@ export default {
     <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
   </RouterView>
   <Toaster />
-  <OperationsPanel />
-  <OperationsTriggerButton />
+  <template v-if="!isPublicPage">
+    <OperationsPanel />
+    <OperationsTriggerButton />
+  </template>
 
   <!-- Fullscreen overlay during store switch -->
   <Transition name="store-switch">

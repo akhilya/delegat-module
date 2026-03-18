@@ -190,6 +190,8 @@ public class ProductSyncController : ControllerBase
 
     #region Export
 
+    public record ExportProductInput(string? OperationId = null);
+
     /// <summary>
     /// Export a product to the marketplace
     /// </summary>
@@ -198,15 +200,20 @@ public class ProductSyncController : ControllerBase
     public async Task<IActionResult> ExportProduct(
         int connectionId,
         int productId,
+        [FromBody] ExportProductInput? input,
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
-        var operationId = Guid.NewGuid().ToString("N");
+        var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
 
-        await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
-            $"Экспорт товара #{productId}", connectionId: connectionId, connectionName: connection.name);
+        var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
+            await _context.operations.AsNoTracking().AnyAsync(o => o.operationId == operationId, ct);
+
+        if (!opExists)
+            await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
+                $"Экспорт товара #{productId}", connectionId: connectionId, connectionName: connection.name);
 
         await _operationLogger.LogAsync(operationId, storeId, "info", "Экспорт товара на маркетплейс...");
 
@@ -257,6 +264,14 @@ public class ProductSyncController : ControllerBase
             .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
         if (alreadyLinked)
             throw ApiException.BadRequest("Товар уже привязан к этому подключению");
+
+        // Check if externalProductId is already used by another product on this connection
+        var duplicateExternalId = await _context.productMarketplaceLinks
+            .AnyAsync(l => l.externalProductId == input.externalProductId.Trim()
+                && l.connectionId == connectionId, ct);
+        if (duplicateExternalId)
+            throw ApiException.BadRequest(
+                $"Внешний ID \"{input.externalProductId.Trim()}\" уже привязан к другому товару в этом подключении");
 
         // Resolve category mapping (optional — same logic as available-connections)
         int? categoryMappingId = null;
@@ -1543,7 +1558,7 @@ public class ProductSyncController : ControllerBase
     /// <summary>
     /// Import changes from the marketplace into the local product
     /// </summary>
-    public record ImportFromLinkInput(List<string>? ExcludeFields = null);
+    public record ImportFromLinkInput(List<string>? ExcludeFields = null, string? OperationId = null);
 
     [HttpPost]
     [Route("/marketplace/links/{linkId}/import")]
@@ -1567,11 +1582,16 @@ public class ProductSyncController : ControllerBase
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Доступ запрещён");
 
-        var operationId = Guid.NewGuid().ToString("N");
+        var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
-        await _operationLogger.StartAsync(operationId, storeId, userId, "single-import",
-            $"Импорт: {link.product?.name ?? link.externalProductId}",
-            connectionId: link.connectionId, connectionName: link.connection.name);
+
+        var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
+            await _context.operations.AsNoTracking().AnyAsync(o => o.operationId == operationId, ct);
+
+        if (!opExists)
+            await _operationLogger.StartAsync(operationId, storeId, userId, "single-import",
+                $"Импорт: {link.product?.name ?? link.externalProductId}",
+                connectionId: link.connectionId, connectionName: link.connection.name);
 
         // Получаем адаптер
         var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
@@ -1950,12 +1970,14 @@ public class ProductSyncController : ControllerBase
         Dictionary<string, object?> newValues,
         string? error);
 
+    public record ExportFromLinkInput(string? OperationId = null);
+
     /// <summary>
     /// Export local changes to the marketplace
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/{linkId}/export")]
-    public async Task<IActionResult> ExportFromLink(int linkId, CancellationToken ct)
+    public async Task<IActionResult> ExportFromLink(int linkId, [FromBody] ExportFromLinkInput? input, CancellationToken ct)
     {
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1977,11 +1999,16 @@ public class ProductSyncController : ControllerBase
         if (link.product == null)
             throw ApiException.BadRequest("Локальный товар не найден");
 
-        var operationId = Guid.NewGuid().ToString("N");
+        var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
-        await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
-            $"Экспорт: {link.product.name ?? link.externalProductId}",
-            connectionId: link.connectionId, connectionName: link.connection.name);
+
+        var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
+            await _context.operations.AsNoTracking().AnyAsync(o => o.operationId == operationId, ct);
+
+        if (!opExists)
+            await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
+                $"Экспорт: {link.product.name ?? link.externalProductId}",
+                connectionId: link.connectionId, connectionName: link.connection.name);
 
         await _operationLogger.LogAsync(operationId, storeId, "info", "Экспорт товара на маркетплейс...");
 

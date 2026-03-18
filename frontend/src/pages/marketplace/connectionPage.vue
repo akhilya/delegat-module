@@ -109,6 +109,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
+import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 export default {
   components: {
@@ -203,6 +204,7 @@ export default {
     Copy,
     FileText,
     Settings2,
+    FieldChangesTable,
   },
   data() {
     return {
@@ -492,6 +494,31 @@ export default {
         groups[key].products.push(p);
       }
       return Object.values(groups);
+    },
+    singleImportPreviewItems() {
+      if (!this.singleImportPreviewData?.updatedFields) return [];
+      return [{
+        fields: this.singleImportPreviewData.updatedFields.map((field) => ({
+          key: field,
+          label: this.getImportFieldLabel(field),
+          oldValue: this.formatImportFieldValue(field, this.singleImportPreviewData.oldValues[field]),
+          newValue: this.formatImportFieldValue(field, this.singleImportPreviewData.newValues[field]),
+        })),
+      }];
+    },
+    bulkImportPreviewItems() {
+      if (!this.bulkImportPreviewData?.items) return [];
+      return this.bulkImportPreviewData.items
+        .filter((item) => item.hasChanges)
+        .map((item) => ({
+          label: item.productName || `Связь #${item.linkId}`,
+          fields: item.updatedFields.map((field) => ({
+            key: field,
+            label: this.getImportFieldLabel(field),
+            oldValue: this.formatImportFieldValue(field, item.oldValues[field]),
+            newValue: this.formatImportFieldValue(field, item.newValues[field]),
+          })),
+        }));
     },
   },
   methods: {
@@ -2599,42 +2626,12 @@ export default {
           </DialogDescription>
         </DialogHeader>
         <div v-if="singleImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
-          <table class="w-full table-fixed text-sm">
-            <thead>
-              <tr class="border-b">
-                <th class="w-[40px] py-2 px-2">
-                  <Checkbox
-                    :model-value="allSingleImportFieldsIncluded()"
-                    @update:model-value="toggleAllSingleImportFields"
-                  />
-                </th>
-                <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
-                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
-                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="field in singleImportPreviewData.updatedFields"
-                :key="field"
-                class="border-b"
-              >
-                <td class="py-2 px-2 align-top">
-                  <Checkbox
-                    :model-value="isSingleImportFieldIncluded(field)"
-                    @update:model-value="toggleSingleImportField(field)"
-                  />
-                </td>
-                <td class="py-2 px-2 font-medium align-top">{{ getImportFieldLabel(field) }}</td>
-                <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
-                  {{ formatImportFieldValue(field, singleImportPreviewData.oldValues[field]) }}
-                </td>
-                <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
-                  {{ formatImportFieldValue(field, singleImportPreviewData.newValues[field]) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <FieldChangesTable
+            :items="singleImportPreviewItems"
+            selectable
+            :excluded-fields="singleImportExcludedFields"
+            @update:excluded-fields="singleImportExcludedFields = $event"
+          />
         </div>
         <DialogFooter>
           <DialogClose as-child>
@@ -2659,36 +2656,8 @@ export default {
             {{ bulkImportPreviewData.totalWithChanges + bulkImportPreviewData.totalWithoutChanges }} товаров
           </DialogDescription>
         </DialogHeader>
-        <div v-if="bulkImportPreviewData" class="py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-          <template v-for="item in bulkImportPreviewData.items" :key="item.linkId">
-            <div v-if="item.hasChanges" class="border rounded-lg p-3">
-              <div class="font-medium mb-2">{{ item.productName || `Связь #${item.linkId}` }}</div>
-              <table class="w-full table-fixed text-sm">
-                <thead>
-                  <tr class="border-b">
-                    <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
-                    <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
-                    <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="field in item.updatedFields"
-                    :key="field"
-                    class="border-b last:border-b-0"
-                  >
-                    <td class="py-2 px-2 font-medium align-top">{{ getImportFieldLabel(field) }}</td>
-                    <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
-                      {{ formatImportFieldValue(field, item.oldValues[field]) }}
-                    </td>
-                    <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
-                      {{ formatImportFieldValue(field, item.newValues[field]) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </template>
+        <div v-if="bulkImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+          <FieldChangesTable :items="bulkImportPreviewItems" />
         </div>
         <DialogFooter>
           <DialogClose as-child>
@@ -2705,7 +2674,7 @@ export default {
 
     <!-- Import Dialog -->
     <Dialog v-model:open="showImportDialog">
-      <DialogContent class="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent class="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Импорт товаров</DialogTitle>
           <DialogDescription>
@@ -2879,7 +2848,7 @@ export default {
             Для некоторых товаров доступно несколько маппингов категории. Выберите нужный маппинг для каждого товара.
           </DialogDescription>
         </DialogHeader>
-        <div class="py-4 space-y-3 max-h-96 overflow-y-auto">
+        <div class="py-4 space-y-4 max-h-96 overflow-y-auto">
           <!-- Быстрый выбор по категории -->
           <div v-if="mappingCategoryGroups.length > 0" class="space-y-2 pb-3 border-b">
             <div class="text-sm font-medium text-muted-foreground">Применить ко всем</div>

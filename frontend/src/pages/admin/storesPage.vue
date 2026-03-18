@@ -126,7 +126,7 @@ export default {
             Создать магазин
           </Button>
         </DialogTrigger>
-          <DialogContent>
+          <DialogContent class="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Новый магазин</DialogTitle>
               <DialogDescription>

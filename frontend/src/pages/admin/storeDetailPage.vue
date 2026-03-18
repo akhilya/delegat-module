@@ -199,7 +199,7 @@ export default {
                 Добавить
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent class="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Добавить участника</DialogTitle>
                 <DialogDescription>

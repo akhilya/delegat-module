@@ -903,7 +903,7 @@ export default {
 
     <!-- Excel Actions Dialog -->
     <Dialog v-model:open="isExcelDialogOpen">
-      <DialogContent class="max-w-sm">
+      <DialogContent class="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Редактирование из таблицы</DialogTitle>
           <DialogDescription>

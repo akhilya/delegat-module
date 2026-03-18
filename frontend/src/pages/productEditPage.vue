@@ -969,14 +969,14 @@ export default {
 
                   <!-- SKU change dialog -->
                   <Dialog v-model:open="showSkuDialog">
-                    <DialogContent>
+                    <DialogContent class="sm:max-w-md">
                       <DialogHeader>
                         <DialogTitle>Изменить артикул</DialogTitle>
                         <DialogDescription>
                           Артикул будет изменён локально и на всех привязанных маркетплейсах.
                         </DialogDescription>
                       </DialogHeader>
-                      <div class="space-y-3 py-2">
+                      <div class="space-y-4 py-4">
                         <div class="space-y-1">
                           <Label class="text-sm text-muted-foreground">Текущий артикул</Label>
                           <Input type="text" disabled :model-value="productSKU" />
@@ -1079,14 +1079,14 @@ export default {
 
             <!-- Group change dialog -->
             <Dialog v-model:open="showGroupDialog">
-              <DialogContent>
+              <DialogContent class="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Сменить группу товаров</DialogTitle>
                   <DialogDescription>
                     Товар будет перемещён в выбранную группу.
                   </DialogDescription>
                 </DialogHeader>
-                <div class="py-2">
+                <div class="py-4">
                   <SearchableSelect
                     :model-value="selectedGroupId"
                     @update:model-value="selectedGroupId = $event"

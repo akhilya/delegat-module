@@ -221,6 +221,30 @@ const actions = {
     await dispatch("initSignalR");
   },
 
+  async startOperation({ commit }, { id, type, title, connectionId, connectionName }) {
+    const op = {
+      id,
+      type,
+      title,
+      status: "running",
+      connectionName: connectionName || null,
+      connectionId: connectionId || null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      progress: null,
+      logs: [],
+      products: [],
+      canRetry: false,
+      batchId: null,
+      batchType: null,
+    };
+    commit("ADD_OPERATION", op);
+    commit("SET_PANEL_OPEN", true);
+    try {
+      await http.post("/operations/start", { operationId: id, type, title, connectionId, connectionName });
+    } catch { /* SignalR will handle */ }
+  },
+
   addOperation({ commit }, operation) {
     const op = {
       id: operation.id || crypto.randomUUID().replace(/-/g, ""),
@@ -345,8 +369,12 @@ const actions = {
     try { await http.delete(`/operations/${id}`); } catch { /* ignore 404 */ }
   },
 
-  clearCompleted({ commit }) {
+  async clearCompleted({ state, commit }) {
+    const completed = state.operations.filter((o) => o.status !== "running");
     commit("CLEAR_COMPLETED");
+    await Promise.allSettled(
+      completed.map((o) => http.delete(`/operations/${o.operationId}`).catch(() => {}))
+    );
   },
 
   togglePanel({ commit, state: _state }) {

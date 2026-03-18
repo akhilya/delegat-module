@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -75,6 +76,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
+import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 export default {
   components: {
@@ -99,6 +101,7 @@ export default {
     CardHeader,
     CardTitle,
     Dialog,
+    DialogClose,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -132,6 +135,7 @@ export default {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
+    FieldChangesTable,
   },
   props: {
     productId: {
@@ -159,6 +163,7 @@ export default {
       isLoadingPreview: false,
       isApplyingImport: false,
       previewLinkId: null,
+      previewConnection: null,
       importExcludedFields: new Set(),
       // Mapping selection
       mappingSelections: {}, // { connectionId: categoryMappingId }
@@ -206,6 +211,25 @@ export default {
     // Whether there are any connections available for export
     canExportToAll() {
       return this.connectionsWithMapping.length > 0;
+    },
+    importPreviewItems() {
+      if (!this.importPreviewData?.updatedFields) return [];
+      return [{
+        fields: this.importPreviewData.updatedFields.map((field) => ({
+          key: field,
+          label: this.getFieldLabel(field),
+          oldValue: this.formatFieldValue(field, this.importPreviewData.oldValues[field]),
+          newValue: this.formatFieldValue(field, this.importPreviewData.newValues[field]),
+        })),
+      }];
+    },
+    importWarning() {
+      return this.hasIrreversibleFields()
+        ? "Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную."
+        : null;
+    },
+    importIrreversibleFields() {
+      return this.importPreviewData?.irreversibleFields || [];
     },
   },
   methods: {
@@ -317,10 +341,23 @@ export default {
       let errorCount = 0;
 
       for (const conn of allExportable) {
+        const operationId = crypto.randomUUID().replace(/-/g, "");
+        const title = conn.isLinked
+          ? `Экспорт: ${"товар #" + this.productId}`
+          : `Экспорт товара #${this.productId}`;
+        await this.$store.dispatch("operations/startOperation", {
+          id: operationId,
+          type: "single-export",
+          title,
+          connectionId: conn.connectionId,
+          connectionName: conn.connectionName,
+        });
+
         try {
           if (conn.isLinked) {
             await this.exportFromLink({
               linkId: conn.linkId,
+              operationId,
               onSuccess: () => {
                 successCount++;
               },
@@ -332,6 +369,7 @@ export default {
             await this.exportProduct({
               connectionId: conn.connectionId,
               productId: this.productId,
+              operationId,
               onSuccess: () => {
                 successCount++;
               },
@@ -400,6 +438,7 @@ export default {
             this.importPreviewData = result;
             this.importExcludedFields = new Set(result.irreversibleFields || []);
             this.previewLinkId = conn.linkId;
+            this.previewConnection = conn;
             this.showImportPreviewDialog = true;
           }
         },
@@ -450,9 +489,20 @@ export default {
       this.isApplyingImport = true;
       const excludeFields = [...this.importExcludedFields];
 
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const conn = this.previewConnection;
+      await this.$store.dispatch("operations/startOperation", {
+        id: operationId,
+        type: "single-import",
+        title: `Импорт: ${"товар #" + this.productId}`,
+        connectionId: conn?.connectionId || null,
+        connectionName: conn?.connectionName || null,
+      });
+
       await this.importFromLink({
         linkId: this.previewLinkId,
         excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
+        operationId,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
@@ -477,6 +527,7 @@ export default {
       this.showImportPreviewDialog = false;
       this.importPreviewData = null;
       this.previewLinkId = null;
+      this.previewConnection = null;
       this.importExcludedFields = new Set();
     },
 
@@ -516,9 +567,22 @@ export default {
 
       this.exportingConnectionId = conn.connectionId;
 
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const title = conn.isLinked
+        ? `Экспорт: ${"товар #" + this.productId}`
+        : `Экспорт товара #${this.productId}`;
+      await this.$store.dispatch("operations/startOperation", {
+        id: operationId,
+        type: "single-export",
+        title,
+        connectionId: conn.connectionId,
+        connectionName: conn.connectionName,
+      });
+
       if (conn.isLinked) {
         await this.exportFromLink({
           linkId: conn.linkId,
+          operationId,
           onSuccess: () => {
             displaySonnerSuccess(`Товар обновлён на ${conn.adapterName}`);
             this.fetchData();
@@ -531,6 +595,7 @@ export default {
         await this.exportProduct({
           connectionId: conn.connectionId,
           productId: this.productId,
+          operationId,
           onSuccess: () => {
             displaySonnerSuccess(`Товар экспортирован на ${conn.adapterName}`);
             this.fetchData();
@@ -1044,7 +1109,7 @@ export default {
             name: PAGE_MARKETPLACE_CONNECTION,
             params: { connId: conn.connectionId },
             query: {
-              tab: 'categories',
+              tab: 'mappings',
               createMapping: 'true',
               localCategoryId: connections.categoryId,
               localCategoryName: connections.categoryName,
@@ -1081,61 +1146,14 @@ export default {
           </DialogDescription>
         </DialogHeader>
         <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
-          <!-- Warning banner for irreversible fields -->
-          <div
-            v-if="hasIrreversibleFields()"
-            class="flex items-start gap-2 p-3 mb-3 rounded-md bg-warning-muted border border-warning/30 text-warning-foreground text-sm"
-          >
-            <AlertTriangle class="size-4 mt-0.5 shrink-0" />
-            <span>Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную.</span>
-          </div>
-          <table class="w-full table-fixed text-sm">
-            <thead>
-              <tr class="border-b">
-                <th class="w-[40px] py-2 px-2">
-                  <Checkbox
-                    :model-value="allFieldsIncluded()"
-                    @update:model-value="toggleAllFields"
-                  />
-                </th>
-                <th class="w-[100px] text-left py-2 px-2 font-medium text-muted-foreground">Поле</th>
-                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
-                <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="field in importPreviewData.updatedFields"
-                :key="field"
-                class="border-b"
-              >
-                <td class="py-2 px-2 align-top">
-                  <Checkbox
-                    :model-value="isFieldIncluded(field)"
-                    @update:model-value="toggleFieldIncluded(field)"
-                  />
-                </td>
-                <td class="py-2 px-2 font-medium align-top">
-                  <div class="flex items-center gap-1">
-                    {{ getFieldLabel(field) }}
-                    <span
-                      v-if="isFieldIrreversible(field)"
-                      class="inline-flex items-center gap-0.5 text-warning-foreground"
-                      title="Необратимые модификаторы"
-                    >
-                      <AlertTriangle class="size-3.5" />
-                    </span>
-                  </div>
-                </td>
-                <td class="py-2 px-2 text-muted-foreground break-words whitespace-pre-wrap align-top">
-                  {{ formatFieldValue(field, importPreviewData.oldValues[field]) }}
-                </td>
-                <td class="py-2 px-2 text-success-foreground font-medium break-words whitespace-pre-wrap align-top">
-                  {{ formatFieldValue(field, importPreviewData.newValues[field]) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <FieldChangesTable
+            :items="importPreviewItems"
+            selectable
+            :excluded-fields="importExcludedFields"
+            :irreversible-fields="importIrreversibleFields"
+            :warning="importWarning"
+            @update:excluded-fields="importExcludedFields = $event"
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" @click="cancelImport">Отменить</Button>
@@ -1157,7 +1175,7 @@ export default {
             Для некоторых подключений доступно несколько маппингов. Выберите нужный для каждого.
           </DialogDescription>
         </DialogHeader>
-        <div class="space-y-3 py-4">
+        <div class="space-y-4 py-4">
           <div
             v-for="conn in bulkMappingConflicts"
             :key="conn.connectionId"
@@ -1184,7 +1202,7 @@ export default {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="showBulkMappingDialog = false">Отмена</Button>
+          <DialogClose as-child><Button variant="outline">Отмена</Button></DialogClose>
           <Button @click="confirmBulkMappingAndExport" :disabled="!allBulkMappingsSelected()">
             <Upload class="size-4 mr-2" />
             Экспортировать
@@ -1215,9 +1233,7 @@ export default {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="showRecreateDialog = false" :disabled="isRecreating">
-            Отмена
-          </Button>
+          <DialogClose as-child><Button variant="outline" :disabled="isRecreating">Отмена</Button></DialogClose>
           <Button @click="submitRecreate" :disabled="isRecreating || !recreateNewSku.trim()">
             <Loader2 v-if="isRecreating" class="size-4 mr-2 animate-spin" />
             <RefreshCw v-else class="size-4 mr-2" />
@@ -1236,13 +1252,13 @@ export default {
             {{ isRelinking ? 'Введите новый ID товара' : 'Введите ID существующего товара' }} на {{ linkConn?.adapterName }} для {{ isRelinking ? 'перепривязки' : 'ручной привязки' }}.
           </DialogDescription>
         </DialogHeader>
-        <div class="py-4 space-y-2">
+        <div class="py-4 space-y-4">
           <Label for="link-external-id">ID товара на маркетплейсе</Label>
           <Input id="link-external-id" v-model="linkExternalId" maxlength="100"
             placeholder="Например: 12345678" @keyup.enter="submitLink" />
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="showLinkDialog = false" :disabled="isLinking">Отмена</Button>
+          <DialogClose as-child><Button variant="outline" :disabled="isLinking">Отмена</Button></DialogClose>
           <Button @click="submitLink" :disabled="isLinking || !linkExternalId.trim()">
             <Loader2 v-if="isLinking" class="size-4 mr-2 animate-spin" />
             <Link2 v-else class="size-4 mr-2" />

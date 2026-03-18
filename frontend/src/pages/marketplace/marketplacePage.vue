@@ -276,7 +276,7 @@ export default {
             Добавить подключение
           </Button>
         </DialogTrigger>
-        <DialogContent class="max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Новое подключение к маркетплейсу</DialogTitle>
             <DialogDescription>
