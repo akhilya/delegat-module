@@ -31,6 +31,12 @@ public interface IStorageService
     Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default);
 
     /// <summary>
+    /// Server-side copy of an object to a new path in the same bucket.
+    /// Returns true on success. Both objects exist after a successful copy.
+    /// </summary>
+    Task<bool> CopyAsync(string sourcePath, string destinationPath, CancellationToken ct = default);
+
+    /// <summary>
     /// Delete a file
     /// </summary>
     Task<bool> DeleteAsync(string path, CancellationToken ct = default);

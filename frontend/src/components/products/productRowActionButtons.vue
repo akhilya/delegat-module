@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PAGE_PRODUCT_EDIT } from "@/router";
-import { EllipsisVertical, Pencil, HardDrive, ExternalLink, StickyNote, Image } from "lucide-vue-next";
+import { EllipsisVertical, Pencil, HardDrive, ExternalLink, StickyNote, Image, ArrowRightLeft } from "lucide-vue-next";
 
 export default {
   components: {
@@ -23,13 +23,23 @@ export default {
     ExternalLink,
     StickyNote,
     Image,
+    ArrowRightLeft,
   },
   props: {
     id: {
       type: Number,
       required: true,
     },
+    name: {
+      type: String,
+      default: "",
+    },
+    sku: {
+      type: String,
+      default: "",
+    },
   },
+  emits: ["transfer"],
   methods: {
     navigate(tab) {
       this.$router.push({
@@ -37,6 +47,9 @@ export default {
         params: { id: this.id },
         query: { tab },
       });
+    },
+    openTransfer() {
+      this.$emit("transfer", { id: this.id, name: this.name, sku: this.sku });
     },
   },
 };
@@ -69,6 +82,10 @@ export default {
       <DropdownMenuItem @click.stop="navigate('notes')">
         <StickyNote class="size-4 mr-2" />
         Заметки
+      </DropdownMenuItem>
+      <DropdownMenuItem @click.stop="openTransfer">
+        <ArrowRightLeft class="size-4 mr-2" />
+        Перенести в магазин…
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>

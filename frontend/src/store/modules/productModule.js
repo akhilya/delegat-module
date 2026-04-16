@@ -108,6 +108,52 @@ export default {
     },
 
     /**
+     * Read-only preview of a clone/move operation: SKU collisions, category match status,
+     * marketplace links that will be broken, target-store group list, etc.
+     * @param {Object} ctx
+     * @param {Object} params
+     * @param {string|number} params.productId
+     * @param {string|number} params.targetStoreId
+     * @param {Function} params.onSuccess
+     * @param {Function} params.onError
+     */
+    async getTransferPreview(ctx, { productId, targetStoreId, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/transfer-preview?targetStoreId=${targetStoreId}`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Execute clone or move of a product into another store.
+     * @param {Object} ctx
+     * @param {Object} params
+     * @param {string|number} params.productId
+     * @param {Object} params.input - TransferRequest body (mode, targetStoreId, sku/category/group settings, confirmBreakLinks)
+     * @param {Function} params.onSuccess
+     * @param {Function} params.onError
+     */
+    async transferProduct(ctx, { productId, input, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/transfer`,
+        { method: "POST", data: input },
+        http,
+        {
+          immediate: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
      * Deletes a product by its ID.
      * @param {Object} ctx - Vuex action context.
      * @param {Object} params - Action parameters.

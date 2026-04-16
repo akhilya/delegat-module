@@ -159,6 +159,9 @@ builder.Services.AddScoped<QuotaService>();
 // Excel import/export
 builder.Services.AddScoped<ExcelProductService>();
 
+// Cross-store product clone/move
+builder.Services.AddScoped<ProductTransferService>();
+
 // Sync services
 builder.Services.AddScoped<MappingService>();
 builder.Services.AddScoped<CategoryImportService>();
@@ -174,6 +177,7 @@ builder.Services.AddHostedService<FileRepairService>();
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
+builder.Services.AddHostedService<ProductTransferBackgroundService>();
 
 // SignalR for real-time operation logs
 builder.Services.AddSignalR();

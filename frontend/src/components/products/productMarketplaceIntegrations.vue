@@ -1078,41 +1078,39 @@ export default {
         </DropdownMenu>
       </div>
 
-      <!-- Connections without mapping -->
+      <!-- Connections without mapping — muted "needs setup" state, not an error -->
       <div
         v-for="conn in connectionsWithoutMapping"
         :key="conn.connectionId"
-        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-warning/30 bg-warning-muted"
+        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-dashed"
       >
-        <div class="size-9 rounded-lg bg-warning/15 flex items-center justify-center shrink-0">
-          <AlertTriangle class="size-4 text-warning" />
+        <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <Link2 class="size-4 text-muted-foreground" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
             <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
-          <div class="text-xs text-muted-foreground mt-0.5">
-            Нет маппинга для «{{ connections.categoryName }}»
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="text-xs text-muted-foreground">Маппинг для «{{ connections.categoryName }}» не настроен</span>
+            <router-link
+              :to="{
+                name: PAGE_MARKETPLACE_CONNECTION,
+                params: { connId: conn.connectionId },
+                query: {
+                  tab: 'mappings',
+                  createMapping: 'true',
+                  localCategoryId: connections.categoryId,
+                  localCategoryName: connections.categoryName,
+                },
+              }"
+              class="text-xs text-primary hover:underline"
+            >
+              · настроить
+            </router-link>
           </div>
         </div>
-        <router-link
-          :to="{
-            name: PAGE_MARKETPLACE_CONNECTION,
-            params: { connId: conn.connectionId },
-            query: {
-              tab: 'mappings',
-              createMapping: 'true',
-              localCategoryId: connections.categoryId,
-              localCategoryName: connections.categoryName,
-            },
-          }"
-        >
-          <Button variant="outline" size="sm" class="shrink-0">
-            <Plus class="size-4 mr-2" />
-            Создать маппинг
-          </Button>
-        </router-link>
       </div>
 
       <!-- Empty state when all connections have issues -->

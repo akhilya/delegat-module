@@ -183,6 +183,35 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
+    /// Server-side copy from one object key to another in the same bucket.
+    /// Uses MinIO CopyObject API — payload doesn't transit our backend.
+    /// </summary>
+    public async Task<bool> CopyAsync(string sourcePath, string destinationPath, CancellationToken ct = default)
+    {
+        try
+        {
+            await EnsureBucketExistsAsync(ct);
+
+            var copySource = new CopySourceObjectArgs()
+                .WithBucket(_bucket)
+                .WithObject(sourcePath);
+
+            var copyArgs = new CopyObjectArgs()
+                .WithBucket(_bucket)
+                .WithObject(destinationPath)
+                .WithCopyObjectSource(copySource);
+
+            await _client.CopyObjectAsync(copyArgs, ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to copy object in MinIO: {Source} -> {Dest}", sourcePath, destinationPath);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Delete a file
     /// </summary>
     public async Task<bool> DeleteAsync(string path, CancellationToken ct = default)

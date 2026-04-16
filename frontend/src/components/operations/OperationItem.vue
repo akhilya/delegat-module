@@ -21,6 +21,7 @@ import {
   Square,
   Ban,
   ImageDown,
+  ArrowRightLeft,
 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
@@ -70,6 +71,8 @@ const typeIcon = computed(() => {
       return FileSpreadsheet;
     case "image-download":
       return ImageDown;
+    case "product-transfer":
+      return ArrowRightLeft;
     default:
       return Upload;
   }

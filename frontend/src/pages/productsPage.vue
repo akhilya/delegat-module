@@ -8,6 +8,7 @@ import TrashRowActionButtons from "@/components/products/trashRowActionButtons.v
 import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
+import ProductTransferDialog from "@/components/products/ProductTransferDialog.vue";
 import {
   columns as baseProductColumns,
   defaultVisibleColumns,
@@ -88,6 +89,7 @@ export default {
     ColumnSelector,
     BulkEditDialog,
     ImportExcelDialog,
+    ProductTransferDialog,
     Button,
     Search,
     ChevronLeft,
@@ -158,6 +160,23 @@ export default {
         name: PAGE_PRODUCT_EDIT,
         params: { id: product.id },
       });
+    },
+
+    onTransferRequest(payload) {
+      this.transferTarget = {
+        id: payload.id,
+        name: payload.name || "",
+        sku: payload.sku || "",
+      };
+      this.isTransferDialogOpen = true;
+    },
+
+    onTransferred(payload) {
+      // Transfer is queued, not done — actual completion happens in background.
+      // Side panel shows progress; row will only disappear (for move) once the
+      // background worker soft-deletes the original. We don't refresh now —
+      // SignalR-driven panel updates will reflect state. User can refresh manually.
+      // (No-op kept as a hook for any future "show toast with link to operation".)
     },
 
     async fetchProducts() {
@@ -517,6 +536,10 @@ export default {
       isDeleting: false,
       isExporting: false,
 
+      // Transfer dialog
+      isTransferDialogOpen: false,
+      transferTarget: { id: null, name: "", sku: "" },
+
       // Trash mode
       isTrashMode: false,
       trashProducts: [],
@@ -791,7 +814,13 @@ export default {
           />
         </template>
         <template #rowActions="{ row }">
-          <ProductRowActionButtons v-if="!isTrashMode" :id="row.original.id" />
+          <ProductRowActionButtons
+            v-if="!isTrashMode"
+            :id="row.original.id"
+            :name="row.original.name"
+            :sku="row.original.sku"
+            @transfer="onTransferRequest"
+          />
           <TrashRowActionButtons v-else :id="row.original.id" @restore="handleRestoreOne" @permanent-delete="handlePermanentDeleteOne" />
         </template>
       </ProductsTable>
@@ -929,6 +958,15 @@ export default {
     <ImportExcelDialog
       v-model="isImportDialogOpen"
       @saved="handleImportSaved"
+    />
+
+    <!-- Transfer (Clone/Move to another store) Dialog -->
+    <ProductTransferDialog
+      v-model:open="isTransferDialogOpen"
+      :product-id="transferTarget.id"
+      :product-name="transferTarget.name"
+      :product-sku="transferTarget.sku"
+      @transferred="onTransferred"
     />
 
     <!-- Bulk Delete Confirmation Dialog -->

@@ -16,6 +16,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<PendingImageDownload> pendingImageDownloads { get; set; }
     public DbSet<PendingProductImport> pendingProductImports { get; set; }
     public DbSet<PendingProductExport> pendingProductExports { get; set; }
+    public DbSet<PendingProductTransfer> pendingProductTransfers { get; set; }
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }
@@ -144,6 +145,13 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(p => p.batchId);
 
         builder.Entity<PendingProductExport>()
+            .HasIndex(p => new { p.status, p.createdAt });
+
+        // Pending product transfer indexes (background queue lookups)
+        builder.Entity<PendingProductTransfer>()
+            .HasIndex(p => p.batchId);
+
+        builder.Entity<PendingProductTransfer>()
             .HasIndex(p => new { p.status, p.createdAt });
 
         // Foreign key indexes for query performance

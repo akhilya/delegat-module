@@ -934,6 +934,86 @@ namespace PrintO.Migrations
                     b.ToTable("pendingProductImports");
                 });
 
+            modelBuilder.Entity("PrintO.Models.PendingProductTransfer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("categoryAction")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("categoryId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("confirmBreakLinks")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("groupAction")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("groupId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("groupName")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("mode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("newProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("newSku")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("sourceProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("sourceStoreId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("startedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("targetStoreId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("batchId");
+
+                    b.HasIndex("newProductId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.ToTable("pendingProductTransfers");
+                });
+
             modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
@@ -1710,6 +1790,15 @@ namespace PrintO.Migrations
                         .HasForeignKey("importedProductId");
 
                     b.Navigation("importedProduct");
+                });
+
+            modelBuilder.Entity("PrintO.Models.PendingProductTransfer", b =>
+                {
+                    b.HasOne("PrintO.Models.Products.Product", "newProduct")
+                        .WithMany()
+                        .HasForeignKey("newProductId");
+
+                    b.Navigation("newProduct");
                 });
 
             modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>

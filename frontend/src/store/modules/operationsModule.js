@@ -217,8 +217,13 @@ const actions = {
   },
 
   async reconnectSignalR({ dispatch }) {
+    // destroySignalR commits RESET_STATE which clears operations + flips
+    // historyLoaded back to false. After reconnecting we explicitly reload
+    // history so the panel reflects the newly-selected store without a
+    // page refresh. Fire-and-forget — UI shows empty state during fetch.
     await dispatch("destroySignalR");
     await dispatch("initSignalR");
+    dispatch("loadHistory");
   },
 
   async startOperation({ commit }, { id, type, title, connectionId, connectionName }) {
@@ -290,8 +295,11 @@ const actions = {
     if (_state.historyLoaded) return;
     const page = 1;
     try {
+      // cache:false is critical — axios-cache-interceptor would otherwise
+      // return the previous store's history when the user switches stores.
       const response = await http.get("/operations", {
         params: { page, pageSize: 20 },
+        cache: false,
       });
       const data = response.data;
       const items = (data.items || []).map((item) => ({ ...mapServerOperation(item), _canExpand: true }));
@@ -310,6 +318,7 @@ const actions = {
     try {
       const response = await http.get("/operations", {
         params: { page, pageSize: 20 },
+        cache: false,
       });
       const data = response.data;
       const items = (data.items || []).map((item) => ({ ...mapServerOperation(item), _canExpand: false }));
