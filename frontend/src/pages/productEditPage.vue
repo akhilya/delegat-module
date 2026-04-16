@@ -204,6 +204,11 @@ export default {
     const lastSavedAt = ref(null);
     const hasUnsavedChanges = ref(false);
     const isInitialLoad = ref(true);
+    // Снапшот productId в момент постановки автосейва в очередь.
+    // Защищает от race: пользователь правит товар A, переходит на B
+    // до срабатывания debounce — autosave не отправит данные A на B.
+    const pendingSaveProductId = ref(null);
+    const pendingSaveImagesProductId = ref(null);
     const isDeletingFile = ref(false);
     const showSkuDialog = ref(false);
     const newSkuValue = ref("");
@@ -287,10 +292,18 @@ export default {
     fetchProductGroup();
 
     async function fetchProduct() {
+      // Подавляем autosave-watcher'ы пока fetch не закончится и данные не запишутся.
+      // Без этого мутация attributeValues внутри onSuccess триггерит autosave с неверным контекстом.
+      isInitialLoad.value = true;
       isProductLoading.value = true;
+      const targetProductId = productId.value;
       await store.dispatch("getProduct", {
-        productId: productId.value,
+        productId: targetProductId,
         onSuccess: (response) => {
+          // Stale-response guard: пока запрос летел, пользователь мог уйти на другой товар.
+          // Применять данные A на UI/state товара B нельзя.
+          if (targetProductId !== productId.value) return;
+
           const product = response.data.value;
           productSKU.value = product.sku;
           setPageTitle(product.sku);
@@ -318,11 +331,15 @@ export default {
           // Mark initial load as complete after a short delay,
           // and auto-resize description once value is rendered
           setTimeout(() => {
+            // Если productId сменился за эти 100мс — оставляем isInitialLoad=true,
+            // следующий fetchProduct сам сбросит его в нужный момент.
+            if (targetProductId !== productId.value) return;
             autoResizeDescription();
             isInitialLoad.value = false;
           }, 100);
         },
         onError: (error) => {
+          if (targetProductId !== productId.value) return;
           displaySonnerError(error);
         },
       });
@@ -446,6 +463,9 @@ export default {
     // Debounced autosave (1.5 second delay)
     const debouncedAutoSave = useDebounceFn(async () => {
       if (isInitialLoad.value || isSubmitting.value) return;
+      // ProductId snapshot guard: если за время debounce пользователь ушёл
+      // на другой товар, не отправляем устаревшие данные на новый productId.
+      if (pendingSaveProductId.value !== productId.value) return;
       await saveProduct(false);
     }, 1500);
 
@@ -455,6 +475,7 @@ export default {
       () => {
         if (isInitialLoad.value) return;
         hasUnsavedChanges.value = true;
+        pendingSaveProductId.value = productId.value;
         debouncedAutoSave();
       },
       { deep: true }
@@ -469,6 +490,7 @@ export default {
         // Clear errors for changed attributes
         categoryAttributeErrors.value = {};
         storeAttributeErrors.value = {};
+        pendingSaveProductId.value = productId.value;
         debouncedAutoSave();
       },
       { deep: true }
@@ -639,6 +661,9 @@ export default {
     }, { immediate: true });
 
     const debouncedSaveImages = useDebounceFn(async () => {
+      // Guard: если за 400мс пользователь ушёл на другой товар, не отправляем
+      // картинки товара A на endpoint товара B.
+      if (pendingSaveImagesProductId.value !== productId.value) return;
       const fileIds = sortedImages.value.map((img) => img.fileId);
       await store.dispatch("postProductImages", {
         productId: productId.value,
@@ -653,6 +678,7 @@ export default {
       sortedImages.value.forEach((img, idx) => { img.index = idx; });
       // Sync back to images ref
       images.value = sortedImages.value.map((img) => ({ ...img }));
+      pendingSaveImagesProductId.value = productId.value;
       debouncedSaveImages();
     }
 
@@ -660,6 +686,7 @@ export default {
       sortedImages.value.splice(index, 1);
       sortedImages.value.forEach((img, idx) => { img.index = idx; });
       images.value = sortedImages.value.map((img) => ({ ...img }));
+      pendingSaveImagesProductId.value = productId.value;
       debouncedSaveImages();
     }
 
@@ -685,6 +712,11 @@ export default {
       if (!fileList?.length) return;
 
       isUploadingGallery.value = true;
+      // Замораживаем productId на момент старта загрузки. Если пользователь
+      // уйдёт на другой товар во время аплоада — все последующие шаги
+      // (PUT files / POST images / fetch) направим на исходный товар,
+      // а итоговый fetchProduct делаем только если пользователь не ушёл.
+      const targetProductId = productId.value;
       try {
         // Upload each file
         const newFileIds = [];
@@ -692,7 +724,7 @@ export default {
           const formData = new FormData();
           formData.append('files', file);
           const response = await http({
-            url: `/products/${productId.value}/files`,
+            url: `/products/${targetProductId}/files`,
             method: 'PUT',
             data: formData,
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -704,18 +736,46 @@ export default {
           }
         }
 
-        // Attach new files as images at end of current list
-        const existingFileIds = sortedImages.value.map((img) => img.fileId);
-        const allFileIds = [...existingFileIds, ...newFileIds];
-        await store.dispatch("postProductImages", {
-          productId: productId.value,
-          files: allFileIds,
-          onSuccess: () => {},
-          onError: (error) => { displaySonnerError(error); },
-        });
+        // Attach new files as images at end of current list.
+        // sortedImages — это reactive ref, и если пользователь успел уйти
+        // на другой товар, sortedImages уже относится к другому товару.
+        // Поэтому пересчитываем relative-к-targetProductId список с осторожностью:
+        // отправляем только что-то осмысленное только если контекст не сменился.
+        if (targetProductId === productId.value) {
+          const existingFileIds = sortedImages.value.map((img) => img.fileId);
+          const allFileIds = [...existingFileIds, ...newFileIds];
+          await store.dispatch("postProductImages", {
+            productId: targetProductId,
+            files: allFileIds,
+            onSuccess: () => {},
+            onError: (error) => { displaySonnerError(error); },
+          });
+        } else {
+          // Контекст ушёл — прикрепляем хотя бы новые файлы к их исходному товару.
+          // Без этого загруженные файлы остаются "осиротевшими" в галерее.
+          // Загружаем актуальный список картинок исходного товара и дописываем новые.
+          try {
+            const refresh = await http.get(`/products/${targetProductId}`);
+            const existing = (refresh.data?.images || [])
+              .slice()
+              .sort((a, b) => a.index - b.index)
+              .map((img) => img.fileId);
+            await store.dispatch("postProductImages", {
+              productId: targetProductId,
+              files: [...existing, ...newFileIds],
+              onSuccess: () => {},
+              onError: (error) => { displaySonnerError(error); },
+            });
+          } catch (e) {
+            displaySonnerError(e);
+          }
+        }
 
-        // Refresh product to sync everything
-        await fetchProduct();
+        // Refresh product to sync everything — но только если контекст не сменился,
+        // иначе перезапишем UI чужого товара.
+        if (targetProductId === productId.value) {
+          await fetchProduct();
+        }
       } catch (error) {
         displaySonnerError(error);
       } finally {
