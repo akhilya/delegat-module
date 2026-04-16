@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Card } from "@/components/ui/card";
 import { PAGE_ADMIN_STORES, setPageTitle } from "@/router";
 
 export default {
@@ -69,6 +70,7 @@ export default {
     TableHeader,
     TableRow,
     EmptyState,
+    Card,
   },
   data() {
     return {
@@ -180,7 +182,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
+    <Card class="h-full w-full grow mb-4 p-4 gap-0">
       <div v-if="isLoading" class="flex justify-center py-12">
         <Loader2 class="size-8 animate-spin text-muted-foreground" />
       </div>
@@ -248,7 +250,7 @@ export default {
           </template>
         </EmptyState>
 
-        <div v-else class="border rounded-lg">
+        <div v-else>
           <Table>
             <TableHeader>
               <TableRow>
@@ -281,6 +283,6 @@ export default {
           </Table>
         </div>
       </div>
-    </div>
+    </Card>
   </Page>
 </template>

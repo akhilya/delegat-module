@@ -17,6 +17,7 @@ import {
 import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Card } from "@/components/ui/card";
 
 export default {
   components: {
@@ -39,6 +40,7 @@ export default {
     Badge,
     PageHeader,
     EmptyState,
+    Card,
   },
   data() {
     return {
@@ -148,7 +150,7 @@ export default {
       </div>
     </div>
 
-    <div class="border rounded-lg h-full w-full grow mb-4">
+    <Card class="p-0 gap-0 h-full w-full grow mb-4 overflow-hidden">
       <EmptyState v-if="isLoading" loading />
       <EmptyState v-else-if="tokens.length === 0" title="Нет токенов" description="Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину">
         <template #icon>
@@ -212,6 +214,6 @@ export default {
           </TableBody>
         </Table>
       </div>
-    </div>
+    </Card>
   </Page>
 </template>

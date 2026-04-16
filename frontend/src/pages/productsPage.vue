@@ -9,6 +9,7 @@ import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
 import ProductTransferDialog from "@/components/products/ProductTransferDialog.vue";
+import { Card } from "@/components/ui/card";
 import {
   columns as baseProductColumns,
   defaultVisibleColumns,
@@ -90,6 +91,7 @@ export default {
     BulkEditDialog,
     ImportExcelDialog,
     ProductTransferDialog,
+    Card,
     Button,
     Search,
     ChevronLeft,
@@ -783,8 +785,8 @@ export default {
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div
-      class="bg-card text-card-foreground border rounded-lg w-full flex-1 min-h-0 mb-4 flex flex-col relative overflow-hidden"
+    <Card
+      class="p-0 gap-0 w-full flex-1 min-h-0 mb-4 relative overflow-hidden"
     >
       <ProductsTable
         :data="isTrashMode ? trashProducts : products"
@@ -919,7 +921,7 @@ export default {
           </Button>
         </div>
       </div>
-    </div>
+    </Card>
 
     <!-- Bulk Edit Dialog -->
     <BulkEditDialog

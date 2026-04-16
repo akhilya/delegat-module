@@ -19,10 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -48,10 +44,6 @@ export default {
     DialogFooter,
     DialogClose,
     Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
     PageHeader,
     EmptyState,
   },
@@ -169,33 +161,27 @@ export default {
         </Button>
       </EmptyState>
 
-      <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card
-          v-for="store in stores"
-          :key="store.id"
-          class="cursor-pointer hover:bg-accent/50 transition-colors"
-          @click="openStore(store.id)"
-        >
-          <CardHeader>
-            <CardTitle class="flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <Store class="size-5" />
-                {{ store.name }}
-              </span>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </CardTitle>
-            <CardDescription>
-              ID: {{ store.id }}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users class="size-4" />
-              <span>{{ store.membersCount || 0 }} участников</span>
+      <Card v-else class="p-0 gap-0 overflow-hidden">
+        <ul class="divide-y divide-border/60">
+          <li
+            v-for="store in stores"
+            :key="store.id"
+            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
+            @click="openStore(store.id)"
+          >
+            <Store class="size-5 text-muted-foreground shrink-0" />
+            <div class="min-w-0 flex-1">
+              <div class="font-medium truncate">{{ store.name }}</div>
+              <div class="text-xs text-muted-foreground tabular-nums">ID {{ store.id }}</div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div class="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0 tabular-nums">
+              <Users class="size-4" />
+              {{ store.membersCount || 0 }}
+            </div>
+            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
+          </li>
+        </ul>
+      </Card>
     </div>
   </Page>
 </template>

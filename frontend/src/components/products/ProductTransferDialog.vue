@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, AlertTriangle, ArrowRightLeft, Copy, ExternalLink } from "lucide-vue-next";
+import { Loader2, AlertTriangle, ArrowRightLeft, Copy, ExternalLink, CheckCircle2, XCircle } from "lucide-vue-next";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -47,6 +47,16 @@ const props = defineProps({
 const emit = defineEmits(["update:open", "transferred"]);
 
 const store = useStore();
+
+// Russian plural form picker. forms = [singular, few, many]
+//   1 → "характеристика", 2-4 → "характеристики", 5+/0 → "характеристик"
+function pluralize(n, forms) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+  return forms[2];
+}
 
 // --- State ---
 const memberships = ref([]);
@@ -225,14 +235,17 @@ async function submit() {
     input,
     onSuccess: (response) => {
       // Backend now enqueues — returns { queued: true, operationId, totalFiles }.
-      // Real progress lives in the operations side panel (SignalR-driven).
+      // Real progress lives in the operations side panel.
       const result = response.data.value;
       const targetStoreName = preview.value.targetStore?.name || "целевой магазин";
-      const verb = mode.value === "move" ? "Перенос" : "Клонирование";
+      // "Перенос" (м.р.) → "поставлен", "Клонирование" (ср.р.) → "поставлено"
+      const headline = mode.value === "move"
+        ? `Перенос в «${targetStoreName}» поставлен в очередь`
+        : `Клонирование в «${targetStoreName}» поставлено в очередь`;
       const tail = result?.totalFiles
-        ? `Файлов в очереди: ${result.totalFiles}. Прогресс — в боковой панели.`
-        : "Прогресс — в боковой панели.";
-      displaySonnerSuccess(`${verb} в «${targetStoreName}» поставлено в очередь. ${tail}`);
+        ? `Прогресс по ${result.totalFiles} файлам — в панели операций.`
+        : "Прогресс — в панели операций.";
+      displaySonnerSuccess(`${headline}. ${tail}`);
       emit("transferred", { queued: true, operationId: result?.operationId, mode: mode.value });
       emit("update:open", false);
     },
@@ -293,21 +306,21 @@ function close() {
             </button>
           </div>
           <p class="text-xs text-muted-foreground">
-            <template v-if="mode === 'clone'">Создаётся копия в целевом магазине. Оригинал остаётся как есть.</template>
-            <template v-else>Создаётся копия в целевом магазине, оригинал отправляется в корзину исходного. Восстановим из корзины при необходимости.</template>
+            <template v-if="mode === 'clone'">Копия появится в целевом магазине. Оригинал не меняется.</template>
+            <template v-else>Оригинал отправится в корзину исходного магазина — оттуда его можно восстановить.</template>
           </p>
         </div>
 
         <!-- Target store -->
         <div class="space-y-2">
-          <Label for="target-store" class="text-sm">Целевой магазин</Label>
+          <Label for="target-store" class="text-sm">Куда переносим</Label>
           <Select
             :model-value="targetStoreId == null ? '' : String(targetStoreId)"
             @update:model-value="(v) => targetStoreId = v ? Number(v) : null"
             :disabled="isLoadingMemberships"
           >
             <SelectTrigger id="target-store" class="w-full">
-              <SelectValue :placeholder="isLoadingMemberships ? 'Загрузка…' : 'Магазин назначения'" />
+              <SelectValue :placeholder="isLoadingMemberships ? 'Загрузка магазинов…' : 'Выберите магазин'" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem
@@ -325,7 +338,7 @@ function close() {
         <!-- Preview area -->
         <div v-if="isLoadingPreview" class="flex items-center gap-2 text-sm text-muted-foreground py-2">
           <Loader2 class="size-4 animate-spin" />
-          Анализ переноса…
+          Проверяем что и куда поедет…
         </div>
 
         <div v-else-if="previewError" class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -335,62 +348,64 @@ function close() {
         <div v-else-if="preview" class="space-y-4">
           <!-- SKU collision -->
           <div v-if="preview.skuConflict" class="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-            <div class="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+            <Label for="new-sku" class="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
               <AlertTriangle class="size-4" />
-              SKU «{{ productSku }}» уже занят в целевом магазине
-            </div>
-            <Label for="new-sku" class="text-xs">Задайте другой SKU</Label>
-            <Input id="new-sku" v-model="newSku" placeholder="Новый SKU" />
+              Артикул «{{ productSku }}» уже занят — задайте новый
+            </Label>
+            <Input id="new-sku" v-model="newSku" placeholder="Новый артикул" />
           </div>
 
           <!-- Category resolution -->
           <div v-if="preview.sourceProduct.categoryName" class="space-y-2">
-            <Label class="text-sm">Категория в целевом магазине</Label>
-            <div class="text-xs text-muted-foreground">
-              Исходная категория: <span class="font-medium">«{{ preview.sourceProduct.categoryName }}»</span>
-              <span v-if="preview.matchedCategory" class="ml-2 text-emerald-600 dark:text-emerald-400">
-                ✓ найдена идентичная
-                ({{ preview.matchedCategory.attributesMappable }} атрибутов смэппится<span v-if="preview.matchedCategory.attributesUnmappable?.length">, {{ preview.matchedCategory.attributesUnmappable.length }} потеряется</span>)
-              </span>
-              <span v-else class="ml-2 text-amber-700 dark:text-amber-400">
-                ✗ не найдена
+            <Label class="text-sm">Категория</Label>
+            <div class="flex items-start gap-1.5 text-xs">
+              <CheckCircle2 v-if="preview.matchedCategory" class="size-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <XCircle v-else class="size-3.5 mt-0.5 text-amber-700 dark:text-amber-400 shrink-0" />
+              <span class="text-muted-foreground">
+                Исходная: <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
+                <template v-if="preview.matchedCategory">
+                  В целевом магазине найдена с тем же названием —
+                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, ['характеристика перенесётся', 'характеристики перенесутся', 'характеристик перенесётся']) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">, <span class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['не подойдёт', 'не подойдут', 'не подойдёт']) }}</span></template>.
+                </template>
+                <template v-else>
+                  В целевом магазине такой нет.
+                </template>
               </span>
             </div>
             <Select v-model="categoryAction">
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Действие с категорией" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem v-if="preview.matchedCategory" value="match" as="button">
                   Использовать найденную «{{ preview.matchedCategory.name }}»
                 </SelectItem>
-                <SelectItem value="create" as="button">Создать идентичную в целевом магазине</SelectItem>
+                <SelectItem value="create" as="button">Создать такую же в целевом магазине</SelectItem>
                 <SelectItem value="none" as="button">Без категории</SelectItem>
               </SelectContent>
             </Select>
             <div v-if="preview.matchedCategory?.attributesUnmappable?.length" class="text-xs text-muted-foreground">
-              Не смэппятся: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+              Не подойдут: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
             </div>
           </div>
 
           <!-- Store attributes -->
           <div v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
                class="text-xs text-muted-foreground">
-            Глобальные атрибуты: {{ preview.storeAttributesMappable }} перенесётся,
-            {{ preview.storeAttributesUnmappable.length }} не найдено в целевом магазине<span v-if="preview.storeAttributesUnmappable.length">: {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></span>
+            Атрибуты магазина: перенесётся {{ preview.storeAttributesMappable }} из {{ preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }}<template v-if="preview.storeAttributesUnmappable.length">. В целевом магазине нет: {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
           </div>
 
           <!-- Group selection -->
           <div class="space-y-2">
-            <Label class="text-sm">Группа в целевом магазине</Label>
+            <Label class="text-sm">Группа</Label>
             <Select v-model="groupAction">
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Действие с группой" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none" as="button">Без группы</SelectItem>
-                <SelectItem v-if="preview.targetGroups.length > 0" value="use" as="button">Существующая…</SelectItem>
-                <SelectItem value="create" as="button">Создать новую…</SelectItem>
+                <SelectItem v-if="preview.targetGroups.length > 0" value="use" as="button">Добавить в существующую</SelectItem>
+                <SelectItem value="create" as="button">Создать новую</SelectItem>
               </SelectContent>
             </Select>
             <Select
@@ -399,7 +414,7 @@ function close() {
               @update:model-value="(v) => groupUseId = v ? Number(v) : null"
             >
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Группа в целевом магазине" />
+                <SelectValue placeholder="Выберите группу" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="g in preview.targetGroups" :key="g.id" :value="String(g.id)" as="button">
@@ -427,10 +442,10 @@ function close() {
               <AlertTriangle v-if="mode === 'move'" class="size-4" />
               <ExternalLink v-else class="size-4" />
               <template v-if="mode === 'move'">
-                Будут разорваны marketplace-связки ({{ preview.marketplaceLinksToBreak.length }})
+                После переноса оторвутся {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с маркетплейсами
               </template>
               <template v-else>
-                Marketplace-связки исходного товара ({{ preview.marketplaceLinksToBreak.length }})
+                У оригинала {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с маркетплейсами
               </template>
             </div>
             <ul class="text-xs text-muted-foreground space-y-1">
@@ -443,27 +458,29 @@ function close() {
             </ul>
             <p class="text-xs text-muted-foreground">
               <template v-if="mode === 'move'">
-                Карточки на маркетплейсах останутся, но больше не будут связаны с этим товаром в PrintO.
-                После перемещения связки нужно завести заново уже для копии.
+                Сами карточки на Ozon/Wildberries останутся, но связь с товаром в PrintO потеряется —
+                в новом магазине их придётся завести заново.
               </template>
               <template v-else>
-                Связки остаются у оригинала. Клон создаётся без marketplace-связок —
-                их можно завести вручную для нового товара после клонирования.
+                Связи остаются у оригинала. У клона их не будет —
+                заведёте сами после клонирования, если нужно.
               </template>
             </p>
             <label v-if="mode === 'move'" class="flex items-start gap-2 text-sm cursor-pointer">
               <input type="checkbox" v-model="confirmBreakLinks" class="mt-0.5" />
-              <span>Я понимаю и подтверждаю разрыв связок</span>
+              <span>Согласен потерять связи — в новом магазине заведу заново</span>
             </label>
           </div>
 
           <!-- Summary of what will travel -->
           <div class="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-0.5">
-            <div class="font-medium text-foreground mb-1">Будет перенесено:</div>
-            <div>· Файлы: {{ preview.filesCount }}<span v-if="preview.foldersCount"> (в {{ preview.foldersCount }} папках)</span></div>
-            <div>· Изображения: {{ preview.imagesCount }}</div>
-            <div>· Заметки: {{ preview.notesCount }}</div>
-            <div v-if="preview.variantsCount > 0">· Варианты (размеры): {{ preview.variantsCount }}</div>
+            <div class="font-medium text-foreground mb-1">
+              {{ mode === 'move' ? 'Также переедет:' : 'Также скопируется:' }}
+            </div>
+            <div>· {{ preview.filesCount }} {{ pluralize(preview.filesCount, ['файл', 'файла', 'файлов']) }}<span v-if="preview.foldersCount"> в {{ preview.foldersCount }} {{ pluralize(preview.foldersCount, ['папке', 'папках', 'папках']) }}</span></div>
+            <div>· {{ preview.imagesCount }} {{ pluralize(preview.imagesCount, ['изображение', 'изображения', 'изображений']) }}</div>
+            <div v-if="preview.notesCount > 0">· {{ preview.notesCount }} {{ pluralize(preview.notesCount, ['заметка', 'заметки', 'заметок']) }}</div>
+            <div v-if="preview.variantsCount > 0">· {{ preview.variantsCount }} {{ pluralize(preview.variantsCount, ['размер', 'размера', 'размеров']) }}</div>
           </div>
         </div>
       </div>

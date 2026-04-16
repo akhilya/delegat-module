@@ -2,6 +2,7 @@
 import NavigationBar from "@/components/navigationBar.vue";
 import Page from "@/components/page.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+import { Card } from "@/components/ui/card";
 import { Wrench } from "lucide-vue-next";
 
 export default {
@@ -9,6 +10,7 @@ export default {
     Page,
     NavigationBar,
     Breadcrumbs,
+    Card,
     Wrench,
   },
   data() {
@@ -31,12 +33,12 @@ export default {
       </p>
     </div>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
+    <Card class="h-full w-full grow mb-4 p-4 gap-0">
       <div class="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
         <Wrench class="size-12 mb-4 opacity-50" />
         <p>Пока нет дополнительных инструментов</p>
         <p class="text-sm">Категории и атрибуты доступны через меню пользователя</p>
       </div>
-    </div>
+    </Card>
   </Page>
 </template>

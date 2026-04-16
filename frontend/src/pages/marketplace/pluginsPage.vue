@@ -43,10 +43,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 
 export default {
@@ -86,10 +82,6 @@ export default {
     AlertDialogTitle,
     AlertDialogTrigger,
     Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
   },
   computed: {
     pluginsWithCapabilities() {
@@ -345,88 +337,86 @@ export default {
         </Button>
       </EmptyState>
 
-      <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card v-for="plugin in pluginsWithCapabilities" :key="plugin.key" class="group">
-          <CardHeader>
-            <CardTitle class="flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <Puzzle class="size-5" />
-                {{ plugin.displayName }}
-              </span>
-              <Badge variant="outline">v{{ plugin.version }}</Badge>
-            </CardTitle>
-            <CardDescription class="flex flex-col gap-1">
-              <span class="font-mono text-xs">{{ plugin.key }}</span>
-              <span v-if="plugin.description">{{ plugin.description }}</span>
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <div class="space-y-3">
-              <!-- Capabilities -->
-              <div v-if="plugin.formattedCapabilities.length > 0">
-                <p class="text-xs text-muted-foreground mb-2">Возможности:</p>
-                <div class="flex flex-wrap gap-1">
-                  <Badge
-                    v-for="cap in plugin.formattedCapabilities"
-                    :key="cap"
-                    variant="secondary"
-                    class="text-xs"
-                  >
-                    {{ cap }}
-                  </Badge>
-                </div>
+      <Card v-else class="p-0 gap-0 overflow-hidden">
+        <ul class="divide-y divide-border/60">
+          <li
+            v-for="plugin in pluginsWithCapabilities"
+            :key="plugin.key"
+            class="flex items-start gap-4 px-5 py-3.5 hover:bg-muted/40 group transition-colors"
+          >
+            <Puzzle class="size-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-medium truncate">{{ plugin.displayName }}</span>
+                <Badge variant="outline" class="text-xs tabular-nums">v{{ plugin.version }}</Badge>
+                <code class="text-xs text-muted-foreground font-mono">{{ plugin.key }}</code>
               </div>
-
-              <!-- Actions -->
-              <div class="flex justify-end items-center pt-2 border-t gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  @click="handleReload(plugin.key)"
-                  :disabled="isReloading === plugin.key"
-                  title="Перезагрузить"
+              <div v-if="plugin.description" class="text-sm text-muted-foreground mt-0.5">
+                {{ plugin.description }}
+              </div>
+              <div v-if="plugin.formattedCapabilities.length > 0" class="flex flex-wrap gap-1 mt-2">
+                <Badge
+                  v-for="cap in plugin.formattedCapabilities"
+                  :key="cap"
+                  variant="secondary"
+                  class="text-[11px] font-normal"
                 >
-                  <Loader2
-                    v-if="isReloading === plugin.key"
-                    class="size-4 animate-spin"
-                  />
-                  <RefreshCw v-else class="size-4" />
-                </Button>
-
-                <AlertDialog v-if="!plugin.isSystem">
-                  <AlertDialogTrigger as-child>
-                    <Button variant="ghost" size="icon" title="Удалить">
-                      <Trash2 class="size-4 text-destructive" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Удалить плагин?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Вы уверены что хотите удалить плагин "{{
-                          plugin.displayName
-                        }}"? Подключения использующие этот плагин перестанут
-                        работать.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Отмена</AlertDialogCancel>
-                      <AlertDialogAction
-                        @click="handleDelete(plugin.key)"
-                        :disabled="isDeleting"
-                      >
-                        <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                        Удалить
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                  {{ cap }}
+                </Badge>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                @click="handleReload(plugin.key)"
+                :disabled="isReloading === plugin.key"
+                title="Перезагрузить"
+                class="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Loader2
+                  v-if="isReloading === plugin.key"
+                  class="size-4 animate-spin"
+                />
+                <RefreshCw v-else class="size-4" />
+              </Button>
+              <AlertDialog v-if="!plugin.isSystem">
+                <AlertDialogTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Удалить"
+                    class="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 class="size-4 text-destructive" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Удалить плагин?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Вы уверены что хотите удалить плагин "{{
+                        plugin.displayName
+                      }}"? Подключения использующие этот плагин перестанут
+                      работать.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Отмена</AlertDialogCancel>
+                    <AlertDialogAction
+                      @click="handleDelete(plugin.key)"
+                      :disabled="isDeleting"
+                    >
+                      <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
+                      Удалить
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </li>
+        </ul>
+      </Card>
     </div>
   </Page>
 </template>

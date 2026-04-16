@@ -23,10 +23,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { PAGE_CATEGORY_EDIT } from "@/router";
 
@@ -56,10 +52,6 @@ export default {
     EmptyState,
     ConfirmDialog,
     Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
   },
   data() {
     return {
@@ -198,32 +190,26 @@ export default {
         </Button>
       </EmptyState>
 
-      <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card
-          v-for="category in categories"
-          :key="category.id"
-          class="cursor-pointer hover:bg-accent/50 transition-colors group"
-        >
-          <CardHeader @click="openCategory(category.id)">
-            <CardTitle class="flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <FolderOpen class="size-5" />
-                {{ category.name }}
-              </span>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </CardTitle>
-            <CardDescription v-if="category.description">
-              {{ category.description }}
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="flex justify-between items-center">
-            <div class="flex items-center gap-4 text-sm text-muted-foreground">
-              <span class="flex items-center gap-1">
+      <Card v-else class="p-0 gap-0 overflow-hidden">
+        <ul class="divide-y divide-border/60">
+          <li
+            v-for="category in categories"
+            :key="category.id"
+            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
+            @click="openCategory(category.id)"
+          >
+            <FolderOpen class="size-5 text-muted-foreground shrink-0" />
+            <div class="min-w-0 flex-1">
+              <div class="font-medium truncate">{{ category.name }}</div>
+              <div v-if="category.description" class="text-sm text-muted-foreground truncate">{{ category.description }}</div>
+            </div>
+            <div class="flex items-center gap-4 text-sm text-muted-foreground shrink-0 tabular-nums">
+              <span class="flex items-center gap-1.5" title="Товаров в категории">
                 <Package class="size-4" />
-                {{ category.productsCount || 0 }} товаров
+                {{ category.productsCount || 0 }}
               </span>
-              <span>
-                {{ category.attributesCount || 0 }} атрибутов
+              <span :title="`${category.attributesCount || 0} атрибутов`">
+                {{ category.attributesCount || 0 }} атр.
               </span>
             </div>
             <ConfirmDialog
@@ -234,14 +220,15 @@ export default {
               @confirm="handleDeleteCategory(category.id)"
             >
               <template #trigger>
-                <Button variant="ghost" size="icon" class="opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
+                <Button variant="ghost" size="icon" class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" @click.stop>
                   <Trash2 class="size-4 text-destructive" />
                 </Button>
               </template>
             </ConfirmDialog>
-          </CardContent>
-        </Card>
-      </div>
+            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
+          </li>
+        </ul>
+      </Card>
     </div>
   </Page>
 </template>

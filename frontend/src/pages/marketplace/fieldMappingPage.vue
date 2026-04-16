@@ -1040,7 +1040,7 @@ export default {
         </Button>
       </div>
 
-      <div class="border rounded-lg h-full w-full grow mb-4 overflow-auto">
+      <Card class="p-0 gap-0 h-full w-full grow mb-4 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -1449,7 +1449,7 @@ export default {
             </TableRow>
           </TableBody>
         </Table>
-      </div>
+      </Card>
     </template>
 
     <!-- Боковое окно модификаторов -->
