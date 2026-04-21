@@ -59,8 +59,8 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
     style="max-height: calc(100dvh - 5.5rem - 2rem)"
   >
     <!-- Loading state -->
-    <div v-if="loading && !group" class="flex-1 flex items-center justify-center">
-      <Loader2 class="size-6 animate-spin text-muted-foreground" />
+    <div v-if="loading && !group" class="flex-1 flex items-center justify-center min-h-24 py-6">
+      <Loader2 class="size-5 animate-spin text-muted-foreground" />
     </div>
     <template v-else-if="group">
       <!-- Header -->
@@ -145,6 +145,18 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
           </ContextMenuContent>
         </ContextMenu>
       </div>
+    </template>
+
+    <!-- Empty state: no group assigned — compact, not a full empty-state splash -->
+    <template v-else>
+      <button
+        type="button"
+        class="flex-1 flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+        @click="emit('change-group')"
+      >
+        <Plus class="size-4" />
+        Добавить в группу
+      </button>
     </template>
   </div>
 </template>

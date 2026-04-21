@@ -29,12 +29,27 @@ export default {
     isSwitchingStore() {
       return this.$store.state.isSwitchingStore;
     },
+    hasActiveUploads() {
+      return this.$store.state.operations.operations.some(
+        (o) => o.type === "file-upload" && o.status === "running"
+      );
+    },
   },
   mounted() {
     this.$store.dispatch("operations/initSignalR");
+    window.addEventListener("beforeunload", this._onBeforeUnload);
   },
   beforeUnmount() {
     this.$store.dispatch("operations/destroySignalR");
+    window.removeEventListener("beforeunload", this._onBeforeUnload);
+  },
+  methods: {
+    _onBeforeUnload(e) {
+      if (this.hasActiveUploads) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    },
   },
 };
 </script>

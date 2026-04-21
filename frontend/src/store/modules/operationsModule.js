@@ -3,6 +3,10 @@ import { http } from "@/main";
 
 let connection = null;
 
+// Cancel callbacks for client-side operations (e.g. file uploads).
+// Keyed by operation ID. Not in Vuex state — functions aren't serializable.
+const cancelCallbacks = new Map();
+
 const state = {
   operations: [],
   panelOpen: false,
@@ -156,7 +160,12 @@ const actions = {
         batchType: data.batchType || null,
       };
       commit("ADD_OPERATION", op);
-      commit("SET_PANEL_OPEN", true);
+      // Don't auto-open panel for client-side operations (file-upload, file-delete) —
+      // they register silently via addOperation; the SignalR echo shouldn't override that.
+      const silentTypes = ["file-upload", "file-delete"];
+      if (!silentTypes.includes(op.type)) {
+        commit("SET_PANEL_OPEN", true);
+      }
     });
 
     connection.on("OperationLog", (data) => {
@@ -270,7 +279,15 @@ const actions = {
       batchType: operation.batchType || null,
     };
     commit("ADD_OPERATION", op);
-    commit("SET_PANEL_OPEN", true);
+    // Register cancel callback for client-side operations
+    if (typeof operation.onCancel === "function") {
+      cancelCallbacks.set(op.id, operation.onCancel);
+    }
+    // Don't auto-open panel for silent operations (e.g. file uploads —
+    // user sees progress in the trigger button badge, opens panel manually if needed).
+    if (!operation.silent) {
+      commit("SET_PANEL_OPEN", true);
+    }
     return op.id;
   },
 
@@ -283,6 +300,8 @@ const actions = {
         message,
       },
     });
+    // Persist to backend (fire-and-forget) so logs survive page refresh
+    http.post(`/operations/${id}/log`, { level, message }, { cache: false }).catch(() => {});
   },
 
   updateProgress({ commit }, { id, progress }) {
@@ -376,12 +395,22 @@ const actions = {
   },
 
   async stopOperation({ commit }, id) {
+    // Client-side operations (e.g. file uploads) have a local cancel callback
+    // instead of a server-side stop API.
+    const localCancel = cancelCallbacks.get(id);
+    if (localCancel) {
+      localCancel();
+      cancelCallbacks.delete(id);
+      commit("FINISH_OPERATION", { id, status: "cancelled", summary: "Остановлено" });
+      return;
+    }
     try {
       await http.post(`/operations/${id}/stop`);
     } catch { /* ignore */ }
   },
 
   async clearOperation({ commit }, id) {
+    cancelCallbacks.delete(id);
     commit("REMOVE_OPERATION", id);
     try { await http.delete(`/operations/${id}`); } catch { /* ignore 404 */ }
   },

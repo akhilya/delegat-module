@@ -501,7 +501,7 @@ export default {
       totalCount: 0,
       searchQuery,
       prevSearchQuery: searchQuery,
-      breadcrumbs: [{ label: "Товары" }],
+      // breadcrumbs is a computed property now
 
       // Categories for filter (restore from query)
       categories: [],
@@ -566,6 +566,13 @@ export default {
     };
   },
   watch: {
+    // React to ?trash=1 query param changes (e.g. from navbar dropdown)
+    '$route.query.trash'(newVal) {
+      const wantTrash = newVal === '1';
+      if (wantTrash !== this.isTrashMode) {
+        this.toggleTrashMode();
+      }
+    },
     startIndex() {
       this.fetchProducts();
     },
@@ -635,6 +642,15 @@ export default {
     },
   },
   computed: {
+    breadcrumbs() {
+      if (this.isTrashMode) {
+        return [
+          { label: "Товары", to: "/products" },
+          { label: `Корзина${this.trashCount > 0 ? ` (${this.trashCount})` : ''}` },
+        ];
+      }
+      return [{ label: "Товары" }];
+    },
     // Dynamic columns including store attributes and preset
     productColumns() {
       return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset);

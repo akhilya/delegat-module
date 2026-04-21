@@ -80,6 +80,16 @@ export default {
       "postSelectStore",
     ]),
     async selectStore(storeId) {
+      // Block store switch if file uploads are in-flight
+      const hasUploads = this.$store.state.operations.operations.some(
+        (o) => o.type === "file-upload" && o.status === "running"
+      );
+      if (hasUploads) {
+        const confirmed = window.confirm(
+          "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
+        );
+        if (!confirmed) return;
+      }
       this.$store.commit("setSwitchingStore", true);
       const minDelay = new Promise(r => setTimeout(r, 500));
       this.postSelectStore({
@@ -92,14 +102,16 @@ export default {
           });
           // Reconnect SignalR to new store group
           this.$store.dispatch("operations/reconnectSignalR");
-          // Force re-render all page components via appKey
-          this.$store.commit("incrementAppKey");
-          // Navigate to the target path (usually current page)
+          // Navigate FIRST to avoid re-mounting the current page component
+          // with a stale product/entity ID from the old store (causes 404 toasts).
           const next = response.data.value.next;
           const targetPath = new URL(next, window.location.origin).pathname;
           if (this.$route.path !== targetPath) {
             await this.$router.push(targetPath);
           }
+          // Force re-render all page components via appKey AFTER navigation,
+          // so components mount at the correct route with the new store cookie.
+          this.$store.commit("incrementAppKey");
           // Ensure overlay is visible for at least 1 second
           await minDelay;
           this.$store.commit("setSwitchingStore", false);
@@ -215,6 +227,10 @@ export default {
         </template>
       </div>
       <div class="hidden sm:flex items-center justify-center">
+        <slot name="center" />
+      </div>
+      <!-- Mobile: center slot rendered as a full-width row below nav -->
+      <div class="sm:hidden col-span-3 pt-1">
         <slot name="center" />
       </div>
       <div class="flex items-center justify-end gap-2">

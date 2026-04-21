@@ -264,7 +264,7 @@ export default {
 
     async getProductGroup(ctx, { productId, onSuccess, onError }) {
       try {
-        const response = await http.get(`/products/${productId}/group`);
+        const response = await http.get(`/products/${productId}/group`, { cache: false });
         onSuccess({ data: { value: response.data } });
       } catch (error) {
         onError(error);

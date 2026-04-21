@@ -907,10 +907,15 @@ export default {
       <span class="text-muted-foreground/50">&middot;</span>
       <span class="text-muted-foreground">{{ productGroup.members?.length || 0 }} товаров</span>
     </div>
+    <div v-else class="lg:hidden flex items-center gap-2 mb-3 text-sm">
+      <Layers class="size-4 text-muted-foreground/50" />
+      <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" @click="openGroupDialog">
+        Выбрать группу
+      </button>
+    </div>
     <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
       <ProductGroupSidebar
-        v-if="productGroup || isLoadingGroup"
         ref="groupSidebarRef"
         :group="productGroup"
         :loading="isLoadingGroup"
@@ -1275,6 +1280,8 @@ export default {
           <ProductFileManager
             :files="files"
             :productId="productId"
+            :productName="form.values?.product?.name || ''"
+            :productSku="productSKU"
             @deleteFile="deleteFile"
             @filesChanged="fetchProduct"
           />

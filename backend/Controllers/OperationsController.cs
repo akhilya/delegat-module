@@ -149,6 +149,64 @@ public class OperationsController : ControllerBase
         public int? totalItems { get; set; }
     }
 
+    /// <summary>
+    /// Finish a running operation from the client side (e.g. file uploads).
+    /// Sets the final status, summary, and finishedAt timestamp.
+    /// </summary>
+    [HttpPost]
+    [Route("/operations/{operationId}/finish")]
+    public async Task<IActionResult> FinishOperation(
+        string operationId,
+        [FromBody] FinishOperationInput input,
+        CancellationToken ct)
+    {
+        var op = await GetOperationAsync(operationId, ct);
+        if (op == null) return NotFound();
+
+        op.status = input.status ?? "completed";
+        op.summary = input.summary;
+        op.finishedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+
+        return Ok();
+    }
+
+    public struct FinishOperationInput
+    {
+        public string? status { get; set; }
+        public string? summary { get; set; }
+    }
+
+    /// <summary>
+    /// Append a log entry to an operation (client-side operations like file uploads).
+    /// </summary>
+    [HttpPost]
+    [Route("/operations/{operationId}/log")]
+    public async Task<IActionResult> AddLog(
+        string operationId,
+        [FromBody] AddLogInput input,
+        CancellationToken ct)
+    {
+        var op = await GetOperationAsync(operationId, ct);
+        if (op == null) return NotFound();
+
+        _context.operationLogEntries.Add(new Models.OperationLogEntry
+        {
+            operationId = operationId,
+            level = input.level ?? "info",
+            message = input.message ?? "",
+            timestamp = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync(ct);
+        return Ok();
+    }
+
+    public struct AddLogInput
+    {
+        public string? level { get; set; }
+        public string? message { get; set; }
+    }
+
     [HttpGet]
     [Route("/operations/{operationId}/status")]
     public async Task<IActionResult> GetStatus(string operationId, CancellationToken ct)

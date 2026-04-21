@@ -458,6 +458,47 @@ public class FileController : ControllerBase
     }
 
     /// <summary>
+    /// Bulk-deletes multiple files for a product in a single request.
+    /// </summary>
+    public record BulkDeleteFilesRequest(int[] fileIds);
+
+    [HttpPost]
+    [Route("/products/{productId}/files/bulk-delete")]
+    public async Task<IActionResult> BulkDeleteProductFiles(int productId, [FromBody] BulkDeleteFilesRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdAsync(productId);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        if (request.fileIds == null || request.fileIds.Length == 0)
+            throw ApiException.BadRequest("Файлы не указаны");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var files = await fileRepo.FindAllAsync(f => request.fileIds.Contains(f.Id) && f.productId == productId);
+        var deletedCount = 0;
+
+        foreach (var file in files)
+        {
+            await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
+            await _storageService.DeleteAsync(file.filePath);
+            fileRepo.DeleteWithoutSave(file);
+            deletedCount++;
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { deletedCount });
+    }
+
+    /// <summary>
     /// Creates a temporary share link for a file.
     /// </summary>
     public record ShareFileRequest(int ttlHours);

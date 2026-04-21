@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from
 import { useStore } from "vuex";
 import { useRoute, useRouter } from "vue-router";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { useFileDialog } from "@vueuse/core";
+import { useFileDialog, useDebounceFn } from "@vueuse/core";
 import Button from "@/components/ui/button/Button.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
@@ -53,9 +53,16 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 const props = defineProps({
   files: { type: Array, required: true },
   productId: { type: Number, required: true },
+  productName: { type: String, default: "" },
+  productSku: { type: String, default: "" },
 });
 
 const emit = defineEmits(["deleteFile", "filesChanged"]);
+
+// Debounced emit for incremental file list refresh during multi-file uploads.
+// Each completed file triggers this; 800ms debounce coalesces rapid completions
+// into a single fetchProduct call.
+const debouncedFilesChanged = useDebounceFn(() => emit("filesChanged"), 800);
 
 const store = useStore();
 const route = useRoute();
@@ -387,11 +394,74 @@ async function uploadFiles(fileList) {
     return entry;
   });
 
+  // Master abort controller — when triggered, cancels ALL in-flight uploads for this batch.
+  const batchAbort = new AbortController();
+  const totalFiles = entries.length;
+
+  // Register operation in Vuex FIRST (before backend call) so the local version
+  // with silent+onCancel wins the race against SignalR OperationStarted event.
+  // ADD_OPERATION deduplicates by ID — whoever adds first keeps the entry.
+  const opId = crypto.randomUUID().replace(/-/g, "");
+  const productLabel = props.productSku
+    ? `${props.productName || 'Товар'} [${props.productSku}]`
+    : (props.productName || `Товар #${props.productId}`);
+  const uploadTitle = totalFiles === 1
+    ? `Загрузка файла — ${productLabel}`
+    : `Загрузка ${totalFiles} файлов — ${productLabel}`;
+
+  store.dispatch("operations/addOperation", {
+    id: opId,
+    type: "file-upload",
+    title: uploadTitle,
+    progress: { total: totalFiles, completed: 0, failed: 0, pending: totalFiles },
+    silent: true,
+    onCancel: () => {
+      batchAbort.abort();
+      for (const entry of entries) {
+        if (entry.status === 'pending' || entry.status === 'uploading') {
+          entry.abortController.abort();
+          entry.status = 'cancelled';
+        }
+      }
+    },
+  });
+
+  // Then persist to backend (fire-and-forget — Vuex state is already set).
+  // This creates the Operation DB record with author info for history.
+  http.post("/operations/start", {
+    operationId: opId,
+    type: "file-upload",
+    title: uploadTitle,
+    totalItems: totalFiles,
+  }, { cache: false }).catch(() => {});
+
+  // First log entry: context about which product this operates on
+  store.dispatch("operations/addLog", { id: opId, level: "info", message: `Товар: ${productLabel}` });
+
+  let completedFiles = 0;
+  let failedFiles = 0;
+  let cancelledFiles = 0;
   let anyDone = false;
   const concurrency = 3;
 
+  function updateOpProgress() {
+    store.dispatch("operations/updateProgress", {
+      id: opId,
+      progress: {
+        total: totalFiles,
+        completed: completedFiles,
+        failed: failedFiles,
+        pending: totalFiles - completedFiles - failedFiles,
+      },
+    });
+  }
+
   async function uploadOne(entry) {
-    if (entry.abortController.signal.aborted) return;
+    if (entry.abortController.signal.aborted || batchAbort.signal.aborted) {
+      entry.status = 'cancelled';
+      cancelledFiles++;
+      return;
+    }
     entry.status = 'uploading';
 
     const formData = new FormData();
@@ -415,12 +485,24 @@ async function uploadFiles(fileList) {
         },
       });
       entry.status = 'done';
+      completedFiles++;
       anyDone = true;
+      updateOpProgress();
+      store.dispatch("operations/addLog", { id: opId, level: "success", message: entry.name });
+      // Refresh file list incrementally — each completed file appears immediately.
+      // Debounced by useDebounceFn so rapid completions don't flood fetchProduct.
+      debouncedFilesChanged();
     } catch (error) {
-      if (error?.code === 'ERR_CANCELED' || entry.abortController.signal.aborted) {
-        entry.status = 'error';
+      if (error?.code === 'ERR_CANCELED' || entry.abortController.signal.aborted || batchAbort.signal.aborted) {
+        entry.status = 'cancelled';
+        cancelledFiles++;
+        updateOpProgress();
+        store.dispatch("operations/addLog", { id: opId, level: "warning", message: `${entry.name}: отменено` });
       } else {
         entry.status = 'error';
+        failedFiles++;
+        updateOpProgress();
+        store.dispatch("operations/addLog", { id: opId, level: "error", message: `${entry.name}: ${error?.response?.data?.message || error?.message || 'ошибка'}` });
         displaySonnerError(error);
       }
     }
@@ -441,6 +523,28 @@ async function uploadFiles(fileList) {
     }
     next();
   });
+
+  // Finish operation — but only if it wasn't already cancelled by stopOperation.
+  // stopOperation calls FINISH_OPERATION(cancelled) before the loop ends;
+  // we must not overwrite it.
+  if (!batchAbort.signal.aborted) {
+    const finalStatus = failedFiles > 0 ? (completedFiles > 0 ? "partial" : "failed") : "completed";
+    const finalSummary = `Загружено: ${completedFiles}` + (failedFiles > 0 ? `, ошибок: ${failedFiles}` : "");
+    store.dispatch("operations/finishOperation", {
+      id: opId,
+      status: finalStatus,
+      summary: finalSummary,
+    });
+    try {
+      await http.post(`/operations/${opId}/finish`, { status: finalStatus, summary: finalSummary }, { cache: false });
+    } catch { /* ignore */ }
+  } else {
+    // Batch was cancelled — persist cancelled status to backend
+    const summary = `Отменено. Загружено: ${completedFiles}, отменено: ${cancelledFiles}`;
+    try {
+      await http.post(`/operations/${opId}/finish`, { status: "cancelled", summary }, { cache: false });
+    } catch { /* ignore */ }
+  }
 
   // Remove all entries at once after all uploads complete
   const entryIds = new Set(entries.map(e => e.id));
@@ -747,6 +851,125 @@ function onKeyDown(e) {
     e.preventDefault();
     handleF2Rename();
   }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // Don't delete while renaming, editing path, or typing in an input
+    if (inlineRenameTarget.value || isEditingPath.value || inlineNewFolder.value) return;
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+    if (selection.value.size === 0) return;
+    e.preventDefault();
+    deleteSelected();
+  }
+  if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+    if (inlineRenameTarget.value || isEditingPath.value || inlineNewFolder.value) return;
+    // Don't hijack Ctrl+A when user is typing in an input, textarea, or contenteditable
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // Select all items in current view
+    const newSel = new Set();
+    for (const item of allCurrentItems.value) newSel.add(selKey(item.type, item.id));
+    selection.value = newSel;
+  }
+}
+
+const isDeletingSelected = ref(false);
+const showDeleteConfirm = ref(false);
+
+async function deleteSelected() {
+  const items = selectedItems.value;
+  if (items.length === 0) return;
+  showDeleteConfirm.value = true;
+}
+
+async function confirmDeleteSelected() {
+  isDeletingSelected.value = true;
+  const fileIds = selectedItems.value
+    .filter(i => i.type === 'file')
+    .map(i => i.id);
+  const fileNames = selectedItems.value
+    .filter(i => i.type === 'file')
+    .map(i => i.item?.displayName || i.item?.name || `#${i.id}`);
+
+  if (fileIds.length === 0) {
+    isDeletingSelected.value = false;
+    showDeleteConfirm.value = false;
+    return;
+  }
+
+  await deleteFilesWithOperation(fileIds, fileNames);
+
+  clearSelection();
+  isDeletingSelected.value = false;
+  showDeleteConfirm.value = false;
+}
+
+// Single file delete (from context menu)
+async function deleteSingleFile(fileId) {
+  const file = props.files.find(f => f.id === fileId);
+  const name = file?.displayName || file?.name || `#${fileId}`;
+  await deleteFilesWithOperation([fileId], [name]);
+}
+
+// Unified delete: registers operation, calls bulk-delete, logs results
+async function deleteFilesWithOperation(fileIds, fileNames) {
+  const count = fileIds.length;
+  const opId = crypto.randomUUID().replace(/-/g, "");
+  const productLabel = props.productSku
+    ? `${props.productName || 'Товар'} [${props.productSku}]`
+    : (props.productName || `Товар #${props.productId}`);
+  const title = count === 1
+    ? `Удаление файла — ${productLabel}`
+    : `Удаление ${count} файлов — ${productLabel}`;
+
+  // Register in Vuex first (wins SignalR race), then backend
+  store.dispatch("operations/addOperation", {
+    id: opId,
+    type: "file-delete",
+    title,
+    progress: { total: count, completed: 0, failed: 0, pending: count },
+    silent: true,
+  });
+  http.post("/operations/start", {
+    operationId: opId,
+    type: "file-delete",
+    title,
+    totalItems: count,
+  }, { cache: false }).catch(() => {});
+
+  store.dispatch("operations/addLog", { id: opId, level: "info", message: `Товар: ${productLabel}` });
+
+  try {
+    await http.post(`/products/${props.productId}/files/bulk-delete`, { fileIds }, { cache: false });
+
+    // Log each file name
+    for (const name of fileNames) {
+      store.dispatch("operations/addLog", { id: opId, level: "success", message: name });
+    }
+
+    store.dispatch("operations/updateProgress", {
+      id: opId,
+      progress: { total: count, completed: count, failed: 0, pending: 0 },
+    });
+    store.dispatch("operations/finishOperation", {
+      id: opId,
+      status: "completed",
+      summary: `Удалено: ${count}`,
+    });
+    http.post(`/operations/${opId}/finish`, { status: "completed", summary: `Удалено: ${count}` }, { cache: false }).catch(() => {});
+
+    emit('filesChanged');
+  } catch (error) {
+    store.dispatch("operations/addLog", { id: opId, level: "error", message: error?.response?.data?.message || error?.message || "Ошибка" });
+    store.dispatch("operations/finishOperation", {
+      id: opId,
+      status: "failed",
+      summary: error?.response?.data?.message || "Ошибка удаления",
+    });
+    http.post(`/operations/${opId}/finish`, { status: "failed", summary: error?.message || "Ошибка" }, { cache: false }).catch(() => {});
+    displaySonnerError(error);
+  }
 }
 
 onMounted(() => {
@@ -811,6 +1034,38 @@ watch(() => props.productId, () => {
         <span class="flex-1" @click="startPathEdit" />
       </template>
     </div>
+
+    <!-- Selection toolbar -->
+    <div v-if="selection.size > 0" class="flex items-center gap-2 px-4 h-9 border-b bg-muted/30 text-sm shrink-0">
+      <span class="text-muted-foreground">Выбрано: {{ selection.size }}</span>
+      <Button variant="ghost" size="sm" class="h-7 text-xs" @click="clearSelection">
+        <X class="size-3 mr-1" />
+        Снять
+      </Button>
+      <div class="flex-1" />
+      <Button variant="ghost" size="sm" class="h-7 text-xs text-destructive hover:text-destructive" @click="deleteSelected">
+        <Trash2 class="size-3 mr-1" />
+        Удалить ({{ selectedItems.filter(i => i.type === 'file').length }})
+      </Button>
+    </div>
+
+    <!-- Delete confirmation -->
+    <AlertDialog v-model:open="showDeleteConfirm">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Удалить выбранные файлы?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ selectedItems.filter(i => i.type === 'file').length }} файлов будет удалено. Это действие нельзя отменить.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteSelected" :disabled="isDeletingSelected">
+            Удалить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <!-- File list -->
     <div
@@ -1110,7 +1365,7 @@ watch(() => props.productId, () => {
             <div class="bg-border -mx-1 my-1 h-px" />
             <button
               class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none text-destructive hover:bg-destructive/10"
-              @click.stop="emit('deleteFile', contextMenu.item.id); closeContextMenu()"
+              @click.stop="deleteSingleFile(contextMenu.item.id); closeContextMenu()"
             >
               <Trash2 class="size-4" />
               Удалить

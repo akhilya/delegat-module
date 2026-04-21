@@ -22,6 +22,7 @@ import {
   Ban,
   ImageDown,
   ArrowRightLeft,
+  Trash2,
 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
@@ -90,6 +91,10 @@ const typeIcon = computed(() => {
       return ImageDown;
     case "product-transfer":
       return ArrowRightLeft;
+    case "file-upload":
+      return Upload;
+    case "file-delete":
+      return Trash2;
     default:
       return Upload;
   }
@@ -145,7 +150,13 @@ const isFinished = computed(() =>
 
 const isRunning = computed(() => props.operation.status === "running");
 const isPaused = computed(() => props.operation.status === "paused");
-const canPauseStop = computed(() => isRunning.value || isPaused.value);
+// Pause/resume only for server-side operations; file-upload has no backend to pause.
+const supportsPause = computed(() =>
+  props.operation.type !== 'file-upload' && props.operation.type !== 'file-delete'
+);
+// Stop is available for ALL running operations (server-side via API, client-side via cancel callback).
+const canStop = computed(() => isRunning.value || isPaused.value);
+const canPauseStop = canStop; // alias for the legacy Stop button v-if
 
 const canExpand = computed(() => !props.operation._fromHistory || props.operation._canExpand !== false);
 
@@ -225,8 +236,8 @@ const statusLabel = computed(() => {
       />
     </button>
 
-    <!-- Progress bar -->
-    <div v-if="operation.progress && operation.progress.total > 0" class="px-3 pb-1.5">
+    <!-- Progress bar — only while operation is active (running/paused) -->
+    <div v-if="!isFinished && operation.progress && operation.progress.total > 0" class="px-3 pb-1.5">
       <div class="flex items-center gap-2">
         <Progress :model-value="progressPercent" class="h-1.5 flex-1" />
         <span class="text-[10px] text-muted-foreground tabular-nums shrink-0">
@@ -237,8 +248,8 @@ const statusLabel = computed(() => {
 
     <!-- Expanded content -->
     <div v-if="expanded" class="px-3 pb-3 space-y-2">
-      <!-- Stats grid (batch ops) -->
-      <div v-if="operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
+      <!-- Stats grid (batch ops) — only while active -->
+      <div v-if="!isFinished && operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
         <div class="bg-muted/50 rounded p-1.5">
           <div class="font-medium">{{ operation.progress.total }}</div>
           <div class="text-muted-foreground">Всего</div>
@@ -278,7 +289,7 @@ const statusLabel = computed(() => {
       <!-- Actions -->
       <div class="flex items-center gap-1.5 pt-1.5 border-t">
         <Button
-          v-if="isRunning"
+          v-if="isRunning && supportsPause"
           variant="outline"
           size="sm"
           class="h-7 text-xs"
@@ -288,7 +299,7 @@ const statusLabel = computed(() => {
           Пауза
         </Button>
         <Button
-          v-if="isPaused"
+          v-if="isPaused && supportsPause"
           variant="outline"
           size="sm"
           class="h-7 text-xs"
