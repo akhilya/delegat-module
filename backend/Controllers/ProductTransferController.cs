@@ -121,7 +121,8 @@ public class ProductTransferController : ControllerBase
 
         // ---- Enqueue ----
         var operationId = Guid.NewGuid().ToString("N");
-        var totalFiles = source.files.Count;
+        // Total = all copyable entities (product + attrs + store attrs + folders + files + images + notes + variants)
+        var totalItems = 1 + source.files.Count; // minimal: product itself + files (full count computed by worker)
 
         var pending = new PendingProductTransfer
         {
@@ -136,6 +137,7 @@ public class ProductTransferController : ControllerBase
             groupId = request.groupId,
             groupName = request.groupName,
             confirmBreakLinks = request.confirmBreakLinks,
+            syncMissingCategoryAttributes = request.syncMissingCategoryAttributes,
             authorUserId = userId.Value,
             batchId = operationId,
             status = ProductTransferStatus.Pending,
@@ -154,13 +156,13 @@ public class ProductTransferController : ControllerBase
             ? $"Перенос товара «{source.name}» → {targetStore.name}"
             : $"Клонирование товара «{source.name}» → {targetStore.name}";
         await _operationLogger.StartAsync(operationId, sourceStoreId.Value, userId.Value,
-            "product-transfer", title, totalItems: totalFiles);
+            "product-transfer", title, totalItems: totalItems);
 
         return Ok(new
         {
             queued = true,
             operationId,
-            totalFiles
+            totalItems
         });
     }
 }

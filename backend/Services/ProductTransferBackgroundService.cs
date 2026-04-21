@@ -149,7 +149,8 @@ public class ProductTransferBackgroundService : BackgroundService
             groupAction = item.groupAction,
             groupId = item.groupId,
             groupName = item.groupName,
-            confirmBreakLinks = item.confirmBreakLinks
+            confirmBreakLinks = item.confirmBreakLinks,
+            syncMissingCategoryAttributes = item.syncMissingCategoryAttributes
         };
 
         try

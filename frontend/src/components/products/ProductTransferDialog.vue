@@ -27,6 +27,7 @@ import {
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
   Select,
   SelectContent,
@@ -76,6 +77,7 @@ const groupAction = ref("none"); // none | use | create
 const groupUseId = ref(null);
 const groupNewName = ref("");
 const confirmBreakLinks = ref(false);
+const syncMissingAttrs = ref(true);
 
 const isSubmitting = ref(false);
 
@@ -141,6 +143,7 @@ function resetState() {
   groupUseId.value = null;
   groupNewName.value = "";
   confirmBreakLinks.value = false;
+  syncMissingAttrs.value = true;
   isSubmitting.value = false;
 }
 
@@ -182,6 +185,13 @@ watch(targetStoreId, async (newId) => {
     },
   });
   isLoadingPreview.value = false;
+});
+
+// --- Computed: SKU conflict resolved? ---
+const skuResolved = computed(() => {
+  if (!preview.value?.skuConflict) return false;
+  const trimmed = newSku.value?.trim() || "";
+  return trimmed.length > 0 && trimmed !== props.productSku;
 });
 
 // --- Computed validity ---
@@ -228,6 +238,7 @@ async function submit() {
     groupName: groupAction.value === "create" ? groupNewName.value.trim() : null,
     // Clone never breaks links (only move does); always send true so backend accepts.
     confirmBreakLinks: mode.value === "move" ? confirmBreakLinks.value : true,
+    syncMissingCategoryAttributes: syncMissingAttrs.value,
   };
 
   await store.dispatch("transferProduct", {
@@ -265,7 +276,7 @@ function close() {
 
 <template>
   <Dialog :open="open" @update:open="(v) => emit('update:open', v)">
-    <DialogContent class="max-w-2xl">
+    <DialogContent class="sm:max-w-3xl">
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <ArrowRightLeft class="size-5" />
@@ -346,11 +357,26 @@ function close() {
         </div>
 
         <div v-else-if="preview" class="space-y-4">
-          <!-- SKU collision -->
-          <div v-if="preview.skuConflict" class="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-            <Label for="new-sku" class="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
-              <AlertTriangle class="size-4" />
-              Артикул «{{ productSku }}» уже занят — задайте новый
+          <!-- SKU collision — dynamic: amber while unresolved, green once user entered a valid alternative -->
+          <div v-if="preview.skuConflict"
+               :class="[
+                 'space-y-2 rounded-md border p-3 transition-colors',
+                 skuResolved
+                   ? 'border-emerald-500/40 bg-emerald-500/5'
+                   : 'border-amber-500/40 bg-amber-500/5'
+               ]">
+            <Label for="new-sku" :class="[
+              'flex items-center gap-2 text-sm font-medium',
+              skuResolved ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'
+            ]">
+              <CheckCircle2 v-if="skuResolved" class="size-4" />
+              <AlertTriangle v-else class="size-4" />
+              <template v-if="skuResolved">
+                Артикул «{{ newSku.trim() }}»
+              </template>
+              <template v-else>
+                Артикул «{{ productSku }}» уже занят — задайте новый
+              </template>
             </Label>
             <Input id="new-sku" v-model="newSku" placeholder="Новый артикул" />
           </div>
@@ -365,7 +391,10 @@ function close() {
                 Исходная: <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
                 <template v-if="preview.matchedCategory">
                   В целевом магазине найдена с тем же названием —
-                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, ['характеристика перенесётся', 'характеристики перенесутся', 'характеристик перенесётся']) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">, <span class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['не подойдёт', 'не подойдут', 'не подойдёт']) }}</span></template>.
+                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, ['характеристика перенесётся', 'характеристики перенесутся', 'характеристик перенесётся']) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">,
+                    <span v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')" class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['будет добавлена', 'будут добавлены', 'будет добавлено']) }}</span>
+                    <span v-else class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['не подойдёт', 'не подойдут', 'не подойдёт']) }}</span>
+                  </template>.
                 </template>
                 <template v-else>
                   В целевом магазине такой нет.
@@ -384,8 +413,27 @@ function close() {
                 <SelectItem value="none" as="button">Без категории</SelectItem>
               </SelectContent>
             </Select>
-            <div v-if="preview.matchedCategory?.attributesUnmappable?.length" class="text-xs text-muted-foreground">
-              Не подойдут: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+            <div v-if="preview.matchedCategory?.attributesUnmappable?.length" class="space-y-2">
+              <div class="text-xs" :class="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create') ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'">
+                <template v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')">
+                  Будут добавлены: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                </template>
+                <template v-else>
+                  Не подойдут: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                </template>
+              </div>
+              <label v-if="categoryAction === 'match' || categoryAction === 'create'" class="flex items-start gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  :model-value="syncMissingAttrs"
+                  @update:model-value="syncMissingAttrs = $event"
+                  class="mt-0.5"
+                />
+                <span class="text-xs">
+                  Добавить {{ preview.matchedCategory.attributesUnmappable.length }}
+                  {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['недостающий атрибут', 'недостающих атрибута', 'недостающих атрибутов']) }}
+                  к категории «{{ preview.matchedCategory.name }}»
+                </span>
+              </label>
             </div>
           </div>
 
@@ -467,7 +515,11 @@ function close() {
               </template>
             </p>
             <label v-if="mode === 'move'" class="flex items-start gap-2 text-sm cursor-pointer">
-              <input type="checkbox" v-model="confirmBreakLinks" class="mt-0.5" />
+              <Checkbox
+                :model-value="confirmBreakLinks"
+                @update:model-value="confirmBreakLinks = $event"
+                class="mt-0.5"
+              />
               <span>Согласен потерять связи — в новом магазине заведу заново</span>
             </label>
           </div>

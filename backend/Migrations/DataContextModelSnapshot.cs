@@ -1000,6 +1000,9 @@ namespace PrintO.Migrations
                     b.Property<int>("status")
                         .HasColumnType("int");
 
+                    b.Property<bool>("syncMissingCategoryAttributes")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<int>("targetStoreId")
                         .HasColumnType("int");
 

@@ -53,6 +53,9 @@ public class PendingProductTransfer
     /// <summary>Snapshot of the user's "yes I understand links will break" flag.</summary>
     public bool confirmBreakLinks { get; set; }
 
+    /// <summary>When true, missing attribute definitions are added to the existing target category.</summary>
+    public bool syncMissingCategoryAttributes { get; set; }
+
     /// <summary>User who initiated the transfer.</summary>
     public int authorUserId { get; set; }
 
