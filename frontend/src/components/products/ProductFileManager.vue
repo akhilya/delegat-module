@@ -49,6 +49,12 @@ import {
 } from "lucide-vue-next";
 import { http } from "@/main";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tag } from "lucide-vue-next";
 
 const props = defineProps({
   files: { type: Array, required: true },
@@ -67,6 +73,78 @@ const debouncedFilesChanged = useDebounceFn(() => emit("filesChanged"), 800);
 const store = useStore();
 const route = useRoute();
 const router = useRouter();
+
+// Tag palette
+const storeTags = ref([]);
+const tagPopoverFileId = ref(null);
+const newTagName = ref("");
+const newTagColor = ref(0);
+const TAG_COLORS = [
+  { value: 0, label: "Красный", class: "bg-red-500" },
+  { value: 1, label: "Синий", class: "bg-blue-500" },
+  { value: 2, label: "Зелёный", class: "bg-emerald-500" },
+  { value: 3, label: "Жёлтый", class: "bg-yellow-400" },
+  { value: 4, label: "Оранжевый", class: "bg-orange-500" },
+  { value: 5, label: "Фиолетовый", class: "bg-purple-500" },
+  { value: 6, label: "Чёрный", class: "bg-neutral-800 dark:bg-neutral-300" },
+  { value: 7, label: "Белый", class: "bg-white border border-border" },
+];
+
+function tagColorClass(colorValue) {
+  return TAG_COLORS.find(c => c.value === colorValue)?.class || "bg-muted";
+}
+
+async function loadStoreTags() {
+  try {
+    const res = await http.get("/tags", { cache: false });
+    storeTags.value = res.data || [];
+  } catch { storeTags.value = []; }
+}
+
+function fileHasTag(fileId, tagId) {
+  const file = props.files.find(f => f.id === fileId);
+  return file?.tags?.some(t => t.id === tagId) ?? false;
+}
+
+async function toggleFileTag(fileId, tagId) {
+  try {
+    if (fileHasTag(fileId, tagId)) {
+      await http.delete(`/files/${fileId}/tags/${tagId}`, { cache: false });
+    } else {
+      await http.post(`/files/${fileId}/tags/${tagId}`, null, { cache: false });
+    }
+    debouncedFilesChanged();
+  } catch (error) {
+    displaySonnerError(error);
+  }
+}
+
+async function createAndAssignTag(fileId) {
+  if (!newTagName.value.trim()) return;
+  try {
+    const res = await http.post("/tags", { name: newTagName.value.trim(), color: newTagColor.value }, { cache: false });
+    const newTag = res.data;
+    storeTags.value.push(newTag);
+    await http.post(`/files/${fileId}/tags/${newTag.Id || newTag.id}`, null, { cache: false });
+    newTagName.value = "";
+    newTagColor.value = 0;
+    debouncedFilesChanged();
+  } catch (error) {
+    displaySonnerError(error);
+  }
+}
+
+async function bulkAssignTag(tagId) {
+  const fileIds = selectedItems.value.filter(i => i.type === 'file').map(i => i.id);
+  if (fileIds.length === 0) return;
+  try {
+    await http.post("/files/bulk-tag", { fileIds, tagId }, { cache: false });
+    debouncedFilesChanged();
+    displaySonnerSuccess(`Тэг назначен ${fileIds.length} файлам`);
+  } catch (error) {
+    displaySonnerError(error);
+  }
+}
 
 // State
 const folders = ref([]);
@@ -487,10 +565,12 @@ async function uploadFiles(fileList) {
       entry.status = 'done';
       completedFiles++;
       anyDone = true;
+      // Remove from pendingUploads immediately so the user doesn't see
+      // both the real file (from refreshed props.files) and the ✓ entry.
+      pendingUploads.value = pendingUploads.value.filter(u => u.id !== entry.id);
       updateOpProgress();
       store.dispatch("operations/addLog", { id: opId, level: "success", message: entry.name });
       // Refresh file list incrementally — each completed file appears immediately.
-      // Debounced by useDebounceFn so rapid completions don't flood fetchProduct.
       debouncedFilesChanged();
     } catch (error) {
       if (error?.code === 'ERR_CANCELED' || entry.abortController.signal.aborted || batchAbort.signal.aborted) {
@@ -546,7 +626,7 @@ async function uploadFiles(fileList) {
     } catch { /* ignore */ }
   }
 
-  // Remove all entries at once after all uploads complete
+  // Remove remaining entries (failed/cancelled) after batch completes
   const entryIds = new Set(entries.map(e => e.id));
   pendingUploads.value = pendingUploads.value.filter(u => !entryIds.has(u.id));
 
@@ -974,6 +1054,7 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
 
 onMounted(() => {
   loadFolders();
+  loadStoreTags();
   document.addEventListener('keydown', onKeyDown);
 });
 
@@ -1033,20 +1114,6 @@ watch(() => props.productId, () => {
         <!-- Spacer to catch click for editing -->
         <span class="flex-1" @click="startPathEdit" />
       </template>
-    </div>
-
-    <!-- Selection toolbar -->
-    <div v-if="selection.size > 0" class="flex items-center gap-2 px-4 h-9 border-b bg-muted/30 text-sm shrink-0">
-      <span class="text-muted-foreground">Выбрано: {{ selection.size }}</span>
-      <Button variant="ghost" size="sm" class="h-7 text-xs" @click="clearSelection">
-        <X class="size-3 mr-1" />
-        Снять
-      </Button>
-      <div class="flex-1" />
-      <Button variant="ghost" size="sm" class="h-7 text-xs text-destructive hover:text-destructive" @click="deleteSelected">
-        <Trash2 class="size-3 mr-1" />
-        Удалить ({{ selectedItems.filter(i => i.type === 'file').length }})
-      </Button>
     </div>
 
     <!-- Delete confirmation -->
@@ -1229,6 +1296,67 @@ watch(() => props.productId, () => {
               <Badge variant="secondary" class="font-normal">{{ file.contentType }}</Badge>
             </td>
             <td class="text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</td>
+            <td class="px-1" @click.stop>
+              <Popover>
+                <PopoverTrigger as-child>
+                  <button type="button" class="flex items-center gap-1 min-w-[60px] py-0.5 px-1 rounded hover:bg-muted/50 transition-colors">
+                    <template v-if="file.tags?.length > 0">
+                      <span
+                        v-for="t in file.tags"
+                        :key="t.id"
+                        :class="['inline-block size-2 rounded-full shrink-0', tagColorClass(t.color)]"
+                        :title="t.name"
+                      />
+                    </template>
+                    <Tag v-else class="size-3 text-muted-foreground/40" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" class="w-52 p-2">
+                  <div class="space-y-1 max-h-48 overflow-y-auto">
+                    <button
+                      v-for="tag in storeTags"
+                      :key="tag.id"
+                      type="button"
+                      class="flex items-center gap-2 w-full px-2 py-1 rounded text-xs hover:bg-muted transition-colors"
+                      @click="toggleFileTag(file.id, tag.id)"
+                    >
+                      <span :class="['size-2.5 rounded-full shrink-0', tagColorClass(tag.color)]" />
+                      <span class="truncate flex-1 text-left">{{ tag.name }}</span>
+                      <Check v-if="fileHasTag(file.id, tag.id)" class="size-3 text-primary shrink-0" />
+                    </button>
+                  </div>
+                  <div class="border-t mt-2 pt-2">
+                    <div class="flex items-center gap-1">
+                      <input
+                        v-model="newTagName"
+                        placeholder="Новый тэг"
+                        maxlength="50"
+                        class="flex-1 text-xs bg-transparent outline-none border rounded px-1.5 py-1"
+                        @keydown.enter="createAndAssignTag(file.id)"
+                      />
+                      <Popover>
+                        <PopoverTrigger as-child>
+                          <button type="button" :class="['size-6 rounded border shrink-0', tagColorClass(newTagColor)]" />
+                        </PopoverTrigger>
+                        <PopoverContent class="w-auto p-2">
+                          <div class="flex gap-1 flex-wrap">
+                            <button
+                              v-for="c in TAG_COLORS"
+                              :key="c.value"
+                              type="button"
+                              :class="['size-5 rounded-full', c.class, newTagColor === c.value ? 'ring-2 ring-primary ring-offset-1' : '']"
+                              :title="c.label"
+                              @click="newTagColor = c.value"
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <Button size="sm" class="h-6 px-2 text-xs" @click="createAndAssignTag(file.id)">+</Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </td>
             <td class="pr-3">
               <Button
                 variant="ghost"
@@ -1414,8 +1542,8 @@ watch(() => props.productId, () => {
           class="flex items-center gap-2 py-2"
         >
           <Checkbox
-            :checked="deleteFolderRecursive"
-            @update:checked="deleteFolderRecursive = $event"
+            :model-value="deleteFolderRecursive"
+            @update:model-value="deleteFolderRecursive = $event"
             id="recursive-delete"
           />
           <label for="recursive-delete" class="text-sm cursor-pointer">
@@ -1497,9 +1625,40 @@ watch(() => props.productId, () => {
         <ArrowDownToLine v-else class="size-4 mr-1" />
         Скачать архив
       </Button>
-      <span v-if="selection.size > 1" class="text-xs text-muted-foreground ml-auto">
-        Выбрано: {{ selection.size }}
-      </span>
+      <template v-if="selection.size > 0">
+        <span class="ml-auto text-sm text-muted-foreground tabular-nums">{{ selection.size }} выбрано</span>
+        <Button variant="outline" size="sm" @click="clearSelection">
+          <X class="size-4 mr-1" />
+          Снять
+        </Button>
+        <Popover>
+          <PopoverTrigger as-child>
+            <Button variant="outline" size="sm">
+              <Tag class="size-4 mr-1" />
+              Тэг
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" class="w-48 p-2">
+            <div class="space-y-1 max-h-48 overflow-y-auto">
+              <button
+                v-for="tag in storeTags"
+                :key="tag.id"
+                type="button"
+                class="flex items-center gap-2 w-full px-2 py-1 rounded text-xs hover:bg-muted transition-colors"
+                @click="bulkAssignTag(tag.id)"
+              >
+                <span :class="['size-2.5 rounded-full shrink-0', tagColorClass(tag.color)]" />
+                <span class="truncate">{{ tag.name }}</span>
+              </button>
+              <div v-if="storeTags.length === 0" class="text-xs text-muted-foreground text-center py-2">Нет тэгов</div>
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Button variant="outline" size="sm" @click="deleteSelected">
+          <Trash2 class="size-4 mr-1" />
+          Удалить
+        </Button>
+      </template>
     </div>
   </div>
 </template>

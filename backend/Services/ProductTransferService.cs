@@ -262,6 +262,7 @@ public class ProductTransferService
                 .ThenInclude(sav => sav.storeAttribute)
             .Include(p => p.files)
                 .ThenInclude(f => f.tags)
+                    .ThenInclude(t => t.tagDefinition)
             .Include(p => p.images)
             .Include(p => p.folders)
             .Include(p => p.notes)
@@ -685,13 +686,47 @@ public class ProductTransferService
                         fileIdMap[srcFile.Id] = newFile.Id;
                         transferred.Add((newFile.Id, newPath));
 
+                        // Copy file tags — map TagDefinitions to target store
                         foreach (var srcTag in srcFile.tags)
                         {
+                            var srcDef = srcTag.tagDefinition;
+                            if (srcDef == null) continue;
+
+                            int targetTagId;
+                            if (srcDef.storeId == request.targetStoreId)
+                            {
+                                // Same store clone — reuse directly
+                                targetTagId = srcTag.tagDefinitionId;
+                            }
+                            else
+                            {
+                                // Cross-store — find or create matching TagDefinition in target
+                                var existing = await _context.tagDefinitions
+                                    .FirstOrDefaultAsync(td =>
+                                        td.storeId == request.targetStoreId && td.name == srcDef.name, ct);
+                                if (existing != null)
+                                {
+                                    targetTagId = existing.Id;
+                                }
+                                else
+                                {
+                                    var newDef = new TagDefinition
+                                    {
+                                        name = srcDef.name,
+                                        color = srcDef.color,
+                                        storeId = request.targetStoreId,
+                                        createdAt = DateTime.UtcNow
+                                    };
+                                    _context.tagDefinitions.Add(newDef);
+                                    await _context.SaveChangesAsync(ct);
+                                    targetTagId = newDef.Id;
+                                }
+                            }
+
                             _context.tags.Add(new FileTag
                             {
                                 fileId = newFile.Id,
-                                tag = srcTag.tag,
-                                color = srcTag.color
+                                tagDefinitionId = targetTagId
                             });
                         }
                     }

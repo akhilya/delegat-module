@@ -259,20 +259,18 @@ namespace PrintO.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("color")
-                        .HasColumnType("int");
-
                     b.Property<int>("fileId")
                         .HasColumnType("int");
 
-                    b.Property<string>("tag")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
+                    b.Property<int>("tagDefinitionId")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("fileId");
+                    b.HasIndex("tagDefinitionId");
+
+                    b.HasIndex("fileId", "tagDefinitionId")
+                        .IsUnique();
 
                     b.ToTable("tags");
                 });
@@ -1446,6 +1444,35 @@ namespace PrintO.Migrations
                     b.ToTable("systemVersions");
                 });
 
+            modelBuilder.Entity("PrintO.Models.TagDefinition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("color")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("tagDefinitions");
+                });
+
             modelBuilder.Entity("PrintO.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -1622,7 +1649,15 @@ namespace PrintO.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PrintO.Models.TagDefinition", "tagDefinition")
+                        .WithMany()
+                        .HasForeignKey("tagDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("file");
+
+                    b.Navigation("tagDefinition");
                 });
 
             modelBuilder.Entity("PrintO.Models.FolderShareToken", b =>
@@ -1957,6 +1992,17 @@ namespace PrintO.Migrations
                     b.Navigation("product");
 
                     b.Navigation("storeAttribute");
+                });
+
+            modelBuilder.Entity("PrintO.Models.TagDefinition", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany()
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
                 });
 
             modelBuilder.Entity("PrintO.Models.User", b =>

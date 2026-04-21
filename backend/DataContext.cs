@@ -20,6 +20,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }
+    public DbSet<TagDefinition> tagDefinitions { get; set; }
     public DbSet<ProductFolder> productFolders { get; set; }
 
     public DbSet<Category> categories { get; set; }
@@ -238,6 +239,15 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         // FolderShareToken indexes
         builder.Entity<FolderShareToken>()
             .HasIndex(fst => fst.token).IsUnique();
+
+        // TagDefinition indexes
+        builder.Entity<TagDefinition>()
+            .HasIndex(td => td.storeId);
+
+        // FileTag: unique (fileId, tagDefinitionId) — one tag per file
+        builder.Entity<FileTag>()
+            .HasIndex(ft => new { ft.fileId, ft.tagDefinitionId })
+            .IsUnique();
 
         // Operation indexes
         builder.Entity<Operation>()

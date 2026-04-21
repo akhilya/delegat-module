@@ -28,6 +28,7 @@ public class FileController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly ThumbnailService _thumbnailService;
     private readonly QuotaService _quotaService;
+    private readonly DataContext _context;
 
     public FileController(
         ICurrentUserService currentUserService,
@@ -35,7 +36,8 @@ public class FileController : ControllerBase
         IStorageService storageService,
         IServiceProvider serviceProvider,
         ThumbnailService thumbnailService,
-        QuotaService quotaService)
+        QuotaService quotaService,
+        DataContext context)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -43,6 +45,7 @@ public class FileController : ControllerBase
         _serviceProvider = serviceProvider;
         _thumbnailService = thumbnailService;
         _quotaService = quotaService;
+        _context = context;
     }
 
     public record BulkMoveRequest(int? targetFolderId, int[] fileIds, int[] folderIds);
@@ -449,6 +452,9 @@ public class FileController : ControllerBase
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
 
+        // Delete tags before file (FK constraint)
+        await _context.tags.Where(t => t.fileId == id).ExecuteDeleteAsync();
+
         await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
         await _storageService.DeleteAsync(file.filePath);
         await fileRepo.DeleteAsync(file);
@@ -485,6 +491,11 @@ public class FileController : ControllerBase
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var files = await fileRepo.FindAllAsync(f => request.fileIds.Contains(f.Id) && f.productId == productId);
         var deletedCount = 0;
+
+        // Delete tags before files (FK constraint)
+        var fileIds = files.Select(f => f.Id).ToList();
+        if (fileIds.Any())
+            await _context.tags.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync();
 
         foreach (var file in files)
         {

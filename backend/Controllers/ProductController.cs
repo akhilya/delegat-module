@@ -221,6 +221,7 @@ public class ProductController : ControllerBase
                     .ThenInclude(c => c!.attributes)
                 .Include(p => p.files)
                     .ThenInclude(f => f.tags)
+                    .ThenInclude(t => t.tagDefinition)
                 .Include(p => p.images)
                 .Include(p => p.notes)
                 .Include(p => p.attributeValues)
@@ -930,6 +931,10 @@ public class ProductController : ControllerBase
                 .Where(pid => pid.productId == productId)
                 .ExecuteDeleteAsync();
 
+            await _context.pendingProductTransfers
+                .Where(pt => pt.newProductId == productId)
+                .ExecuteDeleteAsync();
+
             await _context.productVariantLinks
                 .Where(vl => vl.variant.productId == productId)
                 .ExecuteDeleteAsync();
@@ -1039,6 +1044,11 @@ public class ProductController : ControllerBase
 
             await _context.pendingImageDownloads
                 .Where(pid => foundIds.Contains(pid.productId))
+                .ExecuteDeleteAsync();
+
+            // Clear transfer records referencing these products
+            await _context.pendingProductTransfers
+                .Where(pt => foundIds.Contains(pt.newProductId ?? 0))
                 .ExecuteDeleteAsync();
 
             await _context.productVariantLinks

@@ -9,6 +9,7 @@ using PrintO.Infrastructure.Middleware;
 using PrintO.Infrastructure.Storage;
 using PrintO.Models;
 using PrintO.Models.Products;
+using PrintO.Services;
 
 namespace PrintO.Controllers;
 
@@ -20,17 +21,20 @@ public class ProductFolderController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IStorageService _storageService;
     private readonly DataContext _context;
+    private readonly ThumbnailService _thumbnailService;
 
     public ProductFolderController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IStorageService storageService,
-        DataContext context)
+        DataContext context,
+        ThumbnailService thumbnailService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _context = context;
+        _thumbnailService = thumbnailService;
     }
 
     private async Task<Product> GetAndValidateProduct(int productId)
@@ -176,9 +180,15 @@ public class ProductFolderController : ControllerBase
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
+            // Delete file tags first (FK constraint)
+            var fileIdsToDelete = filesToDelete.Select(f => f.Id).ToList();
+            if (fileIdsToDelete.Any())
+                await _context.tags.Where(t => fileIdsToDelete.Contains(t.fileId)).ExecuteDeleteAsync();
+
             // Delete files from storage
             foreach (var file in filesToDelete)
             {
+                await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
                 await _storageService.DeleteAsync(file.filePath);
             }
 

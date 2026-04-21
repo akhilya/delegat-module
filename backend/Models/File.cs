@@ -110,7 +110,12 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
             contentType,
             length,
             folderId,
-            tags = tags.Select(t => t.MapToDTO(serviceProvider)),
+            tags = tags.Select(t => new
+            {
+                id = t.tagDefinitionId,
+                name = t.tagDefinition?.name ?? "",
+                color = t.tagDefinition?.color ?? 0
+            }),
         };
     }
 
