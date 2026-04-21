@@ -15,10 +15,8 @@
 
   color-scheme: light;
 
-  /* Full OpenType polish: legible, refined, with tabular numerals everywhere by default.
-     `cv11` = single-storey `a` (more geometric), `ss03` = alternative `Я`/`я` shapes,
-     `tnum` aligns digits in tables and prices. */
-  font-feature-settings: "cv11", "ss03", "tnum";
+  /* Tabular numerals — digits align in tables and prices. */
+  font-feature-settings: "tnum";
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
