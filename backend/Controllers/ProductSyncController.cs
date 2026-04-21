@@ -215,9 +215,9 @@ public class ProductSyncController : ControllerBase
             await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
                 $"Экспорт товара #{productId}", connectionId: connectionId, connectionName: connection.name);
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", "Экспорт товара на маркетплейс...");
-
-        var result = await _productSyncService.ExportProductAsync(productId, connectionId, ct);
+        var result = await _productSyncService.ExportProductAsync(
+            productId, connectionId, ct,
+            operationId: operationId, operationStoreId: storeId);
 
         await _operationLogger.FinishAsync(operationId, storeId,
             result.IsSuccess ? "completed" : "failed",
@@ -2012,10 +2012,10 @@ public class ProductSyncController : ControllerBase
                 $"Экспорт: {link.product.name ?? link.externalProductId}",
                 connectionId: link.connectionId, connectionName: link.connection.name);
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", "Экспорт товара на маркетплейс...");
-
         // Экспортируем через сервис
-        var result = await _productSyncService.ExportProductAsync(link.productId, link.connectionId, ct);
+        var result = await _productSyncService.ExportProductAsync(
+            link.productId, link.connectionId, ct,
+            operationId: operationId, operationStoreId: storeId);
 
         await _operationLogger.FinishAsync(operationId, storeId,
             result.IsSuccess ? "completed" : "failed",

@@ -25,6 +25,7 @@ public class OperationLogger : IOperationLogger
                                   int? connectionId = null, string? connectionName = null,
                                   string? batchId = null, string? batchType = null, int? totalItems = null)
     {
+        string? authorUserName = null;
         try
         {
             using var scope = _scopeFactory.CreateScope();
@@ -45,6 +46,12 @@ public class OperationLogger : IOperationLogger
                 createdAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();
+
+            // Resolve author name for the SignalR event so the panel can show who started this
+            authorUserName = await db.Users
+                .Where(u => u.Id == authorUserId)
+                .Select(u => u.UserName)
+                .FirstOrDefaultAsync();
         }
         catch (Exception ex)
         {
@@ -57,6 +64,7 @@ public class OperationLogger : IOperationLogger
                 operationId,
                 storeId,
                 authorUserId,
+                authorUserName,
                 type,
                 title,
                 status = "running",

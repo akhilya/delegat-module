@@ -46,25 +46,30 @@ public class OperationsController : ControllerBase
             .OrderByDescending(o => o.createdAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(o => new
-            {
-                o.operationId,
-                o.storeId,
-                o.authorUserId,
-                o.type,
-                o.title,
-                o.status,
-                o.connectionId,
-                o.connectionName,
-                o.batchId,
-                o.batchType,
-                o.totalItems,
-                o.completedItems,
-                o.failedItems,
-                o.summary,
-                o.createdAt,
-                o.finishedAt
-            })
+            .Join(
+                _context.Users,
+                o => o.authorUserId,
+                u => u.Id,
+                (o, u) => new
+                {
+                    o.operationId,
+                    o.storeId,
+                    o.authorUserId,
+                    authorUserName = u.UserName,
+                    o.type,
+                    o.title,
+                    o.status,
+                    o.connectionId,
+                    o.connectionName,
+                    o.batchId,
+                    o.batchType,
+                    o.totalItems,
+                    o.completedItems,
+                    o.failedItems,
+                    o.summary,
+                    o.createdAt,
+                    o.finishedAt
+                })
             .ToListAsync(ct);
 
         return Ok(new

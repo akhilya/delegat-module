@@ -98,6 +98,7 @@ function mapServerOperation(item) {
     status: item.status,
     connectionName: item.connectionName || null,
     connectionId: item.connectionId || null,
+    authorUserName: item.authorUserName || null,
     startedAt: item.createdAt,
     finishedAt: item.finishedAt || null,
     progress: item.totalItems != null ? {
@@ -139,6 +140,7 @@ const actions = {
         status: "running",
         connectionName: data.connectionName || null,
         connectionId: data.connectionId || null,
+        authorUserName: data.authorUserName || null,
         startedAt: data.createdAt || new Date().toISOString(),
         finishedAt: null,
         progress: data.totalItems != null ? {
@@ -332,7 +334,10 @@ const actions = {
 
   async loadOperationLogs({ commit }, operationId) {
     try {
-      const response = await http.get(`/operations/${operationId}/logs`);
+      const response = await http.get(`/operations/${operationId}/logs`, {
+        cache: false,
+        timeout: 10000, // 10s safety — don't hang the spinner forever
+      });
       const logs = (response.data.logs || []).map((l) => ({
         timestamp: l.timestamp,
         level: l.level,
@@ -341,6 +346,9 @@ const actions = {
       commit("SET_OPERATION_LOGS", { id: operationId, logs });
     } catch (err) {
       console.error("[Operations] Failed to load logs:", err);
+      // Mark as loaded even on failure so we don't retry infinitely on expand/collapse.
+      // User will see empty log timeline — better than infinite spinner.
+      commit("SET_OPERATION_LOGS", { id: operationId, logs: [] });
     }
   },
 

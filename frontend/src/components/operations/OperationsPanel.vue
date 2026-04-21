@@ -3,6 +3,17 @@ import { computed, watch } from "vue";
 import { useStore } from "vuex";
 import { X, Trash2, Activity, Loader2 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import OperationItem from "./OperationItem.vue";
 import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
 
@@ -84,16 +95,30 @@ function handleRemove(id) {
         <div class="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <h2 class="text-sm font-semibold">Операции</h2>
           <div class="flex items-center gap-1">
-            <Button
-              v-if="hasCompleted"
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7"
-              title="Очистить завершённые"
-              @click="clearCompleted"
-            >
-              <Trash2 class="size-3.5" />
-            </Button>
+            <AlertDialog v-if="hasCompleted">
+              <AlertDialogTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  title="Очистить завершённые"
+                >
+                  <Trash2 class="size-3.5" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Очистить завершённые операции?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Все завершённые, отменённые и ошибочные операции будут удалены из списка.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction @click="clearCompleted">Очистить</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button
               variant="ghost"
               size="icon"

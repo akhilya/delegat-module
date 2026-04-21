@@ -25,6 +25,17 @@ import {
 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import OperationLogTimeline from "./OperationLogTimeline.vue";
 
 const props = defineProps({
@@ -42,8 +53,14 @@ let timer = null;
 watch(expanded, async (isExpanded) => {
   if (isExpanded && props.operation._fromHistory && !props.operation._logsLoaded) {
     loadingLogs.value = true;
-    await store.dispatch("operations/loadOperationLogs", props.operation.id);
-    loadingLogs.value = false;
+    // Safety timeout: if dispatch hangs beyond 15s, force-clear spinner.
+    const safety = setTimeout(() => { loadingLogs.value = false; }, 15000);
+    try {
+      await store.dispatch("operations/loadOperationLogs", props.operation.id);
+    } finally {
+      clearTimeout(safety);
+      loadingLogs.value = false;
+    }
   }
 });
 
@@ -253,6 +270,11 @@ const statusLabel = computed(() => {
       </div>
       <OperationLogTimeline v-else :logs="operation.logs" />
 
+      <!-- Author -->
+      <div v-if="operation.authorUserName" class="text-xs text-muted-foreground">
+        Запустил: {{ operation.authorUserName }}
+      </div>
+
       <!-- Actions -->
       <div class="flex items-center gap-1.5 pt-1.5 border-t">
         <Button
@@ -302,14 +324,29 @@ const statusLabel = computed(() => {
             → {{ new Date(operation.finishedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
           </template>
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-7 w-7"
-          @click="emit('remove', operation.id)"
-        >
-          <X class="size-3.5" />
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger as-child>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7"
+            >
+              <X class="size-3.5" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Удалить операцию?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {{ operation.title }}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Отмена</AlertDialogCancel>
+              <AlertDialogAction @click="emit('remove', operation.id)">Удалить</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   </div>

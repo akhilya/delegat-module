@@ -166,6 +166,17 @@ public class ImageDownloadBackgroundService : BackgroundService
         pending.retryCount++;
         await context.SaveChangesAsync(ct);
 
+        // Helper: log to operation panel (no-op for images without a batch)
+        async Task Log(string level, string message)
+        {
+            if (pending.batchId != null)
+                await _operationLogger.LogAsync(pending.batchId, pending.storeId, level, message);
+        }
+
+        var shortUrl = pending.imageUrl.Length > 60
+            ? pending.imageUrl[..57] + "..."
+            : pending.imageUrl;
+
         try
         {
             // Генерируем путь для файла
@@ -185,6 +196,8 @@ public class ImageDownloadBackgroundService : BackgroundService
                 _logger.LogWarning(
                     "Не удалось скачать изображение {ImageUrl} для товара {ProductId} (попытка {Retry})",
                     pending.imageUrl, pending.productId, pending.retryCount);
+
+                await Log("warning", $"Не удалось скачать: {shortUrl} (попытка {pending.retryCount})");
                 return;
             }
 
@@ -239,11 +252,13 @@ public class ImageDownloadBackgroundService : BackgroundService
         {
             pending.status = ImageDownloadStatus.Failed;
             pending.lastError = ex.Message;
-            await context.SaveChangesAsync(CancellationToken.None); // Сохраняем даже если отмена
+            await context.SaveChangesAsync(CancellationToken.None);
 
             _logger.LogError(ex,
                 "Ошибка загрузки изображения {ImageUrl} для товара {ProductId}",
                 pending.imageUrl, pending.productId);
+
+            await Log("error", $"Ошибка загрузки изображения #{pending.imageIndex}: {ex.Message}");
         }
     }
 
