@@ -6,6 +6,7 @@ import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Switch from "@/components/ui/switch/Switch.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import MultiSelectDropdown from "@/components/ui/multi-select/MultiSelectDropdown.vue";
@@ -101,6 +102,10 @@ export default {
     Input,
     Label,
     Badge,
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
     Switch,
     SearchableSelect,
     MultiSelectDropdown,
@@ -195,6 +200,7 @@ export default {
       showModifierSheet: false,
       // Preview summary sheet
       showPreviewSheet: false,
+      previewVisualMode: false,
       // Mapping settings dialog
       showMappingSettings: false,
       settingsName: "",
@@ -766,6 +772,34 @@ export default {
       this.showMappingSettings = true;
     },
 
+    isImageValue(value) {
+      if (!value) return false;
+      // Handle arrays (Vue may pass the raw object from API)
+      if (Array.isArray(value)) return value.some(v => typeof v === 'string' && v.includes('http'));
+      const str = String(value);
+      // JSON array of URLs
+      if (str.startsWith('[') && str.includes('http')) return true;
+      // Single URL with image extension (even with query params like presigned URLs)
+      if (/https?:\/\/\S+\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(str)) return true;
+      // Presigned MinIO URL (contains /images/ path segment)
+      if (/https?:\/\/\S+\/images\/\S+/i.test(str)) return true;
+      return false;
+    },
+    parseImageUrls(value) {
+      if (!value) return [];
+      // Already an array
+      if (Array.isArray(value)) return value.filter(u => typeof u === 'string' && u.includes('http'));
+      const str = String(value);
+      // Try JSON parse
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed.filter(u => typeof u === 'string' && u.includes('http'));
+      } catch {}
+      // Single URL
+      if (str.startsWith('http')) return [str];
+      // Comma-separated
+      return str.split(',').map(s => s.trim()).filter(s => s.startsWith('http'));
+    },
     async saveMappingSettings() {
       this.isSavingSettings = true;
       try {
@@ -1534,13 +1568,60 @@ export default {
             :key="item.externalFieldKey"
             class="rounded-md border p-3 text-sm"
             :class="{
-              'bg-destructive/10 border-l-2 border-l-destructive': item.error,
-              'bg-warning/10 border-l-2 border-l-warning': item.isChanged,
+              'bg-destructive/10': item.error,
+              'bg-warning/10': item.isChanged && !item.error,
             }"
           >
-            <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
-            <div v-if="item.error" class="text-destructive text-xs break-all whitespace-pre-wrap">{{ item.error }}</div>
-            <div v-else class="space-y-1 text-xs">
+            <div v-if="item.error">
+              <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
+              <div class="text-destructive text-xs break-all whitespace-pre-wrap">{{ item.error }}</div>
+            </div>
+            <div v-else-if="isImageValue(item.resultValue)">
+              <Tabs default-value="visual">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-medium text-xs text-muted-foreground">{{ item.fieldName }}</span>
+                  <TabsList class="h-6 p-0.5">
+                    <TabsTrigger value="visual" class="text-[11px] h-5 px-2">Просмотр</TabsTrigger>
+                    <TabsTrigger value="raw" class="text-[11px] h-5 px-2">Данные</TabsTrigger>
+                  </TabsList>
+                </div>
+                <TabsContent value="visual" class="mt-0">
+                  <div class="flex flex-wrap gap-2">
+                    <div
+                      v-for="(url, idx) in parseImageUrls(item.resultValue)"
+                      :key="idx"
+                      class="h-24 w-24 rounded-md border overflow-hidden bg-muted relative group"
+                    >
+                      <img
+                        :src="url"
+                        class="h-full w-full object-cover"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                        @error="$event.target.classList.add('opacity-0')"
+                      />
+                      <!-- Fallback: shows image index when img fails -->
+                      <div class="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground pointer-events-none">
+                        {{ idx + 1 }}
+                      </div>
+                    </div>
+                  </div>
+                  <p class="text-[10px] text-muted-foreground mt-2">{{ parseImageUrls(item.resultValue).length }} изображений. Если не отображаются — URL может быть недоступен из браузера.</p>
+                </TabsContent>
+                <TabsContent value="raw" class="mt-0 space-y-1 text-xs">
+                  <div class="flex gap-2 min-w-0">
+                    <span class="text-muted-foreground shrink-0">Исх:</span>
+                    <span class="text-muted-foreground font-mono break-all whitespace-pre-wrap">{{ item.sourceValue ?? '—' }}</span>
+                  </div>
+                  <div class="flex gap-2 min-w-0">
+                    <span class="text-muted-foreground shrink-0">Рез:</span>
+                    <span class="font-medium font-mono break-all whitespace-pre-wrap">{{ item.resultValue ?? '—' }}</span>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+            <div v-else>
+              <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
+              <div class="space-y-1 text-xs">
               <div class="flex gap-2 min-w-0">
                 <span class="text-muted-foreground shrink-0">Исх:</span>
                 <span class="text-muted-foreground font-mono break-all whitespace-pre-wrap">{{ item.sourceValue ?? '—' }}</span>
@@ -1548,6 +1629,7 @@ export default {
               <div class="flex gap-2 min-w-0">
                 <span class="text-muted-foreground shrink-0">Рез:</span>
                 <span class="font-medium font-mono break-all whitespace-pre-wrap">{{ item.resultValue ?? '—' }}</span>
+              </div>
               </div>
             </div>
           </div>

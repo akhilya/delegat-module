@@ -6,7 +6,9 @@ import OperationsPanel from "@/components/operations/OperationsPanel.vue";
 import OperationsTriggerButton from "@/components/operations/OperationsTriggerButton.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import { Loader2 } from "lucide-vue-next";
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import Button from "@/components/ui/button/Button.vue";
+import { Monitor } from "lucide-vue-next";
 
 export default {
   components: {
@@ -16,11 +18,25 @@ export default {
     OperationsTriggerButton,
     LoadingBar,
     Loader2,
+    Button,
+    Monitor,
   },
   setup() {
     const route = useRoute();
     const isPublicPage = computed(() => !!route.meta?.public);
-    return { isPublicPage };
+
+    // Mobile warning: show once, remember dismissal in localStorage
+    const mobileWarningDismissed = ref(
+      localStorage.getItem("mobile-warning-dismissed") === "1"
+    );
+    const isMobileScreen = ref(window.innerWidth < 640);
+
+    function dismissMobileWarning() {
+      mobileWarningDismissed.value = true;
+      localStorage.setItem("mobile-warning-dismissed", "1");
+    }
+
+    return { isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning };
   },
   computed: {
     appKey() {
@@ -33,6 +49,9 @@ export default {
       return this.$store.state.operations.operations.some(
         (o) => o.type === "file-upload" && o.status === "running"
       );
+    },
+    showMobileWarning() {
+      return this.isMobileScreen && !this.mobileWarningDismissed && !this.isPublicPage;
     },
   },
   mounted() {
@@ -64,6 +83,28 @@ export default {
     <OperationsPanel />
     <OperationsTriggerButton />
   </template>
+
+  <!-- Mobile device warning -->
+  <Teleport to="body">
+    <div
+      v-if="showMobileWarning"
+      class="fixed inset-0 z-[99999] flex items-center justify-center bg-background/95 backdrop-blur-sm p-6"
+    >
+      <div class="max-w-sm w-full flex flex-col items-center text-center gap-5">
+        <Monitor class="size-12 text-muted-foreground" />
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Лучше с компьютера</h2>
+          <p class="text-sm text-muted-foreground leading-relaxed">
+            PrintO — панель управления товарами, оптимизированная для работы на компьютере.
+            На мобильных устройствах часть функций может работать некорректно.
+          </p>
+        </div>
+        <Button class="w-full" @click="dismissMobileWarning">
+          Продолжить
+        </Button>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- Fullscreen overlay during store switch -->
   <Transition name="store-switch">
