@@ -1,9 +1,8 @@
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" size="sm" class="h-8">
-        <SlidersHorizontal class="mr-2 h-4 w-4" />
-        Колонки
+      <Button variant="ghost" size="icon" class="size-8" title="Колонки">
+        <SlidersHorizontal class="size-4" />
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" class="w-64">

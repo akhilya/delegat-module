@@ -58,7 +58,7 @@ export default {
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" class="w-full h-full rounded-none px-2">
+      <Button variant="ghost" class="w-full h-full rounded-none px-2 sm:px-3">
         <EllipsisVertical class="size-4" />
       </Button>
     </DropdownMenuTrigger>

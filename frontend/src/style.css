@@ -181,6 +181,13 @@ button {
   }
   body {
     @apply bg-background text-foreground;
+    /* Slightly smaller base on mobile for denser UI */
+    font-size: 14px;
+  }
+  @media (min-width: 640px) {
+    body {
+      font-size: 16px;
+    }
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);

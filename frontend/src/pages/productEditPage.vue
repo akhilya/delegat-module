@@ -877,27 +877,14 @@ export default {
             <TabsTrigger value="properties">Свойства</TabsTrigger>
             <TabsTrigger value="notes">Заметки</TabsTrigger>
             <TabsTrigger value="files">Файлы</TabsTrigger>
-            <TabsTrigger value="images">Изображения</TabsTrigger>
+            <TabsTrigger value="images"><span class="sm:hidden">Фото</span><span class="hidden sm:inline">Изображения</span></TabsTrigger>
             <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
-            <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
+            <TabsTrigger value="marketplaces"><span class="sm:hidden">МП</span><span class="hidden sm:inline">Маркетплейсы</span></TabsTrigger>
           </TabsList>
         </Tabs>
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
-    <!-- Mobile tabs (visible below sm where center slot is hidden) -->
-    <div class="sm:hidden mb-4 overflow-x-auto">
-      <Tabs v-model="tab">
-        <TabsList>
-          <TabsTrigger value="properties">Свойства</TabsTrigger>
-          <TabsTrigger value="notes">Заметки</TabsTrigger>
-          <TabsTrigger value="files">Файлы</TabsTrigger>
-          <TabsTrigger value="images">Фото</TabsTrigger>
-          <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
-          <TabsTrigger value="marketplaces">МП</TabsTrigger>
-        </TabsList>
-      </Tabs>
-    </div>
     <!-- Mobile group link (visible when sidebar is hidden) -->
     <div v-if="productGroup" class="lg:hidden flex items-center gap-2 mb-3 text-sm">
       <Layers class="size-4 text-muted-foreground" />
@@ -1219,8 +1206,8 @@ export default {
             </CardContent>
           </Card>
 
-          <!-- Actions row: Delete + Duplicate on left, Save on right -->
-          <div class="flex items-center justify-between sticky bottom-0 bg-background py-3 -mx-px border-t mt-2">
+          <!-- Actions row: fixed at bottom on mobile, sticky on desktop -->
+          <div class="flex items-center justify-between fixed sm:sticky bottom-0 left-0 right-0 sm:left-auto sm:right-auto bg-background py-3 px-4 sm:px-0 sm:-mx-px border-t mt-2 z-20">
             <div class="flex items-center gap-2">
               <AlertDialog>
                 <AlertDialogTrigger as-child>

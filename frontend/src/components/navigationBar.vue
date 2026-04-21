@@ -192,127 +192,139 @@ export default {
 </script>
 
 <template>
-  <div class="w-screen h-20 backdrop-blur-lg fixed left-0 top-0 z-30" />
-  <div class="w-full h-20 sticky top-0 left-0 grid grid-cols-3 z-30">
+  <!-- Backdrop blur -->
+  <div class="w-screen backdrop-blur-lg fixed left-0 top-0 z-30 h-14" />
+
+  <!-- Nav: two rows on mobile, single row on desktop -->
+  <div class="w-full sticky top-0 left-0 z-30">
     <template v-if="!isLoading">
-      <div class="flex items-center justify-start gap-2">
-        <template v-if="memberships.length > 0">
-          <Select
-            :model-value="String(me?.selectedStoreId ?? '')"
-            @update:model-value="selectStore(Number($event))"
-          >
-            <SelectTrigger class="bg-primary-foreground w-32 sm:w-48">
-              <SelectValue placeholder="Выберите магазин..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Магазины</SelectLabel>
-                <SelectItem
-                  as="button"
-                  v-for="store in memberships"
-                  :key="store.id"
-                  :value="String(store.id)"
-                >
-                  {{ store.name }}
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </template>
-        <template v-else>
-          <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-32 sm:w-48">
-            <AlertCircle class="size-3 shrink-0" />
-            <span class="truncate">Нет магазинов</span>
-          </div>
-        </template>
-      </div>
-      <div class="hidden sm:flex items-center justify-center">
-        <slot name="center" />
-      </div>
-      <!-- Mobile: center slot rendered as a full-width row below nav -->
-      <div class="sm:hidden col-span-3 pt-1">
-        <slot name="center" />
-      </div>
-      <div class="flex items-center justify-end gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger class="flex items-center gap-2">
-            <Button variant="outline">
-              <UserRound class="size-4" />
-              {{ me?.userName }}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @select="goToProducts">
-              <House class="size-4 mr-2" />
-              Товары
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToProductCreation">
-              <Plus class="size-4 mr-2" />
-              Добавить товар
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToCategories">
-              <FolderOpen class="size-4 mr-2" />
-              Категории
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToProductGroups">
-              <Layers class="size-4 mr-2" />
-              Группы товаров
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToStoreAttributes">
-              <Globe class="size-4 mr-2" />
-              Глобальные атрибуты
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToTrash">
-              <Trash2 class="size-4 mr-2" />
-              Корзина
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @select="goToMarketplace">
-              <ShoppingBag class="size-4 mr-2" />
-              Маркетплейсы
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="goToPlugins">
-              <Puzzle class="size-4 mr-2" />
-              Плагины
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <template v-if="me?.isAdmin">
-              <DropdownMenuItem @select="goToAdminStores">
-                <Store class="size-4 mr-2" />
-                Магазины
+      <!-- Main row: store + (center on desktop) + user menu -->
+      <div class="flex items-center h-14 gap-2">
+        <!-- Store selector -->
+        <div class="shrink-0">
+          <template v-if="memberships.length > 0">
+            <Select
+              :model-value="String(me?.selectedStoreId ?? '')"
+              @update:model-value="selectStore(Number($event))"
+            >
+              <SelectTrigger class="bg-primary-foreground w-28 sm:w-48">
+                <SelectValue placeholder="Магазин" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Магазины</SelectLabel>
+                  <SelectItem
+                    as="button"
+                    v-for="store in memberships"
+                    :key="store.id"
+                    :value="String(store.id)"
+                  >
+                    {{ store.name }}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </template>
+          <template v-else>
+            <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-28 sm:w-48">
+              <AlertCircle class="size-3 shrink-0" />
+              <span class="truncate">Нет магазинов</span>
+            </div>
+          </template>
+        </div>
+
+        <!-- Center slot: search etc. (desktop only, mobile gets its own row below) -->
+        <div class="hidden sm:flex flex-1 items-center justify-center">
+          <slot name="center" />
+        </div>
+
+        <!-- User menu -->
+        <div class="ml-auto shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button variant="outline" size="sm" class="gap-1.5">
+                <UserRound class="size-4" />
+                <span class="hidden sm:inline max-w-[120px] truncate">{{ me?.userName }}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{{ me?.userName }}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem @select="goToProducts">
+                <House class="size-4 mr-2" />
+                Товары
               </DropdownMenuItem>
-              <DropdownMenuItem @select="goToAdminTokens">
-                <Key class="size-4 mr-2" />
-                Токены
+              <DropdownMenuItem @select="goToProductCreation">
+                <Plus class="size-4 mr-2" />
+                Добавить товар
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="goToCategories">
+                <FolderOpen class="size-4 mr-2" />
+                Категории
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="goToProductGroups">
+                <Layers class="size-4 mr-2" />
+                Группы товаров
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="goToStoreAttributes">
+                <Globe class="size-4 mr-2" />
+                Атрибуты магазина
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="goToTrash">
+                <Trash2 class="size-4 mr-2" />
+                Корзина
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-            </template>
-            <DropdownMenuItem @select="toggleDark()">
-              <Sun v-if="isDark" class="size-4 mr-2" />
-              <Moon v-else class="size-4 mr-2" />
-              {{ isDark ? 'Светлая тема' : 'Тёмная тема' }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="postLogOut">
-              <LogOut class="size-4 mr-2" />
-              Выйти
-            </DropdownMenuItem>
-            <template v-if="platformVersion">
+              <DropdownMenuItem @select="goToMarketplace">
+                <ShoppingBag class="size-4 mr-2" />
+                Маркетплейсы
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="goToPlugins">
+                <Puzzle class="size-4 mr-2" />
+                Плагины
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <div class="px-2 py-1 text-[10px] text-muted-foreground text-center select-none">
-                v{{ platformVersion }}
-              </div>
-            </template>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <template v-if="me?.isAdmin">
+                <DropdownMenuItem @select="goToAdminStores">
+                  <Store class="size-4 mr-2" />
+                  Магазины
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="goToAdminTokens">
+                  <Key class="size-4 mr-2" />
+                  Токены
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </template>
+              <DropdownMenuItem @select="toggleDark()">
+                <Sun v-if="isDark" class="size-4 mr-2" />
+                <Moon v-else class="size-4 mr-2" />
+                {{ isDark ? 'Светлая тема' : 'Тёмная тема' }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="postLogOut">
+                <LogOut class="size-4 mr-2" />
+                Выйти
+              </DropdownMenuItem>
+              <template v-if="platformVersion">
+                <DropdownMenuSeparator />
+                <div class="px-2 py-1 text-[10px] text-muted-foreground text-center select-none">
+                  v{{ platformVersion }}
+                </div>
+              </template>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <!-- Mobile-only: center slot as full-width row below main nav -->
+      <div class="sm:hidden pb-1.5">
+        <slot name="center" />
       </div>
     </template>
+
     <template v-else>
-      <div class="col-span-full flex items-center justify-center">
+      <div class="flex items-center justify-center h-14">
         <Loader2 class="size-4 animate-spin" />
       </div>
     </template>
   </div>
-
 </template>

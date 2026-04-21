@@ -1179,9 +1179,9 @@ watch(() => props.productId, () => {
                 @mousedown.stop
                 @dragstart.stop.prevent
               />
-              <span v-else>{{ folder.name }}</span>
+              <span v-else class="block truncate max-w-[200px] sm:max-w-xs lg:max-w-md" :title="folder.name">{{ folder.name }}</span>
             </td>
-            <td class="text-muted-foreground">Папка</td>
+            <td class="text-muted-foreground hidden sm:table-cell">Папка</td>
             <td class="text-muted-foreground">
               {{ folder.fileCount }} {{ folder.fileCount === 1 ? 'файл' : 'файлов' }}
             </td>
@@ -1223,12 +1223,12 @@ watch(() => props.productId, () => {
                 @mousedown.stop
                 @dragstart.stop.prevent
               />
-              <span v-else>{{ extractFileName(file) }}</span>
+              <span v-else class="block truncate max-w-[200px] sm:max-w-xs lg:max-w-md" :title="extractFileName(file)">{{ extractFileName(file) }}</span>
             </td>
-            <td>
+            <td class="hidden sm:table-cell">
               <Badge variant="secondary" class="font-normal">{{ file.contentType }}</Badge>
             </td>
-            <td class="text-muted-foreground">{{ formatBytes(file.length) }}</td>
+            <td class="text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</td>
             <td class="pr-3">
               <Button
                 variant="ghost"
