@@ -156,22 +156,33 @@ function fileHasTag(fileId, tagId) {
 async function toggleFileTag(fileId, tagId) {
   const file = props.files.find(f => f.id === fileId);
   const tag = storeTags.value.find(t => t.id === tagId);
+  const hadTag = fileHasTag(fileId, tagId);
+
+  // Optimistic UI — update instantly
+  if (hadTag) {
+    if (file?.tags) file.tags = file.tags.filter(t => t.id !== tagId);
+  } else if (file && tag) {
+    if (!file.tags) file.tags = [];
+    file.tags.push({ id: tag.id, name: tag.name, color: tag.color });
+  }
+
   try {
-    if (fileHasTag(fileId, tagId)) {
+    if (hadTag) {
       await http.delete(`/files/${fileId}/tags/${tagId}`, { cache: false });
-      // Optimistic: remove tag locally
-      if (file?.tags) file.tags = file.tags.filter(t => t.id !== tagId);
     } else {
       await http.post(`/files/${fileId}/tags/${tagId}`, null, { cache: false });
-      // Optimistic: add tag locally
+    }
+  } catch (error) {
+    // Rollback
+    if (hadTag) {
       if (file && tag) {
         if (!file.tags) file.tags = [];
         file.tags.push({ id: tag.id, name: tag.name, color: tag.color });
       }
+    } else {
+      if (file?.tags) file.tags = file.tags.filter(t => t.id !== tagId);
     }
-  } catch (error) {
     displaySonnerError(error);
-    debouncedFilesChanged(); // revert on error via full refresh
   }
 }
 
@@ -199,34 +210,43 @@ async function bulkToggleTag(tagId) {
   const files = selectedItems.value.filter(i => i.type === 'file');
   if (files.length === 0) return;
 
-  // If ALL selected files already have this tag → remove it from all; otherwise → add to those missing
   const allHaveTag = files.every(f => f.item?.tags?.some(t => t.id === tagId));
   const tag = storeTags.value.find(t => t.id === tagId);
 
+  // Snapshot for rollback: Map<fileId, tag[] copy>
+  const snapshot = new Map(files.map(f => [f.id, f.item?.tags ? [...f.item.tags] : []]));
+
+  // Optimistic UI — update instantly
+  if (allHaveTag) {
+    for (const f of files) {
+      if (f.item?.tags) f.item.tags = f.item.tags.filter(t => t.id !== tagId);
+    }
+  } else if (tag) {
+    for (const f of files) {
+      if (!f.item?.tags?.some(t => t.id === tagId)) {
+        if (!f.item.tags) f.item.tags = [];
+        f.item.tags.push({ id: tag.id, name: tag.name, color: tag.color });
+      }
+    }
+  }
+
   try {
     if (allHaveTag) {
-      // Remove from all
       for (const f of files) {
         await http.delete(`/files/${f.id}/tags/${tagId}`, { cache: false });
-        if (f.item?.tags) f.item.tags = f.item.tags.filter(t => t.id !== tagId);
       }
       displaySonnerSuccess(`Тэг убран с ${files.length} файлов`);
     } else {
-      // Add to those missing
-      const fileIds = files.filter(f => !f.item?.tags?.some(t => t.id === tagId)).map(f => f.id);
+      const fileIds = files.filter(f => !snapshot.get(f.id)?.some(t => t.id === tagId)).map(f => f.id);
       await http.post("/files/bulk-tag", { fileIds, tagId }, { cache: false });
-      // Optimistic
-      for (const f of files) {
-        if (!f.item?.tags?.some(t => t.id === tagId) && tag) {
-          if (!f.item.tags) f.item.tags = [];
-          f.item.tags.push({ id: tag.id, name: tag.name, color: tag.color });
-        }
-      }
       displaySonnerSuccess(`Тэг назначен ${fileIds.length} файлам`);
     }
   } catch (error) {
+    // Rollback to snapshot
+    for (const f of files) {
+      if (f.item) f.item.tags = snapshot.get(f.id) ?? [];
+    }
     displaySonnerError(error);
-    debouncedFilesChanged();
   }
 }
 
