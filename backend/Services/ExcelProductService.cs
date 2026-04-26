@@ -22,6 +22,7 @@ public class ExcelProductService
             ("id", "ID", true),
             ("sku", "Артикул", true),
             ("category", "Категория", true),
+            ("group", "Группа", true),
             ("name", "Название", false),
             ("description", "Описание", false),
             ("price", "Цена", false),
@@ -76,6 +77,13 @@ public class ExcelProductService
             ws.Cell(row, c++).Value = p.Id;
             ws.Cell(row, c++).Value = p.sku;
             ws.Cell(row, c++).Value = p.category?.name ?? "";
+            // Group(s) — comma-separated when product belongs to multiple groups.
+            // Read-only: edits in this column are ignored on import.
+            ws.Cell(row, c++).Value = string.Join(", ",
+                p.groupMemberships?
+                    .Where(gm => gm.group != null)
+                    .Select(gm => gm.group.name)
+                    .Distinct() ?? Enumerable.Empty<string>());
             ws.Cell(row, c++).Value = p.name;
             ws.Cell(row, c++).Value = p.description;
             ws.Cell(row, c++).Value = p.price?.ToString() ?? "";
@@ -96,8 +104,8 @@ public class ExcelProductService
                 ws.Cell(row, c++).Value = val?.value ?? "";
             }
 
-            // Gray background for read-only cells in data rows
-            for (int i = 1; i <= 3; i++)
+            // Gray background for read-only cells in data rows (id, sku, category, group)
+            for (int i = 1; i <= 4; i++)
                 ws.Cell(row, i).Style.Fill.BackgroundColor = XLColor.WhiteSmoke;
 
             row++;
@@ -157,7 +165,7 @@ public class ExcelProductService
             for (int c = 0; c < columnKeys.Count; c++)
             {
                 var key = columnKeys[c];
-                if (string.IsNullOrEmpty(key) || key == "id" || key == "sku" || key == "category")
+                if (string.IsNullOrEmpty(key) || key == "id" || key == "sku" || key == "category" || key == "group")
                     continue;
 
                 var cellValue = ws.Cell(r, c + 1).GetString();

@@ -1140,6 +1140,8 @@ public class ProductController : ControllerBase
             query => query
                 .AsSplitQuery()
                 .Include(p => p.category)
+                .Include(p => p.groupMemberships)
+                    .ThenInclude(gm => gm.group)
                 .Include(p => p.attributeValues)
                     .ThenInclude(av => av.attribute)
                 .Include(p => p.storeAttributeValues)
