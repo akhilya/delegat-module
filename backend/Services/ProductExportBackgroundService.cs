@@ -19,6 +19,7 @@ public class ProductExportBackgroundService : BackgroundService
     private const int BATCH_SIZE = 50;                // Products to process per batch
     private const int POLL_INTERVAL_MS = 1000;        // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 5000;          // Delay after error (ms)
+    private static readonly TimeSpan InProgressTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProductExportBackgroundService"/>.
@@ -72,10 +73,15 @@ public class ProductExportBackgroundService : BackgroundService
         var productSyncService = scope.ServiceProvider.GetRequiredService<ProductSyncService>();
         var adapterRegistry = scope.ServiceProvider.GetRequiredService<IMarketplaceAdapterRegistry>();
 
-        // Получаем пачку pending экспортов
+        var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
+
+        // Получаем пачку pending экспортов. Stale InProgress rows are retried after a
+        // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingExports = await context.pendingProductExports
             .Where(p => p.status == ProductExportStatus.Pending ||
-                       (p.status == ProductExportStatus.Failed && p.retryCount < PendingProductExport.MAX_RETRIES))
+                       (p.status == ProductExportStatus.Failed && p.retryCount < PendingProductExport.MAX_RETRIES) ||
+                       (p.status == ProductExportStatus.InProgress &&
+                        (p.lastAttemptAt ?? p.createdAt) < staleInProgressBefore))
             .OrderBy(p => p.createdAt)
             .Take(BATCH_SIZE)
             .ToListAsync(ct);

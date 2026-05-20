@@ -19,6 +19,7 @@ public class ProductImportBackgroundService : BackgroundService
     private const int DELAY_BETWEEN_PRODUCTS_MS = 200;   // Delay between products (ms)
     private const int POLL_INTERVAL_MS = 1500;        // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 10000;         // Delay after error (ms)
+    private static readonly TimeSpan InProgressTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProductImportBackgroundService"/>.
@@ -71,10 +72,15 @@ public class ProductImportBackgroundService : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
         var productSyncService = scope.ServiceProvider.GetRequiredService<ProductSyncService>();
 
-        // Получаем пачку pending импортов
+        var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
+
+        // Получаем пачку pending импортов. Stale InProgress rows are retried after a
+        // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingImports = await context.pendingProductImports
             .Where(p => p.status == ProductImportStatus.Pending ||
-                       (p.status == ProductImportStatus.Failed && p.retryCount < PendingProductImport.MAX_RETRIES))
+                       (p.status == ProductImportStatus.Failed && p.retryCount < PendingProductImport.MAX_RETRIES) ||
+                       (p.status == ProductImportStatus.InProgress &&
+                        (p.lastAttemptAt ?? p.createdAt) < staleInProgressBefore))
             .OrderBy(p => p.createdAt)
             .Take(BATCH_SIZE)
             .ToListAsync(ct);

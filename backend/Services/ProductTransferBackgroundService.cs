@@ -28,6 +28,7 @@ public class ProductTransferBackgroundService : BackgroundService
     private const int POLL_INTERVAL_MS = 1500;
     private const int ERROR_DELAY_MS = 10_000;
     private const int BATCH_SIZE = 3; // transfers are heavy — process few at a time
+    private static readonly TimeSpan InProgressTimeout = TimeSpan.FromHours(6);
 
     public ProductTransferBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -70,8 +71,12 @@ public class ProductTransferBackgroundService : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
         var transferService = scope.ServiceProvider.GetRequiredService<ProductTransferService>();
 
+        var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
+
         var pending = await context.pendingProductTransfers
-            .Where(t => t.status == ProductTransferStatus.Pending)
+            .Where(t => t.status == ProductTransferStatus.Pending ||
+                        (t.status == ProductTransferStatus.InProgress &&
+                         (t.startedAt ?? t.createdAt) < staleInProgressBefore))
             .OrderBy(t => t.createdAt)
             .Take(BATCH_SIZE)
             .ToListAsync(ct);

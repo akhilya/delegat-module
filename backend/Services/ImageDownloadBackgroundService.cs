@@ -23,6 +23,7 @@ public class ImageDownloadBackgroundService : BackgroundService
     private const int DELAY_BETWEEN_IMAGES_MS = 500;  // Delay between images (ms)
     private const int POLL_INTERVAL_MS = 5000;     // Queue poll interval (ms)
     private const int ERROR_DELAY_MS = 30000;      // Delay after error (ms)
+    private static readonly TimeSpan InProgressTimeout = TimeSpan.FromMinutes(30);
 
     public ImageDownloadBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -70,10 +71,15 @@ public class ImageDownloadBackgroundService : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
         var storageService = scope.ServiceProvider.GetRequiredService<IStorageService>();
 
-        // Получаем пачку pending изображений
+        var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
+
+        // Получаем пачку pending изображений. Stale InProgress rows are retried after a
+        // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingImages = await context.pendingImageDownloads
             .Where(p => p.status == ImageDownloadStatus.Pending ||
-                       (p.status == ImageDownloadStatus.Failed && p.retryCount < PendingImageDownload.MAX_RETRIES))
+                       (p.status == ImageDownloadStatus.Failed && p.retryCount < PendingImageDownload.MAX_RETRIES) ||
+                       (p.status == ImageDownloadStatus.InProgress &&
+                        (p.lastAttemptAt ?? p.createdAt) < staleInProgressBefore))
             .OrderBy(p => p.createdAt)
             .ThenBy(p => p.imageIndex)
             .Take(BATCH_SIZE)
