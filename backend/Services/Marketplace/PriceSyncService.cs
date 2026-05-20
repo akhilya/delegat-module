@@ -248,9 +248,18 @@ public class PriceSyncService
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
                 $"Найдено {links.Count} связанных товаров для подключения #{connectionId} ({connection.adapterKey})");
 
-        // Build data for export
-        var pricesToExport = links
+        var exportableLinks = links
             .Where(l => l.product?.price != null)
+            .ToList();
+
+        // Marketplaces such as Wildberries reject duplicate product IDs in one price upload.
+        var uniqueExportableLinks = exportableLinks
+            .GroupBy(l => l.externalProductId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        // Build data for export
+        var pricesToExport = uniqueExportableLinks
             .Select(l => new PriceInfo(
                 l.externalProductId,
                 l.product!.price,
@@ -259,10 +268,14 @@ public class PriceSyncService
             ))
             .ToList();
 
-        var skippedNoPrice = links.Count - pricesToExport.Count;
+        var skippedNoPrice = links.Count - exportableLinks.Count;
+        var skippedDuplicateExternalIds = exportableLinks.Count - uniqueExportableLinks.Count;
         if (canLog && skippedNoPrice > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Пропущено {skippedNoPrice} товаров без цены");
+        if (canLog && skippedDuplicateExternalIds > 0)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                $"Пропущено {skippedDuplicateExternalIds} дублей внешних ID в одном запросе");
 
         if (!pricesToExport.Any())
         {
@@ -286,10 +299,16 @@ public class PriceSyncService
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
                     $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
 
-            if (result.IsSuccess)
+            if (result.IsSuccess || result.IsPartialSuccess)
             {
+                var failedExternalIds = result.Errors?
+                    .Where(e => !string.IsNullOrWhiteSpace(e.ExternalId))
+                    .Select(e => e.ExternalId!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 // Update cache
-                foreach (var link in links.Where(l => l.product?.price != null))
+                foreach (var link in exportableLinks.Where(l => !failedExternalIds.Contains(l.externalProductId)))
                 {
                     link.externalPrice = link.product!.price;
                     link.externalStock = link.product.storageQuantity;
@@ -298,11 +317,23 @@ public class PriceSyncService
                 await _context.SaveChangesAsync(ct);
                 sw.Stop();
 
-                var msg = $"Экспортировано {result.SuccessCount} цен, ошибок: {result.FailedCount} — {sw.ElapsedMilliseconds}мс";
+                var msg = $"Экспортировано {result.SuccessCount} цен, ошибок: {result.FailedCount}, пропущено: {skippedNoPrice + skippedDuplicateExternalIds} — {sw.ElapsedMilliseconds}мс";
                 if (canLog)
-                    await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
+                {
+                    await _operationLogger.LogAsync(operationId!, storeId!.Value,
+                        result.IsSuccess ? "success" : "warning", msg);
+                    if (result.Errors?.Any() == true)
+                    {
+                        foreach (var error in result.Errors.Take(10))
+                        {
+                            var externalId = string.IsNullOrWhiteSpace(error.ExternalId) ? "unknown" : error.ExternalId;
+                            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                                $"{externalId}: {error.Message}");
+                        }
+                    }
+                }
 
-                return PriceSyncResult.Success(result.SuccessCount, result.FailedCount, msg);
+                return PriceSyncResult.Success(result.SuccessCount, result.FailedCount + skippedNoPrice + skippedDuplicateExternalIds, msg);
             }
 
             sw.Stop();
@@ -371,7 +402,7 @@ public class PriceSyncService
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // Build data for export — per-variant if variants exist, otherwise single stock per link
-        var stocksToExport = new List<StockInfo>();
+        var stockExportEntries = new List<(ProductMarketplaceLink Link, StockInfo Stock)>();
         foreach (var l in links.Where(l => l.product != null))
         {
             if (variantsByProductId.TryGetValue(l.productId, out var variants) && variants.Count > 0)
@@ -382,23 +413,32 @@ public class PriceSyncService
                     var link = v.marketplaceLinks.FirstOrDefault();
                     if (link != null)
                     {
-                        stocksToExport.Add(new StockInfo(
+                        stockExportEntries.Add((l, new StockInfo(
                             l.externalProductId,
                             v.quantity ?? l.product!.storageQuantity ?? 0,
                             VariantId: link.externalVariantId,
                             Barcode: v.barcode
-                        ));
+                        )));
                     }
                 }
             }
             else if (l.product!.storageQuantity != null)
             {
-                stocksToExport.Add(new StockInfo(
+                stockExportEntries.Add((l, new StockInfo(
                     l.externalProductId,
                     l.product.storageQuantity.Value
-                ));
+                )));
             }
         }
+
+        var uniqueStockExportEntries = stockExportEntries
+            .GroupBy(e => BuildStockExportKey(e.Stock), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+        var stocksToExport = uniqueStockExportEntries
+            .Select(e => e.Stock)
+            .ToList();
+        var skippedDuplicateStockTargets = stockExportEntries.Count - uniqueStockExportEntries.Count;
 
         if (!stocksToExport.Any())
             return PriceSyncResult.Success(0, links.Count, "Нет товаров с остатками для экспорта");
@@ -411,6 +451,9 @@ public class PriceSyncService
             var variantCount = stocksToExport.Count(s => s.VariantId != null);
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
                 $"Подготовлено {stocksToExport.Count} остатков ({variantCount} вариантов), отправка на {connection.adapterKey}...");
+            if (skippedDuplicateStockTargets > 0)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                    $"Пропущено {skippedDuplicateStockTargets} дублей внешних остатков в одном запросе");
         }
 
         try
@@ -423,10 +466,19 @@ public class PriceSyncService
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
                     $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
 
-            if (result.IsSuccess)
+            if (result.IsSuccess || result.IsPartialSuccess)
             {
+                var failedExternalIds = result.Errors?
+                    .Where(e => !string.IsNullOrWhiteSpace(e.ExternalId))
+                    .Select(e => e.ExternalId!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 // Update cache
-                foreach (var link in links.Where(l => l.product?.storageQuantity != null))
+                foreach (var link in uniqueStockExportEntries
+                    .Where(e => !failedExternalIds.Contains(e.Stock.ExternalProductId))
+                    .Select(e => e.Link)
+                    .DistinctBy(l => l.Id))
                 {
                     link.externalStock = link.product!.storageQuantity;
                     link.lastSyncAt = DateTime.UtcNow;
@@ -434,11 +486,24 @@ public class PriceSyncService
                 await _context.SaveChangesAsync(ct);
                 sw.Stop();
 
-                var msg = $"Экспортировано {result.SuccessCount} остатков, ошибок: {result.FailedCount} — {sw.ElapsedMilliseconds}мс";
+                var skipped = result.FailedCount + skippedDuplicateStockTargets;
+                var msg = $"Экспортировано {result.SuccessCount} остатков, ошибок: {result.FailedCount}, пропущено: {skippedDuplicateStockTargets} — {sw.ElapsedMilliseconds}мс";
                 if (canLog)
-                    await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
+                {
+                    await _operationLogger.LogAsync(operationId!, storeId!.Value,
+                        result.IsSuccess ? "success" : "warning", msg);
+                    if (result.Errors?.Any() == true)
+                    {
+                        foreach (var error in result.Errors.Take(10))
+                        {
+                            var externalId = string.IsNullOrWhiteSpace(error.ExternalId) ? "unknown" : error.ExternalId;
+                            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                                $"{externalId}: {error.Message}");
+                        }
+                    }
+                }
 
-                return PriceSyncResult.Success(result.SuccessCount, result.FailedCount, msg);
+                return PriceSyncResult.Success(result.SuccessCount, skipped, msg);
             }
 
             sw.Stop();
@@ -458,6 +523,15 @@ public class PriceSyncService
                     $"{errMsg} — {sw.ElapsedMilliseconds}мс");
             return PriceSyncResult.Failure(errMsg);
         }
+    }
+
+    private static string BuildStockExportKey(StockInfo stock)
+    {
+        return string.Join(
+            "|",
+            stock.ExternalProductId,
+            stock.VariantId ?? "",
+            stock.WarehouseId ?? "");
     }
 }
 

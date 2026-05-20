@@ -1811,7 +1811,7 @@ public class WildberriesPlugin : MarketplacePluginBase
         var chrtIdMap = await BuildChrtIdMapAsync(client, ct);
 
         // Build stock items
-        var stockItems = new List<WbStockItem>();
+        var stockItems = new List<(StockInfo Stock, WbStockItem Item)>();
         foreach (var stock in stocks)
         {
             if (!int.TryParse(stock.ExternalProductId, out var nmId))
@@ -1823,7 +1823,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             // If VariantId is provided, use it directly as chrtId (multi-size support)
             if (!string.IsNullOrEmpty(stock.VariantId) && int.TryParse(stock.VariantId, out var directChrtId))
             {
-                stockItems.Add(new WbStockItem { ChrtId = directChrtId, Amount = stock.Quantity });
+                stockItems.Add((stock, new WbStockItem { ChrtId = directChrtId, Amount = stock.Quantity }));
                 continue;
             }
 
@@ -1834,7 +1834,7 @@ public class WildberriesPlugin : MarketplacePluginBase
             }
 
             // Fallback: apply stock to first chrtID only
-            stockItems.Add(new WbStockItem { ChrtId = chrtIds[0], Amount = stock.Quantity });
+            stockItems.Add((stock, new WbStockItem { ChrtId = chrtIds[0], Amount = stock.Quantity }));
         }
 
         // Update in batches of 1000
@@ -1843,13 +1843,13 @@ public class WildberriesPlugin : MarketplacePluginBase
             var batch = stockItems.Skip(i).Take(1000).ToList();
             try
             {
-                await client.UpdateStocksAsync(warehouseId, batch, ct);
+                await client.UpdateStocksAsync(warehouseId, batch.Select(x => x.Item).ToList(), ct);
                 successCount += batch.Count;
             }
             catch (WildberriesApiException ex)
             {
                 foreach (var item in batch)
-                    errors.Add(new ImportError(item.ChrtId.ToString(), ex.Message));
+                    errors.Add(new ImportError(item.Stock.ExternalProductId, ex.Message, item.Item.ChrtId.ToString()));
             }
         }
 
