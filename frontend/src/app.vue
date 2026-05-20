@@ -46,9 +46,7 @@ export default {
       return this.$store.state.isSwitchingStore;
     },
     hasActiveUploads() {
-      return this.$store.state.operations.operations.some(
-        (o) => o.type === "file-upload" && o.status === "running"
-      );
+      return this.$store.getters["operations/hasLocalActiveUploads"];
     },
     showMobileWarning() {
       return this.isMobileScreen && !this.mobileWarningDismissed && !this.isPublicPage;

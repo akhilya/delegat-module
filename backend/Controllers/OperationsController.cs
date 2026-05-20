@@ -163,10 +163,11 @@ public class OperationsController : ControllerBase
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
 
-        op.status = input.status ?? "completed";
-        op.summary = input.summary;
-        op.finishedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync(ct);
+        await _operationLogger.FinishAsync(
+            operationId,
+            op.storeId,
+            input.status ?? "completed",
+            input.summary);
 
         return Ok();
     }

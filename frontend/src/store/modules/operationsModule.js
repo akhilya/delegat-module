@@ -21,7 +21,18 @@ const mutations = {
   },
   ADD_OPERATION(state, operation) {
     const idx = state.operations.findIndex((o) => o.id === operation.id);
-    if (idx >= 0) return;
+    if (idx >= 0) {
+      state.operations[idx] = {
+        ...state.operations[idx],
+        authorUserId: state.operations[idx].authorUserId ?? operation.authorUserId ?? null,
+        authorUserName: state.operations[idx].authorUserName ?? operation.authorUserName ?? null,
+        isLocalClientOperation:
+          state.operations[idx].isLocalClientOperation ||
+          operation.isLocalClientOperation ||
+          false,
+      };
+      return;
+    }
     state.operations.unshift(operation);
   },
   MERGE_HISTORY(state, items) {
@@ -61,13 +72,19 @@ const mutations = {
     const op = state.operations.find((o) => o.id === id);
     if (!op) return;
     op.status = status;
-    op.finishedAt = new Date().toISOString();
+    op.finishedAt = op.finishedAt || new Date().toISOString();
     if (summary) {
-      op.logs.push({
-        timestamp: new Date().toISOString(),
-        level: status === "failed" ? "error" : "success",
-        message: summary,
-      });
+      const level = status === "failed" ? "error" : "success";
+      const alreadyLogged = op.logs.some(
+        (log) => log.message === summary && log.level === level,
+      );
+      if (!alreadyLogged) {
+        op.logs.push({
+          timestamp: new Date().toISOString(),
+          level,
+          message: summary,
+        });
+      }
     }
   },
   UPDATE_OPERATION_STATUS(state, { id, status }) {
@@ -103,6 +120,7 @@ function mapServerOperation(item) {
     connectionName: item.connectionName || null,
     connectionId: item.connectionId || null,
     authorUserName: item.authorUserName || null,
+    authorUserId: item.authorUserId || null,
     startedAt: item.createdAt,
     finishedAt: item.finishedAt || null,
     progress: item.totalItems != null ? {
@@ -117,6 +135,7 @@ function mapServerOperation(item) {
     batchId: item.batchId || null,
     batchType: item.batchType || null,
     _fromHistory: true,
+    isLocalClientOperation: false,
     _logsLoaded: false,
   };
 }
@@ -145,6 +164,7 @@ const actions = {
         connectionName: data.connectionName || null,
         connectionId: data.connectionId || null,
         authorUserName: data.authorUserName || null,
+        authorUserId: data.authorUserId || null,
         startedAt: data.createdAt || new Date().toISOString(),
         finishedAt: null,
         progress: data.totalItems != null ? {
@@ -158,6 +178,7 @@ const actions = {
         canRetry: data.batchType === "export" || data.batchType === "import",
         batchId: data.batchId || null,
         batchType: data.batchType || null,
+        isLocalClientOperation: false,
       };
       commit("ADD_OPERATION", op);
       // Don't auto-open panel for client-side operations (file-upload, file-delete) —
@@ -245,6 +266,8 @@ const actions = {
       status: "running",
       connectionName: connectionName || null,
       connectionId: connectionId || null,
+      authorUserId: null,
+      authorUserName: null,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       progress: null,
@@ -253,6 +276,7 @@ const actions = {
       canRetry: false,
       batchId: null,
       batchType: null,
+      isLocalClientOperation: false,
     };
     commit("ADD_OPERATION", op);
     commit("SET_PANEL_OPEN", true);
@@ -269,6 +293,8 @@ const actions = {
       status: "running",
       connectionName: operation.connectionName || null,
       connectionId: operation.connectionId || null,
+      authorUserId: operation.authorUserId || null,
+      authorUserName: operation.authorUserName || null,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       progress: operation.progress || null,
@@ -277,6 +303,8 @@ const actions = {
       canRetry: operation.canRetry ?? false,
       batchId: operation.batchId || null,
       batchType: operation.batchType || null,
+      isLocalClientOperation:
+        operation.isLocalClientOperation ?? typeof operation.onCancel === "function",
     };
     commit("ADD_OPERATION", op);
     // Register cancel callback for client-side operations
@@ -451,6 +479,14 @@ const getters = {
       }),
 
   activeCount: (_state, getters) => getters.activeOperations.length,
+
+  hasLocalActiveUploads: (state) =>
+    state.operations.some(
+      (o) =>
+        o.type === "file-upload" &&
+        o.status === "running" &&
+        o.isLocalClientOperation,
+    ),
 
   hasOperations: (state) => state.operations.length > 0,
 };

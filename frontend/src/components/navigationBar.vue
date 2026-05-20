@@ -81,9 +81,7 @@ export default {
     ]),
     async selectStore(storeId) {
       // Block store switch if file uploads are in-flight
-      const hasUploads = this.$store.state.operations.operations.some(
-        (o) => o.type === "file-upload" && o.status === "running"
-      );
+      const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
       if (hasUploads) {
         const confirmed = window.confirm(
           "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
