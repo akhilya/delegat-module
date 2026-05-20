@@ -11,6 +11,10 @@ namespace PrintO.Marketplace.Wildberries;
 
 public class WildberriesPlugin : MarketplacePluginBase
 {
+    private const int WbCreateMaxGroupsPerRequest = 100;
+    private const int WbCreateMaxVariantsPerGroup = 30;
+    private const int WbUpdateMaxCardsPerRequest = 3000;
+
     #region Directory Cache
 
     private static readonly TimeSpan DirectoryCacheTtl = TimeSpan.FromMinutes(30);
@@ -1084,8 +1088,11 @@ public class WildberriesPlugin : MarketplacePluginBase
                 })
                 .ToList();
 
-            // WB API limit: max 30 items (variants) per request
-            var chunks = ChunkCardGroups(groups, 30);
+            // WB API limit: max 100 groups per request, max 30 nmID in each group.
+            var chunks = ChunkCardGroups(
+                groups,
+                WbCreateMaxGroupsPerRequest,
+                WbCreateMaxVariantsPerGroup);
             var failedChunkItems = new List<BulkExportItem>();
 
             foreach (var chunk in chunks)
@@ -1281,12 +1288,12 @@ public class WildberriesPlugin : MarketplacePluginBase
         if (allUpdateItems.Count == 0)
             return results;
 
-        // 6c: Batch update — chunk by 1000 (WB limit: 3000 nmID per request, use 1000 for safety)
+        // 6c: Batch update - WB limit is 3000 nmID per request.
         var successNmIds = new HashSet<int>();
 
         foreach (var chunk in allUpdateItems
             .Select((item, i) => new { item, i })
-            .GroupBy(x => x.i / 1000)
+            .GroupBy(x => x.i / WbUpdateMaxCardsPerRequest)
             .Select(g => g.Select(x => x.item).ToList()))
         {
             try
@@ -2084,50 +2091,45 @@ public class WildberriesPlugin : MarketplacePluginBase
     #region Helpers
 
     /// <summary>
-    /// Splits card-create groups into chunks where total variant count per chunk &lt;= maxItems.
-    /// If a single group has more variants than maxItems, it is split into sub-groups.
+    /// Splits card-create groups by WB limits: request group count and variant count inside each group.
+    /// If a single group has too many variants, it is split into multiple groups.
     /// </summary>
     private static List<List<WbCardCreateGroup>> ChunkCardGroups(
-        List<WbCardCreateGroup> groups, int maxItems)
+        List<WbCardCreateGroup> groups,
+        int maxGroupsPerRequest,
+        int maxVariantsPerGroup)
     {
         var chunks = new List<List<WbCardCreateGroup>>();
         var currentChunk = new List<WbCardCreateGroup>();
-        var currentCount = 0;
+
+        void AddGroup(WbCardCreateGroup group)
+        {
+            if (currentChunk.Count >= maxGroupsPerRequest)
+            {
+                chunks.Add(currentChunk);
+                currentChunk = new List<WbCardCreateGroup>();
+            }
+
+            currentChunk.Add(group);
+        }
 
         foreach (var group in groups)
         {
-            if (group.Variants.Count <= maxItems)
+            if (group.Variants.Count <= maxVariantsPerGroup)
             {
-                if (currentCount + group.Variants.Count > maxItems && currentChunk.Count > 0)
-                {
-                    chunks.Add(currentChunk);
-                    currentChunk = new List<WbCardCreateGroup>();
-                    currentCount = 0;
-                }
-
-                currentChunk.Add(group);
-                currentCount += group.Variants.Count;
+                AddGroup(group);
+                continue;
             }
-            else
-            {
-                // Flush current chunk first
-                if (currentChunk.Count > 0)
-                {
-                    chunks.Add(currentChunk);
-                    currentChunk = new List<WbCardCreateGroup>();
-                    currentCount = 0;
-                }
 
-                // Split oversized group into sub-groups of maxItems variants each
-                for (var i = 0; i < group.Variants.Count; i += maxItems)
+            for (var i = 0; i < group.Variants.Count; i += maxVariantsPerGroup)
+            {
+                var subVariants = group.Variants.GetRange(i,
+                    Math.Min(maxVariantsPerGroup, group.Variants.Count - i));
+                AddGroup(new WbCardCreateGroup
                 {
-                    var subVariants = group.Variants.GetRange(i,
-                        Math.Min(maxItems, group.Variants.Count - i));
-                    chunks.Add(new List<WbCardCreateGroup>
-                    {
-                        new() { SubjectId = group.SubjectId, Variants = subVariants }
-                    });
-                }
+                    SubjectId = group.SubjectId,
+                    Variants = subVariants
+                });
             }
         }
 

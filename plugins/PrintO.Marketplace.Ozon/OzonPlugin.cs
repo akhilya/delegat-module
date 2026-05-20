@@ -1242,7 +1242,8 @@ public class OzonPlugin : MarketplacePluginBase
         }
     }
 
-    private const int OZON_BULK_BATCH_SIZE = 50;
+    // Ozon /v3/product/import accepts up to 100 products per request.
+    private const int OZON_BULK_BATCH_SIZE = 100;
 
     public override async Task<BulkExportResult> ExportProductsBulkAsync(
         ConnectionContext context,
