@@ -245,6 +245,8 @@ export default {
       // === Products tab state ===
       products: [],
       selectedItems: [],
+      lastSelectedExternalId: null,
+      isShiftSelecting: false,
       searchQuery: "",
       isLoadingProducts: false,
       isCreatingLocal: false,
@@ -295,6 +297,7 @@ export default {
       localPageSize: 50,
       localSearchQuery: "",
       selectedLocalItemsMap: {},
+      lastSelectedLocalId: null,
       isExportingNewBulk: false,
       exportNewBulkProgress: null, // { done, total, success, failed }
       localSearchDebounceTimer: null,
@@ -973,6 +976,7 @@ export default {
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
           this.products = data.items || [];
+          this.lastSelectedExternalId = null;
           this.totalCount = data.total || 0;
           this.linkedCount = data.linkedCount || 0;
           this.hasMoreProducts = !!data.hasMore;
@@ -1050,15 +1054,78 @@ export default {
       } else {
         this.selectedItems = this.filteredProducts.map((p) => p.externalId);
       }
+      this.lastSelectedExternalId = null;
     },
 
-    toggleSelect(externalId) {
+    captureShiftSelection(event) {
+      this.isShiftSelecting = !!event?.shiftKey;
+    },
+
+    toggleSelect(externalId, checked) {
+      const shouldSelect = checked === true;
+
+      if (this.isShiftSelecting && this.lastSelectedExternalId) {
+        this.selectExternalRange(this.lastSelectedExternalId, externalId, shouldSelect);
+        this.lastSelectedExternalId = externalId;
+        this.isShiftSelecting = false;
+        return;
+      }
+
       const index = this.selectedItems.indexOf(externalId);
-      if (index === -1) {
+      if (shouldSelect && index === -1) {
         this.selectedItems.push(externalId);
-      } else {
+      } else if (!shouldSelect && index !== -1) {
         this.selectedItems.splice(index, 1);
       }
+      this.lastSelectedExternalId = externalId;
+      this.isShiftSelecting = false;
+    },
+
+    handleExternalRowClick(product, event) {
+      if (this.isSelectionIgnoredClick(event)) return;
+
+      const shouldSelect = !this.isSelected(product.externalId);
+      if (event?.shiftKey && this.lastSelectedExternalId) {
+        this.selectExternalRange(this.lastSelectedExternalId, product.externalId, shouldSelect);
+      } else {
+        this.toggleSelect(product.externalId, shouldSelect);
+      }
+      this.lastSelectedExternalId = product.externalId;
+    },
+
+    selectExternalRange(anchorId, targetId, shouldSelect) {
+      const ids = this.filteredProducts.map((p) => p.externalId);
+      const anchorIndex = ids.indexOf(anchorId);
+      const targetIndex = ids.indexOf(targetId);
+
+      if (anchorIndex === -1 || targetIndex === -1) {
+        const index = this.selectedItems.indexOf(targetId);
+        if (shouldSelect && index === -1) {
+          this.selectedItems.push(targetId);
+        } else if (!shouldSelect && index !== -1) {
+          this.selectedItems.splice(index, 1);
+        }
+        return;
+      }
+
+      const [start, end] = anchorIndex < targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex];
+      const rangeIds = ids.slice(start, end + 1);
+
+      if (shouldSelect) {
+        this.selectedItems = Array.from(new Set([...this.selectedItems, ...rangeIds]));
+      } else {
+        const rangeSet = new Set(rangeIds);
+        this.selectedItems = this.selectedItems.filter((id) => !rangeSet.has(id));
+      }
+    },
+
+    isSelectionIgnoredClick(event) {
+      const target = event?.target;
+      return !!target?.closest?.(
+        'a, button, input, textarea, select, [role="button"], [role="checkbox"], [data-ignore-row-select]'
+      );
     },
 
     isSelected(externalId) {
@@ -1586,6 +1653,7 @@ export default {
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
           this.localProducts = data.items || [];
+          this.lastSelectedLocalId = null;
           this.localTotalCount = data.totalCount || 0;
         },
         onError: (error) => {
@@ -1610,15 +1678,71 @@ export default {
         }
         this.selectedLocalItemsMap = next;
       }
+      this.lastSelectedLocalId = null;
     },
 
-    toggleSelectLocal(id) {
-      const next = { ...this.selectedLocalItemsMap };
-      if (next[id]) {
-        delete next[id];
-      } else {
-        next[id] = true;
+    toggleSelectLocal(id, checked) {
+      const shouldSelect = checked === true;
+
+      if (this.isShiftSelecting && this.lastSelectedLocalId) {
+        this.selectLocalRange(this.lastSelectedLocalId, id, shouldSelect);
+        this.lastSelectedLocalId = id;
+        this.isShiftSelecting = false;
+        return;
       }
+
+      const next = { ...this.selectedLocalItemsMap };
+      if (shouldSelect) {
+        next[id] = true;
+      } else {
+        delete next[id];
+      }
+      this.selectedLocalItemsMap = next;
+      this.lastSelectedLocalId = id;
+      this.isShiftSelecting = false;
+    },
+
+    handleLocalRowClick(product, event) {
+      if (this.isSelectionIgnoredClick(event)) return;
+
+      const shouldSelect = !this.isLocalSelected(product.id);
+      if (event?.shiftKey && this.lastSelectedLocalId) {
+        this.selectLocalRange(this.lastSelectedLocalId, product.id, shouldSelect);
+      } else {
+        this.toggleSelectLocal(product.id, shouldSelect);
+      }
+      this.lastSelectedLocalId = product.id;
+    },
+
+    selectLocalRange(anchorId, targetId, shouldSelect) {
+      const ids = this.localProducts.map((p) => p.id);
+      const anchorIndex = ids.indexOf(anchorId);
+      const targetIndex = ids.indexOf(targetId);
+
+      if (anchorIndex === -1 || targetIndex === -1) {
+        const next = { ...this.selectedLocalItemsMap };
+        if (shouldSelect) {
+          next[targetId] = true;
+        } else {
+          delete next[targetId];
+        }
+        this.selectedLocalItemsMap = next;
+        return;
+      }
+
+      const [start, end] = anchorIndex < targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex];
+      const next = { ...this.selectedLocalItemsMap };
+
+      for (const id of ids.slice(start, end + 1)) {
+        if (shouldSelect) {
+          next[id] = true;
+        } else {
+          delete next[id];
+        }
+      }
+
       this.selectedLocalItemsMap = next;
     },
 
@@ -2302,12 +2426,14 @@ export default {
                   <TableRow
                     v-for="product in filteredProducts"
                     :key="product.externalId"
-                    :class="{ 'bg-muted/30': !product.isLinked }"
+                    :class="['cursor-pointer select-none', { 'bg-muted/30': !product.isLinked }]"
+                    @click="handleExternalRowClick(product, $event)"
                   >
                     <TableCell>
                       <Checkbox
                         :model-value="isSelected(product.externalId)"
-                        @update:model-value="toggleSelect(product.externalId)"
+                        @click.capture="captureShiftSelection"
+                        @update:model-value="(checked) => toggleSelect(product.externalId, checked)"
                       />
                     </TableCell>
                     <TableCell>
@@ -2523,11 +2649,14 @@ export default {
                   <TableRow
                     v-for="product in localProducts"
                     :key="product.id"
+                    class="cursor-pointer select-none"
+                    @click="handleLocalRowClick(product, $event)"
                   >
                     <TableCell>
                       <Checkbox
                         :model-value="isLocalSelected(product.id)"
-                        @update:model-value="toggleSelectLocal(product.id)"
+                        @click.capture="captureShiftSelection"
+                        @update:model-value="(checked) => toggleSelectLocal(product.id, checked)"
                       />
                     </TableCell>
                     <TableCell>
