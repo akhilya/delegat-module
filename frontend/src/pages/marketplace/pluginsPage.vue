@@ -101,7 +101,7 @@ export default {
       showUploadDialog: false,
       selectedFile: null,
       breadcrumbs: [
-        { label: "Маркетплейсы", href: "/marketplace" },
+        { label: "Адаптеры", href: "/marketplace" },
         { label: "Плагины" },
       ],
     };
@@ -241,7 +241,7 @@ export default {
 
     <PageHeader
       title="Плагины"
-      description="Управление DLL-плагинами для интеграции с маркетплейсами"
+      description="Управление DLL-плагинами для интеграции с адаптерами"
     >
       <Dialog v-model:open="showUploadDialog">
         <DialogTrigger as-child>
@@ -326,7 +326,7 @@ export default {
       <EmptyState
         v-else-if="plugins.length === 0"
         title="Нет установленных плагинов"
-        description="Загрузите DLL-плагин для интеграции с маркетплейсом"
+        description="Загрузите DLL-плагин для интеграции с адаптером"
       >
         <template #icon>
           <Puzzle class="size-12 mb-4 text-muted-foreground" />

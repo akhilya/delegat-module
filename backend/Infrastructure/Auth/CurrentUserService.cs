@@ -69,7 +69,7 @@ public class CurrentUserService : ICurrentUserService
         return await _context.Users
             .AsNoTracking()
             .Include(u => u.memberships)
-            .FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
+            .FirstOrDefaultAsync(u => u.Id == userId.Value && u.isActive, ct);
     }
 
     /// <summary>
@@ -100,7 +100,7 @@ public class CurrentUserService : ICurrentUserService
 
         // Check if user is a member of the selected store
         var isMember = await _context.stores
-            .AnyAsync(s => s.Id == storeId.Value && s.members.Any(m => m.Id == userId.Value), ct);
+            .AnyAsync(s => s.Id == storeId.Value && s.members.Any(m => m.Id == userId.Value && m.isActive), ct);
 
         return isMember ? storeId : null;
     }

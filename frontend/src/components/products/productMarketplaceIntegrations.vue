@@ -23,6 +23,7 @@ import {
   EllipsisVertical,
   Ruler,
   Layers,
+  Ban,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -131,6 +132,7 @@ export default {
     EllipsisVertical,
     Ruler,
     Layers,
+    Ban,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -150,6 +152,7 @@ export default {
       isExportingAll: false,
       exportingConnectionId: null,
       importingLinkId: null,
+      unlinkingLinkId: null,
       PAGE_MARKETPLACE_CONNECTION,
       PAGE_MARKETPLACE_FIELD_MAPPING,
       // Recreate dialog
@@ -186,7 +189,7 @@ export default {
     connectionsWithMapping() {
       if (!this.connections?.allConnections) return [];
       return this.connections.allConnections.filter(
-        (c) => c.hasMapping && c.canExport,
+        (c) => c.hasMapping && c.canExport && !c.mappingMissing,
       );
     },
     // Connections without mapping (excluding already linked ones)
@@ -245,6 +248,7 @@ export default {
       "updateProductVariant",
       "linkProduct",
       "relinkProduct",
+      "unlinkProduct",
     ]),
 
     async fetchData() {
@@ -278,6 +282,7 @@ export default {
           connectionId: conn.connectionId,
           selections: [{ productId: this.productId, categoryMappingId: mappingId }],
         });
+        await this.fetchData();
       } catch {
         displaySonnerError("Ошибка сохранения маппинга");
       }
@@ -384,7 +389,7 @@ export default {
       }
 
       if (successCount > 0) {
-        displaySonnerSuccess(`Экспортировано на ${successCount} маркетплейс(ов)`);
+        displaySonnerSuccess(`Экспортировано на ${successCount} адаптер(ов)`);
       }
       if (errorCount > 0) {
         displaySonnerError(`Ошибок при экспорте: ${errorCount}`);
@@ -560,6 +565,11 @@ export default {
 
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
+      if (conn.mappingMissing) {
+        displaySonnerError("Маппинг этой связи удалён. Отвяжите товар или выберите новый маппинг.");
+        return;
+      }
+
       if (conn.availableMappings?.length > 1 && !this.mappingSelections[conn.connectionId]) {
         displaySonnerError("Выберите маппинг перед экспортом");
         return;
@@ -623,7 +633,7 @@ export default {
         newSku: this.recreateNewSku.trim(),
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
-          let msg = "Товар пересоздан на маркетплейсе";
+          let msg = "Товар пересоздан на адаптере";
           if (result.archiveError) {
             msg += ` (архивация старого: ${result.archiveError})`;
           }
@@ -683,6 +693,26 @@ export default {
       this.isLinking = false;
     },
 
+    async handleUnlink(conn) {
+      if (!conn.isLinked || !conn.linkId || this.unlinkingLinkId) return;
+
+      this.unlinkingLinkId = conn.linkId;
+      try {
+        await this.unlinkProduct({
+          linkId: conn.linkId,
+          onSuccess: () => {
+            displaySonnerSuccess(`Товар отвязан от ${conn.adapterName}`);
+            this.fetchData();
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+          },
+        });
+      } finally {
+        this.unlinkingLinkId = null;
+      }
+    },
+
     getSelectedMapping(conn) {
       const selectedId = this.mappingSelections[conn.connectionId];
       if (!selectedId || !conn.availableMappings) return null;
@@ -706,9 +736,10 @@ export default {
 
     isConnectionBusy(conn) {
       if (this.exportingConnectionId === conn.connectionId) return true;
-      if (this.isExportingAll && conn.hasMapping && conn.canExport) return true;
+      if (this.isExportingAll && conn.hasMapping && conn.canExport && !conn.mappingMissing) return true;
       if (conn.isLinked) {
         if (this.importingLinkId === conn.linkId) return true;
+        if (this.unlinkingLinkId === conn.linkId) return true;
         if (this.isApplyingImport && this.previewLinkId === conn.linkId) return true;
         if (this.isRecreating && this.recreateConn?.connectionId === conn.connectionId) return true;
       }
@@ -718,6 +749,18 @@ export default {
     getMarketplaceProductUrl(conn) {
       if (!conn.externalProductId || !conn.productEditUrlTemplate) return null;
       return conn.productEditUrlTemplate.replace("{externalId}", conn.externalProductId);
+    },
+
+    getConnectionStatusInfo(conn) {
+      if (conn.mappingMissing) {
+        return {
+          variant: "destructive",
+          icon: AlertTriangle,
+          label: "Нет маппинга",
+          color: "text-error",
+        };
+      }
+      return this.getStatusInfo(conn.linkStatus);
     },
 
     getStatusInfo(status) {
@@ -793,7 +836,7 @@ export default {
     <div class="flex items-center px-4 h-11 border-b shrink-0">
       <p class="text-sm font-medium flex items-center gap-2">
         <Link2 class="size-4" />
-        Связи с маркетплейсами
+        Связи с адаптерами
       </p>
     </div>
 
@@ -811,7 +854,7 @@ export default {
       <AlertTriangle class="size-12 mb-4 text-warning" />
       <h3 class="font-medium mb-1">Товар не привязан к категории</h3>
       <p class="text-sm text-muted-foreground">
-        Укажите категорию товара для экспорта на маркетплейсы
+        Укажите категорию товара для экспорта на адаптеры
       </p>
     </div>
 
@@ -821,9 +864,9 @@ export default {
       class="flex flex-col items-center justify-center py-12 text-center border rounded-lg"
     >
       <Link2 class="size-12 mb-4 text-muted-foreground" />
-      <h3 class="font-medium mb-1">Нет подключений к маркетплейсам</h3>
+      <h3 class="font-medium mb-1">Нет подключений к адаптерам</h3>
       <p class="text-sm text-muted-foreground">
-        Создайте подключение к маркетплейсу в настройках магазина
+        Создайте подключение к адаптеру в настройках магазина
       </p>
     </div>
 
@@ -839,7 +882,7 @@ export default {
             <Upload class="size-4 text-primary" />
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-medium">Экспорт на все маркетплейсы</div>
+            <div class="text-sm font-medium">Экспорт на все адаптеры</div>
             <div class="text-xs text-muted-foreground">
               {{ connectionsWithMapping.length }}
               {{ connectionsWithMapping.length < 5 ? 'подключения готовы' : 'подключений готово' }}
@@ -874,7 +917,7 @@ export default {
           target="_blank"
           rel="noopener noreferrer"
           class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 hover:bg-primary/20 transition-colors"
-          title="Открыть на маркетплейсе"
+          title="Открыть на адаптере"
         >
           <ExternalLink class="size-4 text-primary" />
         </a>
@@ -898,11 +941,14 @@ export default {
             >
               {{ getSelectedMappingName(conn) }}
             </router-link>
+            <span v-else-if="conn.mappingMissing" class="text-xs text-destructive">
+              маппинг удалён
+            </span>
           </div>
         </div>
-        <Badge :variant="getStatusInfo(conn.linkStatus).variant" class="shrink-0">
-          <component :is="getStatusInfo(conn.linkStatus).icon" class="size-3 mr-1" />
-          {{ getStatusInfo(conn.linkStatus).label }}
+        <Badge :variant="getConnectionStatusInfo(conn).variant" class="shrink-0">
+          <component :is="getConnectionStatusInfo(conn).icon" class="size-3 mr-1" />
+          {{ getConnectionStatusInfo(conn).label }}
         </Badge>
         <TooltipProvider v-if="connections?.hasSizes">
           <Tooltip>
@@ -925,7 +971,7 @@ export default {
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               @click="handleExportToConnection(conn)"
-              :disabled="exportingConnectionId === conn.connectionId"
+              :disabled="exportingConnectionId === conn.connectionId || conn.mappingMissing"
             >
               <Upload class="size-4 mr-2" />
               Экспорт
@@ -938,7 +984,7 @@ export default {
               <Download class="size-4 mr-2" />
               Импорт
             </DropdownMenuItem>
-            <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
+            <DropdownMenuSub v-if="conn.availableMappings?.length > 1 || (conn.mappingMissing && conn.availableMappings?.length > 0)">
               <DropdownMenuSubTrigger>
                 <Layers class="size-4 mr-2" />
                 Маппинг
@@ -959,6 +1005,15 @@ export default {
             <DropdownMenuItem @click="openLinkDialog(conn, true)">
               <Link2 class="size-4 mr-2" />
               Перепривязать
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              class="text-destructive focus:text-destructive"
+              @click="handleUnlink(conn)"
+              :disabled="unlinkingLinkId === conn.linkId"
+            >
+              <Loader2 v-if="unlinkingLinkId === conn.linkId" class="size-4 mr-2 animate-spin" />
+              <Ban v-else class="size-4 mr-2" />
+              Отвязать
             </DropdownMenuItem>
             <DropdownMenuSeparator v-if="conn.canArchive && conn.canExport" />
             <DropdownMenuItem
@@ -1122,7 +1177,7 @@ export default {
         "
         class="text-center py-8 text-muted-foreground"
       >
-        <p>Нет доступных маркетплейсов для экспорта</p>
+        <p>Нет доступных адаптеров для экспорта</p>
       </div>
     </div>
 
@@ -1132,7 +1187,7 @@ export default {
         <DialogHeader>
           <DialogTitle>Подтверждение импорта</DialogTitle>
           <DialogDescription>
-            Следующие поля будут обновлены из маркетплейса
+            Следующие поля будут обновлены из адаптера
           </DialogDescription>
         </DialogHeader>
         <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
@@ -1243,7 +1298,7 @@ export default {
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
-          <Label for="link-external-id">ID товара на маркетплейсе</Label>
+          <Label for="link-external-id">ID товара на адаптере</Label>
           <Input id="link-external-id" v-model="linkExternalId" maxlength="100"
             placeholder="Например: 12345678" @keyup.enter="submitLink" />
         </div>

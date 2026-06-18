@@ -20,7 +20,7 @@ import { useRouter, useRoute } from "vue-router";
 import { PAGE_SIGN_IN } from "@/router";
 import { ref } from "vue";
 import { Loader2 } from "lucide-vue-next";
-import { BRAND_NAME, BRAND_DESCRIPTION } from "@/brand";
+import { BRAND_NAME } from "@/brand";
 
 export default {
   components: {
@@ -90,251 +90,150 @@ export default {
       isSubmitting,
       PAGE_SIGN_IN,
       BRAND_NAME,
-      BRAND_DESCRIPTION,
     };
   },
 };
 </script>
 
 <template>
-  <div class="auth-layout">
-    <!-- Brand panel — desktop only -->
-    <aside class="auth-brand">
-      <div class="auth-brand-inner">
-        <Logo class="auth-brand-logo" />
-        <h2 class="auth-brand-title">{{ BRAND_NAME }}</h2>
-        <p class="auth-brand-desc">{{ BRAND_DESCRIPTION }}</p>
-      </div>
-      <div class="auth-dot-pattern" aria-hidden="true"></div>
-    </aside>
-
-    <!-- Form side -->
-    <main class="auth-main">
-      <div class="auth-form-wrap">
-        <!-- Mobile logo -->
-        <div class="auth-mobile-logo">
-          <Logo class="!w-14 !opacity-100" />
-        </div>
-
-        <header class="auth-header">
+  <main class="auth-page">
+    <section class="auth-form-wrap">
+      <header class="auth-header">
+        <Logo class="auth-logo" />
+        <div>
+          <p class="auth-kicker">{{ BRAND_NAME }}</p>
           <h1 class="auth-title">Регистрация</h1>
-          <p class="auth-subtitle">Создайте аккаунт для панели управления</p>
-        </header>
+        </div>
+      </header>
 
-        <form @submit="onSubmit" class="auth-form">
-          <FormField v-slot="{ componentField }" name="userName">
-            <FormItem>
-              <FormLabel>Имя пользователя</FormLabel>
-              <FormControl>
-                <Input
-                  type="text"
-                  placeholder="Имя пользователя"
-                  autocomplete="username"
-                  v-bind="componentField"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+      <form @submit="onSubmit" class="auth-form">
+        <FormField v-slot="{ componentField }" name="userName">
+          <FormItem>
+            <FormLabel>Имя пользователя</FormLabel>
+            <FormControl>
+              <Input
+                type="text"
+                placeholder="Введите имя"
+                autocomplete="username"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
 
-          <FormField v-slot="{ componentField }" name="password">
-            <FormItem>
-              <FormLabel>Пароль</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autocomplete="new-password"
-                  v-bind="componentField"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+        <FormField v-slot="{ componentField }" name="password">
+          <FormItem>
+            <FormLabel>Пароль</FormLabel>
+            <FormControl>
+              <Input
+                type="password"
+                autocomplete="new-password"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
 
-          <FormField v-slot="{ componentField }" name="confirmPassword">
-            <FormItem>
-              <FormLabel>Подтвердите пароль</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autocomplete="new-password"
-                  v-bind="componentField"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+        <FormField v-slot="{ componentField }" name="confirmPassword">
+          <FormItem>
+            <FormLabel>Подтвердите пароль</FormLabel>
+            <FormControl>
+              <Input
+                type="password"
+                autocomplete="new-password"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
 
-          <FormField v-slot="{ componentField }" name="invitationToken">
-            <FormItem>
-              <FormLabel>Токен приглашения</FormLabel>
-              <FormControl>
-                <Input
-                  type="text"
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  autocomplete="off"
-                  v-bind="componentField"
-                />
-              </FormControl>
-              <FormDescription>
-                Вставьте токен, полученный от администратора
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+        <FormField v-slot="{ componentField }" name="invitationToken">
+          <FormItem>
+            <FormLabel>Токен приглашения</FormLabel>
+            <FormControl>
+              <Input
+                type="text"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                autocomplete="off"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormDescription>
+              Вставьте токен, полученный от администратора
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        </FormField>
 
-          <Button type="submit" size="lg" class="w-full mt-2" :disabled="isSubmitting">
-            <span v-if="!isSubmitting">Создать аккаунт</span>
-            <Loader2 v-else class="animate-spin" />
-          </Button>
-        </form>
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <span v-if="!isSubmitting">Создать аккаунт</span>
+          <Loader2 v-else class="animate-spin" />
+        </Button>
+      </form>
 
-        <p class="auth-footer">
-          Есть аккаунт?
-          <RouterLink :to="PAGE_SIGN_IN" class="auth-link">
-            Войти
-          </RouterLink>
-        </p>
-      </div>
-    </main>
-  </div>
+      <p class="auth-footer">
+        Есть аккаунт?
+        <RouterLink :to="PAGE_SIGN_IN" class="auth-link">
+          Войти
+        </RouterLink>
+      </p>
+    </section>
+  </main>
 </template>
 
 <style scoped>
-/* ── Layout ── */
-.auth-layout {
-  display: flex;
+.auth-page {
   min-height: 100vh;
-  background: var(--background);
-}
-
-.auth-brand {
-  display: none;
-  position: relative;
-  width: 42%;
-  min-width: 340px;
-  background: oklch(0.16 0.01 250);
-  overflow: hidden;
-}
-@media (min-width: 1024px) {
-  .auth-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
-.auth-brand-inner {
-  position: relative;
-  z-index: 1;
-  padding: 3rem;
-  text-align: center;
-}
-
-.auth-brand-logo {
-  width: 5rem !important;
-  opacity: 1 !important;
-  filter: brightness(0) invert(1);
-  margin: 0 auto 1.5rem;
-}
-
-.auth-brand-title {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 700;
-  color: oklch(0.96 0 0);
-  letter-spacing: -0.025em;
-  margin-bottom: 0.75rem;
-}
-
-.auth-brand-desc {
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: oklch(0.55 0 0);
-  max-width: 260px;
-  margin: 0 auto;
-}
-
-/* Halftone dot grid — print aesthetic */
-.auth-dot-pattern {
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  background-image: radial-gradient(circle, oklch(0.9 0 0) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-/* ── Form side ── */
-.auth-main {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1.5rem;
+  background: var(--background);
+  padding: 1.5rem;
 }
 
 .auth-form-wrap {
   width: 100%;
-  max-width: 380px;
-  animation: auth-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  max-width: 360px;
 }
 
-@keyframes auth-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.auth-mobile-logo {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 2rem;
-}
-@media (min-width: 1024px) {
-  .auth-mobile-logo {
-    display: none;
-  }
-}
-
-/* ── Typography ── */
 .auth-header {
-  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.auth-logo {
+  width: 2.25rem !important;
+  opacity: 1 !important;
+}
+
+.auth-kicker {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1;
 }
 
 .auth-title {
-  font-family: var(--font-display);
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--foreground);
-  letter-spacing: -0.025em;
-  line-height: 1.15;
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
-.auth-subtitle {
-  font-size: 0.9375rem;
-  color: var(--muted-foreground);
-  margin-top: 0.5rem;
-  line-height: 1.5;
-}
-
-/* ── Form ── */
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
-/* ── Footer ── */
 .auth-footer {
   text-align: center;
   font-size: 0.875rem;
   color: var(--muted-foreground);
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
 .auth-link {
@@ -344,12 +243,5 @@ export default {
 }
 .auth-link:hover {
   text-decoration: underline;
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .auth-form-wrap {
-    animation: none;
-  }
 }
 </style>

@@ -1524,6 +1524,9 @@ namespace PrintO.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<bool>("isActive")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<bool>("isAdmin")
                         .HasColumnType("tinyint(1)");
 

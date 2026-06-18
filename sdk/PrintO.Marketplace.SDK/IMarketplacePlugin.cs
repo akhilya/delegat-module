@@ -108,6 +108,14 @@ public interface IMarketplacePlugin
         string externalCategoryId,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Create a marketplace category and fields from a local category definition.
+    /// </summary>
+    Task<CreateCategoryResult> CreateCategoryAsync(
+        ConnectionContext context,
+        CreateCategoryRequest request,
+        CancellationToken ct = default);
+
     #endregion
 
     #region Products

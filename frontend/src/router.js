@@ -15,6 +15,7 @@ const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
+const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
 const AdminTokensPage = () => import("./pages/admin/tokensPage.vue");
 const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
 const MarketplaceConnectionPage = () => import("./pages/marketplace/connectionPage.vue");
@@ -37,6 +38,7 @@ export const PAGE_NOT_FOUND = "/:pathMatch(.*)*";
 export const PAGE_TOOLS = "/tools";
 export const PAGE_ADMIN_STORES = "/admin/stores";
 export const PAGE_ADMIN_STORE_DETAIL = "/admin/stores/:id";
+export const PAGE_ADMIN_USERS = "/admin/users";
 export const PAGE_ADMIN_TOKENS = "/admin/tokens";
 export const PAGE_MARKETPLACE = "/marketplace";
 export const PAGE_MARKETPLACE_PLUGINS = "/marketplace/plugins";
@@ -62,10 +64,11 @@ export const routes = [
   { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { title: "Глобальные атрибуты" } },
   { path: PAGE_ADMIN_STORES, component: AdminStoresPage, meta: { title: "Магазины" } },
   { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage, meta: { title: "Магазин" } },
+  { path: PAGE_ADMIN_USERS, component: AdminUsersPage, meta: { title: "Пользователи" } },
   { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage, meta: { title: "Токены" } },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
   { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
-  { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Маркетплейсы" } },
+  { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },
   { path: PAGE_MARKETPLACE_PLUGINS, component: PluginsPage, meta: { title: "Плагины" } },
   { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { title: "Подключение" } },
   { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { title: "Импорт категории" } },

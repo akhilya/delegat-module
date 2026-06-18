@@ -43,6 +43,11 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
     /// </summary>
     public bool isAdmin { get; set; }
 
+    /// <summary>
+    /// Whether the user can sign in and use the dashboard.
+    /// </summary>
+    public bool isActive { get; set; } = true;
+
     public bool UpdateFill(SelectStoreForm form)
     {
         selectedStoreId = form.storeId;
@@ -56,7 +61,8 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
             id = Id,
             userName = UserName,
             selectedStoreId = selectedStoreId,
-            isAdmin = isAdmin
+            isAdmin = isAdmin,
+            isActive = isActive
         };
     }
 
@@ -89,6 +95,11 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// Whether the user has administrator privileges.
         /// </summary>
         public bool isAdmin { get; set; }
+
+        /// <summary>
+        /// Whether the user can sign in and use the dashboard.
+        /// </summary>
+        public bool isActive { get; set; }
     }
 
     /// <summary>

@@ -67,11 +67,10 @@ public class StoreController : ControllerBase
 
     [HttpPost]
     [Route("/stores/")]
-    [AllowAnonymous]
     public async Task<IActionResult> PostStore([FromBody] AddForm input)
     {
         var user = await _currentUserService.GetUserAsync();
-        if (user == null || !user.isAdmin)
+        if (user == null || !user.isActive || !user.isAdmin)
             throw ApiException.Forbidden("Только администраторы могут создавать магазины");
 
         var storeRepo = _unitOfWork.Repository<Store>();
@@ -82,11 +81,27 @@ public class StoreController : ControllerBase
 
         var newStore = new Store();
         newStore.AddFill(input);
-        await storeRepo.AddAsync(newStore);
 
-        // Add creator as member
-        newStore.UpdateFill(new UserJoinForm(user));
-        await storeRepo.UpdateAsync(newStore);
+        var userRepo = _unitOfWork.Repository<User>();
+        if (input.addAllUsers)
+        {
+            var activeUsers = await userRepo.QueryTracking()
+                .Where(u => u.isActive)
+                .ToListAsync();
+
+            foreach (var member in activeUsers.DistinctBy(u => u.Id))
+                newStore.members.Add(member);
+        }
+        else
+        {
+            var creator = await userRepo.GetByIdTrackingAsync(user.Id);
+            if (creator == null || !creator.isActive)
+                throw ApiException.Unauthorized("Пользователь не найден");
+
+            newStore.members.Add(creator);
+        }
+
+        await storeRepo.AddWithoutSaveAsync(newStore);
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(newStore.MapToDTO(_serviceProvider));
@@ -97,7 +112,7 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> PostAddStoreMember(int id, [FromBody] AddMemberForm input)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
+        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
             throw ApiException.Forbidden("Только администраторы могут добавлять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
@@ -112,7 +127,7 @@ public class StoreController : ControllerBase
         var userRepo = _unitOfWork.Repository<User>();
         var inviteUser = await userRepo.GetByIdTrackingAsync(input.userId);
 
-        if (inviteUser == null)
+        if (inviteUser == null || !inviteUser.isActive)
             throw ApiException.NotFound("Пользователь не найден");
 
         store.members.Add(inviteUser);
@@ -126,7 +141,7 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> DeleteStoreMember(int id, int userId)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
+        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
             throw ApiException.Forbidden("Только администраторы могут удалять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
@@ -157,7 +172,7 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> GetStoreDetail(int id)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
+        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
             throw ApiException.Forbidden("Только администраторы могут просматривать детали магазина");
 
         var storeRepo = _unitOfWork.Repository<Store>();
@@ -174,11 +189,11 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> GetAllUsers()
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
+        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
             throw ApiException.Forbidden("Только администраторы могут просматривать всех пользователей");
 
         var userRepo = _unitOfWork.Repository<User>();
-        var users = await userRepo.GetAllAsync();
+        var users = await userRepo.GetAllAsync(u => u.isActive);
 
         return Ok(users.Select(u => new { id = u.Id, userName = u.UserName }).ToList());
     }

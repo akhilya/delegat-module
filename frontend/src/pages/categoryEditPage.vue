@@ -699,7 +699,7 @@ export default {
                 <div>
                   <div class="flex items-center gap-2 text-sm">
                     <span class="font-medium">{{ editingOptionsCount.toLocaleString() }}</span>
-                    <span class="text-muted-foreground">вариантов (импортировано с маркетплейса)</span>
+                    <span class="text-muted-foreground">вариантов (импортировано с адаптера)</span>
                   </div>
                   <p class="text-xs text-muted-foreground mt-1">
                     Редактирование большого списка недоступно вручную.

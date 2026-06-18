@@ -646,7 +646,7 @@ export default {
       if (this.isTrashMode) {
         return [
           { label: "Товары", to: "/products" },
-          { label: `Корзина${this.trashCount > 0 ? ` (${this.trashCount})` : ''}` },
+          { label: `Корзина товаров${this.trashCount > 0 ? ` (${this.trashCount})` : ''}` },
         ];
       }
       return [{ label: "Товары" }];
@@ -1016,7 +1016,7 @@ export default {
           <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
           <AlertDialogDescription>
             Вы собираетесь безвозвратно удалить {{ selectedProductIds.length }} товаров.
-            Все файлы, фото, заметки и данные маркетплейсов будут удалены. Это действие нельзя отменить.
+            Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

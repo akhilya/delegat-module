@@ -5,6 +5,8 @@ import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
 import OperationsTriggerButton from "@/components/operations/OperationsTriggerButton.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
+import AppSidebar from "@/components/appSidebar.vue";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -17,6 +19,9 @@ export default {
     OperationsPanel,
     OperationsTriggerButton,
     LoadingBar,
+    AppSidebar,
+    SidebarInset,
+    SidebarProvider,
     Loader2,
     Button,
     Monitor,
@@ -73,9 +78,17 @@ export default {
 
 <template>
   <LoadingBar ref="loadingBar" />
-  <RouterView v-slot="{ Component, route }">
+  <RouterView v-if="isPublicPage" v-slot="{ Component, route }">
     <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
   </RouterView>
+  <SidebarProvider v-else>
+    <AppSidebar />
+    <SidebarInset>
+      <RouterView v-slot="{ Component, route }">
+        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+      </RouterView>
+    </SidebarInset>
+  </SidebarProvider>
   <Toaster />
   <template v-if="!isPublicPage">
     <OperationsPanel />

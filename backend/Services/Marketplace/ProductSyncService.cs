@@ -7,6 +7,7 @@ using PrintO.Models.Marketplace;
 using PrintO.Models.Marketplace.DTOs;
 using PrintO.Models.Products;
 using PrintO.Services.Marketplace.Modifiers;
+using System.Text.Json;
 
 namespace PrintO.Services.Marketplace;
 
@@ -269,6 +270,9 @@ public class ProductSyncService
             if (!result.Success)
             {
                 await Log("error", $"Маркетплейс вернул ошибку: {result.ErrorMessage ?? "неизвестно"}");
+                var detailsMessage = FormatExportDetails(result.Details);
+                if (detailsMessage != null)
+                    await Log("error", detailsMessage);
 
                 // Обновляем статус связи при ошибке
                 if (existingLink != null)
@@ -286,6 +290,9 @@ public class ProductSyncService
             }
 
             await Log("success", $"Маркетплейс ответил: ExternalID = {result.ExternalProductId}");
+            var successDetailsMessage = FormatExportDetails(result.Details);
+            if (successDetailsMessage != null)
+                await Log("info", successDetailsMessage);
 
             // Валидация ExternalProductId — плагин мог вернуть Success=true, но с невалидным ID
             if (string.IsNullOrWhiteSpace(result.ExternalProductId) ||
@@ -343,7 +350,8 @@ public class ProductSyncService
                     productId = productId,
                     connectionId = connectionId,
                     externalProductId = result.ExternalProductId!,
-                    status = ProductMarketplaceStatus.Synced
+                    status = ProductMarketplaceStatus.Synced,
+                    categoryMappingId = categoryMapping.Id
                 });
                 _context.productMarketplaceLinks.Add(existingLink);
             }
@@ -354,7 +362,8 @@ public class ProductSyncService
                     externalProductId = result.ExternalProductId,
                     status = ProductMarketplaceStatus.Synced,
                     lastErrorMessage = null,
-                    lastSyncAt = DateTime.UtcNow
+                    lastSyncAt = DateTime.UtcNow,
+                    categoryMappingId = categoryMapping.Id
                 });
             }
 
@@ -521,6 +530,7 @@ public class ProductSyncService
 
         // Build BulkExportItem list
         var bulkItems = new List<BulkExportItem>();
+        var categoryMappingIdByProductId = new Dictionary<int, int>();
         var failedProductIds = new HashSet<int>();
 
         foreach (var productId in productIds)
@@ -627,6 +637,7 @@ public class ProductSyncService
                     existingExternalId = null;
 
                 bulkItems.Add(new BulkExportItem(productId, exportDataNonNull, existingExternalId));
+                categoryMappingIdByProductId[productId] = categoryMapping.Id;
             }
             catch (Exception ex)
             {
@@ -667,7 +678,8 @@ public class ProductSyncService
                         {
                             itemResults.Add(new BulkProductExportItemResult(
                                 exportItemResult.LocalProductId, false,
-                                ErrorMessage: exportItemResult.ErrorMessage ?? "Ошибка экспорта"));
+                                ErrorMessage: exportItemResult.ErrorMessage ?? "Ошибка экспорта",
+                                Details: exportItemResult.Details));
                             continue;
                         }
 
@@ -684,6 +696,9 @@ public class ProductSyncService
                         // Create/update ProductMarketplaceLink
                         var pid = exportItemResult.LocalProductId;
                         var isNew = !linkByProductId.ContainsKey(pid);
+                        int? usedCategoryMappingId = categoryMappingIdByProductId.TryGetValue(pid, out var categoryMappingId)
+                            ? categoryMappingId
+                            : null;
 
                         if (linkByProductId.TryGetValue(pid, out var existingLink))
                         {
@@ -692,7 +707,8 @@ public class ProductSyncService
                                 externalProductId = exportItemResult.ExternalProductId,
                                 status = ProductMarketplaceStatus.Synced,
                                 lastErrorMessage = null,
-                                lastSyncAt = DateTime.UtcNow
+                                lastSyncAt = DateTime.UtcNow,
+                                categoryMappingId = usedCategoryMappingId
                             });
                         }
                         else
@@ -708,7 +724,8 @@ public class ProductSyncService
                                     externalProductId = exportItemResult.ExternalProductId,
                                     status = ProductMarketplaceStatus.Synced,
                                     lastErrorMessage = null,
-                                    lastSyncAt = DateTime.UtcNow
+                                    lastSyncAt = DateTime.UtcNow,
+                                    categoryMappingId = usedCategoryMappingId
                                 });
                                 linkByProductId[pid] = dupLink;
                                 isNew = false;
@@ -721,7 +738,8 @@ public class ProductSyncService
                                     productId = pid,
                                     connectionId = connectionId,
                                     externalProductId = exportItemResult.ExternalProductId!,
-                                    status = ProductMarketplaceStatus.Synced
+                                    status = ProductMarketplaceStatus.Synced,
+                                    categoryMappingId = usedCategoryMappingId
                                 });
                                 _context.productMarketplaceLinks.Add(newLink);
                                 linkByProductId[pid] = newLink;
@@ -731,7 +749,8 @@ public class ProductSyncService
                         itemResults.Add(new BulkProductExportItemResult(
                             pid, true,
                             ExternalProductId: exportItemResult.ExternalProductId,
-                            IsNewProduct: isNew));
+                            IsNewProduct: isNew,
+                            Details: exportItemResult.Details));
                     }
                 }
             }
@@ -1905,6 +1924,27 @@ public class ProductSyncService
             "Synced {Count} variants for product {ProductId} on connection {ConnectionId}",
             variants.Count, productId, connectionId);
     }
+
+    private static string? FormatExportDetails(Dictionary<string, object>? details)
+    {
+        if (details == null || details.Count == 0)
+            return null;
+
+        try
+        {
+            if (details.TryGetValue("images", out var images))
+            {
+                var json = JsonSerializer.Serialize(images);
+                return $"Детали экспорта изображений: {json}";
+            }
+
+            return $"Детали экспорта: {JsonSerializer.Serialize(details)}";
+        }
+        catch
+        {
+            return "Детали экспорта получены, но не удалось сериализовать их для лога";
+        }
+    }
 }
 
 #region Result DTOs
@@ -2057,7 +2097,8 @@ public record BulkProductExportItemResult(
     bool IsSuccess,
     string? ExternalProductId = null,
     string? ErrorMessage = null,
-    bool IsNewProduct = false
+    bool IsNewProduct = false,
+    Dictionary<string, object>? Details = null
 );
 
 #endregion

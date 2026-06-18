@@ -221,7 +221,7 @@ export default {
   computed: {
     breadcrumbs() {
       const items = [
-        { label: "Маркетплейсы", to: "/marketplace" },
+        { label: "Адаптеры", to: "/marketplace" },
         { label: "Подключение", to: `/marketplace/${this.connectionId}` },
       ];
       if (this.mappingInfo) {
@@ -869,7 +869,7 @@ export default {
 
     removeField(fieldMapping) {
       if (!fieldMapping.isCustom && fieldMapping.id) {
-        displaySonnerError({ message: "Нельзя удалить поле маркетплейса. Можно только отключить." });
+        displaySonnerError({ message: "Нельзя удалить поле адаптера. Можно только отключить." });
         return;
       }
       const index = this.fieldMappings.indexOf(fieldMapping);
@@ -1030,7 +1030,7 @@ export default {
             Обязательные поля: {{ requiredFieldsMapped }} / {{ totalRequiredFields }}
           </CardTitle>
           <CardDescription>
-            Настройте источники данных для полей маркетплейса
+            Настройте источники данных для полей адаптера
           </CardDescription>
         </CardHeader>
       </Card>
@@ -1079,7 +1079,7 @@ export default {
           <TableHeader>
             <TableRow>
               <TableHead class="w-[50px]">Вкл</TableHead>
-              <TableHead class="w-[250px]">Поле маркетплейса</TableHead>
+              <TableHead class="w-[250px]">Поле адаптера</TableHead>
               <TableHead class="w-[180px]">Тип источника</TableHead>
               <TableHead>Источник данных</TableHead>
               <TableHead class="w-[100px]">Статус</TableHead>
@@ -1284,7 +1284,7 @@ export default {
                   <!-- Multiselect field with chip/tag UI -->
                   <template v-else-if="fm.externalFieldType === 'multiselect'">
                     <div class="flex items-center gap-2">
-                      <!-- С опциями маркетплейса: chips + Plus popover -->
+                      <!-- С опциями адаптера: chips + Plus popover -->
                       <template v-if="fm.parsedOptions?.length">
                         <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs">
                           <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
@@ -1520,7 +1520,7 @@ export default {
               @update:modifiers="(v) => onModifiersChange(editingFieldMapping, v)"
             />
             <p v-if="!editingFieldMapping.parsedModifiers?.length" class="text-xs text-muted-foreground mt-2">
-              Модификаторы преобразуют значение перед отправкой на маркетплейс. Нажмите "+ Модификатор" чтобы добавить.
+              Модификаторы преобразуют значение перед отправкой на адаптер. Нажмите "+ Модификатор" чтобы добавить.
             </p>
           </div>
 
@@ -1674,7 +1674,7 @@ export default {
         <DialogHeader>
           <DialogTitle>Добавить поле</DialogTitle>
           <DialogDescription>
-            Добавьте поле с произвольным ключом для маркетплейса
+            Добавьте поле с произвольным ключом для адаптера
           </DialogDescription>
         </DialogHeader>
 

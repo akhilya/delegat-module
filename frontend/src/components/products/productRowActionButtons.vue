@@ -77,7 +77,7 @@ export default {
       </DropdownMenuItem>
       <DropdownMenuItem @click.stop="navigate('marketplaces')">
         <ExternalLink class="size-4 mr-2" />
-        Маркетплейсы
+        Адаптеры
       </DropdownMenuItem>
       <DropdownMenuItem @click.stop="navigate('notes')">
         <StickyNote class="size-4 mr-2" />

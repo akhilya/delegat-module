@@ -71,7 +71,7 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         {
             id = Id,
             name = name,
-            membersCount = members?.Count ?? 0,
+            membersCount = members?.Count(m => m.isActive) ?? 0,
         };
     }
 
@@ -81,7 +81,7 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         {
             id = Id,
             name = name,
-            members = members?.Select(m => new MemberDTO
+            members = members?.Where(m => m.isActive).Select(m => new MemberDTO
             {
                 id = m.Id,
                 userName = m.UserName ?? ""
@@ -103,6 +103,11 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Store display name.
         /// </summary>
         public string name { get; set; }
+
+        /// <summary>
+        /// Add every currently active user as a member of the new store.
+        /// </summary>
+        public bool addAllUsers { get; set; }
     }
 
     /// <summary>

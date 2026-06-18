@@ -154,7 +154,12 @@ public record ExportItemResult(
     /// <summary>
     /// Error message if the export failed.
     /// </summary>
-    string? ErrorMessage = null
+    string? ErrorMessage = null,
+
+    /// <summary>
+    /// Additional details about this item export.
+    /// </summary>
+    Dictionary<string, object>? Details = null
 );
 
 /// <summary>

@@ -113,6 +113,11 @@ public enum MarketplaceCapabilities
     /// </summary>
     ArchiveProduct = 1 << 19,
 
+    /// <summary>
+    /// Create marketplace category and fields from a local category definition
+    /// </summary>
+    CreateCategory = 1 << 20,
+
     #endregion
 
     /// <summary>

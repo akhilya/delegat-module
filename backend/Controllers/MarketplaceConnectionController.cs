@@ -308,6 +308,7 @@ public class MarketplaceConnectionController : ControllerBase
             {
                 getCategories = capabilities.HasFlag(MarketplaceCapabilities.GetCategories),
                 getCategoryFields = capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields),
+                createCategory = capabilities.HasFlag(MarketplaceCapabilities.CreateCategory),
                 importProduct = capabilities.HasFlag(MarketplaceCapabilities.ImportProduct),
                 importAllProducts = capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts),
                 importProductBatch = capabilities.HasFlag(MarketplaceCapabilities.ImportProductBatch),

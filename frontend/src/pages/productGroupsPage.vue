@@ -170,7 +170,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageHeader title="Группы товаров" description="Объединение товаров для синхронизации с маркетплейсами">
+    <PageHeader title="Группы товаров" description="Объединение товаров для синхронизации с адаптерами">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -250,7 +250,7 @@ export default {
             </div>
             <ConfirmDialog
               title="Удалить группу?"
-              :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с маркетплейсами также будут удалены.`"
+              :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с адаптерами также будут удалены.`"
               confirm-label="Удалить"
               :loading="isDeleting"
               @confirm="handleDeleteGroup(group.id)"

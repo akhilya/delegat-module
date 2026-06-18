@@ -47,6 +47,35 @@ export default {
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
     },
+
+    /**
+     * Fetches all users for administrator management.
+     */
+    async getAdminUsers(ctx, { onSuccess, onError }) {
+      return await useAxios(
+        `/users/`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
+     * Updates an existing user from the administrator users page.
+     */
+    async updateAdminUser(ctx, { userId, data, onSuccess, onError }) {
+      try {
+        const response = await http.patch(`/users/${userId}`, data, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
   },
   mutations: {},
   state: {},

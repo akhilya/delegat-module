@@ -117,7 +117,7 @@ export default {
       },
       selectedAdapter: null,
       credentialValues: {},
-      breadcrumbs: [{ label: "Маркетплейсы" }],
+      breadcrumbs: [{ label: "Адаптеры" }],
     };
   },
   computed: {
@@ -185,7 +185,7 @@ export default {
         return;
       }
       if (!this.newConnection.adapterKey) {
-        displaySonnerError("Выберите маркетплейс");
+        displaySonnerError("Выберите адаптер");
         return;
       }
 
@@ -258,8 +258,8 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Маркетплейсы"
-      description="Управление подключениями к маркетплейсам для синхронизации товаров"
+      title="Адаптеры"
+      description="Управление подключениями к адаптерам для синхронизации товаров"
     >
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
@@ -270,9 +270,9 @@ export default {
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Новое подключение к маркетплейсу</DialogTitle>
+            <DialogTitle>Новое подключение к адаптеру</DialogTitle>
             <DialogDescription>
-              Выберите маркетплейс и введите данные для подключения
+              Выберите адаптер и введите данные для подключения
             </DialogDescription>
           </DialogHeader>
           <div class="py-4 space-y-4">
@@ -280,7 +280,7 @@ export default {
             <EmptyState
               v-if="adapters.length === 0"
               title="Нет доступных плагинов"
-              description='Для подключения к маркетплейсам необходимо установить соответствующие плагины. Перейдите в раздел "Плагины" для установки.'
+              description='Для подключения к адаптерам необходимо установить соответствующие плагины. Перейдите в раздел "Плагины" для установки.'
             >
               <template #icon>
                 <Package class="size-12 mb-4 text-muted-foreground" />
@@ -300,10 +300,10 @@ export default {
               </div>
 
               <div class="space-y-2">
-                <Label>Маркетплейс</Label>
+                <Label>Адаптер</Label>
                 <Select v-model="selectedAdapter" @update:modelValue="onAdapterSelect">
                   <SelectTrigger>
-                    <SelectValue placeholder="Выберите маркетплейс" />
+                    <SelectValue placeholder="Выберите адаптер" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
@@ -370,7 +370,7 @@ export default {
       <EmptyState
         v-if="isLoading || connections.length === 0"
         :loading="isLoading"
-        title="Нет подключений к маркетплейсам"
+        title="Нет подключений к адаптерам"
         description="Добавьте первое подключение для синхронизации товаров"
       >
         <template #icon>

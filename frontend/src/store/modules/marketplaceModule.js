@@ -420,6 +420,35 @@ export default {
     },
 
     /**
+     * Creates a marketplace category from a local category and maps it immediately.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.connectionId - The connection ID.
+     * @param {Object} params.data - Local category and external category options.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async createExternalCategoryMapping(ctx, { connectionId, data, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/create-external-category`,
+        {
+          method: "POST",
+          cache: false,
+          data,
+          timeout: 5 * 60 * 1000,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /**
      * Deletes a category mapping by its ID.
      * @param {Object} ctx - Vuex action context.
      * @param {Object} params - Action parameters.
@@ -429,9 +458,12 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteCategoryMapping(ctx, { connectionId, mappingId, onSuccess, onError }) {
+    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, onSuccess, onError }) {
       try {
-        const response = await http.delete(`/marketplace/connections/${connectionId}/mappings/${mappingId}`);
+        const url = reassignToMappingId
+          ? `/marketplace/connections/${connectionId}/mappings/${mappingId}?reassignToMappingId=${encodeURIComponent(reassignToMappingId)}`
+          : `/marketplace/connections/${connectionId}/mappings/${mappingId}`;
+        const response = await http.delete(url);
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);
@@ -801,6 +833,17 @@ export default {
       return await useAxios(
         `/marketplace/links/${linkId}/relink`,
         { method: "POST", data: { externalProductId }, cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async unlinkProduct(ctx, { linkId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}`,
+        { method: "DELETE", cache: false },
         http,
         { immediate: true, abortPrevious: true },
       )

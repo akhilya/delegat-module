@@ -62,7 +62,8 @@ public record ExportItemResult(
     int LocalProductId,
     bool Success,
     string? ExternalProductId = null,
-    string? ErrorMessage = null
+    string? ErrorMessage = null,
+    Dictionary<string, object>? Details = null
 );
 
 /// <summary>

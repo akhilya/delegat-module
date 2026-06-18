@@ -70,6 +70,15 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         throw new NotImplementedException($"GetCategoryFieldsAsync not implemented for {Key}");
     }
 
+    public virtual Task<CreateCategoryResult> CreateCategoryAsync(
+        MarketplaceConnection connection,
+        CreateCategoryRequest request,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.CreateCategory);
+        throw new NotImplementedException($"CreateCategoryAsync not implemented for {Key}");
+    }
+
     public virtual Task<ExternalProduct?> ImportProductAsync(
         MarketplaceConnection connection,
         string externalProductId,

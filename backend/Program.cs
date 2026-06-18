@@ -113,6 +113,23 @@ builder.Services.AddAuthentication(options =>
                 context.Token = token;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var userIdValue = context.Principal?.FindFirst("userId")?.Value;
+            if (!int.TryParse(userIdValue, out var userId))
+            {
+                context.Fail("Invalid user token");
+                return;
+            }
+
+            var db = context.HttpContext.RequestServices.GetRequiredService<DataContext>();
+            var isActive = await db.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == userId && u.isActive);
+
+            if (!isActive)
+                context.Fail("User is inactive");
         }
     };
 });

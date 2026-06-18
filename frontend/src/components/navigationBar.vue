@@ -18,13 +18,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Button from "./ui/button/Button.vue";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useDark, useToggle } from "@vueuse/core";
 import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2, Sun, Moon } from "lucide-vue-next";
-import { PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
+import { PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_ADMIN_USERS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
 
 export default {
   components: {
@@ -41,6 +42,7 @@ export default {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    SidebarTrigger,
     Button,
     UserRound,
     Loader2,
@@ -124,6 +126,9 @@ export default {
     goToAdminStores() {
       this.$router.push(PAGE_ADMIN_STORES);
     },
+    goToAdminUsers() {
+      this.$router.push(PAGE_ADMIN_USERS);
+    },
     goToAdminTokens() {
       this.$router.push(PAGE_ADMIN_TOKENS);
     },
@@ -190,14 +195,15 @@ export default {
 </script>
 
 <template>
-  <!-- Backdrop blur -->
-  <div class="w-screen backdrop-blur-lg fixed left-0 top-0 z-30 h-14" />
-
   <!-- Nav: two rows on mobile, single row on desktop -->
-  <div class="w-full sticky top-0 left-0 z-30">
+  <div class="w-full sticky top-0 z-30 bg-background">
     <template v-if="!isLoading">
       <!-- Main row: store + (center on desktop) + user menu -->
       <div class="flex items-center h-14 gap-2">
+        <div class="md:hidden shrink-0">
+          <SidebarTrigger />
+        </div>
+
         <!-- Store selector -->
         <div class="shrink-0">
           <template v-if="memberships.length > 0">
@@ -240,7 +246,7 @@ export default {
         <div class="ml-auto shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
-              <Button variant="outline" size="sm" class="gap-1.5">
+              <Button variant="outline" class="h-9 gap-1.5">
                 <UserRound class="size-4" />
                 <span class="hidden sm:inline max-w-[120px] truncate">{{ me?.userName }}</span>
               </Button>
@@ -266,16 +272,16 @@ export default {
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToStoreAttributes">
                 <Globe class="size-4 mr-2" />
-                Атрибуты магазина
+                Глобальные атрибуты
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToTrash">
                 <Trash2 class="size-4 mr-2" />
-                Корзина
+                Корзина товаров
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem @select="goToMarketplace">
                 <ShoppingBag class="size-4 mr-2" />
-                Маркетплейсы
+                Адаптеры
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToPlugins">
                 <Puzzle class="size-4 mr-2" />
@@ -286,6 +292,10 @@ export default {
                 <DropdownMenuItem @select="goToAdminStores">
                   <Store class="size-4 mr-2" />
                   Магазины
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="goToAdminUsers">
+                  <Users class="size-4 mr-2" />
+                  Пользователи
                 </DropdownMenuItem>
                 <DropdownMenuItem @select="goToAdminTokens">
                   <Key class="size-4 mr-2" />

@@ -4,6 +4,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Plus, Store, Users, Loader2, ChevronRight } from "lucide-vue-next";
@@ -30,6 +31,7 @@ export default {
     Breadcrumbs,
     Button,
     Input,
+    Checkbox,
     Plus,
     Store,
     Users,
@@ -53,6 +55,7 @@ export default {
       isLoading: false,
       isCreating: false,
       newStoreName: "",
+      addAllUsers: true,
       showCreateDialog: false,
       breadcrumbs: [{ label: "Магазины" }],
     };
@@ -82,9 +85,11 @@ export default {
       this.isCreating = true;
       await this.createStore({
         name: this.newStoreName.trim(),
+        addAllUsers: this.addAllUsers,
         onSuccess: (response) => {
           displaySonnerSuccess("Магазин создан");
           this.newStoreName = "";
+          this.addAllUsers = true;
           this.showCreateDialog = false;
           this.fetchStores();
         },
@@ -125,12 +130,21 @@ export default {
                 Введите название для нового магазина
               </DialogDescription>
             </DialogHeader>
-            <div class="py-4">
+            <div class="py-4 space-y-4">
               <Input
                 v-model="newStoreName"
                 placeholder="Название магазина"
                 @keyup.enter="handleCreateStore"
               />
+              <label class="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm cursor-pointer">
+                <Checkbox v-model="addAllUsers" class="mt-0.5" />
+                <span class="grid gap-1">
+                  <span class="font-medium leading-none">Добавить всех текущих пользователей</span>
+                  <span class="text-xs text-muted-foreground">
+                    Если выключить, участником нового магазина станет только текущий администратор.
+                  </span>
+                </span>
+              </label>
             </div>
             <DialogFooter>
               <DialogClose as-child>
@@ -150,7 +164,7 @@ export default {
       <EmptyState
         v-else-if="stores.length === 0"
         title="Нет магазинов"
-        description="Магазин — это рабочее пространство для управления товарами и синхронизации с маркетплейсами"
+        description="Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами"
       >
         <template #icon>
           <Store class="size-12 mb-4 text-muted-foreground" />

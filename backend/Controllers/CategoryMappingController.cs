@@ -106,7 +106,8 @@ public class CategoryMappingController : ControllerBase
                 localCategoryName = m.localCategory.name,
                 externalCategoryId = m.externalCategoryId,
                 externalCategoryName = m.externalCategoryName,
-                fieldMappingsCount = m.fieldMappings.Count
+                fieldMappingsCount = m.fieldMappings.Count,
+                linkedProductsCount = _context.productMarketplaceLinks.Count(l => l.categoryMappingId == m.Id)
             })
             .ToListAsync();
 
@@ -147,7 +148,6 @@ public class CategoryMappingController : ControllerBase
 
         await mappingRepo.AddAsync(mapping);
 
-        // Получаем поля категории с маркетплейса и создаём FieldMappings
         var fieldsCreated = 0;
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter != null && adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
@@ -155,45 +155,7 @@ public class CategoryMappingController : ControllerBase
             try
             {
                 var fields = await adapter.GetCategoryFieldsAsync(connection, input.externalCategoryId, ct);
-                var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
-
-                // Загружаем атрибуты локальной категории для авто-маппинга
-                var categoryAttributes = await _unitOfWork.Repository<CategoryAttribute>()
-                    .FindAllAsync(a => a.categoryId == input.localCategoryId);
-                var attributeMap = categoryAttributes.ToDictionary(a => a.key ?? a.Id.ToString(), a => a.Id);
-
-                int sortOrder = 0;
-                foreach (var field in fields.OrderBy(f => f.SortOrder))
-                {
-                    // Определяем автоматический источник данных
-                    var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
-
-                    // Если поле маппится на локальное поле товара, то не делаем его обязательным
-                    var isRequired = sourceType == FieldMappingSourceType.ProductField
-                        ? false
-                        : field.IsRequired;
-
-                    var fieldMapping = new FieldMapping();
-                    fieldMapping.AddFill(new FieldMapping.AddForm
-                    {
-                        categoryMappingId = mapping.Id,
-                        externalFieldKey = field.Key,
-                        externalFieldName = field.Name,
-                        isRequired = isRequired,
-                        isEnabled = true,
-                        sourceType = sourceType,
-                        sourceField = sourceField,
-                        sourceAttributeId = sourceAttributeId,
-                        externalFieldType = field.Type,
-                        externalFieldOptions = field.Options != null && field.Options.Count > 0
-                            ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
-                            : null,
-                        sortOrder = sortOrder++
-                    });
-
-                    await fieldMappingRepo.AddAsync(fieldMapping);
-                    fieldsCreated++;
-                }
+                fieldsCreated = await CreateFieldMappingsAsync(mapping.Id, input.localCategoryId, fields);
             }
             catch (Exception ex)
             {
@@ -202,6 +164,86 @@ public class CategoryMappingController : ControllerBase
         }
 
         return Ok(new { id = mapping.Id, fieldsCreated });
+    }
+
+    /// <summary>
+    /// Create an external marketplace category from a local category and map it immediately.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/create-external-category")]
+    public async Task<IActionResult> CreateExternalCategory(
+        int connectionId,
+        [FromBody] CreateExternalCategoryInput input,
+        CancellationToken ct = default)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.CreateCategory))
+            throw ApiException.BadRequest("Адаптер не поддерживает создание категорий");
+
+        var category = await _unitOfWork.Repository<Category>().FindAsync(
+            c => c.Id == input.localCategoryId && c.storeId == connection.storeId,
+            query => query.Include(c => c.attributes));
+
+        if (category == null)
+            throw ApiException.NotFound("Локальная категория не найдена");
+
+        var request = new Models.Marketplace.DTOs.CreateCategoryRequest
+        {
+            Name = string.IsNullOrWhiteSpace(input.externalCategoryName) ? category.name : input.externalCategoryName.Trim(),
+            Description = category.description,
+            ParentId = input.parentExternalCategoryId,
+            StoreId = input.storeId,
+            LanguageId = input.languageId,
+            Fields = category.attributes
+                .OrderBy(a => a.sortOrder)
+                .Select(a => new Models.Marketplace.DTOs.CreateCategoryField
+                {
+                    Key = a.key,
+                    Name = a.name,
+                    Type = MapAttributeType(a.type),
+                    IsRequired = a.isRequired,
+                    Description = a.description,
+                    Group = a.group,
+                    SortOrder = a.sortOrder,
+                    Options = ParseAttributeOptions(a.options)
+                })
+                .ToList()
+        };
+
+        var result = await adapter.CreateCategoryAsync(connection, request, ct);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.ExternalCategoryId))
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Не удалось создать категорию в маркетплейсе");
+
+        var mapping = new CategoryMapping();
+        mapping.AddFill(new CategoryMapping.AddForm
+        {
+            connectionId = connectionId,
+            localCategoryId = category.Id,
+            externalCategoryId = result.ExternalCategoryId,
+            externalCategoryName = result.ExternalCategoryName ?? request.Name,
+            name = input.mappingName
+        });
+
+        await _unitOfWork.Repository<CategoryMapping>().AddAsync(mapping);
+
+        var fields = result.Fields;
+        if (fields == null || fields.Count == 0)
+            fields = await adapter.GetCategoryFieldsAsync(connection, result.ExternalCategoryId, ct);
+
+        var fieldsCreated = await CreateFieldMappingsAsync(mapping.Id, category.Id, fields);
+
+        return Ok(new
+        {
+            id = mapping.Id,
+            externalCategoryId = result.ExternalCategoryId,
+            externalCategoryName = result.ExternalCategoryName ?? request.Name,
+            fieldsCreated
+        });
     }
 
     /// <summary>
@@ -305,7 +347,11 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}")]
-    public async Task<IActionResult> DeleteMapping(int connectionId, int mappingId)
+    public async Task<IActionResult> DeleteMapping(
+        int connectionId,
+        int mappingId,
+        [FromQuery] int? reassignToMappingId = null,
+        CancellationToken ct = default)
     {
         await GetConnectionAsync(connectionId);
 
@@ -317,6 +363,61 @@ public class CategoryMappingController : ControllerBase
         if (mapping == null)
             throw ApiException.NotFound("Маппинг не найден");
 
+        var linkedProducts = await _context.productMarketplaceLinks
+            .Where(l => l.connectionId == connectionId && l.categoryMappingId == mappingId)
+            .Include(l => l.product)
+            .ToListAsync(ct);
+
+        if (linkedProducts.Count > 0)
+        {
+            if (!reassignToMappingId.HasValue)
+            {
+                var replacements = await _context.categoryMappings
+                    .Where(m => m.connectionId == connectionId &&
+                                m.localCategoryId == mapping.localCategoryId &&
+                                m.Id != mappingId)
+                    .Select(m => new
+                    {
+                        id = m.Id,
+                        name = m.name,
+                        externalCategoryId = m.externalCategoryId,
+                        externalCategoryName = m.externalCategoryName
+                    })
+                    .ToListAsync(ct);
+
+                throw new ApiException(
+                    $"Маппинг используется товарами: {linkedProducts.Count}. Выберите другой маппинг для переназначения перед удалением.",
+                    StatusCodes.Status409Conflict,
+                    data: new
+                    {
+                        linkedProductsCount = linkedProducts.Count,
+                        products = linkedProducts.Take(10).Select(l => new
+                        {
+                            id = l.productId,
+                            name = l.product.name,
+                            sku = l.product.sku
+                        }),
+                        replacementMappings = replacements
+                    });
+            }
+
+            var replacement = await _context.categoryMappings
+                .FirstOrDefaultAsync(m =>
+                    m.Id == reassignToMappingId.Value &&
+                    m.connectionId == connectionId &&
+                    m.localCategoryId == mapping.localCategoryId &&
+                    m.Id != mappingId,
+                    ct);
+
+            if (replacement == null)
+                throw ApiException.BadRequest("Маппинг для переназначения не найден или относится к другой локальной категории");
+
+            foreach (var link in linkedProducts)
+                link.categoryMappingId = replacement.Id;
+
+            await _context.SaveChangesAsync(ct);
+        }
+
         // Удаляем связанные field mappings
         var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
         foreach (var fm in mapping.fieldMappings.ToList())
@@ -326,7 +427,7 @@ public class CategoryMappingController : ControllerBase
 
         await mappingRepo.DeleteAsync(mapping);
 
-        return Ok(new { success = true });
+        return Ok(new { success = true, reassignedProducts = linkedProducts.Count });
     }
 
     /// <summary>
@@ -606,6 +707,60 @@ public class CategoryMappingController : ControllerBase
         return connection;
     }
 
+    private async Task<int> CreateFieldMappingsAsync(
+        int categoryMappingId,
+        int localCategoryId,
+        IReadOnlyCollection<Models.Marketplace.DTOs.ExternalField> fields)
+    {
+        var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
+        var categoryAttributes = await _unitOfWork.Repository<CategoryAttribute>()
+            .FindAllAsync(a => a.categoryId == localCategoryId);
+
+        var attributeMap = categoryAttributes
+            .SelectMany(a => new[]
+            {
+                new { Key = a.key, a.Id },
+                new { Key = a.name, a.Id }
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Key))
+            .GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+        var fieldsCreated = 0;
+        var sortOrder = 0;
+
+        foreach (var field in fields.OrderBy(f => f.SortOrder))
+        {
+            var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
+            var isRequired = sourceType == FieldMappingSourceType.ProductField
+                ? false
+                : field.IsRequired;
+
+            var fieldMapping = new FieldMapping();
+            fieldMapping.AddFill(new FieldMapping.AddForm
+            {
+                categoryMappingId = categoryMappingId,
+                externalFieldKey = field.Key,
+                externalFieldName = field.Name,
+                isRequired = isRequired,
+                isEnabled = true,
+                sourceType = sourceType,
+                sourceField = sourceField,
+                sourceAttributeId = sourceAttributeId,
+                externalFieldType = field.Type,
+                externalFieldOptions = field.Options != null && field.Options.Count > 0
+                    ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
+                    : null,
+                sortOrder = sortOrder++
+            });
+
+            await fieldMappingRepo.AddAsync(fieldMapping);
+            fieldsCreated++;
+        }
+
+        return fieldsCreated;
+    }
+
     #endregion
 
     #region Auto-mapping helpers
@@ -661,6 +816,7 @@ public class CategoryMappingController : ControllerBase
     {
         // Ozon attribute 9024 = Артикул
         if (key == "9024") return true;
+        if (key == "model" || name == "model") return true;
 
         var patterns = new[] { "sku", "артикул", "article", "vendor_code", "vendorcode" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
@@ -737,6 +893,71 @@ public class CategoryMappingController : ControllerBase
         return patterns.Any(p => nameLower.Contains(p));
     }
 
+    private static string MapAttributeType(AttributeType type)
+        => type switch
+        {
+            AttributeType.Number => "number",
+            AttributeType.Boolean => "boolean",
+            AttributeType.Select => "select",
+            AttributeType.MultiSelect => "multiselect",
+            AttributeType.Barcode => "string",
+            _ => "string"
+        };
+
+    private static List<Models.Marketplace.DTOs.ExternalFieldOption>? ParseAttributeOptions(string? optionsJson)
+    {
+        if (string.IsNullOrWhiteSpace(optionsJson))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(optionsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var options = new List<Models.Marketplace.DTOs.ExternalFieldOption>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var value = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        options.Add(new Models.Marketplace.DTOs.ExternalFieldOption(value, value));
+                    continue;
+                }
+
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var valueText = TryGetString(item, "value") ?? TryGetString(item, "id") ?? TryGetString(item, "key");
+                var labelText = TryGetString(item, "label") ?? TryGetString(item, "name") ?? valueText;
+                if (!string.IsNullOrWhiteSpace(valueText))
+                    options.Add(new Models.Marketplace.DTOs.ExternalFieldOption(valueText, labelText ?? valueText));
+            }
+
+            return options.Count > 0 ? options : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+            return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
+    }
+
     #endregion
 
     #region Input DTOs
@@ -747,6 +968,16 @@ public class CategoryMappingController : ControllerBase
         public string externalCategoryId { get; set; }
         public string? externalCategoryName { get; set; }
         public string? name { get; set; }
+    }
+
+    public struct CreateExternalCategoryInput
+    {
+        public int localCategoryId { get; set; }
+        public string? externalCategoryName { get; set; }
+        public string? parentExternalCategoryId { get; set; }
+        public string? mappingName { get; set; }
+        public int? storeId { get; set; }
+        public int? languageId { get; set; }
     }
 
     public struct UpdateMappingInput

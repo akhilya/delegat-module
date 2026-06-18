@@ -53,17 +53,18 @@ export default {
      * @param {Object} ctx - Vuex action context.
      * @param {Object} params - Action parameters.
      * @param {string} params.name - Name for the new store.
+     * @param {boolean} params.addAllUsers - Whether to add every active user to the new store.
      * @param {Function} params.onSuccess - Callback on successful response.
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createStore(ctx, { name, onSuccess, onError }) {
+    async createStore(ctx, { name, addAllUsers, onSuccess, onError }) {
       return await useAxios(
         `/stores/`,
         {
           method: "POST",
           cache: false,
-          data: { name }
+          data: { name, addAllUsers }
         },
         http,
         {

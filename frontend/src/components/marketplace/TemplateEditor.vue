@@ -145,7 +145,7 @@ export default {
 
         <!-- Store attributes -->
         <template v-if="availableSources.storeAttributes?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Атрибуты магазина</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">Глобальные атрибуты</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="attr in availableSources.storeAttributes"

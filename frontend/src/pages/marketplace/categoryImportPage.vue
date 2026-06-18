@@ -90,7 +90,7 @@ export default {
     },
     breadcrumbs() {
       return [
-        { label: "Маркетплейсы", to: PAGE_MARKETPLACE },
+        { label: "Адаптеры", to: PAGE_MARKETPLACE },
         { label: this.connection?.name || "Подключение", to: `/marketplace/${this.connectionId}` },
         { label: "Импорт категории" },
       ];
@@ -255,7 +255,7 @@ export default {
 
     async handleImportCategory() {
       if (!this.importCategoryId) {
-        displaySonnerError("Выберите категорию маркетплейса");
+        displaySonnerError("Выберите категорию адаптера");
         return;
       }
 
@@ -316,7 +316,7 @@ export default {
       <!-- Card: Category browser -->
       <Card>
         <CardHeader>
-          <CardTitle>Категория маркетплейса</CardTitle>
+          <CardTitle>Категория адаптера</CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
           <!-- Search -->
@@ -389,7 +389,7 @@ export default {
 
           <!-- Manual ID input -->
           <div class="space-y-2">
-            <Label>ID категории маркетплейса</Label>
+            <Label>ID категории адаптера</Label>
             <Input v-model="importCategoryId" placeholder="Выберите категорию выше или введите ID" />
           </div>
         </CardContent>

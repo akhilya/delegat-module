@@ -80,6 +80,15 @@ public abstract class MarketplacePluginBase : IMarketplacePlugin
     }
 
     /// <inheritdoc />
+    public virtual Task<CreateCategoryResult> CreateCategoryAsync(
+        ConnectionContext context,
+        CreateCategoryRequest request,
+        CancellationToken ct = default)
+    {
+        throw new NotSupportedException($"Plugin '{Key}' does not support CreateCategory");
+    }
+
+    /// <inheritdoc />
     public virtual Task<ExternalProduct?> ImportProductAsync(
         ConnectionContext context,
         string externalProductId,

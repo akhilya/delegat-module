@@ -365,6 +365,7 @@ public class CategoryImportService
     {
         // Ozon attribute 9024 = Артикул
         if (key == "9024") return true;
+        if (key == "model" || name == "model") return true;
 
         var patterns = new[] { "sku", "артикул", "article", "vendor_code", "vendorcode" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));

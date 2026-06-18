@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PrintO.Infrastructure.Auth;
@@ -15,28 +16,115 @@ public class UserController : ControllerBase
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
+    private readonly UserManager<User> _userManager;
 
     public UserController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        UserManager<User> userManager)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
+        _userManager = userManager;
+    }
+
+    [HttpGet]
+    [Route("/users/")]
+    public async Task<IActionResult> GetUsers()
+    {
+        var currentUser = await _currentUserService.GetUserAsync();
+        if (currentUser == null || !currentUser.isAdmin)
+            throw ApiException.Forbidden("Только администраторы могут просматривать пользователей");
+
+        var users = await _userManager.Users
+            .OrderByDescending(u => u.isActive)
+            .ThenBy(u => u.UserName)
+            .ToListAsync();
+
+        return Ok(users.Select(u => u.MapToDTO(_serviceProvider)).ToList());
+    }
+
+    [HttpPatch]
+    [Route("/users/{id}")]
+    public async Task<IActionResult> PatchUser(int id, [FromBody] UpdateUserForm input)
+    {
+        var currentUser = await _currentUserService.GetUserAsync();
+        if (currentUser == null || !currentUser.isAdmin)
+            throw ApiException.Forbidden("Только администраторы могут редактировать пользователей");
+
+        var user = await _userManager.FindByIdAsync(id.ToString());
+        if (user == null)
+            throw ApiException.NotFound("Пользователь не найден");
+
+        if (input.userName != null)
+        {
+            var normalizedName = input.userName.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedName))
+                throw ApiException.BadRequest("Имя пользователя не может быть пустым");
+
+            if (normalizedName.Length > PrintO.Models.User.USER_NAME_MAX_LENGTH)
+                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {PrintO.Models.User.USER_NAME_MAX_LENGTH} символов");
+
+            var duplicate = await _userManager.FindByNameAsync(normalizedName);
+            if (duplicate != null && duplicate.Id != user.Id)
+                throw ApiException.BadRequest("Пользователь с таким именем уже существует");
+
+            user.UserName = normalizedName;
+            user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
+        }
+
+        if (input.isAdmin.HasValue)
+        {
+            if (user.Id == currentUser.Id && !input.isAdmin.Value)
+                throw ApiException.BadRequest("Нельзя снять права администратора с самого себя");
+
+            if (!input.isAdmin.Value)
+            {
+                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
+                if (user.isAdmin && activeAdminCount <= 1)
+                    throw ApiException.BadRequest("Нельзя снять права с последнего активного администратора");
+            }
+
+            user.isAdmin = input.isAdmin.Value;
+        }
+
+        if (input.isActive.HasValue)
+        {
+            if (user.Id == currentUser.Id && !input.isActive.Value)
+                throw ApiException.BadRequest("Нельзя деактивировать самого себя");
+
+            if (!input.isActive.Value && user.isAdmin)
+            {
+                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
+                if (activeAdminCount <= 1)
+                    throw ApiException.BadRequest("Нельзя деактивировать последнего активного администратора");
+            }
+
+            user.isActive = input.isActive.Value;
+            if (!user.isActive)
+                user.selectedStoreId = null;
+        }
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+
+        return Ok(user.MapToDTO(_serviceProvider));
     }
 
     [HttpGet]
     [Route("/users/me/memberships")]
     public async Task<IActionResult> GetMyMemberships()
     {
-        var userId = _currentUserService.GetUserId();
-        if (userId == null)
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null)
             throw ApiException.Unauthorized();
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
-            s => s.members.Any(m => m.Id == userId.Value),
+            s => s.members.Any(m => m.Id == user.Id && m.isActive),
             query => query.Include(s => s.members));
 
         var result = stores.Select(s => s.MapToDTO(_serviceProvider)).ToList();
@@ -76,5 +164,12 @@ public class UserController : ControllerBase
         });
 
         return Ok(new { next = "/products" });
+    }
+
+    public struct UpdateUserForm
+    {
+        public string? userName { get; set; }
+        public bool? isAdmin { get; set; }
+        public bool? isActive { get; set; }
     }
 }

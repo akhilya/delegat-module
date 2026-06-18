@@ -440,7 +440,7 @@ function close() {
           <!-- Store attributes -->
           <div v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
                class="text-xs text-muted-foreground">
-            Атрибуты магазина: перенесётся {{ preview.storeAttributesMappable }} из {{ preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }}<template v-if="preview.storeAttributesUnmappable.length">. В целевом магазине нет: {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
+            Глобальные атрибуты: перенесётся {{ preview.storeAttributesMappable }} из {{ preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }}<template v-if="preview.storeAttributesUnmappable.length">. В целевом магазине нет: {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
           </div>
 
           <!-- Group selection -->
@@ -490,10 +490,10 @@ function close() {
               <AlertTriangle v-if="mode === 'move'" class="size-4" />
               <ExternalLink v-else class="size-4" />
               <template v-if="mode === 'move'">
-                После переноса оторвутся {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с маркетплейсами
+                После переноса оторвутся {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с адаптерами
               </template>
               <template v-else>
-                У оригинала {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с маркетплейсами
+                У оригинала {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с адаптерами
               </template>
             </div>
             <ul class="text-xs text-muted-foreground space-y-1">

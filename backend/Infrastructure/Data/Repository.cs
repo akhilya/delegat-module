@@ -361,6 +361,15 @@ public class Repository<TEntity> where TEntity : class, IEntity
     }
 
     /// <summary>
+    /// Returns a tracking queryable for update operations that need relationship changes.
+    /// </summary>
+    /// <returns>An <see cref="IQueryable{TEntity}"/> with change tracking enabled.</returns>
+    public IQueryable<TEntity> QueryTracking()
+    {
+        return _dbSet;
+    }
+
+    /// <summary>
     /// Generates the next available identifier by finding the current maximum and adding one.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>

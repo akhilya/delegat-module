@@ -95,7 +95,7 @@ export default {
       <AlertDialogHeader>
         <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
         <AlertDialogDescription>
-          Все файлы, фото, заметки и данные маркетплейсов будут удалены. Это действие нельзя отменить.
+          Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>

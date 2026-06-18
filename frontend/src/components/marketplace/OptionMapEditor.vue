@@ -120,7 +120,7 @@ export default {
         :options="selectOptions"
         :model-value="row.to || ''"
         @update:modelValue="(v) => onToChange(index, v)"
-        placeholder="Вариант маркетплейса"
+        placeholder="Вариант адаптера"
         :search-threshold="3"
       />
       <Input

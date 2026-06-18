@@ -228,6 +228,7 @@ export default {
       testResult: null,
       showCreateMappingDialog: false,
       isCreatingMapping: false,
+      isCreatingExternalCategory: false,
       newMapping: {
         localCategoryId: null,
         externalCategoryId: "",
@@ -256,6 +257,7 @@ export default {
       isExportingStocks: false,
       importingLinkId: null,
       exportingLinkId: null,
+      unlinkingLinkId: null,
       totalCount: 0,
       linkedCount: 0,
       hasMoreProducts: false,
@@ -308,6 +310,13 @@ export default {
       renameMappingValue: "",
       isRenamingMapping: false,
 
+      // === Delete mapping dialog ===
+      showDeleteMappingDialog: false,
+      deleteMappingTarget: null,
+      deleteMappingImpact: null,
+      deleteMappingReplacementId: null,
+      isDeletingMapping: false,
+
       // === Mapping settings dialog ===
       showMappingSettingsDialog: false,
       mappingSettingsId: null,
@@ -332,6 +341,7 @@ export default {
       capabilityLabels: {
         getCategories: "Получение категорий",
         getCategoryFields: "Поля категорий",
+        createCategory: "Создание категорий",
         importProduct: "Импорт товара",
         importAllProducts: "Импорт всех товаров",
         importProductBatch: "Пакетный импорт",
@@ -408,7 +418,7 @@ export default {
     },
     breadcrumbs() {
       return [
-        { label: "Маркетплейсы", to: PAGE_MARKETPLACE },
+        { label: "Адаптеры", to: PAGE_MARKETPLACE },
         { label: this.connection?.name || "Подключение" },
       ];
     },
@@ -426,6 +436,10 @@ export default {
       if (!this.connection) return "";
       const adapter = this.adapters.find((a) => a.key === this.connection.adapterKey);
       return adapter?.displayName || this.connection.adapterKey;
+    },
+    selectedLocalCategory() {
+      if (!this.newMapping.localCategoryId) return null;
+      return this.localCategories.find((cat) => cat.id === this.newMapping.localCategoryId) || null;
     },
 
     // Products computed - server handles SKU filtering, just return products
@@ -511,6 +525,18 @@ export default {
       }
       return Object.values(groups);
     },
+    deleteMappingReplacementOptions() {
+      if (!this.deleteMappingTarget) return [];
+      const replacements = this.deleteMappingImpact?.replacementMappings;
+      if (Array.isArray(replacements) && replacements.length > 0) {
+        return replacements;
+      }
+
+      return this.categoryMappings.filter((mapping) =>
+        mapping.id !== this.deleteMappingTarget.id &&
+        mapping.localCategoryId === this.deleteMappingTarget.localCategoryId
+      );
+    },
     singleImportPreviewItems() {
       if (!this.singleImportPreviewData?.updatedFields) return [];
       return [{
@@ -548,6 +574,7 @@ export default {
       "getLocalCategories",
       "getExternalCategories",
       "createCategoryMapping",
+      "createExternalCategoryMapping",
       "deleteCategoryMapping",
       "importCategory",
       "createCategory",
@@ -559,6 +586,7 @@ export default {
       "importFromLink",
       "importFromLinkPreview",
       "exportFromLink",
+      "unlinkProduct",
       "importSelectedProducts",
       "getImportBatchStatus",
       "exportPrices",
@@ -766,6 +794,15 @@ export default {
       this.loadRootCategories();
     },
 
+    resetNewMapping() {
+      this.newMapping = {
+        localCategoryId: null,
+        externalCategoryId: "",
+        externalCategoryName: "",
+        name: "",
+      };
+    },
+
     parseCredentials() {
       if (this.connection?.credentialsJson) {
         try {
@@ -833,12 +870,7 @@ export default {
         onSuccess: () => {
           displaySonnerSuccess("Маппинг создан");
           this.showCreateMappingDialog = false;
-          this.newMapping = {
-            localCategoryId: null,
-            externalCategoryId: "",
-            externalCategoryName: "",
-            name: "",
-          };
+          this.resetNewMapping();
           this.fetchMappings();
         },
         onError: (error) => {
@@ -848,18 +880,105 @@ export default {
       this.isCreatingMapping = false;
     },
 
-    async handleDeleteMapping(mappingId) {
-      await this.deleteCategoryMapping({
+    async handleCreateExternalCategoryMapping() {
+      if (!this.newMapping.localCategoryId) {
+        displaySonnerError("Выберите локальную категорию");
+        return;
+      }
+
+      if (!this.capabilities?.capabilities?.createCategory) {
+        displaySonnerError("Адаптер не поддерживает создание категорий");
+        return;
+      }
+
+      this.isCreatingExternalCategory = true;
+      await this.createExternalCategoryMapping({
         connectionId: this.connectionId,
-        mappingId,
+        data: {
+          localCategoryId: this.newMapping.localCategoryId,
+          externalCategoryName: this.newMapping.externalCategoryName || this.selectedLocalCategory?.name,
+          parentExternalCategoryId: this.currentParentId,
+          mappingName: this.newMapping.name,
+        },
         onSuccess: () => {
-          displaySonnerSuccess("Маппинг удалён");
+          displaySonnerSuccess("Категория создана и связана");
+          this.showCreateMappingDialog = false;
+          this.resetNewMapping();
           this.fetchMappings();
+          this.loadRootCategories();
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
+      this.isCreatingExternalCategory = false;
+    },
+
+    handleDeleteMapping(mapping) {
+      const target = typeof mapping === "object"
+        ? mapping
+        : this.categoryMappings.find((m) => m.id === mapping);
+
+      if (!target) return;
+
+      if ((target.linkedProductsCount || 0) > 0) {
+        this.deleteMappingTarget = target;
+        this.deleteMappingImpact = {
+          linkedProductsCount: target.linkedProductsCount,
+          replacementMappings: this.categoryMappings.filter((m) =>
+            m.id !== target.id && m.localCategoryId === target.localCategoryId
+          ),
+        };
+        this.deleteMappingReplacementId = null;
+        this.showDeleteMappingDialog = true;
+        return;
+      }
+
+      this.confirmDeleteMapping(target.id, null);
+    },
+
+    async confirmDeleteMapping(mappingId = null, reassignToMappingId = null) {
+      const targetId = mappingId || this.deleteMappingTarget?.id;
+      if (!targetId) return;
+
+      this.isDeletingMapping = true;
+      await this.deleteCategoryMapping({
+        connectionId: this.connectionId,
+        mappingId: targetId,
+        reassignToMappingId,
+        onSuccess: (response) => {
+          const reassigned = response?.data?.reassignedProducts || 0;
+          displaySonnerSuccess(reassigned > 0
+            ? `Маппинг удалён, товары переназначены: ${reassigned}`
+            : "Маппинг удалён");
+          this.showDeleteMappingDialog = false;
+          this.deleteMappingTarget = null;
+          this.deleteMappingImpact = null;
+          this.deleteMappingReplacementId = null;
+          this.fetchMappings();
+        },
+        onError: (error) => {
+          if (error?.response?.status === 409 && error.response.data?.data) {
+            this.deleteMappingImpact = error.response.data.data;
+            this.showDeleteMappingDialog = true;
+          } else {
+            displaySonnerError(error);
+          }
+        },
+      });
+      this.isDeletingMapping = false;
+    },
+
+    async confirmDeleteMappingWithReassign() {
+      if (!this.deleteMappingReplacementId) {
+        displaySonnerError({ response: { data: { title: "Выберите маппинг для переназначения" } } });
+        return;
+      }
+
+      await this.confirmDeleteMapping(
+        this.deleteMappingTarget?.id,
+        parseInt(this.deleteMappingReplacementId)
+      );
     },
 
     async handleDuplicateMapping(mappingId) {
@@ -1226,7 +1345,7 @@ export default {
       await this.exportFromLink({
         linkId: product.linkId,
         onSuccess: () => {
-          displaySonnerSuccess("Товар экспортирован на маркетплейс");
+          displaySonnerSuccess("Товар экспортирован на адаптер");
           this.fetchProducts(true);
         },
         onError: (error) => {
@@ -1234,6 +1353,25 @@ export default {
         },
       });
       this.exportingLinkId = null;
+    },
+
+    async handleUnlinkProduct(product) {
+      if (!product.isLinked || !product.linkId || this.unlinkingLinkId) return;
+
+      this.unlinkingLinkId = product.linkId;
+      await this.unlinkProduct({
+        linkId: product.linkId,
+        onSuccess: () => {
+          displaySonnerSuccess("Товар отвязан от адаптера");
+          this.selectedItems = this.selectedItems.filter((id) => id !== product.externalId);
+          this.fetchProducts(true);
+          this.fetchLocalProducts();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.unlinkingLinkId = null;
     },
 
     // Import dialog
@@ -1881,6 +2019,9 @@ export default {
       if (!product.isLinked) {
         return { variant: "secondary", icon: Package, label: "Не связан", color: "text-muted-foreground" };
       }
+      if (product.mappingMissing) {
+        return { variant: "destructive", icon: AlertTriangle, label: "Нет маппинга", color: "text-error" };
+      }
       switch (product.linkStatus) {
         case "Synced":
           return { variant: "default", icon: CheckCircle, label: "Синхронизирован", color: "text-success" };
@@ -2062,7 +2203,7 @@ export default {
                     <DialogHeader>
                       <DialogTitle>API Лимиты</DialogTitle>
                       <DialogDescription>
-                        {{ limitsData && !limitsData.supported ? 'Маркетплейс не поддерживает отслеживание лимитов' : 'Текущие лимиты API маркетплейса' }}
+                        {{ limitsData && !limitsData.supported ? 'Адаптер не поддерживает отслеживание лимитов' : 'Текущие лимиты API адаптера' }}
                       </DialogDescription>
                     </DialogHeader>
                     <div v-if="limitsData && limitsData.supported" class="space-y-6">
@@ -2165,7 +2306,7 @@ export default {
                 <DialogHeader>
                   <DialogTitle>Создать маппинг</DialogTitle>
                   <DialogDescription>
-                    Выберите локальную категорию и категорию маркетплейса для связывания
+                    Выберите локальную категорию и категорию адаптера для связывания
                   </DialogDescription>
                 </DialogHeader>
                 <div class="py-4 space-y-4">
@@ -2185,10 +2326,13 @@ export default {
                         </SelectItem>
                       </SelectContent>
                     </Select>
+                    <p v-if="selectedLocalCategory" class="text-xs text-muted-foreground">
+                      Атрибутов: {{ selectedLocalCategory.attributesCount || 0 }}
+                    </p>
                   </div>
 
                   <div class="space-y-2">
-                    <Label>Категория маркетплейса</Label>
+                    <Label>Категория адаптера</Label>
                     <div class="flex gap-2">
                       <Input
                         v-model="externalCategorySearch"
@@ -2235,8 +2379,24 @@ export default {
                     <div v-if="isLoadingCategories" class="flex justify-center py-8">
                       <Loader2 class="size-6 animate-spin text-muted-foreground" />
                     </div>
-                    <div v-else-if="externalCategories.length === 0" class="text-center py-8 text-muted-foreground text-sm">
-                      Категории не найдены
+                    <div v-else-if="externalCategories.length === 0" class="text-center py-8 text-muted-foreground text-sm space-y-3">
+                      <div>
+                        <p>Категории не найдены</p>
+                        <p v-if="capabilities?.capabilities?.createCategory && selectedLocalCategory" class="text-xs">
+                          Можно создать категорию в {{ adapterDisplayName }} из выбранной локальной категории
+                        </p>
+                      </div>
+                      <Button
+                        v-if="capabilities?.capabilities?.createCategory"
+                        size="sm"
+                        variant="outline"
+                        :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                        @click="handleCreateExternalCategoryMapping"
+                      >
+                        <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                        <FolderTree v-else class="size-4 mr-2" />
+                        {{ isCreatingExternalCategory ? 'Создание...' : `Создать в ${adapterDisplayName}` }}
+                      </Button>
                     </div>
                     <div
                       v-else
@@ -2258,7 +2418,7 @@ export default {
                     <Label>Или введите ID категории вручную</Label>
                     <Input
                       v-model="newMapping.externalCategoryId"
-                      placeholder="ID категории маркетплейса"
+                      placeholder="ID категории адаптера"
                     />
                   </div>
 
@@ -2274,7 +2434,17 @@ export default {
                   <DialogClose as-child>
                     <Button variant="outline">Отмена</Button>
                   </DialogClose>
-                  <Button @click="handleCreateMapping" :disabled="isCreatingMapping">
+                  <Button
+                    v-if="capabilities?.capabilities?.createCategory"
+                    variant="outline"
+                    @click="handleCreateExternalCategoryMapping"
+                    :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                  >
+                    <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                    <FolderTree v-else class="size-4 mr-2" />
+                    {{ isCreatingExternalCategory ? 'Создание...' : `Создать в ${adapterDisplayName}` }}
+                  </Button>
+                  <Button @click="handleCreateMapping" :disabled="isCreatingMapping || isCreatingExternalCategory">
                     <Loader2 v-if="isCreatingMapping" class="size-4 mr-2 animate-spin" />
                     {{ isCreatingMapping ? 'Связывание...' : 'Связать' }}
                   </Button>
@@ -2317,6 +2487,9 @@ export default {
                     <Badge variant="outline">
                       {{ mapping.fieldMappingsCount }} полей
                     </Badge>
+                    <Badge v-if="mapping.linkedProductsCount" variant="secondary">
+                      {{ mapping.linkedProductsCount }} товаров
+                    </Badge>
                   </div>
                   <div class="flex items-center gap-2">
                     <DropdownMenu>
@@ -2344,7 +2517,7 @@ export default {
                           Дублировать
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem class="text-destructive" @click.stop="handleDeleteMapping(mapping.id)">
+                        <DropdownMenuItem class="text-destructive" @click.stop="handleDeleteMapping(mapping)">
                           <Trash2 class="size-4 mr-2" />
                           Удалить
                         </DropdownMenuItem>
@@ -2365,7 +2538,7 @@ export default {
               :variant="productsViewMode === 'external' ? 'default' : 'outline'"
               @click="switchProductsView('external')"
             >
-              МП товары
+              Товары адаптера
             </Button>
             <Button
               :variant="productsViewMode === 'local' ? 'default' : 'outline'"
@@ -2469,7 +2642,7 @@ export default {
                       <div v-if="product.isLinked" class="space-y-0.5">
                         <div class="font-medium">{{ formatPrice(product.localPrice) }}</div>
                         <div v-if="product.externalPrice !== null && product.externalPrice !== product.localPrice" class="text-xs text-muted-foreground">
-                          МП: {{ formatPrice(product.externalPrice) }}
+                          Адаптер: {{ formatPrice(product.externalPrice) }}
                         </div>
                       </div>
                       <span v-else class="text-muted-foreground">—</span>
@@ -2478,7 +2651,7 @@ export default {
                       <div v-if="product.isLinked" class="space-y-0.5">
                         <div class="font-medium">{{ product.localStock ?? '—' }}</div>
                         <div v-if="product.externalStock !== null && product.externalStock !== product.localStock" class="text-xs text-muted-foreground">
-                          МП: {{ product.externalStock }}
+                          Адаптер: {{ product.externalStock }}
                         </div>
                       </div>
                       <span v-else class="text-muted-foreground">—</span>
@@ -2496,7 +2669,7 @@ export default {
                           size="sm"
                           @click="handleImportSingle(product)"
                           :disabled="importingLinkId === product.linkId"
-                          title="Импорт с маркетплейса"
+                          title="Импорт с адаптера"
                         >
                           <Loader2 v-if="importingLinkId === product.linkId" class="size-4 animate-spin" />
                           <Download v-else class="size-4" />
@@ -2505,11 +2678,22 @@ export default {
                           variant="ghost"
                           size="sm"
                           @click="handleExportSingle(product)"
-                          :disabled="exportingLinkId === product.linkId"
-                          title="Экспорт на маркетплейс"
+                          :disabled="exportingLinkId === product.linkId || product.mappingMissing"
+                          title="Экспорт на адаптер"
                         >
                           <Loader2 v-if="exportingLinkId === product.linkId" class="size-4 animate-spin" />
                           <Upload v-else class="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="text-destructive hover:text-destructive"
+                          @click="handleUnlinkProduct(product)"
+                          :disabled="unlinkingLinkId === product.linkId"
+                          title="Отвязать товар"
+                        >
+                          <Loader2 v-if="unlinkingLinkId === product.linkId" class="size-4 animate-spin" />
+                          <Ban v-else class="size-4" />
                         </Button>
                       </div>
                       <span v-else class="text-muted-foreground">—</span>
@@ -2772,7 +2956,7 @@ export default {
               >
                 <Loader2 v-if="isExportingNewBulk" class="size-4 mr-2 animate-spin" />
                 <Upload v-else class="size-4 mr-2" />
-                Экспортировать на МП ({{ selectedLocalIds.length }})
+                Экспортировать на адаптер ({{ selectedLocalIds.length }})
               </Button>
             </div>
           </template>
@@ -2786,7 +2970,7 @@ export default {
         <DialogHeader>
           <DialogTitle>Подтверждение импорта</DialogTitle>
           <DialogDescription>
-            Следующие поля будут обновлены из маркетплейса
+            Следующие поля будут обновлены из адаптера
           </DialogDescription>
         </DialogHeader>
         <div v-if="singleImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
@@ -2842,7 +3026,7 @@ export default {
         <DialogHeader>
           <DialogTitle>Импорт товаров</DialogTitle>
           <DialogDescription>
-            Выберите локальную категорию для каждой категории маркетплейса
+            Выберите локальную категорию для каждой категории адаптера
           </DialogDescription>
         </DialogHeader>
 
@@ -2911,7 +3095,7 @@ export default {
                   <RadioGroupItem value="new" :id="`new-${group.externalCategoryId || '__none__'}`" class="mt-0.5 shrink-0" />
                   <Label :for="`new-${group.externalCategoryId || '__none__'}`" class="flex items-start gap-2 cursor-pointer">
                     <Sparkles class="size-4 text-warning mt-0.5 shrink-0" />
-                    <span v-if="group.externalCategoryId">Создать новую из МП: "{{ group.externalCategoryName }}"</span>
+                    <span v-if="group.externalCategoryId">Создать новую из адаптера: "{{ group.externalCategoryName }}"</span>
                     <span v-else>Создать новую категорию:</span>
                   </Label>
                   <Input
@@ -2970,6 +3154,87 @@ export default {
           <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
             <Loader2 v-if="isRenamingMapping" class="size-4 mr-2 animate-spin" />
             Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Delete Mapping Dialog -->
+    <Dialog v-model:open="showDeleteMappingDialog">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Удалить маппинг</DialogTitle>
+          <DialogDescription>
+            Этот маппинг используется товарами. Чтобы экспорт не сломался, переназначьте товары на другой маппинг той же категории.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-4">
+          <div class="rounded-md border p-3 text-sm">
+            <div class="font-medium">
+              {{ deleteMappingTarget?.localCategoryName }}
+              <span v-if="deleteMappingTarget?.name" class="text-muted-foreground font-normal">
+                — {{ deleteMappingTarget.name }}
+              </span>
+            </div>
+            <div class="text-muted-foreground">
+              Зависимых товаров: {{ deleteMappingImpact?.linkedProductsCount || deleteMappingTarget?.linkedProductsCount || 0 }}
+            </div>
+          </div>
+
+          <div v-if="deleteMappingImpact?.products?.length" class="space-y-2">
+            <Label>Примеры товаров</Label>
+            <div class="max-h-32 overflow-y-auto rounded-md border divide-y">
+              <div
+                v-for="product in deleteMappingImpact.products"
+                :key="product.id"
+                class="px-3 py-2 text-sm"
+              >
+                <div class="font-medium truncate">{{ product.name || `Товар #${product.id}` }}</div>
+                <div class="text-xs text-muted-foreground">{{ product.sku || `ID ${product.id}` }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <Label>Переназначить на</Label>
+            <Select
+              :model-value="deleteMappingReplacementId?.toString()"
+              @update:model-value="(value) => deleteMappingReplacementId = value"
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите маппинг..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="mapping in deleteMappingReplacementOptions"
+                  :key="mapping.id"
+                  :value="mapping.id.toString()"
+                >
+                  {{ mapping.name || `Маппинг #${mapping.id}` }}
+                  <span class="text-muted-foreground ml-1">
+                    ({{ mapping.externalCategoryName || mapping.externalCategoryId }})
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p v-if="deleteMappingReplacementOptions.length === 0" class="text-sm text-destructive">
+              Нет другого маппинга для этой локальной категории. Сначала создайте или продублируйте маппинг.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">Отмена</Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            @click="confirmDeleteMappingWithReassign"
+            :disabled="isDeletingMapping || !deleteMappingReplacementId"
+          >
+            <Loader2 v-if="isDeletingMapping" class="size-4 mr-2 animate-spin" />
+            Переназначить и удалить
           </Button>
         </DialogFooter>
       </DialogContent>

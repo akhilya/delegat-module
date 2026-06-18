@@ -97,6 +97,13 @@ public class MappingService
             result[mapping.externalFieldKey] = value;
         }
 
+        if (!result.ContainsKey("images"))
+        {
+            var imageUrls = GetProductImageUrlsAsync(product).GetAwaiter().GetResult();
+            if (imageUrls.Count > 0)
+                result["_imageUrls"] = imageUrls;
+        }
+
         // Attach field type metadata for the plugin
         result["_fieldTypes"] = fieldTypes;
 

@@ -482,7 +482,7 @@ export default {
             <EmptyState
               v-if="members.length === 0"
               title="Нет товаров"
-              description="Товары в группе синхронизируются на маркетплейсы как единое предложение"
+              description="Товары в группе синхронизируются на адаптеры как единое предложение"
             >
               <template #icon>
                 <Package class="size-12 mb-4 text-muted-foreground" />
@@ -569,7 +569,7 @@ export default {
             <div class="flex justify-between items-center">
               <h2 class="text-lg font-semibold flex items-center gap-2">
                 <Upload class="size-5" />
-                Синхронизация с маркетплейсами
+                Синхронизация с адаптерами
               </h2>
               <Button
                 variant="ghost"
@@ -582,7 +582,7 @@ export default {
             </div>
 
             <div v-if="connections.length === 0" class="text-sm text-muted-foreground">
-              Нет подключенных маркетплейсов
+              Нет подключенных адаптеров
             </div>
 
             <div v-else class="space-y-3">

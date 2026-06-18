@@ -141,6 +141,58 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         )).ToList();
     }
 
+    public async Task<Models.Marketplace.DTOs.CreateCategoryResult> CreateCategoryAsync(
+        MarketplaceConnection connection,
+        Models.Marketplace.DTOs.CreateCategoryRequest request,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var sdkRequest = new PrintO.Marketplace.SDK.DTOs.CreateCategoryRequest
+        {
+            Name = request.Name,
+            Description = request.Description,
+            ParentId = request.ParentId,
+            StoreId = request.StoreId,
+            LanguageId = request.LanguageId,
+            SortOrder = request.SortOrder,
+            Fields = request.Fields.Select(f => new PrintO.Marketplace.SDK.DTOs.CreateCategoryField
+            {
+                Key = f.Key,
+                Name = f.Name,
+                Type = f.Type,
+                IsRequired = f.IsRequired,
+                Description = f.Description,
+                Group = f.Group,
+                SortOrder = f.SortOrder,
+                Options = f.Options?.Select(o => new PrintO.Marketplace.SDK.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList()
+            }).ToList()
+        };
+
+        var result = await _plugin.CreateCategoryAsync(context, sdkRequest, ct);
+        return new Models.Marketplace.DTOs.CreateCategoryResult(
+            result.Success,
+            result.ExternalCategoryId,
+            result.ExternalCategoryName,
+            result.Fields?.Select(f => new Models.Marketplace.DTOs.ExternalField(
+                f.Key,
+                f.Name,
+                f.IsRequired,
+                f.Type,
+                f.Options?.Select(o => new Models.Marketplace.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList(),
+                f.Description,
+                f.Unit,
+                f.MaxLength,
+                f.MinValue,
+                f.MaxValue,
+                f.ValidationPattern,
+                f.Group,
+                f.SortOrder,
+                f.IsAspect
+            )).ToList(),
+            result.ErrorMessage,
+            result.Details);
+    }
+
     #endregion
 
     #region Products
@@ -279,7 +331,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 i.LocalProductId,
                 i.Success,
                 i.ExternalProductId,
-                i.ErrorMessage
+                i.ErrorMessage,
+                i.Details
             )).ToList()
         );
     }

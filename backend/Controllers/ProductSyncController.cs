@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PrintO.Enums;
@@ -306,6 +307,38 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
+    /// Remove a local marketplace link without deleting the external product.
+    /// </summary>
+    [HttpDelete]
+    [Route("/marketplace/links/{linkId}")]
+    public async Task<IActionResult> UnlinkProduct(int linkId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var link = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.connection.storeId == selectedStoreId.Value, ct);
+
+        if (link == null)
+            throw ApiException.NotFound("Связь не найдена");
+
+        var productId = link.productId;
+        var externalProductId = link.externalProductId;
+
+        _context.productMarketplaceLinks.Remove(link);
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            success = true,
+            productId,
+            externalProductId
+        });
+    }
+
+    /// <summary>
     /// Re-link a product to a different external marketplace product.
     /// </summary>
     [HttpPost]
@@ -547,7 +580,8 @@ public class ProductSyncController : ControllerBase
         var externalIds = pagedResult.Items.Select(p => p.ExternalId).ToList();
         var existingLinks = await linkRepo.FindAllAsync(
             l => l.connectionId == connectionId && externalIds.Contains(l.externalProductId),
-            q => q.Include(l => l.product));
+            q => q.Include(l => l.product)
+                .Include(l => l.categoryMapping));
         var linkedExternalIds = existingLinks.ToDictionary(l => l.externalProductId, l => l);
 
         // Build items with link status
@@ -569,6 +603,8 @@ public class ProductSyncController : ControllerBase
                 isLinked,
                 linkId = isLinked ? existingLink!.Id : (int?)null,
                 linkStatus = isLinked ? existingLink!.status.ToString() : null,
+                categoryMappingId = isLinked ? existingLink!.categoryMappingId : null,
+                mappingMissing = isLinked && (existingLink!.categoryMappingId == null || existingLink.categoryMapping == null),
                 localProductId = isLinked ? existingLink!.productId : (int?)null,
                 localProductSku = isLinked ? existingLink!.product?.sku : null,
                 localProductName = isLinked ? existingLink!.product?.name : null,
@@ -1488,7 +1524,9 @@ public class ProductSyncController : ControllerBase
 
         // Get existing links
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
-        var existingLinks = await linkRepo.FindAllAsync(l => l.productId == productId);
+        var existingLinks = await linkRepo.FindAllAsync(
+            l => l.productId == productId,
+            q => q.Include(l => l.categoryMapping));
         var linkByConnectionId = existingLinks.ToDictionary(l => l.connectionId, l => l);
 
         // Get all active connections
@@ -1525,6 +1563,7 @@ public class ProductSyncController : ControllerBase
                     needsMapping = !hasMapping && product.categoryId.HasValue,
                     // Multi-mapping: all available mappings + selected one from link
                     selectedMappingId = link?.categoryMappingId,
+                    mappingMissing = isLinked && (link?.categoryMappingId == null || link.categoryMapping == null),
                     availableMappings = mappingsByConnectionId.TryGetValue(conn.Id, out var connMappings)
                         ? connMappings.Select(m => (object)new {
                             id = m.Id,
@@ -2424,12 +2463,18 @@ public class ProductSyncController : ControllerBase
                             results.Add(new { linkId, success = true, externalProductId = item.ExternalProductId });
                             successCount++;
                             await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "success", $"Экспортирован: #{item.ProductId}");
+                            var details = FormatExportDetails(item.Details);
+                            if (details != null)
+                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info", $"#{item.ProductId}: {details}");
                         }
                         else
                         {
                             results.Add(new { linkId, success = false, error = item.ErrorMessage });
                             failedCount++;
                             await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Ошибка #{item.ProductId}: {item.ErrorMessage}");
+                            var details = FormatExportDetails(item.Details);
+                            if (details != null)
+                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"#{item.ProductId}: {details}");
                         }
                     }
                 }
@@ -2626,6 +2671,24 @@ public class ProductSyncController : ControllerBase
             throw ApiException.NotFound("Подключение не найдено");
 
         return connection;
+    }
+
+    private static string? FormatExportDetails(Dictionary<string, object>? details)
+    {
+        if (details == null || details.Count == 0)
+            return null;
+
+        try
+        {
+            if (details.TryGetValue("images", out var images))
+                return $"Детали экспорта изображений: {JsonSerializer.Serialize(images)}";
+
+            return $"Детали экспорта: {JsonSerializer.Serialize(details)}";
+        }
+        catch
+        {
+            return "Детали экспорта получены, но не удалось сериализовать их для лога";
+        }
     }
 
     #endregion

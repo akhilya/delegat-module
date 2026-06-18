@@ -583,11 +583,11 @@ export default {
           if (failed.length > 0) {
             const details = failed.map((r) => `${r.name}: ${r.error}`).join("\n");
             displaySonnerSuccess(
-              `Артикул изменён локально. Ошибки на маркетплейсах (${failed.length}):\n${details}`,
+              `Артикул изменён локально. Ошибки на адаптерах (${failed.length}):\n${details}`,
             );
           } else if (mpResults.length > 0) {
             displaySonnerSuccess(
-              `Артикул изменён локально и на ${mpResults.length} маркетплейс(ах)`,
+              `Артикул изменён локально и на ${mpResults.length} адаптер(ах)`,
             );
           } else {
             displaySonnerSuccess("Артикул изменён");
@@ -879,7 +879,7 @@ export default {
             <TabsTrigger value="files">Файлы</TabsTrigger>
             <TabsTrigger value="images"><span class="sm:hidden">Фото</span><span class="hidden sm:inline">Изображения</span></TabsTrigger>
             <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
-            <TabsTrigger value="marketplaces"><span class="sm:hidden">МП</span><span class="hidden sm:inline">Маркетплейсы</span></TabsTrigger>
+            <TabsTrigger value="marketplaces"><span class="sm:hidden">АД</span><span class="hidden sm:inline">Адаптеры</span></TabsTrigger>
           </TabsList>
         </Tabs>
       </template>
@@ -1025,7 +1025,7 @@ export default {
                       <DialogHeader>
                         <DialogTitle>Изменить артикул</DialogTitle>
                         <DialogDescription>
-                          Артикул будет изменён локально и на всех привязанных маркетплейсах.
+                          Артикул будет изменён локально и на всех привязанных адаптерах.
                         </DialogDescription>
                       </DialogHeader>
                       <div class="space-y-4 py-4">

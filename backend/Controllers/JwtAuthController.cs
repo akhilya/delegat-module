@@ -47,6 +47,9 @@ public class JwtAuthController : ControllerBase
         if (user == null)
             throw ApiException.Unauthorized("Неверные учётные данные");
 
+        if (!user.isActive)
+            throw ApiException.Forbidden("Пользователь деактивирован");
+
         var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, lockoutOnFailure: true);
         if (result.IsLockedOut)
             return StatusCode(429, new { title = "Account locked. Try again later.", status = 429 });
@@ -77,7 +80,7 @@ public class JwtAuthController : ControllerBase
         if (tokenEntity.used)
             throw ApiException.BadRequest("Токен уже использован");
 
-        var user = new User { UserName = input.userName };
+        var user = new User { UserName = input.userName, isActive = true };
         var result = await _userManager.CreateAsync(user, input.password);
 
         if (!result.Succeeded)
@@ -110,12 +113,21 @@ public class JwtAuthController : ControllerBase
     [HttpGet]
     [Route("auth/isAuthenticated")]
     [AllowAnonymous]
-    public IActionResult GetIsAuthenticated()
+    public async Task<IActionResult> GetIsAuthenticated()
     {
         var userId = _userManager.GetUserId(User);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Ok(new
+            {
+                isAuthenticated = false
+            });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
         return Ok(new
         {
-            isAuthenticated = !string.IsNullOrEmpty(userId)
+            isAuthenticated = user?.isActive == true
         });
     }
 
@@ -128,7 +140,7 @@ public class JwtAuthController : ControllerBase
             throw ApiException.Unauthorized();
 
         var user = await _userManager.FindByIdAsync(userId);
-        if (user == null)
+        if (user == null || !user.isActive)
             throw ApiException.NotFound("Пользователь не найден");
 
         // Sync selected_store_id cookie with DB value
@@ -187,7 +199,7 @@ public class JwtAuthController : ControllerBase
 
             var userId = refreshToken.userId;
             var user = await _userManager.FindByIdAsync(userId.ToString());
-            if (user == null)
+            if (user == null || !user.isActive)
                 throw ApiException.Unauthorized("Пользователь не найден");
 
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
