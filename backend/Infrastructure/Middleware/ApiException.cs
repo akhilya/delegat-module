@@ -14,8 +14,9 @@ public class ApiException : Exception
         string message = "An error occurred while processing your request.",
         int statusCode = StatusCodes.Status400BadRequest,
         Dictionary<string, string[]>? errors = null,
-        object? data = null)
-        : base(message)
+        object? data = null,
+        Exception? innerException = null)
+        : base(message, innerException)
     {
         StatusCode = statusCode;
         Errors = errors;
@@ -33,6 +34,12 @@ public class ApiException : Exception
     /// </summary>
     public static ApiException BadRequest(string message, object? data)
         => new(message, StatusCodes.Status400BadRequest, data: data);
+
+    /// <summary>
+    /// Create a BadRequest exception with structured details and original exception.
+    /// </summary>
+    public static ApiException BadRequest(string message, object? data, Exception? innerException)
+        => new(message, StatusCodes.Status400BadRequest, data: data, innerException: innerException);
 
     /// <summary>
     /// Create a BadRequest exception with multiple error messages

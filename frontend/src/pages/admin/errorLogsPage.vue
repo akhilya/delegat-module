@@ -16,7 +16,16 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw, Trash2 } from "lucide-vue-next";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Loader2,
+  RefreshCw,
+  Trash2,
+} from "lucide-vue-next";
 
 export default {
   components: {
@@ -34,8 +43,10 @@ export default {
     TableHeader,
     TableRow,
     AlertTriangle,
+    Check,
     ChevronDown,
     ChevronRight,
+    Copy,
     Loader2,
     RefreshCw,
     Trash2,
@@ -46,6 +57,7 @@ export default {
       expandedLogId: null,
       isLoading: false,
       deletingLogId: null,
+      copiedLogId: null,
       breadcrumbs: [{ label: "Логи ошибок" }],
     };
   },
@@ -86,6 +98,38 @@ export default {
         },
       });
       this.deletingLogId = null;
+    },
+
+    buildLogDetails(log) {
+      return [
+        `Время: ${this.formatDate(log.createdAt)}`,
+        `Статус: ${log.statusCode}`,
+        `Метод: ${log.method}`,
+        `Путь: ${this.formatPath(log)}`,
+        `Сообщение: ${log.message || "-"}`,
+        `Тип ошибки: ${log.exceptionType || "-"}`,
+        `Пользователь: ${log.userName || log.userId || "-"}`,
+        `Trace ID: ${log.traceIdentifier || "-"}`,
+        "",
+        "Stack trace:",
+        log.stackTrace || "-",
+      ].join("\n");
+    },
+
+    async copyLogDetails(log) {
+      try {
+        await navigator.clipboard.writeText(this.buildLogDetails(log));
+        this.copiedLogId = log.id;
+        displaySonnerSuccess("Детали ошибки скопированы");
+
+        window.setTimeout(() => {
+          if (this.copiedLogId === log.id) {
+            this.copiedLogId = null;
+          }
+        }, 1500);
+      } catch {
+        displaySonnerError("Не удалось скопировать детали ошибки");
+      }
     },
 
     formatDate(value) {
@@ -143,7 +187,7 @@ export default {
               <TableHead class="w-28">Метод</TableHead>
               <TableHead>Ошибка</TableHead>
               <TableHead class="w-44">Пользователь</TableHead>
-              <TableHead class="w-20"></TableHead>
+              <TableHead class="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -176,17 +220,28 @@ export default {
                 <TableCell class="text-sm">
                   {{ log.userName || log.userId || "-" }}
                 </TableCell>
-                <TableCell class="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    :disabled="deletingLogId === log.id"
-                    @click="removeLog(log)"
-                  >
-                    <Loader2 v-if="deletingLogId === log.id" class="size-4 animate-spin" />
-                    <Trash2 v-else class="size-4" />
-                    <span class="sr-only">Удалить лог</span>
-                  </Button>
+                <TableCell>
+                  <div class="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      @click="copyLogDetails(log)"
+                    >
+                      <Check v-if="copiedLogId === log.id" class="size-4" />
+                      <Copy v-else class="size-4" />
+                      <span class="sr-only">Скопировать детали ошибки</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      :disabled="deletingLogId === log.id"
+                      @click="removeLog(log)"
+                    >
+                      <Loader2 v-if="deletingLogId === log.id" class="size-4 animate-spin" />
+                      <Trash2 v-else class="size-4" />
+                      <span class="sr-only">Удалить лог</span>
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
               <TableRow v-if="expandedLogId === log.id" class="bg-muted/30 hover:bg-muted/30">

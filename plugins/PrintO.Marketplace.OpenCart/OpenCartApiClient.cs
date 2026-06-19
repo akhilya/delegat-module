@@ -149,36 +149,64 @@ public sealed class OpenCartApiClient
     {
         _logger?.LogDebug("OpenCart request: {Method} {Uri}", request.Method, request.RequestUri);
 
-        using var response = await SharedHttpClient.SendAsync(request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var message = ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "OpenCart API error";
-            throw new OpenCartApiException((int)response.StatusCode, message, body);
-        }
-
-        if (string.IsNullOrWhiteSpace(body))
-            return Activator.CreateInstance<TResponse>();
-
-        TResponse? result;
+        HttpResponseMessage response;
         try
         {
-            result = JsonSerializer.Deserialize<TResponse>(body, JsonOptions);
+            response = await SharedHttpClient.SendAsync(request, ct);
         }
-        catch (JsonException)
+        catch (OpenCartApiException)
         {
-            var preview = body.Length > 500 ? body[..500] : body;
+            throw;
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
             throw new OpenCartApiException(
-                (int)HttpStatusCode.OK,
-                $"OpenCart bridge returned a non-JSON response: {preview}",
-                body);
+                (int)HttpStatusCode.GatewayTimeout,
+                $"OpenCart bridge did not respond within {SharedHttpClient.Timeout.TotalSeconds:0} seconds",
+                null,
+                ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new OpenCartApiException(
+                0,
+                $"OpenCart bridge network error: {ex.Message}",
+                null,
+                ex);
         }
 
-        if (result == null)
-            throw new OpenCartApiException((int)HttpStatusCode.OK, "OpenCart API returned an empty response", body);
+        using (response)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
 
-        return result;
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "OpenCart API error";
+                throw new OpenCartApiException((int)response.StatusCode, message, body);
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+                return Activator.CreateInstance<TResponse>();
+
+            TResponse? result;
+            try
+            {
+                result = JsonSerializer.Deserialize<TResponse>(body, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                var preview = body.Length > 500 ? body[..500] : body;
+                throw new OpenCartApiException(
+                    (int)HttpStatusCode.OK,
+                    $"OpenCart bridge returned a non-JSON response: {preview}",
+                    body);
+            }
+
+            if (result == null)
+                throw new OpenCartApiException((int)HttpStatusCode.OK, "OpenCart API returned an empty response", body);
+
+            return result;
+        }
     }
 
     private Uri BuildUri(string action, Dictionary<string, string?>? query)

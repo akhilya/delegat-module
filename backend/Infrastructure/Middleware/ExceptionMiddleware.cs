@@ -32,7 +32,14 @@ public class ExceptionMiddleware
         }
         catch (ApiException ex)
         {
+            if (ex.StatusCode >= (int)HttpStatusCode.InternalServerError || ex.Data != null)
+                await PersistErrorLogAsync(context, ex, ex.StatusCode);
+
             await HandleApiExceptionAsync(context, ex);
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogDebug("Request was canceled by client: {Method} {Path}", context.Request.Method, context.Request.Path);
         }
         catch (Exception ex)
         {

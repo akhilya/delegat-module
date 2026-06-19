@@ -572,22 +572,86 @@ public class ProductSyncController : ControllerBase
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
             throw ApiException.BadRequest("Адаптер не поддерживает получение списка товаров");
 
-        // Get products from marketplace
-        var pagedResult = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, offerIdSearch, ct);
+        Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct> pagedResult;
+        try
+        {
+            pagedResult = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, offerIdSearch, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to get external products from adapter {AdapterKey} for connection {ConnectionId}",
+                connection.adapterKey,
+                connectionId);
 
-        // Get existing links to detect linked products
-        var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
+            throw ApiException.BadRequest(
+                $"Не удалось получить товары из адаптера {adapter.DisplayName}: {ex.Message}",
+                new
+                {
+                    adapterKey = connection.adapterKey,
+                    connectionId,
+                    operation = "external-products",
+                    errorType = ex.GetType().FullName
+                },
+                ex);
+        }
+
         var externalIds = pagedResult.Items.Select(p => p.ExternalId).ToList();
-        var existingLinks = await linkRepo.FindAllAsync(
-            l => l.connectionId == connectionId && externalIds.Contains(l.externalProductId),
-            q => q.Include(l => l.product)
-                .Include(l => l.categoryMapping));
+        var existingLinks = await _context.productMarketplaceLinks
+            .AsNoTracking()
+            .Where(l => l.connectionId == connectionId && externalIds.Contains(l.externalProductId))
+            .Include(l => l.product)
+            .ToListAsync(ct);
         var linkedExternalIds = existingLinks.ToDictionary(l => l.externalProductId, l => l);
+
+        var selectedMappingIds = existingLinks
+            .Where(l => l.categoryMappingId.HasValue)
+            .Select(l => l.categoryMappingId!.Value)
+            .Distinct()
+            .ToList();
+
+        var productCategoryIds = existingLinks
+            .Where(l => l.product != null && l.product.categoryId.HasValue)
+            .Select(l => l.product.categoryId!.Value)
+            .Distinct()
+            .ToList();
+
+        var availableMappings = selectedMappingIds.Count > 0 || productCategoryIds.Count > 0
+            ? await _context.categoryMappings
+                .AsNoTracking()
+                .Where(m => m.connectionId == connectionId &&
+                    (selectedMappingIds.Contains(m.Id) ||
+                     productCategoryIds.Contains(m.localCategoryId)))
+                .ToListAsync(ct)
+            : new List<CategoryMapping>();
+        var mappingsById = availableMappings.ToDictionary(m => m.Id, m => m);
+        var mappingsByLocalCategoryId = availableMappings
+            .GroupBy(m => m.localCategoryId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Build items with link status
         var items = pagedResult.Items.Select(product =>
         {
             var isLinked = linkedExternalIds.TryGetValue(product.ExternalId, out var existingLink);
+            CategoryMapping? resolvedMapping = null;
+
+            if (isLinked)
+            {
+                if (existingLink!.categoryMappingId.HasValue)
+                {
+                    mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out resolvedMapping);
+                }
+                else if (existingLink.product?.categoryId is int localCategoryId &&
+                         mappingsByLocalCategoryId.TryGetValue(localCategoryId, out var localCategoryMappings) &&
+                         localCategoryMappings.Count == 1)
+                {
+                    resolvedMapping = localCategoryMappings[0];
+                }
+            }
 
             return new
             {
@@ -603,8 +667,9 @@ public class ProductSyncController : ControllerBase
                 isLinked,
                 linkId = isLinked ? existingLink!.Id : (int?)null,
                 linkStatus = isLinked ? existingLink!.status.ToString() : null,
-                categoryMappingId = isLinked ? existingLink!.categoryMappingId : null,
-                mappingMissing = isLinked && (existingLink!.categoryMappingId == null || existingLink.categoryMapping == null),
+                categoryMappingId = resolvedMapping?.Id,
+                categoryMappingName = resolvedMapping?.name,
+                mappingMissing = isLinked && resolvedMapping == null,
                 localProductId = isLinked ? existingLink!.productId : (int?)null,
                 localProductSku = isLinked ? existingLink!.product?.sku : null,
                 localProductName = isLinked ? existingLink!.product?.name : null,
