@@ -19,6 +19,9 @@ COPY backend/ backend/
 COPY sdk/ sdk/
 COPY plugins/ plugins/
 
+# Do not let host build artifacts overwrite Linux restore outputs.
+RUN find backend sdk plugins -type d \( -name bin -o -name obj -o -name .vs \) -prune -exec rm -rf {} +
+
 # Publish backend app
 RUN dotnet publish backend/PrintO.csproj -a $TARGETARCH -c Release -o /app
 

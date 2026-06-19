@@ -32,6 +32,12 @@ node_modules/
 backend/bin/
 backend/obj/
 backend/.vs/
+sdk/**/bin/
+sdk/**/obj/
+sdk/**/.vs/
+plugins/**/bin/
+plugins/**/obj/
+plugins/**/.vs/
 backend/Properties/
 backend/appsettings.json
 backend/appsettings.*.json
