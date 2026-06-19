@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PrintO.Marketplace.OpenCart.Models;
 using PrintO.Marketplace.SDK;
@@ -265,11 +266,21 @@ public sealed class OpenCartPlugin : MarketplacePluginBase
             };
 
             var response = await CreateClient(context).CreateCategoryAsync(payload, ct);
+            var categoryId = response.CategoryId ?? response.Id;
+            var responseMessage = response.Message ?? response.Error;
+            var responseDetails = BuildResponseDetails(response);
+
             if (!response.Success)
                 return new CreateCategoryResult(
                     false,
-                    ErrorMessage: response.Message ?? "OpenCart rejected category creation",
-                    Details: response.Details);
+                    ErrorMessage: responseMessage ?? "OpenCart rejected category creation",
+                    Details: responseDetails);
+
+            if (string.IsNullOrWhiteSpace(categoryId))
+                return new CreateCategoryResult(
+                    false,
+                    ErrorMessage: responseMessage ?? "OpenCart bridge created category but did not return category id",
+                    Details: responseDetails);
 
             var fields = response.Fields != null && response.Fields.Count > 0
                 ? response.Fields
@@ -289,15 +300,15 @@ public sealed class OpenCartPlugin : MarketplacePluginBase
                         f.Group,
                         f.SortOrder))
                     .ToList()
-                : await GetCategoryFieldsAsync(context, response.CategoryId ?? "", ct);
+                : await GetCategoryFieldsAsync(context, categoryId, ct);
 
             return new CreateCategoryResult(
                 true,
-                response.CategoryId,
+                categoryId,
                 response.Name ?? request.Name,
                 fields,
-                response.Message,
-                response.Details);
+                responseMessage,
+                responseDetails);
         }
         catch (OpenCartApiException ex)
         {
@@ -715,6 +726,31 @@ public sealed class OpenCartPlugin : MarketplacePluginBase
             ["statusCode"] = ex.StatusCode,
             ["response"] = ex.ResponseBody ?? ""
         };
+
+    private static Dictionary<string, object>? BuildResponseDetails(OpenCartCreateCategoryResponse response)
+    {
+        var details = response.Details != null
+            ? new Dictionary<string, object>(response.Details)
+            : new Dictionary<string, object>();
+
+        if (response.ExtensionData != null)
+        {
+            foreach (var (key, value) in response.ExtensionData)
+            {
+                details[key] = value.ValueKind switch
+                {
+                    JsonValueKind.String => value.GetString() ?? "",
+                    JsonValueKind.Number => value.TryGetInt64(out var number) ? number : value.GetRawText(),
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Null => "",
+                    _ => value.GetRawText()
+                };
+            }
+        }
+
+        return details.Count > 0 ? details : null;
+    }
 
     private static void FlattenCategory(
         OpenCartCategoryDto category,

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace PrintO.Marketplace.OpenCart.Models;
 
 public sealed class OpenCartInfoResponse
@@ -72,10 +75,14 @@ public sealed class OpenCartCreateCategoryResponse
 {
     public bool Success { get; set; } = true;
     public string? CategoryId { get; set; }
+    public string? Id { get; set; }
     public string? Name { get; set; }
     public string? Message { get; set; }
+    public string? Error { get; set; }
     public List<OpenCartFieldDto>? Fields { get; set; }
     public Dictionary<string, object>? Details { get; set; }
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class OpenCartProductPayload

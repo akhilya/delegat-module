@@ -217,9 +217,17 @@ public class CategoryMappingController : ControllerBase
 
         var result = await adapter.CreateCategoryAsync(connection, request, ct);
         if (!result.Success || string.IsNullOrWhiteSpace(result.ExternalCategoryId))
+        {
+            var errorMessage = !string.IsNullOrWhiteSpace(result.ErrorMessage)
+                ? result.ErrorMessage
+                : result.Success
+                    ? "Адаптер сообщил об успешном создании категории, но не вернул внешний ID категории"
+                    : "Не удалось создать категорию в маркетплейсе";
+
             throw ApiException.BadRequest(
-                result.ErrorMessage ?? "Не удалось создать категорию в маркетплейсе",
+                errorMessage,
                 result.Details);
+        }
 
         var mapping = new CategoryMapping();
         mapping.AddFill(new CategoryMapping.AddForm
