@@ -111,6 +111,17 @@ public class UserController : ControllerBase
         if (!result.Succeeded)
             throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
 
+        if (input.password != null)
+        {
+            if (string.IsNullOrWhiteSpace(input.password))
+                throw ApiException.BadRequest("Пароль не может быть пустым");
+
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, input.password);
+            if (!passwordResult.Succeeded)
+                throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
+        }
+
         return Ok(user.MapToDTO(_serviceProvider));
     }
 
@@ -169,6 +180,7 @@ public class UserController : ControllerBase
     public struct UpdateUserForm
     {
         public string? userName { get; set; }
+        public string? password { get; set; }
         public bool? isAdmin { get; set; }
         public bool? isActive { get; set; }
     }

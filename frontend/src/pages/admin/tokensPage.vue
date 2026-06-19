@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -16,12 +17,11 @@ import {
 } from "@/components/ui/table";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Card } from "@/components/ui/card";
 
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -39,8 +39,6 @@ export default {
     TableRow,
     Badge,
     PageHeader,
-    EmptyState,
-    Card,
   },
   data() {
     return {
@@ -150,19 +148,21 @@ export default {
       </div>
     </div>
 
-    <Card class="p-0 gap-0 h-full w-full grow mb-4 overflow-hidden">
-      <EmptyState v-if="isLoading" loading />
-      <EmptyState v-else-if="tokens.length === 0" title="Нет токенов" description="Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину">
-        <template #icon>
-          <Key class="size-12 mb-4 text-muted-foreground" />
-        </template>
+    <PageSection
+      :loading="isLoading"
+      :empty="tokens.length === 0"
+      :empty-icon="Key"
+      empty-title="Нет токенов"
+      empty-description="Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину"
+    >
+      <template #empty-action>
         <Button @click="handleCreateToken" :disabled="isCreating">
           <Plus class="size-4 mr-2" />
           Создать токен
         </Button>
-      </EmptyState>
+      </template>
 
-      <div v-else>
+      <div class="overflow-hidden rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -214,6 +214,6 @@ export default {
           </TableBody>
         </Table>
       </div>
-    </Card>
+    </PageSection>
   </Page>
 </template>

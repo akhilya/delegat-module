@@ -71,7 +71,7 @@ export default {
     async updateAdminUser(ctx, { userId, data, onSuccess, onError }) {
       try {
         const response = await http.patch(`/users/${userId}`, data, { cache: false });
-        onSuccess({ data: response.data });
+        await onSuccess({ data: response.data });
       } catch (error) {
         onError(error);
       }

@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -58,6 +59,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -202,7 +204,7 @@ export default {
           this.resetForm();
           this.showCreateDialog = false;
           const data = extractResponseData(response, {});
-          this.$router.push(`/marketplace/${data.id}`);
+          this.$router.push(`/adapter/${data.id}`);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -238,7 +240,7 @@ export default {
     },
 
     openConnection(connectionId) {
-      this.$router.push(`/marketplace/${connectionId}`);
+      this.$router.push(`/adapter/${connectionId}`);
     },
 
     getAdapterName(adapterKey) {
@@ -285,7 +287,7 @@ export default {
               <template #icon>
                 <Package class="size-12 mb-4 text-muted-foreground" />
               </template>
-              <Button variant="outline" class="mt-4" @click="$router.push('/marketplace/plugins')">
+              <Button variant="outline" class="mt-4" @click="$router.push('/adapter/plugins')">
                 Перейти к плагинам
               </Button>
             </EmptyState>
@@ -366,19 +368,15 @@ export default {
       </Dialog>
     </PageHeader>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <EmptyState
-        v-if="isLoading || connections.length === 0"
-        :loading="isLoading"
-        title="Нет подключений к адаптерам"
-        description="Добавьте первое подключение для синхронизации товаров"
-      >
-        <template #icon>
-          <Store class="size-12 mb-4 text-muted-foreground" />
-        </template>
-      </EmptyState>
+    <PageSection
+      :loading="isLoading"
+      :empty="connections.length === 0"
+      :empty-icon="Store"
+      empty-title="Нет подключений к адаптерам"
+      empty-description="Добавьте первое подключение для синхронизации товаров"
+    >
 
-      <Card v-else class="p-0 gap-0 overflow-hidden">
+      <Card class="p-0 gap-0 overflow-hidden">
         <ul class="divide-y divide-border/60">
           <li
             v-for="conn in connections"
@@ -451,6 +449,6 @@ export default {
           </li>
         </ul>
       </Card>
-    </div>
+    </PageSection>
   </Page>
 </template>

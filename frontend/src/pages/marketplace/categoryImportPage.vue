@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -34,6 +35,7 @@ import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION } from "@/router";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -91,7 +93,7 @@ export default {
     breadcrumbs() {
       return [
         { label: "Адаптеры", to: PAGE_MARKETPLACE },
-        { label: this.connection?.name || "Подключение", to: `/marketplace/${this.connectionId}` },
+        { label: this.connection?.name || "Подключение", to: `/adapter/${this.connectionId}` },
         { label: "Импорт категории" },
       ];
     },
@@ -277,7 +279,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(result.message || "Категория импортирована");
-          this.$router.push(`/marketplace/${this.connectionId}?tab=mappings`);
+          this.$router.push(`/adapter/${this.connectionId}?tab=mappings`);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -297,19 +299,16 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="size-8 animate-spin text-muted-foreground" />
-    </div>
-
-    <div v-else class="flex flex-col flex-1 mb-4 space-y-4">
+    <PageSection :loading="isLoading" class="flex flex-col space-y-4">
+    <div class="flex flex-col flex-1 space-y-4">
       <!-- Header -->
       <div class="flex items-center gap-4">
-        <Button variant="ghost" size="icon" @click="$router.push(`/marketplace/${connectionId}?tab=mappings`)">
+        <Button variant="ghost" size="icon" @click="$router.push(`/adapter/${connectionId}?tab=mappings`)">
           <ArrowLeft class="size-4" />
         </Button>
         <div>
-          <h1 class="text-2xl font-bold">Импорт категории</h1>
-          <p class="text-muted-foreground">{{ connection?.name }}</p>
+          <h1 class="text-lg font-semibold">Импорт категории</h1>
+          <p class="text-sm text-muted-foreground">{{ connection?.name }}</p>
         </div>
       </div>
 
@@ -506,5 +505,6 @@ export default {
         </Button>
       </div>
     </div>
+    </PageSection>
   </Page>
 </template>

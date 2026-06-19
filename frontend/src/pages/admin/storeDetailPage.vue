@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -34,12 +35,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Card } from "@/components/ui/card";
 import { PAGE_ADMIN_STORES, setPageTitle } from "@/router";
 
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -70,7 +71,6 @@ export default {
     TableHeader,
     TableRow,
     EmptyState,
-    Card,
   },
   data() {
     return {
@@ -182,12 +182,8 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <Card class="h-full w-full grow mb-4 p-4 gap-0">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-      </div>
-
-      <div v-else-if="store" class="space-y-4">
+    <PageSection :loading="isLoading">
+      <div v-if="store" class="space-y-4">
         <div class="flex justify-between items-center">
           <h2 class="text-lg font-semibold flex items-center gap-2">
             <Users class="size-5" />
@@ -283,6 +279,6 @@ export default {
           </Table>
         </div>
       </div>
-    </Card>
+    </PageSection>
   </Page>
 </template>

@@ -17,6 +17,7 @@ const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
 const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
 const AdminTokensPage = () => import("./pages/admin/tokensPage.vue");
+const AdminErrorLogsPage = () => import("./pages/admin/errorLogsPage.vue");
 const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
 const MarketplaceConnectionPage = () => import("./pages/marketplace/connectionPage.vue");
 const MarketplaceCategoryImportPage = () => import("./pages/marketplace/categoryImportPage.vue");
@@ -40,11 +41,12 @@ export const PAGE_ADMIN_STORES = "/admin/stores";
 export const PAGE_ADMIN_STORE_DETAIL = "/admin/stores/:id";
 export const PAGE_ADMIN_USERS = "/admin/users";
 export const PAGE_ADMIN_TOKENS = "/admin/tokens";
-export const PAGE_MARKETPLACE = "/marketplace";
-export const PAGE_MARKETPLACE_PLUGINS = "/marketplace/plugins";
-export const PAGE_MARKETPLACE_CONNECTION = "/marketplace/:connId";
-export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/marketplace/:connId/categories/import";
-export const PAGE_MARKETPLACE_FIELD_MAPPING = "/marketplace/:connId/categories/:mappingId";
+export const PAGE_ADMIN_ERROR_LOGS = "/admin/error-logs";
+export const PAGE_MARKETPLACE = "/adapter";
+export const PAGE_MARKETPLACE_PLUGINS = "/adapter/plugins";
+export const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
+export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/adapter/:connId/categories/import";
+export const PAGE_MARKETPLACE_FIELD_MAPPING = "/adapter/:connId/categories/:mappingId";
 
 // Track whether a page component set a custom title (prevents afterEach from overwriting it on tab/query changes)
 let _customTitle = null;
@@ -66,6 +68,7 @@ export const routes = [
   { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage, meta: { title: "Магазин" } },
   { path: PAGE_ADMIN_USERS, component: AdminUsersPage, meta: { title: "Пользователи" } },
   { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage, meta: { title: "Токены" } },
+  { path: PAGE_ADMIN_ERROR_LOGS, component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
   { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
   { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },
@@ -73,6 +76,11 @@ export const routes = [
   { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { title: "Подключение" } },
   { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { title: "Импорт категории" } },
   { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage, meta: { title: "Маппинг полей" } },
+  { path: "/marketplace/:connId/categories/import", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/import`, query: to.query }) },
+  { path: "/marketplace/:connId/categories/:mappingId", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/${to.params.mappingId}`, query: to.query }) },
+  { path: "/marketplace/plugins", redirect: PAGE_MARKETPLACE_PLUGINS },
+  { path: "/marketplace/:connId", redirect: to => ({ path: `/adapter/${to.params.connId}`, query: to.query }) },
+  { path: "/marketplace", redirect: PAGE_MARKETPLACE },
 ];
 routes.forEach((r) => (r.name = r.path));
 

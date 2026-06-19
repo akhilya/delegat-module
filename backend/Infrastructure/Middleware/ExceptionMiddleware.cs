@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using PrintO.Services;
 
 namespace PrintO.Infrastructure.Middleware;
 
@@ -36,8 +37,17 @@ public class ExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception occurred: {Message}", ex.Message);
+            await PersistErrorLogAsync(context, ex, (int)HttpStatusCode.InternalServerError);
             await HandleExceptionAsync(context, ex);
         }
+    }
+
+    private static async Task PersistErrorLogAsync(HttpContext context, Exception exception, int statusCode)
+    {
+        var errorLogService = context.RequestServices.GetService<IErrorLogService>();
+        if (errorLogService == null) return;
+
+        await errorLogService.LogAsync(context, exception, statusCode);
     }
 
     private Task HandleApiExceptionAsync(HttpContext context, ApiException exception)

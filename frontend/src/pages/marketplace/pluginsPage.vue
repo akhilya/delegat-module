@@ -1,9 +1,9 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -48,10 +48,10 @@ import {
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     PageHeader,
-    EmptyState,
     Button,
     Input,
     Label,
@@ -101,7 +101,7 @@ export default {
       showUploadDialog: false,
       selectedFile: null,
       breadcrumbs: [
-        { label: "Адаптеры", href: "/marketplace" },
+        { label: "Адаптеры", to: "/adapter" },
         { label: "Плагины" },
       ],
     };
@@ -321,23 +321,21 @@ export default {
       </Dialog>
     </PageHeader>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <EmptyState v-if="isLoading" loading />
-      <EmptyState
-        v-else-if="plugins.length === 0"
-        title="Нет установленных плагинов"
-        description="Загрузите DLL-плагин для интеграции с адаптером"
-      >
-        <template #icon>
-          <Puzzle class="size-12 mb-4 text-muted-foreground" />
-        </template>
+    <PageSection
+      :loading="isLoading"
+      :empty="plugins.length === 0"
+      :empty-icon="Puzzle"
+      empty-title="Нет установленных плагинов"
+      empty-description="Загрузите DLL-плагин для интеграции с адаптером"
+    >
+      <template #empty-action>
         <Button @click="showUploadDialog = true">
           <Upload class="size-4 mr-2" />
           Загрузить плагин
         </Button>
-      </EmptyState>
+      </template>
 
-      <Card v-else class="p-0 gap-0 overflow-hidden">
+      <Card class="p-0 gap-0 overflow-hidden">
         <ul class="divide-y divide-border/60">
           <li
             v-for="plugin in pluginsWithCapabilities"
@@ -417,6 +415,6 @@ export default {
           </li>
         </ul>
       </Card>
-    </div>
+    </PageSection>
   </Page>
 </template>

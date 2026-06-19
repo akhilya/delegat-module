@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -22,11 +23,11 @@ import {
   Card,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -47,7 +48,6 @@ export default {
     DialogClose,
     Card,
     PageHeader,
-    EmptyState,
   },
   data() {
     return {
@@ -159,23 +159,21 @@ export default {
         </Dialog>
     </PageHeader>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <EmptyState v-if="isLoading" loading />
-      <EmptyState
-        v-else-if="stores.length === 0"
-        title="Нет магазинов"
-        description="Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами"
-      >
-        <template #icon>
-          <Store class="size-12 mb-4 text-muted-foreground" />
-        </template>
+    <PageSection
+      :loading="isLoading"
+      :empty="stores.length === 0"
+      :empty-icon="Store"
+      empty-title="Нет магазинов"
+      empty-description="Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами"
+    >
+      <template #empty-action>
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
           Создать магазин
         </Button>
-      </EmptyState>
+      </template>
 
-      <Card v-else class="p-0 gap-0 overflow-hidden">
+      <Card class="p-0 gap-0 overflow-hidden">
         <ul class="divide-y divide-border/60">
           <li
             v-for="store in stores"
@@ -196,6 +194,6 @@ export default {
           </li>
         </ul>
       </Card>
-    </div>
+    </PageSection>
   </Page>
 </template>

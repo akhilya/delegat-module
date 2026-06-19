@@ -1,13 +1,22 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -18,26 +27,35 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, Save, Users } from "lucide-vue-next";
+import { KeyRound, Loader2, Pencil, Save, Users } from "lucide-vue-next";
 
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
     Input,
+    Label,
     Switch,
     Badge,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
     PageHeader,
-    EmptyState,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
+    KeyRound,
     Loader2,
+    Pencil,
     Save,
     Users,
   },
@@ -45,6 +63,12 @@ export default {
     return {
       users: [],
       drafts: {},
+      editingUser: null,
+      editForm: {
+        userName: "",
+        password: "",
+      },
+      isEditDialogOpen: false,
       isLoading: false,
       savingUserId: null,
       breadcrumbs: [{ label: "Пользователи" }],
@@ -54,6 +78,13 @@ export default {
     activeUsersCount() {
       return this.users.filter((user) => user.isActive).length;
     },
+    hasIdentityChanges() {
+      if (!this.editingUser) return false;
+      return (
+        this.editForm.userName.trim() !== (this.editingUser.userName || "") ||
+        this.editForm.password.trim().length > 0
+      );
+    },
   },
   methods: {
     ...mapActions(["getAdminUsers", "updateAdminUser"]),
@@ -61,7 +92,6 @@ export default {
     createDrafts(users) {
       this.drafts = users.reduce((acc, user) => {
         acc[user.id] = {
-          userName: user.userName || "",
           isAdmin: user.isAdmin,
           isActive: user.isActive,
         };
@@ -83,42 +113,89 @@ export default {
       this.isLoading = false;
     },
 
-    hasChanges(user) {
+    applyUpdatedUser(updatedUser) {
+      const index = this.users.findIndex((item) => item.id === updatedUser.id);
+      if (index !== -1) {
+        this.users.splice(index, 1, updatedUser);
+      }
+      this.createDrafts(this.users);
+    },
+
+    hasRoleChanges(user) {
       const draft = this.drafts[user.id];
       if (!draft) return false;
 
       return (
-        draft.userName.trim() !== (user.userName || "") ||
         draft.isAdmin !== user.isAdmin ||
         draft.isActive !== user.isActive
       );
     },
 
-    async saveUser(user) {
-      const draft = this.drafts[user.id];
-      if (!draft || !this.hasChanges(user)) return;
+    openEditDialog(user) {
+      this.editingUser = user;
+      this.editForm = {
+        userName: user.userName || "",
+        password: "",
+      };
+      this.isEditDialogOpen = true;
+    },
 
-      if (!draft.userName.trim()) {
-        displaySonnerError("Имя пользователя не может быть пустым");
-        return;
-      }
+    closeEditDialog() {
+      this.isEditDialogOpen = false;
+      this.editingUser = null;
+      this.editForm = {
+        userName: "",
+        password: "",
+      };
+    },
+
+    async saveRoleChanges(user) {
+      const draft = this.drafts[user.id];
+      if (!draft || !this.hasRoleChanges(user)) return;
 
       this.savingUserId = user.id;
       await this.updateAdminUser({
         userId: user.id,
         data: {
-          userName: draft.userName.trim(),
           isAdmin: draft.isAdmin,
           isActive: draft.isActive,
         },
         onSuccess: (response) => {
-          const updatedUser = response.data.value;
-          const index = this.users.findIndex((item) => item.id === updatedUser.id);
-          if (index !== -1) {
-            this.users.splice(index, 1, updatedUser);
-          }
-          this.createDrafts(this.users);
+          this.applyUpdatedUser(response.data.value);
           displaySonnerSuccess("Пользователь обновлён");
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+          this.createDrafts(this.users);
+        },
+      });
+      this.savingUserId = null;
+    },
+
+    async saveIdentityChanges() {
+      if (!this.editingUser || !this.hasIdentityChanges) return;
+
+      const userName = this.editForm.userName.trim();
+      const password = this.editForm.password.trim();
+
+      if (!userName) {
+        displaySonnerError("Имя пользователя не может быть пустым");
+        return;
+      }
+
+      this.savingUserId = this.editingUser.id;
+      const payload = { userName };
+      if (password) {
+        payload.password = password;
+      }
+
+      await this.updateAdminUser({
+        userId: this.editingUser.id,
+        data: payload,
+        onSuccess: async (response) => {
+          await this.fetchUsers();
+          this.closeEditDialog();
+          displaySonnerSuccess(password ? "Пользователь и пароль обновлены" : "Имя пользователя обновлено");
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -143,19 +220,14 @@ export default {
       :description="`Активных пользователей: ${activeUsersCount}`"
     />
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <EmptyState v-if="isLoading" loading />
-      <EmptyState
-        v-else-if="users.length === 0"
-        title="Нет пользователей"
-        description="Пользователи появятся здесь после регистрации по приглашению"
-      >
-        <template #icon>
-          <Users class="size-12 mb-4 text-muted-foreground" />
-        </template>
-      </EmptyState>
-
-      <div v-else class="overflow-hidden rounded-lg border">
+    <PageSection
+      :loading="isLoading"
+      :empty="users.length === 0"
+      :empty-icon="Users"
+      empty-title="Нет пользователей"
+      empty-description="Пользователи появятся здесь после регистрации по приглашению"
+    >
+      <div class="overflow-hidden rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -164,7 +236,7 @@ export default {
               <TableHead class="w-32">Роль</TableHead>
               <TableHead class="w-36">Админ</TableHead>
               <TableHead class="w-36">Активен</TableHead>
-              <TableHead class="w-24"></TableHead>
+              <TableHead class="w-32"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -177,11 +249,7 @@ export default {
                 {{ user.id }}
               </TableCell>
               <TableCell>
-                <Input
-                  v-model="drafts[user.id].userName"
-                  :disabled="savingUserId === user.id"
-                  class="max-w-sm"
-                />
+                <div class="font-medium">{{ user.userName }}</div>
               </TableCell>
               <TableCell>
                 <Badge :variant="drafts[user.id].isAdmin ? 'default' : 'secondary'">
@@ -202,24 +270,95 @@ export default {
                   @update:model-value="drafts[user.id].isActive = $event"
                 />
               </TableCell>
-              <TableCell class="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  :disabled="savingUserId === user.id || !hasChanges(user)"
-                  @click="saveUser(user)"
-                >
-                  <Loader2
-                    v-if="savingUserId === user.id"
-                    class="size-4 animate-spin"
-                  />
-                  <Save v-else class="size-4" />
-                </Button>
+              <TableCell>
+                <div class="flex justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    :disabled="savingUserId === user.id"
+                    @click="openEditDialog(user)"
+                  >
+                    <Pencil class="size-4" />
+                    <span class="sr-only">Редактировать пользователя</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    :disabled="savingUserId === user.id || !hasRoleChanges(user)"
+                    @click="saveRoleChanges(user)"
+                  >
+                    <Loader2
+                      v-if="savingUserId === user.id"
+                      class="size-4 animate-spin"
+                    />
+                    <Save v-else class="size-4" />
+                    <span class="sr-only">Сохранить роль и статус</span>
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           </TableBody>
         </Table>
       </div>
-    </div>
+    </PageSection>
+
+    <Dialog v-model:open="isEditDialogOpen">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Редактировать пользователя</DialogTitle>
+          <DialogDescription>
+            Измените имя пользователя или задайте новый пароль.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="grid gap-4">
+          <div class="grid gap-2">
+            <Label for="admin-user-name">Имя пользователя</Label>
+            <Input
+              id="admin-user-name"
+              v-model="editForm.userName"
+              :disabled="savingUserId === editingUser?.id"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="grid gap-2">
+            <Label for="admin-user-password">Новый пароль</Label>
+            <div class="relative">
+              <KeyRound class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="admin-user-password"
+                v-model="editForm.password"
+                :disabled="savingUserId === editingUser?.id"
+                class="pl-9"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Оставьте пустым, если менять не нужно"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            :disabled="savingUserId === editingUser?.id"
+            @click="closeEditDialog"
+          >
+            Отмена
+          </Button>
+          <Button
+            :disabled="savingUserId === editingUser?.id || !hasIdentityChanges"
+            @click="saveIdentityChanges"
+          >
+            <Loader2
+              v-if="savingUserId === editingUser?.id"
+              class="size-4 animate-spin"
+            />
+            <span v-else>Сохранить</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </Page>
 </template>

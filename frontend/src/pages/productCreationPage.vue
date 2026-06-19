@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -41,6 +42,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -438,7 +440,7 @@ export default {
   <Page>
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
+    <PageSection class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
       <ProductGroupSidebar
         v-if="groupDetail"
@@ -638,6 +640,6 @@ export default {
         </div>
       </form>
       </div>
-    </div>
+    </PageSection>
   </Page>
 </template>

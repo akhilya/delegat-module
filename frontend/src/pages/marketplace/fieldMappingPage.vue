@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -96,6 +97,7 @@ import {
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -221,8 +223,8 @@ export default {
   computed: {
     breadcrumbs() {
       const items = [
-        { label: "Адаптеры", to: "/marketplace" },
-        { label: "Подключение", to: `/marketplace/${this.connectionId}` },
+        { label: "Адаптеры", to: "/adapter" },
+        { label: "Подключение", to: `/adapter/${this.connectionId}` },
       ];
       if (this.mappingInfo) {
         items.push({ label: this.mappingInfo.externalCategoryName || "Категория" });
@@ -764,7 +766,7 @@ export default {
     },
 
     goBack() {
-      this.$router.push(`/marketplace/${this.connectionId}`);
+      this.$router.push(`/adapter/${this.connectionId}`);
     },
 
     openMappingSettings() {
@@ -1010,11 +1012,8 @@ export default {
       </div>
     </div>
 
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="size-8 animate-spin text-muted-foreground" />
-    </div>
-
-    <template v-else>
+    <PageSection :loading="isLoading">
+    <template v-if="!isLoading">
       <Card class="mb-4">
         <CardHeader class="">
           <CardTitle class="text-base flex items-center gap-2">
@@ -1485,6 +1484,7 @@ export default {
         </Table>
       </Card>
     </template>
+    </PageSection>
 
     <!-- Боковое окно модификаторов -->
     <Sheet v-model:open="showModifierSheet">

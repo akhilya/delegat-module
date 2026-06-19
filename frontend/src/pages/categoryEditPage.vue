@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -88,6 +89,7 @@ const ATTRIBUTE_TYPE_OPTIONS = [
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -495,14 +497,10 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="border rounded-lg h-full w-full grow mb-4 flex flex-col">
-      <div v-if="isLoading" class="grow flex items-center justify-center">
-        <Loader2 class="text-primary size-8 animate-spin" />
-      </div>
-
-      <div v-else-if="category" class="grow flex flex-col">
+    <PageSection :loading="isLoading" class="flex flex-col">
+      <div v-if="category" class="grow flex flex-col">
         <!-- Category Info Section -->
-        <div class="p-4 space-y-4">
+        <div class="space-y-4">
           <h2 class="text-lg font-semibold">Основные данные</h2>
           <div class="grid gap-4 max-w-xl">
             <div class="space-y-2">
@@ -536,7 +534,7 @@ export default {
         <Separator />
 
         <!-- Attributes Section -->
-        <div class="p-4 space-y-4 grow">
+        <div class="pt-4 space-y-4 grow">
           <div class="flex justify-between items-center">
             <h2 class="text-lg font-semibold flex items-center gap-2">
               <Settings2 class="size-5" />
@@ -641,7 +639,7 @@ export default {
           </draggable>
         </div>
       </div>
-    </div>
+    </PageSection>
 
     <!-- Attribute Dialog -->
     <Dialog v-model:open="showAttributeDialog">

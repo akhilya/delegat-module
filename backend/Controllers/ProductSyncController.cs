@@ -1547,9 +1547,12 @@ public class ProductSyncController : ControllerBase
             .Select(conn =>
             {
                 var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
-                var hasMapping = mappingsByConnectionId.ContainsKey(conn.Id);
+                mappingsByConnectionId.TryGetValue(conn.Id, out var connMappings);
+                connMappings ??= new List<CategoryMapping>();
+                var hasMapping = connMappings.Count > 0;
                 var isLinked = linkByConnectionId.ContainsKey(conn.Id);
                 var link = isLinked ? linkByConnectionId[conn.Id] : null;
+                var savedMappingWasDeleted = link?.categoryMappingId != null && link.categoryMapping == null;
 
                 return new
                 {
@@ -1563,14 +1566,13 @@ public class ProductSyncController : ControllerBase
                     needsMapping = !hasMapping && product.categoryId.HasValue,
                     // Multi-mapping: all available mappings + selected one from link
                     selectedMappingId = link?.categoryMappingId,
-                    mappingMissing = isLinked && (link?.categoryMappingId == null || link.categoryMapping == null),
-                    availableMappings = mappingsByConnectionId.TryGetValue(conn.Id, out var connMappings)
-                        ? connMappings.Select(m => (object)new {
+                    mappingMissing = isLinked && (!hasMapping || savedMappingWasDeleted),
+                    availableMappings = connMappings
+                        .Select(m => (object)new {
                             id = m.Id,
                             name = m.name,
                             externalCategoryName = m.externalCategoryName
-                        }).ToList()
-                        : new List<object>(),
+                        }).ToList(),
                     // Статус связи
                     isLinked,
                     linkId = link?.Id,

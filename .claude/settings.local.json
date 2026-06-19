@@ -114,7 +114,21 @@
       "Bash(node:*)",
       "Bash(python3:*)",
       "Bash(find /c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\( -name \"*.vue\" -o -name \"*.ts\" \\\\\\) 2>/dev/null | head -30)",
-      "Bash(find C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\(-name *store* -o -name *dropdown* -o -name *selector* \\\\\\))"
+      "Bash(find C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\(-name *store* -o -name *dropdown* -o -name *selector* \\\\\\))",
+      "Bash(find /c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\(-name *.vue -o -name *.ts -o -name *.js \\\\\\))",
+      "Bash(dotnet list:*)",
+      "Bash(find /c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/frontend/src -type f \\\\\\(-name *.ts -o -name *.js -o -name *.vue \\\\\\))",
+      "mcp__filesystem__list_allowed_directories",
+      "Bash(head -50 frontend/src/constants/*.js)",
+      "Bash(find /c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard -maxdepth 2 -type f \\\\\\(-name README* -o -name *.md -o -name package.json -o -name .impeccable.md -o -name vite.config.* -o -name tailwind.config.* -o -name tsconfig.* \\\\\\))",
+      "Bash(grep -E \"\\\\.\\(cs\\)$\")",
+      "Bash(for file:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/**)",
+      "Bash(cp -f \"C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/plugins/PrintO.Marketplace.Ozon/bin/Debug/net8.0/\"*.dll \"C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/backend/bin/Debug/net8.0/plugins/\")",
+      "Bash(cp -f \"C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/plugins/PrintO.Marketplace.Wildberries/bin/Debug/net8.0/\"*.dll \"C:/Users/ARTEM/PrintO.Studio/PrintOSystem/printo-dashboard/backend/bin/Debug/net8.0/plugins/\")",
+      "Bash(git fetch:*)",
+      "Bash(sort -t'|' -k2 -r)"
     ]
   }
 }

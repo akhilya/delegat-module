@@ -167,6 +167,64 @@ namespace PrintO.Migrations
                     b.ToTable("categoryAttributes");
                 });
 
+            modelBuilder.Entity("PrintO.Models.ErrorLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("exceptionType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("message")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("method")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("path")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("queryString")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("remoteIpAddress")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("stackTrace")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("statusCode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("traceIdentifier")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("userId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("userName")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("createdAt");
+
+                    b.HasIndex("statusCode");
+
+                    b.ToTable("errorLogs");
+                });
+
             modelBuilder.Entity("PrintO.Models.File", b =>
                 {
                     b.Property<int>("Id")

@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -19,7 +20,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
@@ -29,6 +29,7 @@ import { PAGE_CATEGORY_EDIT } from "@/router";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -49,7 +50,6 @@ export default {
     DialogFooter,
     DialogClose,
     PageHeader,
-    EmptyState,
     ConfirmDialog,
     Card,
   },
@@ -178,19 +178,21 @@ export default {
       </Dialog>
     </PageHeader>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 p-4">
-      <EmptyState v-if="isLoading" loading />
-      <EmptyState v-else-if="categories.length === 0" title="Нет категорий" description="Создайте первую категорию для товаров">
-        <template #icon>
-          <FolderOpen class="size-12 mb-4 text-muted-foreground" />
-        </template>
+    <PageSection
+      :loading="isLoading"
+      :empty="categories.length === 0"
+      :empty-icon="FolderOpen"
+      empty-title="Нет категорий"
+      empty-description="Создайте первую категорию для товаров"
+    >
+      <template #empty-action>
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
           Добавить категорию
         </Button>
-      </EmptyState>
+      </template>
 
-      <Card v-else class="p-0 gap-0 overflow-hidden">
+      <Card class="p-0 gap-0 overflow-hidden">
         <ul class="divide-y divide-border/60">
           <li
             v-for="category in categories"
@@ -229,6 +231,6 @@ export default {
           </li>
         </ul>
       </Card>
-    </div>
+    </PageSection>
   </Page>
 </template>

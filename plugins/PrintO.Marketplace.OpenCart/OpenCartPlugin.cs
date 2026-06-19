@@ -266,7 +266,10 @@ public sealed class OpenCartPlugin : MarketplacePluginBase
 
             var response = await CreateClient(context).CreateCategoryAsync(payload, ct);
             if (!response.Success)
-                return new CreateCategoryResult(false, ErrorMessage: response.Message ?? "OpenCart rejected category creation");
+                return new CreateCategoryResult(
+                    false,
+                    ErrorMessage: response.Message ?? "OpenCart rejected category creation",
+                    Details: response.Details);
 
             var fields = response.Fields != null && response.Fields.Count > 0
                 ? response.Fields

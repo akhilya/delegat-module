@@ -1,9 +1,9 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
@@ -82,10 +82,10 @@ const ATTRIBUTE_TYPE_OPTIONS = [
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     PageHeader,
-    EmptyState,
     Button,
     Input,
     Textarea,
@@ -374,26 +374,22 @@ export default {
       </Button>
     </PageHeader>
 
-    <div class="border rounded-lg h-full w-full grow mb-4 flex flex-col">
-      <EmptyState v-if="isLoading" loading />
-
-      <div v-else class="grow flex flex-col p-4">
-        <EmptyState
-          v-if="attributes.length === 0"
-          title="Нет глобальных атрибутов"
-          description="Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
-        >
-          <template #icon>
-            <Settings2 class="size-12 mb-4 text-muted-foreground" />
-          </template>
+    <PageSection
+      :loading="isLoading"
+      :empty="attributes.length === 0"
+      :empty-icon="Settings2"
+      empty-title="Нет глобальных атрибутов"
+      empty-description="Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
+      class="flex flex-col"
+    >
+      <template #empty-action>
           <Button @click="openAddAttributeDialog">
             <Plus class="size-4 mr-2" />
             Добавить атрибут
           </Button>
-        </EmptyState>
+      </template>
 
         <draggable
-            v-else
             v-model="attributes"
             item-key="id"
             handle=".drag-handle"
@@ -467,8 +463,7 @@ export default {
               </Card>
             </template>
           </draggable>
-      </div>
-    </div>
+    </PageSection>
 
     <!-- Attribute Dialog -->
     <Dialog v-model:open="showAttributeDialog">

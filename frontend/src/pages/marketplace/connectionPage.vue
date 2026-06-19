@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -114,6 +115,7 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -1045,7 +1047,7 @@ export default {
     },
 
     openFieldMapping(mappingId) {
-      this.$router.push(`/marketplace/${this.connectionId}/categories/${mappingId}`);
+      this.$router.push(`/adapter/${this.connectionId}/categories/${mappingId}`);
     },
 
     selectExternalCategory(category) {
@@ -2119,19 +2121,16 @@ export default {
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="size-8 animate-spin text-muted-foreground" />
-    </div>
-
-    <div v-else-if="connection" class="flex flex-col flex-1 mb-4">
+    <PageSection :loading="isLoading" class="flex flex-col">
+    <div v-if="connection" class="flex flex-col flex-1">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-4">
           <Button variant="ghost" size="icon" @click="$router.push(PAGE_MARKETPLACE)">
             <ArrowLeft class="size-4" />
           </Button>
           <div>
-            <h1 class="text-2xl font-bold">{{ connection.name }}</h1>
-            <p class="text-muted-foreground">{{ adapterDisplayName }}</p>
+            <h1 class="text-lg font-semibold">{{ connection.name }}</h1>
+            <p class="text-sm text-muted-foreground">{{ adapterDisplayName }}</p>
           </div>
           <Badge :variant="connection.isActive ? 'default' : 'secondary'">
             {{ connection.isActive ? "Активен" : "Неактивен" }}
@@ -2452,7 +2451,7 @@ export default {
               </DialogContent>
             </Dialog>
 
-            <Button @click="$router.push(`/marketplace/${connectionId}/categories/import`)">
+            <Button @click="$router.push(`/adapter/${connectionId}/categories/import`)">
               <Plus class="size-4 mr-2" />
               Импортировать категорию
             </Button>
@@ -2963,6 +2962,7 @@ export default {
         </TabsContent>
       </Tabs>
     </div>
+    </PageSection>
 
     <!-- Single Import Preview Dialog -->
     <Dialog v-model:open="showSingleImportPreviewDialog">

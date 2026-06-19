@@ -29,6 +29,12 @@ public class ApiException : Exception
         => new(message, StatusCodes.Status400BadRequest);
 
     /// <summary>
+    /// Create a BadRequest exception with structured details.
+    /// </summary>
+    public static ApiException BadRequest(string message, object? data)
+        => new(message, StatusCodes.Status400BadRequest, data: data);
+
+    /// <summary>
     /// Create a BadRequest exception with multiple error messages
     /// </summary>
     public static ApiException BadRequest(string[] messages)

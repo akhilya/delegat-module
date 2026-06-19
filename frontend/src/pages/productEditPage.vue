@@ -1,5 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
+import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -88,6 +89,7 @@ import { http, router } from "@/main";
 export default {
   components: {
     Page,
+    PageSection,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -900,7 +902,7 @@ export default {
         Выбрать группу
       </button>
     </div>
-    <div class="w-full flex gap-6 mb-4" style="min-height: calc(100vh - 8.5rem)">
+    <PageSection :loading="isProductLoading" class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
       <ProductGroupSidebar
         ref="groupSidebarRef"
@@ -915,7 +917,7 @@ export default {
       />
       <!-- Main content -->
       <div ref="mainScrollRef" class="grow flex flex-col min-w-0">
-        <div v-show="!isProductLoading" class="grow flex flex-col">
+        <div class="grow flex flex-col">
           <form
             v-if="form"
             v-show="tab == 'properties'"
@@ -1326,17 +1328,9 @@ export default {
           </div>
         </div>
       </div>
-
-        <!-- Loading state -->
-        <div
-          v-show="isProductLoading"
-          class="grow flex items-center justify-center"
-        >
-          <Loader2 class="text-primary size-8 animate-spin" />
-        </div>
       </div>
 
-    </div>
+    </PageSection>
     <!-- Lightbox overlay -->
     <Teleport to="body">
       <div

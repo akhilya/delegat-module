@@ -179,6 +179,9 @@ builder.Services.AddScoped<ExcelProductService>();
 // Cross-store product clone/move
 builder.Services.AddScoped<ProductTransferService>();
 
+// Persisted error logs
+builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
+
 // Sync services
 builder.Services.AddScoped<MappingService>();
 builder.Services.AddScoped<CategoryImportService>();

@@ -5,7 +5,52 @@ import { toast } from "vue-sonner";
  * @param {Object} error - The error object, typically from an Axios response.
  */
 export function displaySonnerError(error) {
-  if (error?.response?.data) toast.error(error.response.data.title);
+  if (typeof error === "string") {
+    toast.error(error);
+    return;
+  }
+
+  const payload = error?.response?.data;
+  if (!payload) {
+    toast.error(error?.message || "Ошибка");
+    return;
+  }
+
+  const title = payload.title || payload.message || "Ошибка";
+  const description = formatErrorDetails(payload);
+  toast.error(title, description ? { description } : undefined);
+}
+
+function formatErrorDetails(payload) {
+  const details =
+    payload.detail ||
+    payload.details ||
+    payload.data ||
+    payload.errors;
+
+  if (!details) return null;
+
+  if (typeof details === "string") return truncateDetails(details);
+
+  if (Array.isArray(details)) {
+    return truncateDetails(details.map(String).join("\n"));
+  }
+
+  if (typeof details === "object") {
+    try {
+      return truncateDetails(JSON.stringify(details, null, 2));
+    } catch {
+      return "Подробности ошибки получены, но их не удалось отобразить";
+    }
+  }
+
+  return truncateDetails(String(details));
+}
+
+function truncateDetails(value) {
+  const text = value.trim();
+  if (text.length <= 1200) return text;
+  return `${text.slice(0, 1200)}...`;
 }
 
 /**

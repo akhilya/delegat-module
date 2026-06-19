@@ -1,14 +1,5 @@
 <script>
-// NavigationBar - Top-level navigation bar with store selector, user menu, and page links.
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// NavigationBar - Page-level toolbar with mobile sidebar trigger, center slot, and user menu.
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,18 +15,39 @@ import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useDark, useToggle } from "@vueuse/core";
-import { UserRound, Loader2, Store, Key, LogOut, AlertCircle, House, Plus, ShoppingBag, Puzzle, FolderOpen, Globe, Layers, Trash2, Sun, Moon } from "lucide-vue-next";
-import { PAGE_ADMIN_STORES, PAGE_ADMIN_TOKENS, PAGE_ADMIN_USERS, PAGE_PRODUCTS, PAGE_PRODUCT_CREATION, PAGE_MARKETPLACE, PAGE_MARKETPLACE_PLUGINS, PAGE_CATEGORIES, PAGE_PRODUCT_GROUPS, PAGE_STORE_ATTRIBUTES } from "@/router";
+import {
+  FolderOpen,
+  Globe,
+  House,
+  Key,
+  Layers,
+  Loader2,
+  LogOut,
+  Moon,
+  Plus,
+  Puzzle,
+  ShoppingBag,
+  Store,
+  Sun,
+  Trash2,
+  UserRound,
+  Users,
+} from "lucide-vue-next";
+import {
+  PAGE_ADMIN_STORES,
+  PAGE_ADMIN_TOKENS,
+  PAGE_ADMIN_USERS,
+  PAGE_CATEGORIES,
+  PAGE_MARKETPLACE,
+  PAGE_MARKETPLACE_PLUGINS,
+  PAGE_PRODUCT_CREATION,
+  PAGE_PRODUCT_GROUPS,
+  PAGE_PRODUCTS,
+  PAGE_STORE_ATTRIBUTES,
+} from "@/router";
 
 export default {
   components: {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -44,22 +56,22 @@ export default {
     DropdownMenuTrigger,
     SidebarTrigger,
     Button,
-    UserRound,
-    Loader2,
-    Store,
-    Key,
-    LogOut,
-    AlertCircle,
-    House,
-    Plus,
-    ShoppingBag,
-    Puzzle,
     FolderOpen,
     Globe,
+    House,
+    Key,
     Layers,
-    Trash2,
-    Sun,
+    Loader2,
+    LogOut,
     Moon,
+    Plus,
+    Puzzle,
+    ShoppingBag,
+    Store,
+    Sun,
+    Trash2,
+    UserRound,
+    Users,
   },
   setup() {
     const isDark = useDark();
@@ -70,59 +82,11 @@ export default {
     return {
       me: undefined,
       isLoading: false,
-      memberships: [],
       platformVersion: null,
     };
   },
   methods: {
-    ...mapActions([
-      "getMe",
-      "postLogOut",
-      "getMyMemberships",
-      "postSelectStore",
-    ]),
-    async selectStore(storeId) {
-      // Block store switch if file uploads are in-flight
-      const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
-      if (hasUploads) {
-        const confirmed = window.confirm(
-          "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
-        );
-        if (!confirmed) return;
-      }
-      this.$store.commit("setSwitchingStore", true);
-      const minDelay = new Promise(r => setTimeout(r, 500));
-      this.postSelectStore({
-        storeId,
-        onSuccess: async (response) => {
-          // Re-fetch user data (selectedStoreId changed on server)
-          await this.getMe({
-            onSuccess: (r) => { this.me = r.data.value; },
-            onError: () => {},
-          });
-          // Reconnect SignalR to new store group
-          this.$store.dispatch("operations/reconnectSignalR");
-          // Navigate FIRST to avoid re-mounting the current page component
-          // with a stale product/entity ID from the old store (causes 404 toasts).
-          const next = response.data.value.next;
-          const targetPath = new URL(next, window.location.origin).pathname;
-          if (this.$route.path !== targetPath) {
-            await this.$router.push(targetPath);
-          }
-          // Force re-render all page components via appKey AFTER navigation,
-          // so components mount at the correct route with the new store cookie.
-          this.$store.commit("incrementAppKey");
-          // Ensure overlay is visible for at least 1 second
-          await minDelay;
-          this.$store.commit("setSwitchingStore", false);
-        },
-        onError: async (error) => {
-          await minDelay;
-          this.$store.commit("setSwitchingStore", false);
-          displaySonnerError(error);
-        },
-      });
-    },
+    ...mapActions(["getMe", "postLogOut"]),
     goToAdminStores() {
       this.$router.push(PAGE_ADMIN_STORES);
     },
@@ -154,7 +118,7 @@ export default {
       this.$router.push(PAGE_STORE_ATTRIBUTES);
     },
     goToTrash() {
-      this.$router.push({ path: PAGE_PRODUCTS, query: { trash: '1' } });
+      this.$router.push({ path: PAGE_PRODUCTS, query: { trash: "1" } });
     },
   },
   async mounted() {
@@ -168,23 +132,6 @@ export default {
       },
     });
 
-    await this.getMyMemberships({
-      onSuccess: (response) => {
-        this.memberships = response.data.value;
-      },
-      onError: (error) => {
-        displaySonnerError(error);
-      },
-    });
-
-    // Auto-select first store if current selection is invalid
-    if (this.memberships.length > 0 && (
-      !this.me?.selectedStoreId ||
-      !this.memberships.some(s => s.id === this.me.selectedStoreId)
-    )) {
-      await this.selectStore(this.memberships[0].id);
-    }
-
     this.isLoading = false;
 
     http.get("/health").then(r => {
@@ -195,58 +142,21 @@ export default {
 </script>
 
 <template>
-  <!-- Nav: two rows on mobile, single row on desktop -->
   <div class="w-full sticky top-0 z-30 bg-background">
     <template v-if="!isLoading">
-      <!-- Main row: store + (center on desktop) + user menu -->
       <div class="flex items-center h-14 gap-2">
         <div class="md:hidden shrink-0">
           <SidebarTrigger />
         </div>
 
-        <!-- Store selector -->
-        <div class="shrink-0">
-          <template v-if="memberships.length > 0">
-            <Select
-              :model-value="String(me?.selectedStoreId ?? '')"
-              @update:model-value="selectStore(Number($event))"
-            >
-              <SelectTrigger class="bg-primary-foreground w-28 sm:w-48">
-                <SelectValue placeholder="Магазин" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Магазины</SelectLabel>
-                  <SelectItem
-                    as="button"
-                    v-for="store in memberships"
-                    :key="store.id"
-                    :value="String(store.id)"
-                  >
-                    {{ store.name }}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </template>
-          <template v-else>
-            <div class="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-2 py-1.5 rounded-md w-28 sm:w-48">
-              <AlertCircle class="size-3 shrink-0" />
-              <span class="truncate">Нет магазинов</span>
-            </div>
-          </template>
-        </div>
-
-        <!-- Center slot: search etc. (desktop only, mobile gets its own row below) -->
         <div class="hidden sm:flex flex-1 items-center justify-center">
           <slot name="center" />
         </div>
 
-        <!-- User menu -->
         <div class="ml-auto shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
-              <Button variant="outline" class="h-9 gap-1.5">
+              <Button variant="ghost" class="h-9 gap-1.5">
                 <UserRound class="size-4" />
                 <span class="hidden sm:inline max-w-[120px] truncate">{{ me?.userName }}</span>
               </Button>
@@ -306,7 +216,7 @@ export default {
               <DropdownMenuItem @select="toggleDark()">
                 <Sun v-if="isDark" class="size-4 mr-2" />
                 <Moon v-else class="size-4 mr-2" />
-                {{ isDark ? 'Светлая тема' : 'Тёмная тема' }}
+                {{ isDark ? "Светлая тема" : "Тёмная тема" }}
               </DropdownMenuItem>
               <DropdownMenuItem @select="postLogOut">
                 <LogOut class="size-4 mr-2" />
@@ -323,7 +233,6 @@ export default {
         </div>
       </div>
 
-      <!-- Mobile-only: center slot as full-width row below main nav -->
       <div class="sm:hidden pb-1.5">
         <slot name="center" />
       </div>

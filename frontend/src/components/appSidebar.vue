@@ -42,8 +42,10 @@ import {
   Trash2,
   UserCog,
   Wand2,
+  Bug,
 } from "lucide-vue-next";
 import {
+  PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_STORES,
   PAGE_ADMIN_TOKENS,
   PAGE_ADMIN_USERS,
@@ -93,6 +95,7 @@ export default {
     Trash2,
     UserCog,
     Wand2,
+    Bug,
   },
   setup() {
     const isDark = useDark();
@@ -129,6 +132,7 @@ export default {
         { label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
         { label: "Пользователи", to: PAGE_ADMIN_USERS, icon: UserCog },
         { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
+        { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: Bug },
       ];
     },
   },
@@ -144,7 +148,7 @@ export default {
       if (query) return this.$route.path === path && this.$route.fullPath.includes(query);
       return this.$route.path === path || this.$route.path.startsWith(`${path}/`);
     },
-    async loadShellData() {
+    async loadShellData(autoSelectStore = true) {
       await this.getMe({
         onSuccess: (response) => {
           this.me = response.data.value;
@@ -164,6 +168,13 @@ export default {
       http.get("/health").then((response) => {
         this.platformVersion = response.data?.version;
       }).catch(() => {});
+
+      if (autoSelectStore && this.memberships.length > 0 && (
+        !this.me?.selectedStoreId ||
+        !this.memberships.some((store) => store.id === this.me.selectedStoreId)
+      )) {
+        await this.selectStore(this.memberships[0].id);
+      }
     },
     async selectStore(storeId) {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
@@ -178,7 +189,7 @@ export default {
       await this.postSelectStore({
         storeId,
         onSuccess: async (response) => {
-          await this.loadShellData();
+          await this.loadShellData(false);
           this.$store.dispatch("operations/reconnectSignalR");
           const next = response.data.value.next;
           const targetPath = new URL(next, window.location.origin).pathname;

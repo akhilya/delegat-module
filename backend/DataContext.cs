@@ -59,6 +59,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<Operation> operations { get; set; }
     public DbSet<OperationLogEntry> operationLogEntries { get; set; }
 
+    // Persisted server errors for administrators
+    public DbSet<ErrorLog> errorLogs { get; set; }
+
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
     }
@@ -259,5 +262,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         // OperationLogEntry indexes
         builder.Entity<OperationLogEntry>()
             .HasIndex(e => e.operationId);
+
+        // ErrorLog indexes
+        builder.Entity<ErrorLog>()
+            .HasIndex(e => e.createdAt);
+
+        builder.Entity<ErrorLog>()
+            .HasIndex(e => e.statusCode);
     }
 }
