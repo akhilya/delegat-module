@@ -49,6 +49,7 @@ public class FileTagController : ControllerBase
                 td.name,
                 td.color,
                 usageCount = _context.tags.Count(ft => ft.tagDefinitionId == td.Id)
+                    + _context.storeFileTags.Count(ft => ft.tagDefinitionId == td.Id)
             })
             .ToListAsync(ct);
 
@@ -144,6 +145,9 @@ public class FileTagController : ControllerBase
 
         // Remove all assignments first
         await _context.tags
+            .Where(ft => ft.tagDefinitionId == id)
+            .ExecuteDeleteAsync(ct);
+        await _context.storeFileTags
             .Where(ft => ft.tagDefinitionId == id)
             .ExecuteDeleteAsync(ct);
 

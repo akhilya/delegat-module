@@ -8,7 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Plus, Store, Users, Loader2, ChevronRight } from "lucide-vue-next";
+import { Plus, Store, Users, Loader2, Pencil, Save, ShieldCheck } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +20,13 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
-  Card,
-} from "@/components/ui/card";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 
 export default {
@@ -37,7 +42,9 @@ export default {
     Store,
     Users,
     Loader2,
-    ChevronRight,
+    Pencil,
+    Save,
+    ShieldCheck,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -46,14 +53,28 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    Card,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     PageHeader,
   },
   data() {
     return {
       stores: [],
+      allUsers: [],
+      editingStore: null,
+      editForm: {
+        name: "",
+        memberIds: [],
+        storeAdminIds: [],
+      },
       isLoading: false,
       isCreating: false,
+      isSaving: false,
+      isEditDialogOpen: false,
       newStoreName: "",
       addAllUsers: true,
       showCreateDialog: false,
@@ -61,7 +82,7 @@ export default {
     };
   },
   methods: {
-    ...mapActions(["getAllStores", "createStore"]),
+    ...mapActions(["getAllStores", "createStore", "getStoreDetail", "getAllUsers", "updateStore"]),
 
     async fetchStores() {
       this.isLoading = true;
@@ -74,6 +95,17 @@ export default {
         },
       });
       this.isLoading = false;
+    },
+
+    async fetchUsers() {
+      await this.getAllUsers({
+        onSuccess: (response) => {
+          this.allUsers = response.data.value;
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
     },
 
     async handleCreateStore() {
@@ -100,12 +132,103 @@ export default {
       this.isCreating = false;
     },
 
-    openStore(storeId) {
-      this.$router.push(`/admin/stores/${storeId}`);
+    async openEditDialog(store) {
+      this.isEditDialogOpen = true;
+      this.editingStore = null;
+      this.editForm = {
+        name: "",
+        memberIds: [],
+        storeAdminIds: [],
+      };
+
+      await this.getStoreDetail({
+        id: store.id,
+        onSuccess: (response) => {
+          const detail = response.data.value;
+          this.editingStore = detail;
+          this.editForm = {
+            name: detail.name,
+            memberIds: detail.members.map((member) => member.id),
+            storeAdminIds: detail.members.filter((member) => member.isStoreAdmin).map((member) => member.id),
+          };
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+          this.closeEditDialog();
+        },
+      });
+    },
+
+    closeEditDialog() {
+      this.isEditDialogOpen = false;
+      this.editingStore = null;
+      this.editForm = {
+        name: "",
+        memberIds: [],
+        storeAdminIds: [],
+      };
+    },
+
+    toggleMember(userId, enabled) {
+      const memberIds = new Set(this.editForm.memberIds);
+      const adminIds = new Set(this.editForm.storeAdminIds);
+
+      if (enabled) {
+        memberIds.add(userId);
+      } else {
+        memberIds.delete(userId);
+        adminIds.delete(userId);
+      }
+
+      this.editForm.memberIds = Array.from(memberIds);
+      this.editForm.storeAdminIds = Array.from(adminIds);
+    },
+
+    toggleStoreAdmin(userId, enabled) {
+      const memberIds = new Set(this.editForm.memberIds);
+      const adminIds = new Set(this.editForm.storeAdminIds);
+
+      if (enabled) {
+        memberIds.add(userId);
+        adminIds.add(userId);
+      } else {
+        adminIds.delete(userId);
+      }
+
+      this.editForm.memberIds = Array.from(memberIds);
+      this.editForm.storeAdminIds = Array.from(adminIds);
+    },
+
+    async saveStore() {
+      if (!this.editingStore) return;
+      if (!this.editForm.name.trim()) {
+        displaySonnerError("Название магазина не может быть пустым");
+        return;
+      }
+
+      this.isSaving = true;
+      await this.updateStore({
+        storeId: this.editingStore.id,
+        data: {
+          name: this.editForm.name.trim(),
+          memberIds: this.editForm.memberIds,
+          storeAdminIds: this.editForm.storeAdminIds,
+        },
+        onSuccess: async () => {
+          displaySonnerSuccess("Магазин обновлён");
+          this.closeEditDialog();
+          await this.fetchStores();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isSaving = false;
     },
   },
   mounted() {
     this.fetchStores();
+    this.fetchUsers();
   },
 };
 </script>
@@ -173,27 +296,110 @@ export default {
         </Button>
       </template>
 
-      <Card class="p-0 gap-0 overflow-hidden">
-        <ul class="divide-y divide-border/60">
-          <li
-            v-for="store in stores"
-            :key="store.id"
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
-            @click="openStore(store.id)"
-          >
-            <Store class="size-5 text-muted-foreground shrink-0" />
-            <div class="min-w-0 flex-1">
-              <div class="font-medium truncate">{{ store.name }}</div>
-              <div class="text-xs text-muted-foreground tabular-nums">ID {{ store.id }}</div>
-            </div>
-            <div class="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0 tabular-nums">
-              <Users class="size-4" />
-              {{ store.membersCount || 0 }}
-            </div>
-            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
-          </li>
-        </ul>
-      </Card>
+      <div class="overflow-x-auto border-y">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-24">ID</TableHead>
+              <TableHead>Магазин</TableHead>
+              <TableHead class="w-40">Участники</TableHead>
+              <TableHead class="w-40">Админы магазина</TableHead>
+              <TableHead class="w-20"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="store in stores" :key="store.id">
+              <TableCell class="text-muted-foreground tabular-nums">{{ store.id }}</TableCell>
+              <TableCell>
+                <div class="font-medium">{{ store.name }}</div>
+              </TableCell>
+              <TableCell>
+                <span class="inline-flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+                  <Users class="size-4" />
+                  {{ store.membersCount || 0 }}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span class="inline-flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+                  <ShieldCheck class="size-4" />
+                  {{ store.storeAdminsCount || 0 }}
+                </span>
+              </TableCell>
+              <TableCell class="text-right">
+                <Button variant="ghost" size="icon" @click="openEditDialog(store)">
+                  <Pencil class="size-4" />
+                  <span class="sr-only">Редактировать магазин</span>
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </PageSection>
+
+    <Dialog v-model:open="isEditDialogOpen">
+      <DialogContent class="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Настройки магазина</DialogTitle>
+          <DialogDescription>
+            Измените название, участников и администраторов магазина.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="!editingStore" class="flex h-40 items-center justify-center">
+          <Loader2 class="size-5 animate-spin text-muted-foreground" />
+        </div>
+
+        <div v-else class="grid gap-4">
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="store-name">Название</label>
+            <Input id="store-name" v-model="editForm.name" :disabled="isSaving" />
+          </div>
+
+          <div class="overflow-hidden rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Пользователь</TableHead>
+                  <TableHead class="w-32">Участник</TableHead>
+                  <TableHead class="w-40">Админ магазина</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="user in allUsers" :key="user.id">
+                  <TableCell>
+                    <div class="font-medium">{{ user.userName }}</div>
+                    <div class="text-xs text-muted-foreground">ID {{ user.id }}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Checkbox
+                      :model-value="editForm.memberIds.includes(user.id)"
+                      :disabled="isSaving"
+                      @update:model-value="toggleMember(user.id, $event)"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Checkbox
+                      :model-value="editForm.storeAdminIds.includes(user.id)"
+                      :disabled="isSaving"
+                      @update:model-value="toggleStoreAdmin(user.id, $event)"
+                    />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" :disabled="isSaving" @click="closeEditDialog">Отмена</Button>
+          <Button :disabled="isSaving || !editingStore" @click="saveStore">
+            <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
+            <Save v-else class="mr-2 size-4" />
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </Page>
 </template>

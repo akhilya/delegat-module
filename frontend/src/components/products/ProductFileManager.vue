@@ -58,9 +58,11 @@ import { Tag } from "lucide-vue-next";
 
 const props = defineProps({
   files: { type: Array, required: true },
-  productId: { type: Number, required: true },
+  productId: { type: Number, default: null },
   productName: { type: String, default: "" },
   productSku: { type: String, default: "" },
+  scope: { type: String, default: "product" },
+  storageLabel: { type: String, default: "" },
 });
 
 const emit = defineEmits(["deleteFile", "filesChanged"]);
@@ -73,6 +75,88 @@ const debouncedFilesChanged = useDebounceFn(() => emit("filesChanged"), 800);
 const store = useStore();
 const route = useRoute();
 const router = useRouter();
+
+const isStoreScope = computed(() => props.scope === "store");
+const rootLabel = computed(() => isStoreScope.value ? "Хранилище" : "Файлы");
+const subjectLabel = computed(() => {
+  if (props.storageLabel) return props.storageLabel;
+  if (isStoreScope.value) return "Общее хранилище магазина";
+  return props.productSku
+    ? `${props.productName || "Товар"} [${props.productSku}]`
+    : (props.productName || `Товар #${props.productId}`);
+});
+
+function productRequired() {
+  if (!props.productId) {
+    throw new Error("productId is required for product file storage");
+  }
+  return props.productId;
+}
+
+function uploadFilesUrl(folderId) {
+  if (isStoreScope.value) {
+    return folderId != null
+      ? `/store-storage/files?folderId=${folderId}`
+      : "/store-storage/files";
+  }
+  const productId = productRequired();
+  return folderId != null
+    ? `/products/${productId}/files?folderId=${folderId}`
+    : `/products/${productId}/files`;
+}
+
+function bulkMoveUrl() {
+  return isStoreScope.value ? "/store-storage/bulk-move" : `/products/${productRequired()}/bulk-move`;
+}
+
+function foldersUrl(folderId = null, action = "") {
+  if (isStoreScope.value) {
+    if (folderId == null) return "/store-storage/folders";
+    return `/store-storage/folders/${folderId}${action}`;
+  }
+  if (folderId == null) return `/products/${productRequired()}/folders`;
+  return `/products/${productRequired()}/folders/${folderId}${action}`;
+}
+
+function renameFileUrl(fileId) {
+  return isStoreScope.value
+    ? `/store-storage/files/${fileId}/rename`
+    : `/products/${productRequired()}/files/${fileId}/rename`;
+}
+
+function bulkDeleteFilesUrl() {
+  return isStoreScope.value
+    ? "/store-storage/files/bulk-delete"
+    : `/products/${productRequired()}/files/bulk-delete`;
+}
+
+function shareFileUrl(fileId) {
+  return isStoreScope.value ? `/store-storage/files/${fileId}/share` : `/files/${fileId}/share`;
+}
+
+function shareFolderUrl(folderId) {
+  const id = folderId ?? "root";
+  return isStoreScope.value
+    ? `/store-storage/folders/${id}/share`
+    : `/products/${productRequired()}/folders/${id}/share`;
+}
+
+function downloadFolderUrl(folderId) {
+  const id = folderId ?? "root";
+  return isStoreScope.value
+    ? `/store-storage/folders/${id}/download`
+    : `/products/${productRequired()}/folders/${id}/download`;
+}
+
+function fileTagUrl(fileId, tagId) {
+  return isStoreScope.value
+    ? `/store-storage/files/${fileId}/tags/${tagId}`
+    : `/files/${fileId}/tags/${tagId}`;
+}
+
+function bulkTagUrl() {
+  return isStoreScope.value ? "/store-storage/files/bulk-tag" : "/files/bulk-tag";
+}
 
 // Tag palette
 const storeTags = ref([]);
@@ -168,9 +252,9 @@ async function toggleFileTag(fileId, tagId) {
 
   try {
     if (hadTag) {
-      await http.delete(`/files/${fileId}/tags/${tagId}`, { cache: false });
+      await http.delete(fileTagUrl(fileId, tagId), { cache: false });
     } else {
-      await http.post(`/files/${fileId}/tags/${tagId}`, null, { cache: false });
+      await http.post(fileTagUrl(fileId, tagId), null, { cache: false });
     }
   } catch (error) {
     // Rollback
@@ -192,7 +276,7 @@ async function createAndAssignTag(fileId) {
     const res = await http.post("/tags", { name: newTagName.value.trim(), color: newTagColor.value }, { cache: false });
     const newTag = { id: res.data.Id ?? res.data.id, name: res.data.name, color: res.data.color };
     storeTags.value.push(newTag);
-    await http.post(`/files/${fileId}/tags/${newTag.id}`, null, { cache: false });
+    await http.post(fileTagUrl(fileId, newTag.id), null, { cache: false });
     // Optimistic: add tag to file locally
     const file = props.files.find(f => f.id === fileId);
     if (file) {
@@ -233,12 +317,12 @@ async function bulkToggleTag(tagId) {
   try {
     if (allHaveTag) {
       for (const f of files) {
-        await http.delete(`/files/${f.id}/tags/${tagId}`, { cache: false });
+        await http.delete(fileTagUrl(f.id, tagId), { cache: false });
       }
       displaySonnerSuccess(`Тэг убран с ${files.length} файлов`);
     } else {
       const fileIds = files.filter(f => !snapshot.get(f.id)?.some(t => t.id === tagId)).map(f => f.id);
-      await http.post("/files/bulk-tag", { fileIds, tagId }, { cache: false });
+      await http.post(bulkTagUrl(), { fileIds, tagId }, { cache: false });
       displaySonnerSuccess(`Тэг назначен ${fileIds.length} файлам`);
     }
   } catch (error) {
@@ -356,7 +440,7 @@ const editPathValue = ref("");
 const pathInputRef = ref(null);
 
 const breadcrumbs = computed(() => {
-  const items = [{ id: null, name: "Файлы" }];
+  const items = [{ id: null, name: rootLabel.value }];
   if (currentFolderId.value == null) return items;
   const path = [];
   let cur = currentFolderId.value;
@@ -391,8 +475,8 @@ function startPathEdit() {
 function commitPathEdit() {
   isEditingPath.value = false;
   const parts = editPathValue.value.split("/").map(s => s.trim()).filter(Boolean);
-  // First part should be root name "Файлы"
-  if (parts.length === 0 || parts[0] === "Файлы") {
+  // First part should be the current storage root name.
+  if (parts.length === 0 || parts[0] === rootLabel.value) {
     // Walk the path from root
     let folderId = null;
     for (let i = 1; i < parts.length; i++) {
@@ -445,15 +529,12 @@ onChange((newFiles) => {
 // Methods
 async function loadFolders() {
   isLoadingFolders.value = true;
-  await store.dispatch("getProductFolders", {
-    productId: props.productId,
-    onSuccess: (response) => {
-      folders.value = response.data.value || [];
-    },
-    onError: (error) => {
-      displaySonnerError(error);
-    },
-  });
+  try {
+    const response = await http.get(foldersUrl(), { cache: false });
+    folders.value = response.data?.value || response.data || [];
+  } catch (error) {
+    displaySonnerError(error);
+  }
   isLoadingFolders.value = false;
 }
 
@@ -521,14 +602,11 @@ async function onDrop(e, targetFolderId) {
   const fileIds = items.filter(i => i.type === 'file').map(i => i.id);
   const folderIds = items.filter(i => i.type === 'folder').map(i => i.id);
 
-  await store.dispatch("bulkMove", {
-    productId: props.productId,
-    targetFolderId,
-    fileIds,
-    folderIds,
-    onSuccess: () => {},
-    onError: (error) => { displaySonnerError(error); },
-  });
+  try {
+    await http.post(bulkMoveUrl(), { targetFolderId, fileIds, folderIds }, { cache: false });
+  } catch (error) {
+    displaySonnerError(error);
+  }
 
   if (fileIds.length > 0) emit("filesChanged");
   await loadFolders();
@@ -538,6 +616,7 @@ async function onDrop(e, targetFolderId) {
 // External file drop (upload from desktop)
 function onAreaDragEnter(e) {
   if (dragItems.value.length > 0) return;
+  e.preventDefault();
   externalDragCounter.value++;
 }
 
@@ -549,7 +628,7 @@ function onAreaDragOver(e) {
 
 function onAreaDragLeave(e) {
   if (dragItems.value.length > 0) return;
-  externalDragCounter.value--;
+  externalDragCounter.value = Math.max(0, externalDragCounter.value - 1);
 }
 
 async function onAreaDrop(e) {
@@ -589,12 +668,9 @@ async function uploadFiles(fileList) {
   // with silent+onCancel wins the race against SignalR OperationStarted event.
   // ADD_OPERATION deduplicates by ID — whoever adds first keeps the entry.
   const opId = crypto.randomUUID().replace(/-/g, "");
-  const productLabel = props.productSku
-    ? `${props.productName || 'Товар'} [${props.productSku}]`
-    : (props.productName || `Товар #${props.productId}`);
   const uploadTitle = totalFiles === 1
-    ? `Загрузка файла — ${productLabel}`
-    : `Загрузка ${totalFiles} файлов — ${productLabel}`;
+    ? `Загрузка файла — ${subjectLabel.value}`
+    : `Загрузка ${totalFiles} файлов — ${subjectLabel.value}`;
 
   store.dispatch("operations/addOperation", {
     id: opId,
@@ -623,7 +699,7 @@ async function uploadFiles(fileList) {
   }, { cache: false }).catch(() => {});
 
   // First log entry: context about which product this operates on
-  store.dispatch("operations/addLog", { id: opId, level: "info", message: `Товар: ${productLabel}` });
+  store.dispatch("operations/addLog", { id: opId, level: "info", message: subjectLabel.value });
 
   let completedFiles = 0;
   let failedFiles = 0;
@@ -654,9 +730,7 @@ async function uploadFiles(fileList) {
     const formData = new FormData();
     formData.append('files', entry.file);
 
-    const url = entry.folderId != null
-      ? `/products/${props.productId}/files?folderId=${entry.folderId}`
-      : `/products/${props.productId}/files`;
+    const url = uploadFilesUrl(entry.folderId);
 
     try {
       await http({
@@ -819,17 +893,12 @@ async function commitInlineCreate() {
     return;
   }
   isCreatingFolder.value = true;
-  await store.dispatch("createProductFolder", {
-    productId: props.productId,
-    name,
-    parentFolderId: currentFolderId.value,
-    onSuccess: (response) => {
-      folders.value.push(response.data.value);
-    },
-    onError: (error) => {
-      displaySonnerError(error);
-    },
-  });
+  try {
+    const response = await http.post(foldersUrl(), { name, parentFolderId: currentFolderId.value }, { cache: false });
+    folders.value.push(response.data?.value || response.data);
+  } catch (error) {
+    displaySonnerError(error);
+  }
   isCreatingFolder.value = false;
   inlineNewFolder.value = false;
 }
@@ -864,24 +933,20 @@ async function commitInlineRename() {
   if (!newName || newName === target.originalName) return;
 
   if (target.type === 'folder') {
-    await store.dispatch("renameProductFolder", {
-      productId: props.productId,
-      folderId: target.id,
-      name: newName,
-      onSuccess: (response) => {
-        const f = folders.value.find((f) => f.id === target.id);
-        if (f) f.name = response.data.value.name;
-      },
-      onError: (error) => { displaySonnerError(error); },
-    });
+    try {
+      const response = await http.put(foldersUrl(target.id), { name: newName }, { cache: false });
+      const f = folders.value.find((f) => f.id === target.id);
+      if (f) f.name = (response.data?.value || response.data).name;
+    } catch (error) {
+      displaySonnerError(error);
+    }
   } else {
-    await store.dispatch("renameProductFile", {
-      productId: props.productId,
-      fileId: target.id,
-      name: newName,
-      onSuccess: () => { emit("filesChanged"); },
-      onError: (error) => { displaySonnerError(error); },
-    });
+    try {
+      await http.patch(renameFileUrl(target.id), { name: newName }, { cache: false });
+      emit("filesChanged");
+    } catch (error) {
+      displaySonnerError(error);
+    }
   }
 }
 
@@ -912,23 +977,18 @@ function openDeleteFolderDialog(folder) {
 async function deleteFolder() {
   if (!deleteFolderTarget.value) return;
   const isEmpty = deleteFolderTarget.value.fileCount === 0 && deleteFolderTarget.value.subfolderCount === 0;
-  await store.dispatch("deleteProductFolder", {
-    productId: props.productId,
-    folderId: deleteFolderTarget.value.id,
-    recursive: !isEmpty && deleteFolderRecursive.value,
-    onSuccess: () => {
-      const removeIds = [deleteFolderTarget.value.id];
-      if (deleteFolderRecursive.value) {
-        collectDescendantIds(deleteFolderTarget.value.id, removeIds);
-      }
-      folders.value = folders.value.filter((f) => !removeIds.includes(f.id));
-      displaySonnerSuccess("Папка удалена.");
-      if (deleteFolderRecursive.value) emit("filesChanged");
-    },
-    onError: (error) => {
-      displaySonnerError(error);
-    },
-  });
+  try {
+    await http.delete(`${foldersUrl(deleteFolderTarget.value.id)}?recursive=${!!(!isEmpty && deleteFolderRecursive.value)}`, { cache: false });
+    const removeIds = [deleteFolderTarget.value.id];
+    if (deleteFolderRecursive.value) {
+      collectDescendantIds(deleteFolderTarget.value.id, removeIds);
+    }
+    folders.value = folders.value.filter((f) => !removeIds.includes(f.id));
+    displaySonnerSuccess("Папка удалена.");
+    if (deleteFolderRecursive.value) emit("filesChanged");
+  } catch (error) {
+    displaySonnerError(error);
+  }
   showDeleteFolder.value = false;
 }
 
@@ -955,24 +1015,27 @@ async function createShareLink() {
   isCreatingShare.value = true;
 
   if (shareTarget.value.type === 'file') {
-    await store.dispatch("shareFile", {
-      fileId: shareTarget.value.item.id,
-      ttlHours: parseInt(shareTtlHours.value),
-      onSuccess: (response) => {
-        shareUrl.value = `${window.location.origin}${response.data.value.url}`;
-      },
-      onError: (error) => { displaySonnerError(error); },
-    });
+    try {
+      const response = await http.post(
+        shareFileUrl(shareTarget.value.item.id),
+        { ttlHours: parseInt(shareTtlHours.value) },
+        { cache: false },
+      );
+      shareUrl.value = `${window.location.origin}${response.data?.value?.url || response.data?.url}`;
+    } catch (error) {
+      displaySonnerError(error);
+    }
   } else {
-    await store.dispatch("shareFolder", {
-      productId: props.productId,
-      folderId: shareTarget.value.item?.id ?? null,
-      ttlHours: parseInt(shareTtlHours.value),
-      onSuccess: (response) => {
-        shareUrl.value = `${window.location.origin}${response.data.value.url}`;
-      },
-      onError: (error) => { displaySonnerError(error); },
-    });
+    try {
+      const response = await http.post(
+        shareFolderUrl(shareTarget.value.item?.id ?? null),
+        { ttlHours: parseInt(shareTtlHours.value) },
+        { cache: false },
+      );
+      shareUrl.value = `${window.location.origin}${response.data?.value?.url || response.data?.url}`;
+    } catch (error) {
+      displaySonnerError(error);
+    }
   }
 
   isCreatingShare.value = false;
@@ -998,9 +1061,8 @@ async function downloadFolderArchive(folderId) {
   downloadingFolderId.value = folderId;
   displaySonnerSuccess("Формируется архив...");
   try {
-    const id = folderId ?? 'root';
     const response = await http({
-      url: `/products/${props.productId}/folders/${id}/download`,
+      url: downloadFolderUrl(folderId),
       method: 'GET',
       responseType: 'blob',
       timeout: 10 * 60 * 1000,
@@ -1105,12 +1167,9 @@ async function deleteSingleFile(fileId) {
 async function deleteFilesWithOperation(fileIds, fileNames) {
   const count = fileIds.length;
   const opId = crypto.randomUUID().replace(/-/g, "");
-  const productLabel = props.productSku
-    ? `${props.productName || 'Товар'} [${props.productSku}]`
-    : (props.productName || `Товар #${props.productId}`);
   const title = count === 1
-    ? `Удаление файла — ${productLabel}`
-    : `Удаление ${count} файлов — ${productLabel}`;
+    ? `Удаление файла — ${subjectLabel.value}`
+    : `Удаление ${count} файлов — ${subjectLabel.value}`;
 
   // Register in Vuex first (wins SignalR race), then backend
   store.dispatch("operations/addOperation", {
@@ -1127,10 +1186,10 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
     totalItems: count,
   }, { cache: false }).catch(() => {});
 
-  store.dispatch("operations/addLog", { id: opId, level: "info", message: `Товар: ${productLabel}` });
+  store.dispatch("operations/addLog", { id: opId, level: "info", message: subjectLabel.value });
 
   try {
-    await http.post(`/products/${props.productId}/files/bulk-delete`, { fileIds }, { cache: false });
+    await http.post(bulkDeleteFilesUrl(), { fileIds }, { cache: false });
 
     // Log each file name
     for (const name of fileNames) {
@@ -1186,7 +1245,7 @@ watch(() => props.productId, () => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex min-h-[inherit] flex-1 flex-col">
     <!-- Path bar (Windows Explorer style) -->
     <div
       class="flex items-center gap-2 text-sm min-w-0 h-11 px-4 border-b cursor-text"
@@ -1245,7 +1304,7 @@ watch(() => props.productId, () => {
 
     <!-- File list -->
     <div
-      class="flex-1 overflow-auto relative"
+      class="relative min-h-[24rem] flex-1 overflow-auto"
       @contextmenu="onContextMenu($event, 'area', null)"
       @click.self="clearSelection"
       @dragenter="onAreaDragEnter"
@@ -1256,7 +1315,7 @@ watch(() => props.productId, () => {
       <!-- External file drop overlay -->
       <div
         v-if="externalDragCounter > 0 && dragItems.length === 0"
-        class="absolute inset-0 z-10 flex items-center justify-center bg-background/80 border-2 border-dashed border-primary/40 rounded-md pointer-events-none"
+        class="absolute inset-3 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/80 pointer-events-none"
       >
         <div class="flex flex-col items-center gap-1 text-muted-foreground">
           <Upload class="size-8" />
@@ -1265,7 +1324,7 @@ watch(() => props.productId, () => {
       </div>
 
       <div v-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
-        class="flex flex-col items-center justify-center py-16 text-muted-foreground"
+        class="flex min-h-[24rem] flex-col items-center justify-center py-16 text-muted-foreground"
       >
         <Folder class="size-12 mb-3 opacity-40" />
         <p>Папка пуста</p>
@@ -1742,7 +1801,7 @@ watch(() => props.productId, () => {
     </Dialog>
 
     <!-- Sticky bottom actions -->
-    <div class="sticky bottom-0 flex items-center gap-2 p-3 border-t bg-background rounded-b-xl">
+    <div class="sticky bottom-0 flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl">
       <Button variant="outline" size="sm" @click="startInlineCreate">
         <Plus class="size-4 mr-1" />
         Папка

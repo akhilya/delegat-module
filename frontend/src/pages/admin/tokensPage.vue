@@ -128,7 +128,7 @@ export default {
     <!-- Last created token highlight -->
     <div
       v-if="lastCreatedToken"
-      class="mb-4 p-4 bg-success-muted border border-success/30 rounded-lg"
+      class="mb-4 rounded-md bg-success-muted p-4"
     >
       <p class="text-sm text-success-foreground mb-2 font-medium">
         Новый токен создан:
@@ -162,7 +162,7 @@ export default {
         </Button>
       </template>
 
-      <div class="overflow-hidden rounded-lg border bg-card">
+      <div class="overflow-x-auto border-y">
         <Table>
           <TableHeader>
             <TableRow>

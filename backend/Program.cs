@@ -171,6 +171,7 @@ builder.Services.AddHostedService<PluginHostedService>();
 builder.Services.AddScoped<ProductFolderController>();
 
 // Quotas
+builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<QuotaService>();
 
 // Excel import/export

@@ -9,68 +9,71 @@ namespace PrintO.Services;
 public class QuotaService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly AppSettingsService _settingsService;
 
-    private static readonly int? MaxProducts = ParseEnvInt("MAX_PRODUCTS");
-    private static readonly long? MaxStorageBytes = ParseEnvGb("MAX_STORAGE_GB");
-    private static readonly int? MaxFiles = ParseEnvInt("MAX_FILES");
-    private static readonly int? MaxConnections = ParseEnvInt("MAX_CONNECTIONS");
-
-    public QuotaService(IUnitOfWork unitOfWork)
+    public QuotaService(IUnitOfWork unitOfWork, AppSettingsService settingsService)
     {
         _unitOfWork = unitOfWork;
+        _settingsService = settingsService;
     }
 
     public async Task EnsureProductQuotaAsync(int storeId)
     {
-        if (MaxProducts == null) return;
+        var maxProducts = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxProducts);
+        if (maxProducts == null) return;
 
         var count = await _unitOfWork.Repository<Product>()
             .CountAsync(p => p.storeId == storeId);
 
-        if (count >= MaxProducts.Value)
-            throw ApiException.Conflict($"Достигнут лимит товаров (MAX_PRODUCTS={MaxProducts.Value})");
+        if (count >= maxProducts.Value)
+            throw ApiException.Conflict($"Достигнут лимит товаров (MAX_PRODUCTS={maxProducts.Value})");
     }
 
     public async Task EnsureStorageQuotaAsync(int storeId, long additionalBytes = 0)
     {
-        if (MaxStorageBytes == null) return;
+        var maxStorageBytes = await _settingsService.GetPositiveGigabytesAsBytesAsync(AppSettingKeys.MaxStorageGb);
+        if (maxStorageBytes == null) return;
 
-        var usedBytes = await _unitOfWork.Repository<Models.File>()
+        var productFilesBytes = await _unitOfWork.Repository<Models.File>()
             .Query()
             .Where(f => f.product.storeId == storeId)
             .SumAsync(f => f.length);
 
-        if (usedBytes + additionalBytes > MaxStorageBytes.Value)
-            throw ApiException.Conflict($"Достигнут лимит хранилища (MAX_STORAGE_GB={Environment.GetEnvironmentVariable("MAX_STORAGE_GB")})");
+        var storeFilesBytes = await _unitOfWork.Repository<StoreFile>()
+            .Query()
+            .Where(f => f.storeId == storeId)
+            .SumAsync(f => f.length);
+
+        if (productFilesBytes + storeFilesBytes + additionalBytes > maxStorageBytes.Value)
+            throw ApiException.Conflict("Достигнут лимит хранилища (MAX_STORAGE_GB)");
     }
 
     public async Task EnsureFileQuotaAsync(int storeId, int additionalFiles = 1)
     {
-        if (MaxFiles == null) return;
+        var maxFiles = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxFiles);
+        if (maxFiles == null) return;
 
-        var count = await _unitOfWork.Repository<Models.File>()
+        var productFilesCount = await _unitOfWork.Repository<Models.File>()
             .Query()
             .CountAsync(f => f.product.storeId == storeId);
 
-        if (count + additionalFiles > MaxFiles.Value)
-            throw ApiException.Conflict($"Достигнут лимит файлов (MAX_FILES={MaxFiles.Value})");
+        var storeFilesCount = await _unitOfWork.Repository<StoreFile>()
+            .Query()
+            .CountAsync(f => f.storeId == storeId);
+
+        if (productFilesCount + storeFilesCount + additionalFiles > maxFiles.Value)
+            throw ApiException.Conflict($"Достигнут лимит файлов (MAX_FILES={maxFiles.Value})");
     }
 
     public async Task EnsureConnectionQuotaAsync(int storeId)
     {
-        if (MaxConnections == null) return;
+        var maxConnections = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxConnections);
+        if (maxConnections == null) return;
 
         var count = await _unitOfWork.Repository<Models.Marketplace.MarketplaceConnection>()
             .CountAsync(c => c.storeId == storeId);
 
-        if (count >= MaxConnections.Value)
-            throw ApiException.Conflict($"Достигнут лимит подключений (MAX_CONNECTIONS={MaxConnections.Value})");
+        if (count >= maxConnections.Value)
+            throw ApiException.Conflict($"Достигнут лимит подключений (MAX_CONNECTIONS={maxConnections.Value})");
     }
-
-    private static int? ParseEnvInt(string key) =>
-        int.TryParse(Environment.GetEnvironmentVariable(key), out var n) && n > 0 ? n : null;
-
-    private static long? ParseEnvGb(string key) =>
-        double.TryParse(Environment.GetEnvironmentVariable(key), out var gb) && gb > 0
-            ? (long)(gb * 1024 * 1024 * 1024) : null;
 }

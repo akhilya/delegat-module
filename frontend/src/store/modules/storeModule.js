@@ -76,6 +76,15 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async updateStore(ctx, { storeId, data, onSuccess, onError }) {
+      try {
+        const response = await http.patch(`/stores/${storeId}`, data, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
     /**
      * Adds a user as a member of a store.
      * @param {Object} ctx - Vuex action context.

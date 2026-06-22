@@ -32,6 +32,9 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
     [InverseProperty(nameof(Store.members))]
     public virtual ICollection<Store> memberships { get; set; } = new List<Store>();
 
+    [InverseProperty(nameof(Store.storeAdmins))]
+    public virtual ICollection<Store> storeAdminMemberships { get; set; } = new List<Store>();
+
     /// <summary>
     /// Username for display and authentication.
     /// </summary>

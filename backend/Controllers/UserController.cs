@@ -136,10 +136,70 @@ public class UserController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
             s => s.members.Any(m => m.Id == user.Id && m.isActive),
-            query => query.Include(s => s.members));
+            query => query.Include(s => s.members).Include(s => s.storeAdmins));
 
-        var result = stores.Select(s => s.MapToDTO(_serviceProvider)).ToList();
+        var result = stores.Select(s =>
+        {
+            var dto = s.MapToDTO(_serviceProvider);
+            dto.isStoreAdmin = s.storeAdmins.Any(a => a.Id == user.Id && a.isActive);
+            return dto;
+        }).ToList();
         return Ok(result);
+    }
+
+    [HttpPatch]
+    [Route("/users/me")]
+    public async Task<IActionResult> PatchMe([FromBody] UpdateMeForm input)
+    {
+        var currentUser = await _currentUserService.GetUserAsync();
+        if (currentUser == null)
+            throw ApiException.Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(currentUser.Id.ToString());
+        if (user == null)
+            throw ApiException.Unauthorized();
+
+        if (input.password != null)
+        {
+            if (string.IsNullOrWhiteSpace(input.currentPassword))
+                throw ApiException.BadRequest("Введите текущий пароль");
+
+            if (!await _userManager.CheckPasswordAsync(user, input.currentPassword))
+                throw ApiException.BadRequest("Текущий пароль указан неверно");
+
+            if (string.IsNullOrWhiteSpace(input.password))
+                throw ApiException.BadRequest("Новый пароль не может быть пустым");
+        }
+
+        if (input.userName != null)
+        {
+            var normalizedName = input.userName.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedName))
+                throw ApiException.BadRequest("Имя пользователя не может быть пустым");
+
+            if (normalizedName.Length > PrintO.Models.User.USER_NAME_MAX_LENGTH)
+                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {PrintO.Models.User.USER_NAME_MAX_LENGTH} символов");
+
+            var duplicate = await _userManager.FindByNameAsync(normalizedName);
+            if (duplicate != null && duplicate.Id != user.Id)
+                throw ApiException.BadRequest("Пользователь с таким именем уже существует");
+
+            user.UserName = normalizedName;
+            user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
+        }
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+
+        if (input.password != null)
+        {
+            var passwordResult = await _userManager.ChangePasswordAsync(user, input.currentPassword!, input.password!);
+            if (!passwordResult.Succeeded)
+                throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
+        }
+
+        return Ok(user.MapToDTO(_serviceProvider));
     }
 
     [HttpPost]
@@ -183,5 +243,12 @@ public class UserController : ControllerBase
         public string? password { get; set; }
         public bool? isAdmin { get; set; }
         public bool? isActive { get; set; }
+    }
+
+    public struct UpdateMeForm
+    {
+        public string? userName { get; set; }
+        public string? currentPassword { get; set; }
+        public string? password { get; set; }
     }
 }

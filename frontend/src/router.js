@@ -11,6 +11,10 @@ const categoryEditPage = () => import("./pages/categoryEditPage.vue");
 const productGroupsPage = () => import("./pages/productGroupsPage.vue");
 const productGroupEditPage = () => import("./pages/productGroupEditPage.vue");
 const storeAttributesPage = () => import("./pages/storeAttributesPage.vue");
+const storeStoragePage = () => import("./pages/storeStoragePage.vue");
+const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
+const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
+const SettingsStorePage = () => import("./pages/settings/settingsStorePage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
@@ -35,13 +39,19 @@ export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";
 export const PAGE_STORE_ATTRIBUTES = "/store-attributes";
+export const PAGE_STORE_STORAGE = "/storage";
+export const PAGE_SETTINGS = "/settings";
+export const PAGE_SETTINGS_OPERATIONS = "/settings/operations";
+export const PAGE_SETTINGS_USER = "/settings/user";
+export const PAGE_SETTINGS_STORE = "/settings/store";
 export const PAGE_NOT_FOUND = "/:pathMatch(.*)*";
 export const PAGE_TOOLS = "/tools";
-export const PAGE_ADMIN_STORES = "/admin/stores";
-export const PAGE_ADMIN_STORE_DETAIL = "/admin/stores/:id";
-export const PAGE_ADMIN_USERS = "/admin/users";
-export const PAGE_ADMIN_TOKENS = "/admin/tokens";
-export const PAGE_ADMIN_ERROR_LOGS = "/admin/error-logs";
+export const PAGE_ADMIN_STORES = "/settings/admin/stores";
+export const PAGE_ADMIN_STORE_DETAIL = "/settings/admin/stores/:id";
+export const PAGE_ADMIN_USERS = "/settings/admin/users";
+export const PAGE_ADMIN_TOKENS = "/settings/admin/tokens";
+export const PAGE_ADMIN_ERROR_LOGS = "/settings/admin/error-logs";
+export const PAGE_ADMIN_PLUGINS = "/settings/admin/plugins";
 export const PAGE_MARKETPLACE = "/adapter";
 export const PAGE_MARKETPLACE_PLUGINS = "/adapter/plugins";
 export const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
@@ -64,23 +74,35 @@ export const routes = [
   { path: PAGE_PRODUCT_GROUP_CREATE, component: productGroupEditPage, meta: { title: "Новая группа" } },
   { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage, meta: { title: "Группа товаров" } },
   { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { title: "Глобальные атрибуты" } },
+  { path: PAGE_STORE_STORAGE, component: storeStoragePage, meta: { title: "Хранилище" } },
+  { path: PAGE_SETTINGS, component: SettingsOverviewPage, meta: { title: "Общие настройки" } },
+  { path: PAGE_SETTINGS_OPERATIONS, redirect: PAGE_SETTINGS },
+  { path: PAGE_SETTINGS_USER, component: SettingsUserPage, meta: { title: "Настройки пользователя" } },
+  { path: PAGE_SETTINGS_STORE, component: SettingsStorePage, meta: { title: "Настройки магазина" } },
   { path: PAGE_ADMIN_STORES, component: AdminStoresPage, meta: { title: "Магазины" } },
   { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage, meta: { title: "Магазин" } },
   { path: PAGE_ADMIN_USERS, component: AdminUsersPage, meta: { title: "Пользователи" } },
   { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage, meta: { title: "Токены" } },
   { path: PAGE_ADMIN_ERROR_LOGS, component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
+  { path: PAGE_ADMIN_PLUGINS, component: PluginsPage, meta: { title: "Плагины" } },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
   { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
   { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },
-  { path: PAGE_MARKETPLACE_PLUGINS, component: PluginsPage, meta: { title: "Плагины" } },
+  { path: PAGE_MARKETPLACE_PLUGINS, redirect: PAGE_ADMIN_PLUGINS },
   { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { title: "Подключение" } },
   { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { title: "Импорт категории" } },
   { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage, meta: { title: "Маппинг полей" } },
   { path: "/marketplace/:connId/categories/import", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/import`, query: to.query }) },
   { path: "/marketplace/:connId/categories/:mappingId", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/${to.params.mappingId}`, query: to.query }) },
-  { path: "/marketplace/plugins", redirect: PAGE_MARKETPLACE_PLUGINS },
+  { path: "/marketplace/plugins", redirect: PAGE_ADMIN_PLUGINS },
+  { path: "/admin/plugins", redirect: PAGE_ADMIN_PLUGINS },
   { path: "/marketplace/:connId", redirect: to => ({ path: `/adapter/${to.params.connId}`, query: to.query }) },
   { path: "/marketplace", redirect: PAGE_MARKETPLACE },
+  { path: "/admin/stores/:id", redirect: to => ({ path: `/settings/admin/stores/${to.params.id}`, query: to.query }) },
+  { path: "/admin/stores", redirect: PAGE_ADMIN_STORES },
+  { path: "/admin/users", redirect: PAGE_ADMIN_USERS },
+  { path: "/admin/tokens", redirect: PAGE_ADMIN_TOKENS },
+  { path: "/admin/error-logs", redirect: PAGE_ADMIN_ERROR_LOGS },
 ];
 routes.forEach((r) => (r.name = r.path));
 

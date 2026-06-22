@@ -82,6 +82,56 @@ namespace PrintO.Migrations
                     b.ToTable("UserRoles");
                 });
 
+            modelBuilder.Entity("PrintO.Models.AppSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<bool>("isEditable")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("updatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("value")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("valueType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("key")
+                        .IsUnique();
+
+                    b.HasIndex("updatedByUserId");
+
+                    b.ToTable("appSettings");
+                });
+
             modelBuilder.Entity("PrintO.Models.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -1445,6 +1495,186 @@ namespace PrintO.Migrations
                     b.ToTable("storeAttributes");
                 });
 
+            modelBuilder.Entity("PrintO.Models.StoreFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("contentType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("displayName")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("filePath")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("fileType")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("length")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("uploadDateTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("authorUserId");
+
+                    b.HasIndex("folderId");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("storeFiles");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFileShareToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("createdByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("expiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("createdByUserId");
+
+                    b.HasIndex("fileId");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.ToTable("storeFileShareTokens");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFileTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("tagDefinitionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("tagDefinitionId");
+
+                    b.HasIndex("fileId", "tagDefinitionId")
+                        .IsUnique();
+
+                    b.ToTable("storeFileTags");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("parentFolderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("parentFolderId");
+
+                    b.HasIndex("storeId");
+
+                    b.ToTable("storeFolders");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFolderShareToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("createdByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("expiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("createdByUserId");
+
+                    b.HasIndex("folderId");
+
+                    b.HasIndex("storeId");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.ToTable("storeFolderShareTokens");
+                });
+
             modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
@@ -1620,6 +1850,21 @@ namespace PrintO.Migrations
                     b.ToTable("Roles");
                 });
 
+            modelBuilder.Entity("StoreAdministrators", b =>
+                {
+                    b.Property<int>("StoreId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("StoreId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("StoreAdministrators");
+                });
+
             modelBuilder.Entity("StoreUser", b =>
                 {
                     b.Property<int>("membersId")
@@ -1633,6 +1878,16 @@ namespace PrintO.Migrations
                     b.HasIndex("membershipsId");
 
                     b.ToTable("StoreUser");
+                });
+
+            modelBuilder.Entity("PrintO.Models.AppSetting", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "updatedByUser")
+                        .WithMany()
+                        .HasForeignKey("updatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("updatedByUser");
                 });
 
             modelBuilder.Entity("PrintO.Models.Category", b =>
@@ -2036,6 +2291,113 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
+            modelBuilder.Entity("PrintO.Models.StoreFile", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "authorUser")
+                        .WithMany()
+                        .HasForeignKey("authorUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.StoreFolder", "folder")
+                        .WithMany("files")
+                        .HasForeignKey("folderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany()
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("authorUser");
+
+                    b.Navigation("folder");
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFileShareToken", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "createdByUser")
+                        .WithMany()
+                        .HasForeignKey("createdByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.StoreFile", "file")
+                        .WithMany()
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("createdByUser");
+
+                    b.Navigation("file");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFileTag", b =>
+                {
+                    b.HasOne("PrintO.Models.StoreFile", "file")
+                        .WithMany("tags")
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.TagDefinition", "tagDefinition")
+                        .WithMany()
+                        .HasForeignKey("tagDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("file");
+
+                    b.Navigation("tagDefinition");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFolder", b =>
+                {
+                    b.HasOne("PrintO.Models.StoreFolder", "parentFolder")
+                        .WithMany("childFolders")
+                        .HasForeignKey("parentFolderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany()
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("parentFolder");
+
+                    b.Navigation("store");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFolderShareToken", b =>
+                {
+                    b.HasOne("PrintO.Models.User", "createdByUser")
+                        .WithMany()
+                        .HasForeignKey("createdByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.StoreFolder", "folder")
+                        .WithMany()
+                        .HasForeignKey("folderId");
+
+                    b.HasOne("PrintO.Models.Store", "store")
+                        .WithMany()
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("createdByUser");
+
+                    b.Navigation("folder");
+
+                    b.Navigation("store");
+                });
+
             modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
                 {
                     b.HasOne("PrintO.Models.Products.Product", "product")
@@ -2073,6 +2435,21 @@ namespace PrintO.Migrations
                         .HasForeignKey("selectedStoreId");
 
                     b.Navigation("selectedStore");
+                });
+
+            modelBuilder.Entity("StoreAdministrators", b =>
+                {
+                    b.HasOne("PrintO.Models.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PrintO.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("StoreUser", b =>
@@ -2177,6 +2554,18 @@ namespace PrintO.Migrations
             modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
                 {
                     b.Navigation("values");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFile", b =>
+                {
+                    b.Navigation("tags");
+                });
+
+            modelBuilder.Entity("PrintO.Models.StoreFolder", b =>
+                {
+                    b.Navigation("childFolders");
+
+                    b.Navigation("files");
                 });
 #pragma warning restore 612, 618
         }

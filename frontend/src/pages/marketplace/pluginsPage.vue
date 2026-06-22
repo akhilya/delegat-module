@@ -41,9 +41,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Card,
-} from "@/components/ui/card";
 
 export default {
   components: {
@@ -81,7 +78,6 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Card,
   },
   computed: {
     pluginsWithCapabilities() {
@@ -335,7 +331,7 @@ export default {
         </Button>
       </template>
 
-      <Card class="p-0 gap-0 overflow-hidden">
+      <div class="border-y">
         <ul class="divide-y divide-border/60">
           <li
             v-for="plugin in pluginsWithCapabilities"
@@ -414,7 +410,7 @@ export default {
             </div>
           </li>
         </ul>
-      </Card>
+      </div>
     </PageSection>
   </Page>
 </template>

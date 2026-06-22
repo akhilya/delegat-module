@@ -55,6 +55,7 @@ import {
 import Switch from "@/components/ui/switch/Switch.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PAGE_ADMIN_PLUGINS } from "@/router";
 
 export default {
   components: {
@@ -243,6 +244,10 @@ export default {
       this.$router.push(`/adapter/${connectionId}`);
     },
 
+    openPlugins() {
+      this.$router.push(PAGE_ADMIN_PLUGINS);
+    },
+
     getAdapterName(adapterKey) {
       const adapter = this.adapters.find((a) => a.key === adapterKey);
       return adapter?.displayName || adapterKey;
@@ -287,7 +292,7 @@ export default {
               <template #icon>
                 <Package class="size-12 mb-4 text-muted-foreground" />
               </template>
-              <Button variant="outline" class="mt-4" @click="$router.push('/adapter/plugins')">
+              <Button variant="outline" class="mt-4" @click="openPlugins">
                 Перейти к плагинам
               </Button>
             </EmptyState>

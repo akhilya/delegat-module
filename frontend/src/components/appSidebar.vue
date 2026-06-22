@@ -27,36 +27,29 @@ import { http } from "@/main";
 import { useDark, useToggle } from "@vueuse/core";
 import {
   Boxes,
-  FolderOpen,
-  Globe,
-  Key,
+  HardDrive,
   Layers,
   LogOut,
   Moon,
   PackagePlus,
   Plug,
   Settings2,
-  ShoppingBag,
   Store,
   Sun,
   Trash2,
   UserCog,
-  Wand2,
   Bug,
 } from "lucide-vue-next";
 import {
   PAGE_ADMIN_ERROR_LOGS,
-  PAGE_ADMIN_STORES,
-  PAGE_ADMIN_TOKENS,
-  PAGE_ADMIN_USERS,
-  PAGE_CATEGORIES,
-  PAGE_MARKETPLACE,
-  PAGE_MARKETPLACE_PLUGINS,
+  PAGE_ADMIN_PLUGINS,
   PAGE_PRODUCT_CREATION,
   PAGE_PRODUCT_GROUPS,
   PAGE_PRODUCTS,
-  PAGE_STORE_ATTRIBUTES,
-  PAGE_TOOLS,
+  PAGE_SETTINGS,
+  PAGE_SETTINGS_STORE,
+  PAGE_SETTINGS_USER,
+  PAGE_STORE_STORAGE,
 } from "@/router";
 
 export default {
@@ -80,21 +73,17 @@ export default {
     SelectValue,
     Button,
     Boxes,
-    FolderOpen,
-    Globe,
-    Key,
+    HardDrive,
     Layers,
     LogOut,
     Moon,
     PackagePlus,
     Plug,
     Settings2,
-    ShoppingBag,
     Store,
     Sun,
     Trash2,
     UserCog,
-    Wand2,
     Bug,
   },
   setup() {
@@ -110,29 +99,40 @@ export default {
     };
   },
   computed: {
+    selectedStoreMembership() {
+      return this.memberships.find((store) => store.id === this.me?.selectedStoreId);
+    },
+    canManageSelectedStore() {
+      return this.me?.isAdmin || this.selectedStoreMembership?.isStoreAdmin;
+    },
     primaryItems() {
       return [
         { label: "Товары", to: PAGE_PRODUCTS, icon: Boxes },
         { label: "Новый товар", to: PAGE_PRODUCT_CREATION, icon: PackagePlus },
-        { label: "Категории", to: PAGE_CATEGORIES, icon: FolderOpen },
         { label: "Группы товаров", to: PAGE_PRODUCT_GROUPS, icon: Layers },
-        { label: "Глобальные атрибуты", to: PAGE_STORE_ATTRIBUTES, icon: Globe },
+        { label: "Хранилище", to: PAGE_STORE_STORAGE, icon: HardDrive },
         { label: "Корзина товаров", to: `${PAGE_PRODUCTS}?trash=1`, icon: Trash2 },
       ];
     },
-    integrationItems() {
+    userSettingsItems() {
       return [
-        { label: "Адаптеры", to: PAGE_MARKETPLACE, icon: ShoppingBag },
-        { label: "Плагины", to: PAGE_MARKETPLACE_PLUGINS, icon: Plug },
-        { label: "Инструменты", to: PAGE_TOOLS, icon: Wand2 },
+        { label: "Мои настройки", to: PAGE_SETTINGS_USER, icon: UserCog },
       ];
     },
-    adminItems() {
+    storeSettingsItems() {
+      if (!this.canManageSelectedStore) return [];
+
       return [
-        { label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
-        { label: "Пользователи", to: PAGE_ADMIN_USERS, icon: UserCog },
-        { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
+        { label: "Настройки магазина", to: PAGE_SETTINGS_STORE, icon: Store },
+      ];
+    },
+    adminSettingsItems() {
+      if (!this.me?.isAdmin) return [];
+
+      return [
+        { label: "Общие настройки", to: PAGE_SETTINGS, icon: Settings2 },
         { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: Bug },
+        { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
       ];
     },
   },
@@ -266,10 +266,10 @@ export default {
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel>Интеграции</SidebarGroupLabel>
+        <SidebarGroupLabel>Пользователь</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="item in integrationItems" :key="item.label">
+            <SidebarMenuItem v-for="item in userSettingsItems" :key="item.label">
               <SidebarMenuButton as-child :is-active="isActive(item.to)">
                 <RouterLink :to="item.to">
                   <component :is="item.icon" />
@@ -281,11 +281,27 @@ export default {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <SidebarGroup v-if="me?.isAdmin">
+      <SidebarGroup v-if="storeSettingsItems.length > 0">
+        <SidebarGroupLabel>Настройки магазина</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem v-for="item in storeSettingsItems" :key="item.label">
+              <SidebarMenuButton as-child :is-active="isActive(item.to)">
+                <RouterLink :to="item.to">
+                  <component :is="item.icon" />
+                  <span>{{ item.label }}</span>
+                </RouterLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup v-if="adminSettingsItems.length > 0">
         <SidebarGroupLabel>Администрирование</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="item in adminItems" :key="item.label">
+            <SidebarMenuItem v-for="item in adminSettingsItems" :key="item.label">
               <SidebarMenuButton as-child :is-active="isActive(item.to)">
                 <RouterLink :to="item.to">
                   <component :is="item.icon" />

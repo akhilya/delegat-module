@@ -177,7 +177,7 @@ export default {
       empty-title="Ошибок нет"
       empty-description="Новые неожиданные ошибки backend появятся здесь автоматически"
     >
-      <div class="overflow-hidden rounded-lg border bg-card">
+      <div class="overflow-x-auto border-y">
         <Table>
           <TableHeader>
             <TableRow>

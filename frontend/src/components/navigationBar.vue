@@ -16,34 +16,25 @@ import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useDark, useToggle } from "@vueuse/core";
 import {
-  FolderOpen,
-  Globe,
   House,
-  Key,
   Layers,
   Loader2,
   LogOut,
   Moon,
   Plus,
-  Puzzle,
-  ShoppingBag,
-  Store,
+  Settings2,
   Sun,
   Trash2,
+  UserCog,
   UserRound,
-  Users,
 } from "lucide-vue-next";
 import {
-  PAGE_ADMIN_STORES,
-  PAGE_ADMIN_TOKENS,
-  PAGE_ADMIN_USERS,
-  PAGE_CATEGORIES,
-  PAGE_MARKETPLACE,
-  PAGE_MARKETPLACE_PLUGINS,
   PAGE_PRODUCT_CREATION,
   PAGE_PRODUCT_GROUPS,
   PAGE_PRODUCTS,
-  PAGE_STORE_ATTRIBUTES,
+  PAGE_SETTINGS,
+  PAGE_SETTINGS_STORE,
+  PAGE_SETTINGS_USER,
 } from "@/router";
 
 export default {
@@ -56,22 +47,17 @@ export default {
     DropdownMenuTrigger,
     SidebarTrigger,
     Button,
-    FolderOpen,
-    Globe,
     House,
-    Key,
     Layers,
     Loader2,
     LogOut,
     Moon,
     Plus,
-    Puzzle,
-    ShoppingBag,
-    Store,
+    Settings2,
     Sun,
     Trash2,
+    UserCog,
     UserRound,
-    Users,
   },
   setup() {
     const isDark = useDark();
@@ -87,38 +73,26 @@ export default {
   },
   methods: {
     ...mapActions(["getMe", "postLogOut"]),
-    goToAdminStores() {
-      this.$router.push(PAGE_ADMIN_STORES);
-    },
-    goToAdminUsers() {
-      this.$router.push(PAGE_ADMIN_USERS);
-    },
-    goToAdminTokens() {
-      this.$router.push(PAGE_ADMIN_TOKENS);
-    },
     goToProducts() {
       this.$router.push(PAGE_PRODUCTS);
     },
     goToProductCreation() {
       this.$router.push(PAGE_PRODUCT_CREATION);
     },
-    goToMarketplace() {
-      this.$router.push(PAGE_MARKETPLACE);
-    },
-    goToPlugins() {
-      this.$router.push(PAGE_MARKETPLACE_PLUGINS);
-    },
-    goToCategories() {
-      this.$router.push(PAGE_CATEGORIES);
-    },
     goToProductGroups() {
       this.$router.push(PAGE_PRODUCT_GROUPS);
     },
-    goToStoreAttributes() {
-      this.$router.push(PAGE_STORE_ATTRIBUTES);
-    },
     goToTrash() {
       this.$router.push({ path: PAGE_PRODUCTS, query: { trash: "1" } });
+    },
+    goToUserSettings() {
+      this.$router.push(PAGE_SETTINGS_USER);
+    },
+    goToStoreSettings() {
+      this.$router.push(PAGE_SETTINGS_STORE);
+    },
+    goToAdminSettings() {
+      this.$router.push(PAGE_SETTINGS);
     },
   },
   async mounted() {
@@ -172,47 +146,30 @@ export default {
                 <Plus class="size-4 mr-2" />
                 Добавить товар
               </DropdownMenuItem>
-              <DropdownMenuItem @select="goToCategories">
-                <FolderOpen class="size-4 mr-2" />
-                Категории
-              </DropdownMenuItem>
               <DropdownMenuItem @select="goToProductGroups">
                 <Layers class="size-4 mr-2" />
                 Группы товаров
-              </DropdownMenuItem>
-              <DropdownMenuItem @select="goToStoreAttributes">
-                <Globe class="size-4 mr-2" />
-                Глобальные атрибуты
               </DropdownMenuItem>
               <DropdownMenuItem @select="goToTrash">
                 <Trash2 class="size-4 mr-2" />
                 Корзина товаров
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem @select="goToMarketplace">
-                <ShoppingBag class="size-4 mr-2" />
-                Адаптеры
+              <DropdownMenuItem @select="goToUserSettings">
+                <UserCog class="size-4 mr-2" />
+                Мои настройки
               </DropdownMenuItem>
-              <DropdownMenuItem @select="goToPlugins">
-                <Puzzle class="size-4 mr-2" />
-                Плагины
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <template v-if="me?.isAdmin">
-                <DropdownMenuItem @select="goToAdminStores">
-                  <Store class="size-4 mr-2" />
-                  Магазины
+                <DropdownMenuItem @select="goToStoreSettings">
+                  <Settings2 class="size-4 mr-2" />
+                  Настройки магазина
                 </DropdownMenuItem>
-                <DropdownMenuItem @select="goToAdminUsers">
-                  <Users class="size-4 mr-2" />
-                  Пользователи
+                <DropdownMenuItem @select="goToAdminSettings">
+                  <Settings2 class="size-4 mr-2" />
+                  Общие настройки
                 </DropdownMenuItem>
-                <DropdownMenuItem @select="goToAdminTokens">
-                  <Key class="size-4 mr-2" />
-                  Токены
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
               </template>
+              <DropdownMenuSeparator />
               <DropdownMenuItem @select="toggleDark()">
                 <Sun v-if="isDark" class="size-4 mr-2" />
                 <Moon v-else class="size-4 mr-2" />

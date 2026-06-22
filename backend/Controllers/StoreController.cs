@@ -35,7 +35,7 @@ public class StoreController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
             s => true,
-            q => q.Include(s => s.members)
+            q => q.Include(s => s.members).Include(s => s.storeAdmins)
         );
 
         var paged = stores
@@ -57,7 +57,7 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> GetStoreById(int id)
     {
         var storeRepo = _unitOfWork.Repository<Store>();
-        var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
+        var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
             throw ApiException.NotFound("Магазин не найден");
@@ -91,6 +91,10 @@ public class StoreController : ControllerBase
 
             foreach (var member in activeUsers.DistinctBy(u => u.Id))
                 newStore.members.Add(member);
+
+            var creator = activeUsers.FirstOrDefault(u => u.Id == user.Id);
+            if (creator != null)
+                newStore.storeAdmins.Add(creator);
         }
         else
         {
@@ -99,6 +103,7 @@ public class StoreController : ControllerBase
                 throw ApiException.Unauthorized("Пользователь не найден");
 
             newStore.members.Add(creator);
+            newStore.storeAdmins.Add(creator);
         }
 
         await storeRepo.AddWithoutSaveAsync(newStore);
@@ -112,11 +117,11 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> PostAddStoreMember(int id, [FromBody] AddMemberForm input)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
+        if (!await CanManageStoreAsync(id, currentUser))
             throw ApiException.Forbidden("Только администраторы могут добавлять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
-        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, query => query.Include(s => s.members));
+        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
             throw ApiException.NotFound("Магазин не найден");
@@ -141,11 +146,11 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> DeleteStoreMember(int id, int userId)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
+        if (!await CanManageStoreAsync(id, currentUser))
             throw ApiException.Forbidden("Только администраторы могут удалять участников");
 
         var storeRepo = _unitOfWork.Repository<Store>();
-        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, query => query.Include(s => s.members));
+        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
             throw ApiException.NotFound("Магазин не найден");
@@ -155,6 +160,9 @@ public class StoreController : ControllerBase
             throw ApiException.BadRequest("Пользователь не является участником этого магазина");
 
         store.members.Remove(memberToRemove);
+        var adminToRemove = store.storeAdmins.FirstOrDefault(m => m.Id == userId);
+        if (adminToRemove != null)
+            store.storeAdmins.Remove(adminToRemove);
 
         // Clear selected store if user was removed from their selected store
         if (memberToRemove.selectedStoreId == id)
@@ -172,14 +180,93 @@ public class StoreController : ControllerBase
     public async Task<IActionResult> GetStoreDetail(int id)
     {
         var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
+        if (!await CanManageStoreAsync(id, currentUser))
             throw ApiException.Forbidden("Только администраторы могут просматривать детали магазина");
 
         var storeRepo = _unitOfWork.Repository<Store>();
-        var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
+        var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
             throw ApiException.NotFound("Магазин не найден");
+
+        return Ok(store.MapToDetailDTO(_serviceProvider));
+    }
+
+    [HttpPatch]
+    [Route("/stores/{id}")]
+    public async Task<IActionResult> PatchStore(int id, [FromBody] UpdateStoreForm input)
+    {
+        var currentUser = await _currentUserService.GetUserAsync();
+        if (!await CanManageStoreAsync(id, currentUser))
+            throw ApiException.Forbidden("Недостаточно прав для изменения магазина");
+
+        var storeRepo = _unitOfWork.Repository<Store>();
+        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
+
+        if (store == null)
+            throw ApiException.NotFound("Магазин не найден");
+
+        if (input.name != null)
+        {
+            var name = input.name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                throw ApiException.BadRequest("Название магазина не может быть пустым");
+
+            if (name.Length > Store.STORE_NAME_MAX_LENGTH)
+                throw ApiException.BadRequest($"Название магазина не может быть длиннее {Store.STORE_NAME_MAX_LENGTH} символов");
+
+            var duplicate = await storeRepo.FindAsync(s => s.Id != id && s.name == name);
+            if (duplicate != null)
+                throw ApiException.BadRequest("Магазин с таким именем уже существует");
+
+            store.name = name;
+        }
+
+        var isPlatformAdmin = currentUser?.isAdmin == true;
+        if ((input.memberIds != null || input.storeAdminIds != null) && !isPlatformAdmin)
+            throw ApiException.Forbidden("Только администратор платформы может менять участников и администраторов магазина");
+
+        if (input.memberIds != null)
+        {
+            var memberIds = input.memberIds.Distinct().ToHashSet();
+            var removedMembers = store.members.Where(member => !memberIds.Contains(member.Id)).ToList();
+            var users = await _unitOfWork.Repository<User>()
+                .QueryTracking()
+                .Where(u => memberIds.Contains(u.Id) && u.isActive)
+                .ToListAsync();
+
+            if (users.Count != memberIds.Count)
+                throw ApiException.BadRequest("Один или несколько пользователей не найдены");
+
+            store.members.Clear();
+            foreach (var user in users)
+                store.members.Add(user);
+
+            foreach (var removedMember in removedMembers)
+            {
+                if (removedMember.selectedStoreId == id)
+                    removedMember.selectedStoreId = null;
+            }
+
+            var removedStoreAdmins = store.storeAdmins.Where(admin => !memberIds.Contains(admin.Id)).ToList();
+            foreach (var admin in removedStoreAdmins)
+                store.storeAdmins.Remove(admin);
+        }
+
+        if (input.storeAdminIds != null)
+        {
+            var adminIds = input.storeAdminIds.Distinct().ToHashSet();
+            var memberIds = store.members.Select(m => m.Id).ToHashSet();
+            if (!adminIds.All(memberIds.Contains))
+                throw ApiException.BadRequest("Администратор магазина должен быть участником этого магазина");
+
+            var admins = store.members.Where(m => adminIds.Contains(m.Id)).ToList();
+            store.storeAdmins.Clear();
+            foreach (var admin in admins)
+                store.storeAdmins.Add(admin);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }
@@ -201,5 +288,28 @@ public class StoreController : ControllerBase
     public struct AddMemberForm
     {
         public int userId { get; set; }
+    }
+
+    public struct UpdateStoreForm
+    {
+        public string? name { get; set; }
+        public List<int>? memberIds { get; set; }
+        public List<int>? storeAdminIds { get; set; }
+    }
+
+    private static IQueryable<Store> StoreIncludes(IQueryable<Store> query) =>
+        query.Include(s => s.members).Include(s => s.storeAdmins);
+
+    private async Task<bool> CanManageStoreAsync(int storeId, User? user)
+    {
+        if (user == null || !user.isActive)
+            return false;
+
+        if (user.isAdmin)
+            return true;
+
+        return await _unitOfWork.Repository<Store>()
+            .Query()
+            .AnyAsync(s => s.Id == storeId && s.storeAdmins.Any(a => a.Id == user.Id && a.isActive));
     }
 }

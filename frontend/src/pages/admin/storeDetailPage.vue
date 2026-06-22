@@ -4,9 +4,10 @@ import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Store, UserPlus, UserMinus, Loader2, Users } from "lucide-vue-next";
+import { UserPlus, UserMinus, Loader2, Users } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +45,7 @@ export default {
     NavigationBar,
     Breadcrumbs,
     Button,
-    Store,
+    PageHeader,
     UserPlus,
     UserMinus,
     Loader2,
@@ -182,59 +183,58 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading">
-      <div v-if="store" class="space-y-4">
-        <div class="flex justify-between items-center">
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <Users class="size-5" />
-            Участники ({{ store.members.length }})
-          </h2>
+    <PageHeader
+      :title="store?.name || 'Магазин'"
+      :description="store ? `Участников: ${store.members.length}` : 'Настройки участников магазина'"
+    >
+      <Dialog v-if="store" v-model:open="showAddDialog">
+        <DialogTrigger as-child>
+          <Button :disabled="availableUsers.length === 0">
+            <UserPlus class="mr-2 size-4" />
+            Добавить участника
+          </Button>
+        </DialogTrigger>
+        <DialogContent class="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить участника</DialogTitle>
+            <DialogDescription>
+              Выберите пользователя для добавления в магазин
+            </DialogDescription>
+          </DialogHeader>
+          <div class="py-4">
+            <Select v-model="selectedUserId">
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите пользователя..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Пользователи</SelectLabel>
+                  <SelectItem
+                    v-for="user in availableUsers"
+                    :key="user.id"
+                    :value="String(user.id)"
+                  >
+                    {{ user.userName }}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <DialogClose as-child>
+              <Button variant="outline">Отмена</Button>
+            </DialogClose>
+            <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
+              <Loader2 v-if="isAddingMember" class="mr-2 size-4 animate-spin" />
+              Добавить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageHeader>
 
-          <Dialog v-model:open="showAddDialog">
-            <DialogTrigger as-child>
-              <Button :disabled="availableUsers.length === 0">
-                <UserPlus class="size-4 mr-2" />
-                Добавить
-              </Button>
-            </DialogTrigger>
-            <DialogContent class="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Добавить участника</DialogTitle>
-                <DialogDescription>
-                  Выберите пользователя для добавления в магазин
-                </DialogDescription>
-              </DialogHeader>
-              <div class="py-4">
-                <Select v-model="selectedUserId">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите пользователя..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Пользователи</SelectLabel>
-                      <SelectItem
-                        v-for="user in availableUsers"
-                        :key="user.id"
-                        :value="String(user.id)"
-                      >
-                        {{ user.userName }}
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              <DialogFooter>
-                <DialogClose as-child>
-                  <Button variant="outline">Отмена</Button>
-                </DialogClose>
-                <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
-                  <Loader2 v-if="isAddingMember" class="size-4 mr-2 animate-spin" />
-                  Добавить
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+    <PageSection :loading="isLoading">
+      <div v-if="store">
 
         <EmptyState
           v-if="store.members.length === 0"
@@ -246,7 +246,7 @@ export default {
           </template>
         </EmptyState>
 
-        <div v-else>
+        <div v-else class="overflow-x-auto border-y">
           <Table>
             <TableHeader>
               <TableRow>

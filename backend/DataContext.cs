@@ -12,6 +12,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<Store> stores { get; set; }
     public DbSet<Product> products { get; set; }
     public DbSet<Models.File> files { get; set; }
+    public DbSet<StoreFile> storeFiles { get; set; }
+    public DbSet<StoreFolder> storeFolders { get; set; }
+    public DbSet<StoreFileTag> storeFileTags { get; set; }
     public DbSet<ImageReference> images { get; set; }
     public DbSet<PendingImageDownload> pendingImageDownloads { get; set; }
     public DbSet<PendingProductImport> pendingProductImports { get; set; }
@@ -42,6 +45,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // File sharing
     public DbSet<FileShareToken> fileShareTokens { get; set; }
     public DbSet<FolderShareToken> folderShareTokens { get; set; }
+    public DbSet<StoreFileShareToken> storeFileShareTokens { get; set; }
+    public DbSet<StoreFolderShareToken> storeFolderShareTokens { get; set; }
 
     // System versioning
     public DbSet<SystemVersion> systemVersions { get; set; }
@@ -62,6 +67,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Persisted server errors for administrators
     public DbSet<ErrorLog> errorLogs { get; set; }
 
+    // Platform settings editable by administrators
+    public DbSet<AppSetting> appSettings { get; set; }
+
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
     }
@@ -76,6 +84,19 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasOne(u => u.selectedStore)
             .WithMany()
             .HasForeignKey(u => u.selectedStoreId);
+
+        builder.Entity<Store>()
+            .HasMany(s => s.storeAdmins)
+            .WithMany(u => u.storeAdminMemberships)
+            .UsingEntity<Dictionary<string, object>>(
+                "StoreAdministrators",
+                right => right.HasOne<User>().WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade),
+                left => left.HasOne<Store>().WithMany().HasForeignKey("StoreId").OnDelete(DeleteBehavior.Cascade),
+                join =>
+                {
+                    join.HasKey("StoreId", "UserId");
+                    join.HasIndex("UserId");
+                });
 
         // SystemVersion unique key
         builder.Entity<SystemVersion>()
@@ -189,6 +210,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<Models.File>()
             .HasIndex(f => f.folderId);
 
+        builder.Entity<StoreFile>()
+            .HasIndex(f => f.storeId);
+
+        builder.Entity<StoreFile>()
+            .HasIndex(f => f.folderId);
+
         // ProductFolder self-referencing relationship
         builder.Entity<ProductFolder>()
             .HasOne(f => f.parentFolder)
@@ -208,6 +235,24 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<ProductFolder>()
             .HasIndex(pf => pf.parentFolderId);
+
+        builder.Entity<StoreFolder>()
+            .HasOne(f => f.parentFolder)
+            .WithMany(f => f.childFolders)
+            .HasForeignKey(f => f.parentFolderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<StoreFile>()
+            .HasOne(f => f.folder)
+            .WithMany(f => f.files)
+            .HasForeignKey(f => f.folderId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<StoreFolder>()
+            .HasIndex(sf => sf.storeId);
+
+        builder.Entity<StoreFolder>()
+            .HasIndex(sf => sf.parentFolderId);
 
         builder.Entity<ImageReference>()
             .HasIndex(i => i.productId);
@@ -243,12 +288,25 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<FolderShareToken>()
             .HasIndex(fst => fst.token).IsUnique();
 
+        builder.Entity<StoreFileShareToken>()
+            .HasIndex(fst => fst.token).IsUnique();
+
+        builder.Entity<StoreFileShareToken>()
+            .HasIndex(fst => fst.fileId);
+
+        builder.Entity<StoreFolderShareToken>()
+            .HasIndex(fst => fst.token).IsUnique();
+
         // TagDefinition indexes
         builder.Entity<TagDefinition>()
             .HasIndex(td => td.storeId);
 
         // FileTag: unique (fileId, tagDefinitionId) — one tag per file
         builder.Entity<FileTag>()
+            .HasIndex(ft => new { ft.fileId, ft.tagDefinitionId })
+            .IsUnique();
+
+        builder.Entity<StoreFileTag>()
             .HasIndex(ft => new { ft.fileId, ft.tagDefinitionId })
             .IsUnique();
 
@@ -269,5 +327,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<ErrorLog>()
             .HasIndex(e => e.statusCode);
+
+        // AppSetting indexes
+        builder.Entity<AppSetting>()
+            .HasIndex(s => s.key)
+            .IsUnique();
+
+        builder.Entity<AppSetting>()
+            .HasOne(s => s.updatedByUser)
+            .WithMany()
+            .HasForeignKey(s => s.updatedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

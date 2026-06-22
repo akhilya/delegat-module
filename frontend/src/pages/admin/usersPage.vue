@@ -62,11 +62,14 @@ export default {
   data() {
     return {
       users: [],
+      me: null,
       drafts: {},
       editingUser: null,
       editForm: {
         userName: "",
         password: "",
+        isAdmin: false,
+        isActive: true,
       },
       isEditDialogOpen: false,
       isLoading: false,
@@ -78,16 +81,21 @@ export default {
     activeUsersCount() {
       return this.users.filter((user) => user.isActive).length;
     },
-    hasIdentityChanges() {
+    hasEditChanges() {
       if (!this.editingUser) return false;
       return (
         this.editForm.userName.trim() !== (this.editingUser.userName || "") ||
-        this.editForm.password.trim().length > 0
+        this.editForm.password.trim().length > 0 ||
+        this.editForm.isAdmin !== this.editingUser.isAdmin ||
+        this.editForm.isActive !== this.editingUser.isActive
       );
+    },
+    editingSelf() {
+      return Boolean(this.editingUser && this.me && this.editingUser.id === this.me.id);
     },
   },
   methods: {
-    ...mapActions(["getAdminUsers", "updateAdminUser"]),
+    ...mapActions(["getMe", "getAdminUsers", "updateAdminUser"]),
 
     createDrafts(users) {
       this.drafts = users.reduce((acc, user) => {
@@ -113,6 +121,17 @@ export default {
       this.isLoading = false;
     },
 
+    async fetchMe() {
+      await this.getMe({
+        onSuccess: (response) => {
+          this.me = response.data.value;
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+    },
+
     applyUpdatedUser(updatedUser) {
       const index = this.users.findIndex((item) => item.id === updatedUser.id);
       if (index !== -1) {
@@ -136,6 +155,8 @@ export default {
       this.editForm = {
         userName: user.userName || "",
         password: "",
+        isAdmin: user.isAdmin,
+        isActive: user.isActive,
       };
       this.isEditDialogOpen = true;
     },
@@ -146,6 +167,8 @@ export default {
       this.editForm = {
         userName: "",
         password: "",
+        isAdmin: false,
+        isActive: true,
       };
     },
 
@@ -173,7 +196,7 @@ export default {
     },
 
     async saveIdentityChanges() {
-      if (!this.editingUser || !this.hasIdentityChanges) return;
+      if (!this.editingUser || !this.hasEditChanges) return;
 
       const userName = this.editForm.userName.trim();
       const password = this.editForm.password.trim();
@@ -184,7 +207,11 @@ export default {
       }
 
       this.savingUserId = this.editingUser.id;
-      const payload = { userName };
+      const payload = {
+        userName,
+        isAdmin: this.editForm.isAdmin,
+        isActive: this.editForm.isActive,
+      };
       if (password) {
         payload.password = password;
       }
@@ -195,7 +222,7 @@ export default {
         onSuccess: async (response) => {
           await this.fetchUsers();
           this.closeEditDialog();
-          displaySonnerSuccess(password ? "Пользователь и пароль обновлены" : "Имя пользователя обновлено");
+          displaySonnerSuccess("Пользователь обновлён");
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -205,6 +232,7 @@ export default {
     },
   },
   mounted() {
+    this.fetchMe();
     this.fetchUsers();
   },
 };
@@ -227,15 +255,14 @@ export default {
       empty-title="Нет пользователей"
       empty-description="Пользователи появятся здесь после регистрации по приглашению"
     >
-      <div class="overflow-hidden rounded-lg border bg-card">
+      <div class="overflow-x-auto border-y">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead class="w-24">ID</TableHead>
               <TableHead>Имя</TableHead>
               <TableHead class="w-32">Роль</TableHead>
-              <TableHead class="w-36">Админ</TableHead>
-              <TableHead class="w-36">Активен</TableHead>
+              <TableHead class="w-32">Статус</TableHead>
               <TableHead class="w-32"></TableHead>
             </TableRow>
           </TableHeader>
@@ -252,23 +279,14 @@ export default {
                 <div class="font-medium">{{ user.userName }}</div>
               </TableCell>
               <TableCell>
-                <Badge :variant="drafts[user.id].isAdmin ? 'default' : 'secondary'">
-                  {{ drafts[user.id].isAdmin ? "Админ" : "Пользователь" }}
+                <Badge :variant="user.isAdmin ? 'default' : 'secondary'">
+                  {{ user.isAdmin ? "Админ" : "Пользователь" }}
                 </Badge>
               </TableCell>
               <TableCell>
-                <Switch
-                  :model-value="drafts[user.id].isAdmin"
-                  :disabled="savingUserId === user.id"
-                  @update:model-value="drafts[user.id].isAdmin = $event"
-                />
-              </TableCell>
-              <TableCell>
-                <Switch
-                  :model-value="drafts[user.id].isActive"
-                  :disabled="savingUserId === user.id"
-                  @update:model-value="drafts[user.id].isActive = $event"
-                />
+                <Badge :variant="user.isActive ? 'secondary' : 'outline'">
+                  {{ user.isActive ? "Активен" : "Отключён" }}
+                </Badge>
               </TableCell>
               <TableCell>
                 <div class="flex justify-end gap-1">
@@ -280,19 +298,6 @@ export default {
                   >
                     <Pencil class="size-4" />
                     <span class="sr-only">Редактировать пользователя</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    :disabled="savingUserId === user.id || !hasRoleChanges(user)"
-                    @click="saveRoleChanges(user)"
-                  >
-                    <Loader2
-                      v-if="savingUserId === user.id"
-                      class="size-4 animate-spin"
-                    />
-                    <Save v-else class="size-4" />
-                    <span class="sr-only">Сохранить роль и статус</span>
                   </Button>
                 </div>
               </TableCell>
@@ -337,6 +342,34 @@ export default {
               />
             </div>
           </div>
+
+          <div class="grid gap-3 rounded-lg border p-3">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <div class="text-sm font-medium">Глобальный администратор</div>
+                <div class="text-xs text-muted-foreground">Доступ ко всем общим настройкам платформы</div>
+              </div>
+              <Switch
+                :model-value="editForm.isAdmin"
+                :disabled="savingUserId === editingUser?.id || editingSelf"
+                @update:model-value="editForm.isAdmin = $event"
+              />
+            </div>
+            <div v-if="editingSelf" class="text-xs text-muted-foreground">
+              Нельзя менять собственный статус глобального администратора.
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <div class="text-sm font-medium">Активен</div>
+                <div class="text-xs text-muted-foreground">Отключённый пользователь не может войти</div>
+              </div>
+              <Switch
+                :model-value="editForm.isActive"
+                :disabled="savingUserId === editingUser?.id"
+                @update:model-value="editForm.isActive = $event"
+              />
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -348,7 +381,7 @@ export default {
             Отмена
           </Button>
           <Button
-            :disabled="savingUserId === editingUser?.id || !hasIdentityChanges"
+            :disabled="savingUserId === editingUser?.id || !hasEditChanges"
             @click="saveIdentityChanges"
           >
             <Loader2

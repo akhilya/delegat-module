@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PrintO.Infrastructure.Auth;
+using PrintO.Infrastructure.Middleware;
 using PrintO.Models;
 using PrintO.Services;
 
@@ -13,12 +14,18 @@ public class OperationsController : ControllerBase
     private readonly DataContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOperationLogger _operationLogger;
+    private readonly AppSettingsService _settingsService;
 
-    public OperationsController(DataContext context, ICurrentUserService currentUserService, IOperationLogger operationLogger)
+    public OperationsController(
+        DataContext context,
+        ICurrentUserService currentUserService,
+        IOperationLogger operationLogger,
+        AppSettingsService settingsService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _operationLogger = operationLogger;
+        _settingsService = settingsService;
     }
 
     [HttpGet]
@@ -425,6 +432,255 @@ public class OperationsController : ControllerBase
         if (storeId == null) return null;
         return await _context.operations
             .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId.Value, ct);
+    }
+
+    [HttpGet]
+    [Route("/settings/operations/summary")]
+    public async Task<IActionResult> GetOperationsSummary(CancellationToken ct)
+    {
+        await EnsureAdminAsync(ct);
+
+        var storeId = _currentUserService.GetSelectedStoreId();
+        if (storeId == null)
+            return BadRequest(new { message = "Не выбран магазин" });
+
+        var operations = await _context.operations
+            .AsNoTracking()
+            .Where(o => o.storeId == storeId.Value)
+            .GroupBy(o => o.status)
+            .Select(g => new QueueStatusCount(g.Key, g.Count()))
+            .ToListAsync(ct);
+
+        var limits = await _settingsService.GetSettingsAsync(ct);
+
+        return Ok(new
+        {
+            storeId,
+            limits,
+            operations = new
+            {
+                key = "operations",
+                label = "Фоновые процессы",
+                total = operations.Sum(x => x.count),
+                statuses = operations
+            },
+            queues = new[]
+            {
+                await BuildExportQueueSummary(storeId.Value, ct),
+                await BuildImportQueueSummary(storeId.Value, ct),
+                await BuildImageQueueSummary(storeId.Value, ct),
+                await BuildTransferQueueSummary(storeId.Value, ct)
+            }
+        });
+    }
+
+    [HttpPost]
+    [Route("/settings/operations/clear")]
+    public async Task<IActionResult> ClearOperationsQueue([FromBody] ClearOperationsInput input, CancellationToken ct)
+    {
+        await EnsureAdminAsync(ct);
+
+        var storeId = _currentUserService.GetSelectedStoreId();
+        if (storeId == null)
+            return BadRequest(new { message = "Не выбран магазин" });
+
+        var target = (input.target ?? "").Trim().ToLowerInvariant();
+        var status = (input.status ?? "inactive").Trim().ToLowerInvariant();
+
+        var deleted = target switch
+        {
+            "operations" => await ClearOperationsHistory(storeId.Value, status, ct),
+            "exports" => await ClearExports(storeId.Value, status, ct),
+            "imports" => await ClearImports(storeId.Value, status, ct),
+            "images" => await ClearImages(storeId.Value, status, ct),
+            "transfers" => await ClearTransfers(storeId.Value, status, ct),
+            "all-queues" => await ClearExports(storeId.Value, status, ct)
+                + await ClearImports(storeId.Value, status, ct)
+                + await ClearImages(storeId.Value, status, ct)
+                + await ClearTransfers(storeId.Value, status, ct),
+            _ => throw ApiException.BadRequest("Неизвестная очередь")
+        };
+
+        return Ok(new { deleted });
+    }
+
+    public record ClearOperationsInput(string? target, string? status);
+    public record QueueStatusCount(string status, int count);
+    public record QueueSummary(string key, string label, int total, List<QueueStatusCount> statuses);
+
+    private async Task<QueueSummary> BuildExportQueueSummary(int storeId, CancellationToken ct)
+    {
+        var grouped = await _context.pendingProductExports
+            .AsNoTracking()
+            .Where(x => x.storeId == storeId)
+            .GroupBy(x => x.status)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var statuses = grouped
+            .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
+            .ToList();
+
+        return new QueueSummary("exports", "Экспорт товаров", statuses.Sum(x => x.count), statuses);
+    }
+
+    private async Task<QueueSummary> BuildImportQueueSummary(int storeId, CancellationToken ct)
+    {
+        var grouped = await _context.pendingProductImports
+            .AsNoTracking()
+            .Where(x => x.storeId == storeId)
+            .GroupBy(x => x.status)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var statuses = grouped
+            .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
+            .ToList();
+
+        return new QueueSummary("imports", "Импорт товаров", statuses.Sum(x => x.count), statuses);
+    }
+
+    private async Task<QueueSummary> BuildImageQueueSummary(int storeId, CancellationToken ct)
+    {
+        var grouped = await _context.pendingImageDownloads
+            .AsNoTracking()
+            .Where(x => x.storeId == storeId)
+            .GroupBy(x => x.status)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var statuses = grouped
+            .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
+            .ToList();
+
+        return new QueueSummary("images", "Скачивание изображений", statuses.Sum(x => x.count), statuses);
+    }
+
+    private async Task<QueueSummary> BuildTransferQueueSummary(int storeId, CancellationToken ct)
+    {
+        var grouped = await _context.pendingProductTransfers
+            .AsNoTracking()
+            .Where(x => x.sourceStoreId == storeId || x.targetStoreId == storeId)
+            .GroupBy(x => x.status)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var statuses = grouped
+            .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
+            .ToList();
+
+        return new QueueSummary("transfers", "Переносы товаров", statuses.Sum(x => x.count), statuses);
+    }
+
+    private static bool IsInactiveStatus(string status) =>
+        status is "inactive" or "finished" or "completed-failed-cancelled";
+
+    private static IQueryable<Operation> FilterOperationsByStatus(IQueryable<Operation> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "running" => query.Where(x => x.status == "running"),
+            "paused" => query.Where(x => x.status == "paused"),
+            "completed" => query.Where(x => x.status == "completed"),
+            "failed" => query.Where(x => x.status == "failed"),
+            "cancelled" => query.Where(x => x.status == "cancelled"),
+            _ when IsInactiveStatus(status) => query.Where(x => x.status == "completed" || x.status == "failed" || x.status == "cancelled"),
+            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+        };
+
+    private static IQueryable<PendingProductExport> FilterExportsByStatus(IQueryable<PendingProductExport> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "pending" => query.Where(x => x.status == ProductExportStatus.Pending),
+            "in-progress" => query.Where(x => x.status == ProductExportStatus.InProgress),
+            "completed" => query.Where(x => x.status == ProductExportStatus.Completed),
+            "failed" => query.Where(x => x.status == ProductExportStatus.Failed),
+            "cancelled" => query.Where(x => x.status == ProductExportStatus.Cancelled),
+            _ when IsInactiveStatus(status) => query.Where(x => x.status == ProductExportStatus.Completed || x.status == ProductExportStatus.Failed || x.status == ProductExportStatus.Cancelled),
+            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+        };
+
+    private static IQueryable<PendingProductImport> FilterImportsByStatus(IQueryable<PendingProductImport> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "pending" => query.Where(x => x.status == ProductImportStatus.Pending),
+            "in-progress" => query.Where(x => x.status == ProductImportStatus.InProgress),
+            "completed" => query.Where(x => x.status == ProductImportStatus.Completed),
+            "failed" => query.Where(x => x.status == ProductImportStatus.Failed),
+            "cancelled" => query.Where(x => x.status == ProductImportStatus.Cancelled),
+            _ when IsInactiveStatus(status) => query.Where(x => x.status == ProductImportStatus.Completed || x.status == ProductImportStatus.Failed || x.status == ProductImportStatus.Cancelled),
+            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+        };
+
+    private static IQueryable<PendingImageDownload> FilterImagesByStatus(IQueryable<PendingImageDownload> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "pending" => query.Where(x => x.status == ImageDownloadStatus.Pending),
+            "in-progress" => query.Where(x => x.status == ImageDownloadStatus.InProgress),
+            "completed" => query.Where(x => x.status == ImageDownloadStatus.Completed),
+            "failed" => query.Where(x => x.status == ImageDownloadStatus.Failed),
+            "cancelled" => query.Where(x => x.status == ImageDownloadStatus.Cancelled),
+            _ when IsInactiveStatus(status) => query.Where(x => x.status == ImageDownloadStatus.Completed || x.status == ImageDownloadStatus.Failed || x.status == ImageDownloadStatus.Cancelled),
+            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+        };
+
+    private static IQueryable<PendingProductTransfer> FilterTransfersByStatus(IQueryable<PendingProductTransfer> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "pending" => query.Where(x => x.status == ProductTransferStatus.Pending),
+            "in-progress" => query.Where(x => x.status == ProductTransferStatus.InProgress),
+            "completed" => query.Where(x => x.status == ProductTransferStatus.Completed),
+            "failed" => query.Where(x => x.status == ProductTransferStatus.Failed),
+            "cancelled" => query.Where(x => x.status == ProductTransferStatus.Cancelled),
+            "partial" => query.Where(x => x.status == ProductTransferStatus.Partial),
+            _ when IsInactiveStatus(status) => query.Where(x =>
+                x.status == ProductTransferStatus.Completed ||
+                x.status == ProductTransferStatus.Failed ||
+                x.status == ProductTransferStatus.Cancelled ||
+                x.status == ProductTransferStatus.Partial),
+            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+        };
+
+    private async Task<int> ClearOperationsHistory(int storeId, string status, CancellationToken ct)
+    {
+        var operationIds = await FilterOperationsByStatus(
+                _context.operations.AsNoTracking().Where(x => x.storeId == storeId),
+                status)
+            .Select(x => x.operationId)
+            .ToListAsync(ct);
+
+        if (operationIds.Count == 0) return 0;
+
+        await _context.operationLogEntries
+            .Where(x => operationIds.Contains(x.operationId))
+            .ExecuteDeleteAsync(ct);
+
+        return await _context.operations
+            .Where(x => operationIds.Contains(x.operationId) && x.storeId == storeId)
+            .ExecuteDeleteAsync(ct);
+    }
+
+    private Task<int> ClearExports(int storeId, string status, CancellationToken ct) =>
+        FilterExportsByStatus(_context.pendingProductExports.Where(x => x.storeId == storeId), status)
+            .ExecuteDeleteAsync(ct);
+
+    private Task<int> ClearImports(int storeId, string status, CancellationToken ct) =>
+        FilterImportsByStatus(_context.pendingProductImports.Where(x => x.storeId == storeId), status)
+            .ExecuteDeleteAsync(ct);
+
+    private Task<int> ClearImages(int storeId, string status, CancellationToken ct) =>
+        FilterImagesByStatus(_context.pendingImageDownloads.Where(x => x.storeId == storeId), status)
+            .ExecuteDeleteAsync(ct);
+
+    private Task<int> ClearTransfers(int storeId, string status, CancellationToken ct) =>
+        FilterTransfersByStatus(_context.pendingProductTransfers.Where(x => x.sourceStoreId == storeId || x.targetStoreId == storeId), status)
+            .ExecuteDeleteAsync(ct);
+
+    private async Task EnsureAdminAsync(CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (currentUser == null || !currentUser.isAdmin)
+            throw ApiException.Forbidden("Только администраторы могут управлять очередями фоновых процессов");
     }
 
     [HttpDelete]
