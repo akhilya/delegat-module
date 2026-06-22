@@ -20,11 +20,42 @@ public static class DatabaseSeeder
         var userManager = services.GetRequiredService<UserManager<User>>();
         var logger = services.GetRequiredService<ILogger<DataContext>>();
 
-        // Check if admin already exists
-        var existingAdmin = await userManager.FindByEmailAsync(settings.Email);
+        // Find by email first, then fall back to username (old accounts may have no email)
+        var existingAdmin = await userManager.FindByEmailAsync(settings.Email)
+            ?? await userManager.FindByNameAsync(settings.Username);
+
         if (existingAdmin != null)
         {
-            logger.LogInformation("Admin user already exists: {Email}", settings.Email);
+            if (!settings.ForceReset)
+            {
+                logger.LogInformation("Admin user already exists: {Username}", existingAdmin.UserName);
+                return;
+            }
+
+            // Sync email and username if different
+            bool profileChanged = false;
+            if (existingAdmin.Email != settings.Email)
+            {
+                existingAdmin.Email = settings.Email;
+                existingAdmin.EmailConfirmed = true;
+                profileChanged = true;
+            }
+            if (existingAdmin.UserName != settings.Username)
+            {
+                existingAdmin.UserName = settings.Username;
+                existingAdmin.NormalizedUserName = settings.Username.ToUpperInvariant();
+                profileChanged = true;
+            }
+            if (profileChanged)
+                await userManager.UpdateAsync(existingAdmin);
+
+            // Reset password — set ADMIN_FORCE_RESET=true to trigger this
+            var token = await userManager.GeneratePasswordResetTokenAsync(existingAdmin);
+            var resetResult = await userManager.ResetPasswordAsync(existingAdmin, token, settings.Password);
+            if (resetResult.Succeeded)
+                logger.LogInformation("Admin reset: username={Username}, email={Email} (ADMIN_FORCE_RESET=true — remove after use)", settings.Username, settings.Email);
+            else
+                logger.LogError("Failed to reset admin: {Errors}", string.Join(", ", resetResult.Errors.Select(e => e.Description)));
             return;
         }
 
@@ -40,13 +71,8 @@ public static class DatabaseSeeder
         var result = await userManager.CreateAsync(admin, settings.Password);
 
         if (result.Succeeded)
-        {
-            logger.LogInformation("Admin user created successfully: {Email}", settings.Email);
-        }
+            logger.LogInformation("Admin user created: {Email}", settings.Email);
         else
-        {
-            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-            logger.LogError("Failed to create admin user: {Errors}", errors);
-        }
+            logger.LogError("Failed to create admin user: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
     }
 }

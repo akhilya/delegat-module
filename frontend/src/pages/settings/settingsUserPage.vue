@@ -6,6 +6,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -141,20 +142,18 @@ onMounted(fetchMe);
           <div class="grid gap-2 sm:grid-cols-2">
             <div class="grid gap-2">
               <label class="text-sm font-medium" for="current-password">Текущий пароль</label>
-              <Input
+              <PasswordInput
                 id="current-password"
                 v-model="currentPassword"
-                type="password"
                 autocomplete="current-password"
                 :disabled="isChangingPassword"
               />
             </div>
             <div class="grid gap-2">
               <label class="text-sm font-medium" for="new-password">Новый пароль</label>
-              <Input
+              <PasswordInput
                 id="new-password"
                 v-model="newPassword"
-                type="password"
                 autocomplete="new-password"
                 :disabled="isChangingPassword"
               />

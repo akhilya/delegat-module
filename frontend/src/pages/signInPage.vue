@@ -1,6 +1,7 @@
 <script>
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import Logo from "@/components/logo.vue";
 import {
@@ -31,6 +32,7 @@ export default {
     FormMessage,
     Button,
     Input,
+    PasswordInput,
     Checkbox,
     Logo,
     Loader2,
@@ -115,8 +117,7 @@ export default {
           <FormItem>
             <FormLabel>Пароль</FormLabel>
             <FormControl>
-              <Input
-                type="password"
+              <PasswordInput
                 autocomplete="current-password"
                 v-bind="componentField"
               />

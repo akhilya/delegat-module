@@ -177,7 +177,8 @@ export default {
       empty-title="Ошибок нет"
       empty-description="Новые неожиданные ошибки backend появятся здесь автоматически"
     >
-      <div class="overflow-x-auto border-y">
+      <div class="rounded-lg border overflow-hidden">
+      <div class="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -269,6 +270,7 @@ export default {
             </template>
           </TableBody>
         </Table>
+      </div>
       </div>
     </PageSection>
   </Page>

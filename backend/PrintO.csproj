@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>PrintO</RootNamespace>
+    <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,7 +29,7 @@
     <PackageReference Include="Minio" Version="6.0.5" />
 
     <!-- Image Processing -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
 
     <!-- Health Checks -->
     <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.1" />
@@ -60,10 +61,18 @@
     <ProjectReference Include="..\sdk\PrintO.Marketplace.SDK\PrintO.Marketplace.SDK.csproj" />
   </ItemGroup>
 
-  <!-- Copy compiled plugins from their build output to backend output directory -->
+  <!-- Build plugins and copy their output to backend output directory -->
   <Target Name="CopyPlugins" AfterTargets="Build">
+    <MSBuild Projects="..\plugins\PrintO.Marketplace.Ozon\PrintO.Marketplace.Ozon.csproj"
+             Targets="Restore;Build"
+             Properties="Configuration=$(Configuration)" />
+    <MSBuild Projects="..\plugins\PrintO.Marketplace.Wildberries\PrintO.Marketplace.Wildberries.csproj"
+             Targets="Restore;Build"
+             Properties="Configuration=$(Configuration)" />
+    <MSBuild Projects="..\plugins\PrintO.Marketplace.OpenCart\PrintO.Marketplace.OpenCart.csproj"
+             Targets="Restore;Build"
+             Properties="Configuration=$(Configuration)" />
     <ItemGroup>
-      <!-- Get all DLLs from plugin build outputs -->
       <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll"
                   Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\PrintO.Marketplace.SDK.dll" />
     </ItemGroup>

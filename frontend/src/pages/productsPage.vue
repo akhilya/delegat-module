@@ -7,6 +7,7 @@ import ProductRowActionButtons from "@/components/products/productRowActionButto
 import TrashRowActionButtons from "@/components/products/trashRowActionButtons.vue";
 import ColumnSelector from "@/components/products/columnSelector.vue";
 import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
+import BulkAdapterDialog from "@/components/products/BulkAdapterDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
 import ProductTransferDialog from "@/components/products/ProductTransferDialog.vue";
 import { Card } from "@/components/ui/card";
@@ -40,6 +41,7 @@ import {
   Check,
   FileSpreadsheet,
   Undo2,
+  RefreshCw,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -89,6 +91,7 @@ export default {
     TrashRowActionButtons,
     ColumnSelector,
     BulkEditDialog,
+    BulkAdapterDialog,
     ImportExcelDialog,
     ProductTransferDialog,
     Card,
@@ -532,6 +535,7 @@ export default {
 
       // Dialogs
       isBulkEditDialogOpen: false,
+      isBulkAdapterDialogOpen: false,
       isBulkDeleteDialogOpen: false,
       isImportDialogOpen: false,
       isExcelDialogOpen: false,
@@ -890,6 +894,10 @@ export default {
                   Редактирование из таблицы
                 </Button>
               </div>
+              <Button variant="outline" size="sm" class="h-8" @click="isBulkAdapterDialogOpen = true">
+                <RefreshCw class="h-4 w-4 mr-1" />
+                Адаптеры
+              </Button>
               <Button variant="destructive" size="sm" class="h-8" @click="openBulkDeleteDialog">
                 <Trash2 class="h-4 w-4 mr-1" />
                 В корзину
@@ -946,6 +954,12 @@ export default {
       :category-attributes="categoryAttributes"
       :store-attributes="storeAttributes"
       @saved="handleBulkEditSaved"
+    />
+
+    <!-- Bulk Adapter Dialog -->
+    <BulkAdapterDialog
+      v-model="isBulkAdapterDialogOpen"
+      :selected-products="selectedProducts"
     />
 
     <!-- Excel Actions Dialog -->

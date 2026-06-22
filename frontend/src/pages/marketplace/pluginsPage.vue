@@ -331,7 +331,7 @@ export default {
         </Button>
       </template>
 
-      <div class="border-y">
+      <div class="rounded-lg border overflow-hidden">
         <ul class="divide-y divide-border/60">
           <li
             v-for="plugin in pluginsWithCapabilities"

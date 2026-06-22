@@ -410,6 +410,33 @@ public class ProductSyncController : ControllerBase
 
     #endregion
 
+    #region Resolve product links (productIds → linkIds for a connection)
+
+    public record ResolveProductLinksInput(List<int> ProductIds);
+
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/resolve-product-links")]
+    public async Task<IActionResult> ResolveProductLinks(
+        int connectionId,
+        [FromBody] ResolveProductLinksInput input,
+        CancellationToken ct)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+
+        var links = await _context.productMarketplaceLinks
+            .AsNoTracking()
+            .Where(l => l.connectionId == connectionId && input.ProductIds.Contains(l.productId))
+            .Select(l => new { l.productId, linkId = l.Id, status = l.status.ToString() })
+            .ToListAsync(ct);
+
+        var linkedProductIds = links.Select(l => l.productId).ToHashSet();
+        var unlinked = input.ProductIds.Where(id => !linkedProductIds.Contains(id)).ToList();
+
+        return Ok(new { linked = links, unlinked });
+    }
+
+    #endregion
+
     #region Export Batch (async background)
 
     /// <summary>

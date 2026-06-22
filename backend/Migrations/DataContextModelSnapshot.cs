@@ -303,6 +303,9 @@ namespace PrintO.Migrations
                     b.Property<int?>("folderId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("isPublic")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<long>("length")
                         .HasColumnType("bigint");
 
@@ -1522,6 +1525,9 @@ namespace PrintO.Migrations
 
                     b.Property<int?>("folderId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("isPublic")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<long>("length")
                         .HasColumnType("bigint");

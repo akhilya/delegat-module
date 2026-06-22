@@ -75,6 +75,8 @@ import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
@@ -129,6 +131,8 @@ export default {
     DropdownMenuSub,
     DropdownMenuSubTrigger,
     DropdownMenuSubContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     EllipsisVertical,
     Ruler,
     Layers,
@@ -990,15 +994,18 @@ export default {
                 Маппинг
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  v-for="m in conn.availableMappings"
-                  :key="m.id"
-                  @click="handleMappingChange(conn, m.id)"
+                <DropdownMenuRadioGroup
+                  :model-value="String(mappingSelections[conn.connectionId] ?? '')"
+                  @update:model-value="handleMappingChange(conn, Number($event))"
                 >
-                  <CheckCircle v-if="mappingSelections[conn.connectionId] === m.id" class="size-4 mr-2 text-primary" />
-                  <span v-else class="size-4 mr-2" />
-                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
-                </DropdownMenuItem>
+                  <DropdownMenuRadioItem
+                    v-for="m in conn.availableMappings"
+                    :key="m.id"
+                    :value="String(m.id)"
+                  >
+                    {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
@@ -1118,15 +1125,18 @@ export default {
                 Маппинг
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  v-for="m in conn.availableMappings"
-                  :key="m.id"
-                  @click="handleMappingChange(conn, m.id)"
+                <DropdownMenuRadioGroup
+                  :model-value="String(mappingSelections[conn.connectionId] ?? '')"
+                  @update:model-value="handleMappingChange(conn, Number($event))"
                 >
-                  <CheckCircle v-if="mappingSelections[conn.connectionId] === m.id" class="size-4 mr-2 text-primary" />
-                  <span v-else class="size-4 mr-2" />
-                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
-                </DropdownMenuItem>
+                  <DropdownMenuRadioItem
+                    v-for="m in conn.availableMappings"
+                    :key="m.id"
+                    :value="String(m.id)"
+                  >
+                    {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </DropdownMenuContent>

@@ -72,6 +72,11 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public long length { get; set; }
 
     /// <summary>
+    /// When true the file is served at a permanent public URL with no authentication.
+    /// </summary>
+    public bool isPublic { get; set; } = false;
+
+    /// <summary>
     /// Optional folder this file belongs to (null = root level).
     /// </summary>
     [ForeignKey(nameof(folder))]
@@ -99,14 +104,34 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
         return true;
     }
 
+    private static string ExtensionFromContentType(string? ct) => ct switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/gif" => ".gif",
+        "image/webp" => ".webp",
+        "image/svg+xml" => ".svg",
+        "application/pdf" => ".pdf",
+        "video/mp4" => ".mp4",
+        "video/webm" => ".webm",
+        "application/zip" => ".zip",
+        _ => ""
+    };
+
     public object MapToDTO(IServiceProvider serviceProvider)
     {
+        var rawName = displayName ?? Path.GetFileName(filePath);
+        var fileName = Path.HasExtension(rawName)
+            ? rawName
+            : rawName + ExtensionFromContentType(contentType);
         return new
         {
             Id,
             uploadDateTime,
             fullPath = $"/api/files/{Id}/download",
-            fileName = displayName ?? Path.GetFileName(filePath),
+            publicUrl = isPublic ? $"/api/pub/files/{Id}/{Uri.EscapeDataString(fileName)}" : (string?)null,
+            isPublic,
+            fileName,
             contentType,
             length,
             folderId,

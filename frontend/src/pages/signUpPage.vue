@@ -1,6 +1,7 @@
 <script>
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Logo from "@/components/logo.vue";
 import {
   FormControl,
@@ -32,6 +33,7 @@ export default {
     FormMessage,
     Button,
     Input,
+    PasswordInput,
     Logo,
     Loader2,
   },
@@ -126,8 +128,7 @@ export default {
           <FormItem>
             <FormLabel>Пароль</FormLabel>
             <FormControl>
-              <Input
-                type="password"
+              <PasswordInput
                 autocomplete="new-password"
                 v-bind="componentField"
               />
@@ -140,8 +141,7 @@ export default {
           <FormItem>
             <FormLabel>Подтвердите пароль</FormLabel>
             <FormControl>
-              <Input
-                type="password"
+              <PasswordInput
                 autocomplete="new-password"
                 v-bind="componentField"
               />

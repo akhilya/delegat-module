@@ -255,7 +255,8 @@ export default {
       empty-title="Нет пользователей"
       empty-description="Пользователи появятся здесь после регистрации по приглашению"
     >
-      <div class="overflow-x-auto border-y">
+      <div class="rounded-lg border overflow-hidden">
+      <div class="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -304,6 +305,7 @@ export default {
             </TableRow>
           </TableBody>
         </Table>
+      </div>
       </div>
     </PageSection>
 

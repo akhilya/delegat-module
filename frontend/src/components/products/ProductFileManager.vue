@@ -46,9 +46,11 @@ import {
   Check,
   X,
   CornerLeftUp,
+  Globe,
 } from "lucide-vue-next";
 import { http } from "@/main";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import Switch from "@/components/ui/switch/Switch.vue";
 import {
   Popover,
   PopoverContent,
@@ -132,6 +134,31 @@ function bulkDeleteFilesUrl() {
 
 function shareFileUrl(fileId) {
   return isStoreScope.value ? `/store-storage/files/${fileId}/share` : `/files/${fileId}/share`;
+}
+
+function filePublicToggleUrl(fileId) {
+  return isStoreScope.value
+    ? `/store-storage/files/${fileId}/public`
+    : `/products/${productRequired()}/files/${fileId}/public`;
+}
+
+async function setFilePublic(file, isPublic) {
+  const prevIsPublic = shareItemIsPublic.value;
+  const prevPublicUrl = shareItemPublicUrl.value;
+  shareItemIsPublic.value = isPublic;
+  try {
+    const response = await http.patch(filePublicToggleUrl(file.id), { isPublic }, { cache: false });
+    const updated = response.data?.value ?? response.data;
+    file.isPublic = updated.isPublic;
+    file.publicUrl = updated.publicUrl ?? null;
+    shareItemIsPublic.value = updated.isPublic;
+    shareItemPublicUrl.value = updated.publicUrl ?? null;
+    displaySonnerSuccess(isPublic ? "Публичный доступ открыт" : "Публичный доступ закрыт");
+  } catch (error) {
+    shareItemIsPublic.value = prevIsPublic;
+    shareItemPublicUrl.value = prevPublicUrl;
+    displaySonnerError(error);
+  }
 }
 
 function shareFolderUrl(folderId) {
@@ -370,6 +397,9 @@ const showShareDialog = ref(false);
 const shareTarget = ref(null);
 const shareTtlHours = ref("168");
 const shareUrl = ref("");
+const publicUrlCopied = ref(false);
+const shareItemIsPublic = ref(false);
+const shareItemPublicUrl = ref(null);
 const isCreatingShare = ref(false);
 const shareCopied = ref(false);
 
@@ -1007,6 +1037,9 @@ function openShareDialog(type, item) {
   shareTtlHours.value = "168";
   shareUrl.value = "";
   shareCopied.value = false;
+  publicUrlCopied.value = false;
+  shareItemIsPublic.value = item.isPublic ?? false;
+  shareItemPublicUrl.value = item.publicUrl ?? null;
   showShareDialog.value = true;
 }
 
@@ -1047,6 +1080,22 @@ async function copyShareUrl() {
     shareCopied.value = true;
     displaySonnerSuccess("Ссылка скопирована");
     setTimeout(() => { shareCopied.value = false; }, 2000);
+  } catch {
+    displaySonnerError("Не удалось скопировать");
+  }
+}
+
+function getPublicUrl(file) {
+  const url = shareTarget.value?.item === file ? shareItemPublicUrl.value : file.publicUrl;
+  return `${window.location.origin}${url}`;
+}
+
+async function copyPublicUrl(file) {
+  try {
+    await navigator.clipboard.writeText(getPublicUrl(file));
+    publicUrlCopied.value = true;
+    displaySonnerSuccess("Ссылка скопирована");
+    setTimeout(() => { publicUrlCopied.value = false; }, 2000);
   } catch {
     displaySonnerError("Не удалось скопировать");
   }
@@ -1551,18 +1600,30 @@ watch(() => props.productId, () => {
             </td>
             <td class="text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</td>
             <td class="pr-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-7 opacity-0 group-hover:opacity-100"
-                as="a"
-                :href="file.fullPath"
-                :download="!file.contentType.startsWith('image/') ? extractFileName(file) : undefined"
-                target="_blank"
-                @click.stop
-              >
-                <ArrowDownToLine class="size-3.5" />
-              </Button>
+              <div class="flex items-center gap-0.5">
+                <Button
+                  v-if="file.isPublic && file.publicUrl"
+                  variant="ghost"
+                  size="icon"
+                  class="size-7 opacity-0 group-hover:opacity-100 text-green-500"
+                  title="Скопировать публичную ссылку"
+                  @click.stop="copyPublicUrl(file)"
+                >
+                  <Globe class="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-7 opacity-0 group-hover:opacity-100"
+                  as="a"
+                  :href="file.fullPath"
+                  :download="!file.contentType.startsWith('image/') ? extractFileName(file) : undefined"
+                  target="_blank"
+                  @click.stop
+                >
+                  <ArrowDownToLine class="size-3.5" />
+                </Button>
+              </div>
             </td>
           </tr>
 
@@ -1758,13 +1819,47 @@ watch(() => props.productId, () => {
 
     <!-- Share dialog (file or folder) -->
     <Dialog :open="showShareDialog" @update:open="showShareDialog = $event">
-      <DialogContent>
+      <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{{ shareTarget?.type === 'folder' ? 'Поделиться папкой' : 'Поделиться файлом' }}</DialogTitle>
         </DialogHeader>
-        <p class="text-sm text-muted-foreground mb-2">
+        <p class="text-sm text-muted-foreground -mt-1">
           {{ shareTarget?.type === 'file' ? extractFileName(shareTarget.item) : (shareTarget?.item?.name ?? 'Все файлы') }}
         </p>
+
+        <!-- Public permanent URL section (files only) -->
+        <template v-if="shareTarget?.type === 'file'">
+          <div class="rounded-lg border p-3 space-y-2.5">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-medium">Постоянная публичная ссылка</p>
+                <p class="text-xs text-muted-foreground">Всегда доступна без авторизации</p>
+              </div>
+              <Switch
+                :checked="shareItemIsPublic"
+                @update:checked="setFilePublic(shareTarget.item, $event)"
+              />
+            </div>
+            <div v-if="shareItemIsPublic && shareItemPublicUrl" class="flex gap-2">
+              <Input
+                :model-value="getPublicUrl(shareTarget.item)"
+                readonly
+                class="flex-1 text-xs font-mono"
+                @click="$event.target.select()"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                @click="copyPublicUrl(shareTarget.item)"
+              >
+                <Check v-if="publicUrlCopied" class="size-4 text-success" />
+                <Copy v-else class="size-4" />
+              </Button>
+            </div>
+          </div>
+          <div class="bg-border my-1 h-px" />
+        </template>
+
         <template v-if="!shareUrl">
           <Select v-model="shareTtlHours">
             <SelectTrigger>

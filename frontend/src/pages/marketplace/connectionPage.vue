@@ -5,6 +5,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
@@ -2171,9 +2172,15 @@ export default {
                       {{ field.displayName }}
                       <span v-if="field.isRequired" class="text-destructive">*</span>
                     </Label>
-                    <Input
+                    <PasswordInput
+                      v-if="field.isSecret"
                       v-model="credentialValues[field.key]"
-                      :type="field.isSecret ? 'password' : 'text'"
+                      :placeholder="field.placeholder || field.description"
+                    />
+                    <Input
+                      v-else
+                      v-model="credentialValues[field.key]"
+                      type="text"
                       :placeholder="field.placeholder || field.description"
                     />
                   </div>

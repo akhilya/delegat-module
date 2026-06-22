@@ -561,6 +561,37 @@ public class FileController : ControllerBase
             expiresAt = shareToken.expiresAt
         });
     }
+
+    public record SetPublicRequest(bool isPublic);
+
+    [HttpPatch]
+    [Route("/products/{productId}/files/{id}/public")]
+    public async Task<IActionResult> SetFilePublic(int productId, int id, [FromBody] SetPublicRequest request)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdAsync(productId);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+
+        var fileRepo = _unitOfWork.Repository<Models.File>();
+        var file = await fileRepo.GetByIdTrackingAsync(id);
+
+        if (file == null || file.productId != productId)
+            throw ApiException.NotFound("Файл не найден");
+
+        file.isPublic = request.isPublic;
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(file.MapToDTO(_serviceProvider));
+    }
 }
 
 /// <summary>
@@ -603,5 +634,72 @@ public class SharedFileController : ControllerBase
         Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
 
         await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body);
+    }
+}
+
+/// <summary>
+/// Serves permanently public product files — no authentication required.
+/// Files must have isPublic = true to be accessible here.
+/// URL format: /api/pub/files/{id}/{filename} — filename segment is for the extension only,
+/// the server always serves the actual file from the DB record.
+/// </summary>
+[ApiController]
+public class PublicFileController : ControllerBase
+{
+    private readonly DataContext _db;
+    private readonly IStorageService _storageService;
+
+    public PublicFileController(DataContext db, IStorageService storageService)
+    {
+        _db = db;
+        _storageService = storageService;
+    }
+
+    [HttpGet]
+    [Route("/pub/files/{id}/{filename}")]
+    public async Task GetPublicFile(int id, string filename)
+    {
+        var file = await _db.files.FirstOrDefaultAsync(f => f.Id == id && f.isPublic);
+
+        if (file == null)
+            throw ApiException.NotFound("Файл не найден");
+
+        if (!await _storageService.ExistsAsync(file.filePath))
+            throw ApiException.NotFound("Файл не найден в хранилище");
+
+        var actualName = file.displayName ?? Path.GetFileName(file.filePath);
+        var isImage = file.contentType.StartsWith("image/");
+        var encodedFileName = Uri.EscapeDataString(actualName);
+
+        Response.ContentType = file.contentType;
+        Response.ContentLength = file.length;
+        Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
+        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+
+        await _storageService.StreamToAsync(file.filePath, Response.Body);
+    }
+
+    [HttpGet]
+    [Route("/pub/store-files/{id}/{filename}")]
+    public async Task GetPublicStoreFile(int id, string filename)
+    {
+        var file = await _db.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.isPublic);
+
+        if (file == null)
+            throw ApiException.NotFound("Файл не найден");
+
+        if (!await _storageService.ExistsAsync(file.filePath))
+            throw ApiException.NotFound("Файл не найден в хранилище");
+
+        var actualName = file.displayName ?? Path.GetFileName(file.filePath);
+        var isImage = file.contentType.StartsWith("image/");
+        var encodedFileName = Uri.EscapeDataString(actualName);
+
+        Response.ContentType = file.contentType;
+        Response.ContentLength = file.length;
+        Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
+        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+
+        await _storageService.StreamToAsync(file.filePath, Response.Body);
     }
 }

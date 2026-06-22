@@ -188,6 +188,23 @@ public class StoreStorageController : ControllerBase
         return Ok(file.MapToDTO(_serviceProvider));
     }
 
+    public record SetPublicRequest(bool isPublic);
+
+    [HttpPatch]
+    [Route("/store-storage/files/{id}/public")]
+    public async Task<IActionResult> SetFilePublic(int id, [FromBody] SetPublicRequest request, CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
+        if (file == null)
+            throw ApiException.NotFound("Файл не найден");
+
+        file.isPublic = request.isPublic;
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(file.MapToDTO(_serviceProvider));
+    }
+
     public record MoveFileRequest(int? folderId);
 
     [HttpPatch]

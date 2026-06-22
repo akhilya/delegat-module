@@ -86,7 +86,8 @@ public static class ConfigurationExtensions
         {
             Email = GetValue(config, "ADMIN_EMAIL", ""),
             Username = GetValue(config, "ADMIN_USERNAME", ""),
-            Password = GetValue(config, "ADMIN_PASSWORD", "")
+            Password = GetValue(config, "ADMIN_PASSWORD", ""),
+            ForceReset = GetValue(config, "ADMIN_FORCE_RESET", "false").Equals("true", StringComparison.OrdinalIgnoreCase)
         };
     }
 
