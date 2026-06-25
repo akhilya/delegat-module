@@ -1,8 +1,11 @@
 <script>
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import Button from "@/components/ui/button/Button.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
@@ -55,10 +58,10 @@ export default {
     return {
       logs: [],
       expandedLogId: null,
+      breadcrumbs: [{ label: "Логи ошибок" }],
       isLoading: false,
       deletingLogId: null,
       copiedLogId: null,
-      breadcrumbs: [{ label: "Логи ошибок" }],
     };
   },
   methods: {
@@ -158,6 +161,7 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
+
 
     <PageHeader
       title="Логи ошибок"

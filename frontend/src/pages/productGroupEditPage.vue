@@ -645,7 +645,7 @@ export default {
 
     <!-- Product Search Dialog -->
     <Dialog v-model:open="showProductSearch">
-      <DialogContent class="sm:max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent size="2xl" class="max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Добавить товары</DialogTitle>
         </DialogHeader>

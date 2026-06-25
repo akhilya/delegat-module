@@ -1,8 +1,11 @@
 <script>
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
@@ -71,6 +74,7 @@ export default {
         memberIds: [],
         storeAdminIds: [],
       },
+      breadcrumbs: [{ label: "Магазины" }],
       isLoading: false,
       isCreating: false,
       isSaving: false,
@@ -78,7 +82,6 @@ export default {
       newStoreName: "",
       addAllUsers: true,
       showCreateDialog: false,
-      breadcrumbs: [{ label: "Магазины" }],
     };
   },
   methods: {
@@ -238,6 +241,7 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
+
     <PageHeader title="Магазины" description="Управление магазинами системы">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
@@ -246,7 +250,7 @@ export default {
             Создать магазин
           </Button>
         </DialogTrigger>
-          <DialogContent class="sm:max-w-md">
+          <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>Новый магазин</DialogTitle>
               <DialogDescription>
@@ -340,7 +344,7 @@ export default {
     </PageSection>
 
     <Dialog v-model:open="isEditDialogOpen">
-      <DialogContent class="sm:max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Настройки магазина</DialogTitle>
           <DialogDescription>

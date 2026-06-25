@@ -50,7 +50,6 @@ import {
 } from "lucide-vue-next";
 import { http } from "@/main";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
-import Switch from "@/components/ui/switch/Switch.vue";
 import {
   Popover,
   PopoverContent,
@@ -142,24 +141,6 @@ function filePublicToggleUrl(fileId) {
     : `/products/${productRequired()}/files/${fileId}/public`;
 }
 
-async function setFilePublic(file, isPublic) {
-  const prevIsPublic = shareItemIsPublic.value;
-  const prevPublicUrl = shareItemPublicUrl.value;
-  shareItemIsPublic.value = isPublic;
-  try {
-    const response = await http.patch(filePublicToggleUrl(file.id), { isPublic }, { cache: false });
-    const updated = response.data?.value ?? response.data;
-    file.isPublic = updated.isPublic;
-    file.publicUrl = updated.publicUrl ?? null;
-    shareItemIsPublic.value = updated.isPublic;
-    shareItemPublicUrl.value = updated.publicUrl ?? null;
-    displaySonnerSuccess(isPublic ? "Публичный доступ открыт" : "Публичный доступ закрыт");
-  } catch (error) {
-    shareItemIsPublic.value = prevIsPublic;
-    shareItemPublicUrl.value = prevPublicUrl;
-    displaySonnerError(error);
-  }
-}
 
 function shareFolderUrl(folderId) {
   const id = folderId ?? "root";
@@ -398,8 +379,6 @@ const shareTarget = ref(null);
 const shareTtlHours = ref("168");
 const shareUrl = ref("");
 const publicUrlCopied = ref(false);
-const shareItemIsPublic = ref(false);
-const shareItemPublicUrl = ref(null);
 const isCreatingShare = ref(false);
 const shareCopied = ref(false);
 
@@ -1034,18 +1013,35 @@ function collectDescendantIds(parentId, result) {
 
 function openShareDialog(type, item) {
   shareTarget.value = { type, item };
-  shareTtlHours.value = "168";
-  shareUrl.value = "";
   shareCopied.value = false;
   publicUrlCopied.value = false;
-  shareItemIsPublic.value = item.isPublic ?? false;
-  shareItemPublicUrl.value = item.publicUrl ?? null;
+  if (type === 'file' && item.isPublic && item.publicUrl) {
+    shareTtlHours.value = "permanent";
+    shareUrl.value = `${window.location.origin}${item.publicUrl}`;
+  } else {
+    shareTtlHours.value = "168";
+    shareUrl.value = "";
+  }
   showShareDialog.value = true;
 }
 
 async function createShareLink() {
   if (!shareTarget.value || isCreatingShare.value) return;
   isCreatingShare.value = true;
+
+  if (shareTtlHours.value === 'permanent') {
+    try {
+      const res = await http.patch(filePublicToggleUrl(shareTarget.value.item.id), { isPublic: true }, { cache: false });
+      const updated = res.data?.value ?? res.data;
+      shareTarget.value.item.isPublic = updated.isPublic;
+      shareTarget.value.item.publicUrl = updated.publicUrl ?? null;
+      shareUrl.value = `${window.location.origin}${updated.publicUrl}`;
+    } catch (error) {
+      displaySonnerError(error);
+    }
+    isCreatingShare.value = false;
+    return;
+  }
 
   if (shareTarget.value.type === 'file') {
     try {
@@ -1085,14 +1081,9 @@ async function copyShareUrl() {
   }
 }
 
-function getPublicUrl(file) {
-  const url = shareTarget.value?.item === file ? shareItemPublicUrl.value : file.publicUrl;
-  return `${window.location.origin}${url}`;
-}
-
 async function copyPublicUrl(file) {
   try {
-    await navigator.clipboard.writeText(getPublicUrl(file));
+    await navigator.clipboard.writeText(`${window.location.origin}${file.publicUrl}`);
     publicUrlCopied.value = true;
     displaySonnerSuccess("Ссылка скопирована");
     setTimeout(() => { publicUrlCopied.value = false; }, 2000);
@@ -1100,6 +1091,7 @@ async function copyPublicUrl(file) {
     displaySonnerError("Не удалось скопировать");
   }
 }
+
 
 const isDownloadingArchive = ref(false);
 const downloadingFolderId = ref(null);
@@ -1819,46 +1811,13 @@ watch(() => props.productId, () => {
 
     <!-- Share dialog (file or folder) -->
     <Dialog :open="showShareDialog" @update:open="showShareDialog = $event">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{{ shareTarget?.type === 'folder' ? 'Поделиться папкой' : 'Поделиться файлом' }}</DialogTitle>
         </DialogHeader>
         <p class="text-sm text-muted-foreground -mt-1">
           {{ shareTarget?.type === 'file' ? extractFileName(shareTarget.item) : (shareTarget?.item?.name ?? 'Все файлы') }}
         </p>
-
-        <!-- Public permanent URL section (files only) -->
-        <template v-if="shareTarget?.type === 'file'">
-          <div class="rounded-lg border p-3 space-y-2.5">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-medium">Постоянная публичная ссылка</p>
-                <p class="text-xs text-muted-foreground">Всегда доступна без авторизации</p>
-              </div>
-              <Switch
-                :checked="shareItemIsPublic"
-                @update:checked="setFilePublic(shareTarget.item, $event)"
-              />
-            </div>
-            <div v-if="shareItemIsPublic && shareItemPublicUrl" class="flex gap-2">
-              <Input
-                :model-value="getPublicUrl(shareTarget.item)"
-                readonly
-                class="flex-1 text-xs font-mono"
-                @click="$event.target.select()"
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                @click="copyPublicUrl(shareTarget.item)"
-              >
-                <Check v-if="publicUrlCopied" class="size-4 text-success" />
-                <Copy v-else class="size-4" />
-              </Button>
-            </div>
-          </div>
-          <div class="bg-border my-1 h-px" />
-        </template>
 
         <template v-if="!shareUrl">
           <Select v-model="shareTtlHours">
@@ -1870,6 +1829,7 @@ watch(() => props.productId, () => {
               <SelectItem value="24">1 день</SelectItem>
               <SelectItem value="168">7 дней</SelectItem>
               <SelectItem value="720">30 дней</SelectItem>
+              <SelectItem v-if="shareTarget?.type === 'file'" value="permanent">Постоянно</SelectItem>
             </SelectContent>
           </Select>
           <DialogFooter>

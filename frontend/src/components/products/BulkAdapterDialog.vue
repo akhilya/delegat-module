@@ -194,7 +194,7 @@ async function run() {
 
 <template>
   <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
-    <DialogContent class="sm:max-w-md">
+    <DialogContent size="md">
       <DialogHeader>
         <DialogTitle>Адаптеры — {{ selectedProductIds.length }} товаров</DialogTitle>
         <DialogDescription>

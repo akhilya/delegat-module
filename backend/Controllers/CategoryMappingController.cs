@@ -286,6 +286,138 @@ public class CategoryMappingController : ControllerBase
     }
 
     /// <summary>
+    /// Get the visual node graph for a mapping. Returns the saved graph, or null when none
+    /// exists yet (the client then auto-migrates the current field mappings into a graph).
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph")]
+    public async Task<IActionResult> GetMappingGraph(int connectionId, int mappingId)
+    {
+        await GetConnectionAsync(connectionId);
+
+        var mapping = await _unitOfWork.Repository<CategoryMapping>()
+            .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
+
+        if (mapping == null)
+            throw ApiException.NotFound("Маппинг не найден");
+
+        object? graph = null;
+        if (!string.IsNullOrWhiteSpace(mapping.graphJson))
+        {
+            try { graph = JsonSerializer.Deserialize<JsonElement>(mapping.graphJson); }
+            catch (JsonException) { graph = null; }
+        }
+
+        return Ok(new { hasGraph = graph != null, graph });
+    }
+
+    /// <summary>
+    /// Save (or clear) the visual node graph for a mapping. A null/empty graph reverts the
+    /// mapping to the legacy per-field export. Existing per-field modifiersJson is left intact,
+    /// so reverse (import) of unchanged linear fields keeps working.
+    /// </summary>
+    [HttpPut]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph")]
+    public async Task<IActionResult> SaveMappingGraph(
+        int connectionId,
+        int mappingId,
+        [FromBody] SaveGraphInput input)
+    {
+        await GetConnectionAsync(connectionId);
+
+        var repo = _unitOfWork.Repository<CategoryMapping>();
+        var mapping = await repo.FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
+
+        if (mapping == null)
+            throw ApiException.NotFound("Маппинг не найден");
+
+        mapping.graphJson = input.graph.HasValue
+            && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+                ? input.graph.Value.GetRawText()
+                : null;
+
+        await repo.UpdateAsync(mapping);
+
+        // Project reversible lanes back onto the per-field rows so the import (reverse) path keeps working.
+        if (input.fields != null && input.fields.Count > 0)
+        {
+            var fmRepo = _unitOfWork.Repository<FieldMapping>();
+            var fieldMappings = (await fmRepo.FindAllAsync(fm => fm.categoryMappingId == mappingId)).ToList();
+            foreach (var proj in input.fields)
+            {
+                var fm = fieldMappings.FirstOrDefault(x => x.externalFieldKey == proj.externalFieldKey);
+                if (fm == null)
+                    continue;
+                fm.sourceType = proj.sourceType;
+                fm.sourceAttributeId = proj.sourceAttributeId;
+                fm.modifiersJson = proj.modifiersJson;
+                await fmRepo.UpdateAsync(fm);
+            }
+        }
+
+        return Ok(new { success = true, hasGraph = mapping.graphJson != null });
+    }
+
+    /// <summary>
+    /// Preview the result of a node graph for a specific product. Uses the graph in the request
+    /// body when provided (unsaved edits from the editor), otherwise the saved graph.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph/preview")]
+    public async Task<IActionResult> PreviewMappingGraph(
+        int connectionId,
+        int mappingId,
+        [FromBody] GraphPreviewInput input,
+        CancellationToken ct = default)
+    {
+        await GetConnectionAsync(connectionId);
+
+        var mapping = await _unitOfWork.Repository<CategoryMapping>()
+            .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
+
+        if (mapping == null)
+            throw ApiException.NotFound("Маппинг не найден");
+
+        var graphJson = input.graph.HasValue
+            && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+                ? input.graph.Value.GetRawText()
+                : mapping.graphJson;
+
+        if (string.IsNullOrWhiteSpace(graphJson))
+            return Ok(new
+            {
+                outputs = new Dictionary<string, string?>(),
+                fieldTypes = new Dictionary<string, string>(),
+                nodeValues = new Dictionary<string, string?>(),
+            });
+
+        // Load product with all relations needed for source resolution (matches the field-mapping preview).
+        var product = await _context.products
+            .Include(p => p.category)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.attribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.files)
+            .Include(p => p.images)
+                .ThenInclude(i => i.file)
+            .Include(p => p.groupMemberships)
+                .ThenInclude(gm => gm.group)
+            .FirstOrDefaultAsync(p => p.Id == input.productId, ct);
+
+        if (product == null)
+            throw ApiException.NotFound("Товар не найден");
+
+        var mappingService = _serviceProvider.GetRequiredService<MappingService>();
+        var eval = mappingService.EvaluateGraph(product, graphJson);
+
+        var outputs = eval.Outputs.ToDictionary(kv => kv.Key, kv => FormatGraphValue(kv.Value));
+        var nodeValues = eval.NodeValues.ToDictionary(kv => kv.Key, kv => FormatGraphValue(kv.Value));
+
+        return Ok(new { outputs, fieldTypes = eval.FieldTypes, nodeValues });
+    }
+
+    /// <summary>
     /// Duplicate a category mapping with all its field mappings
     /// </summary>
     [HttpPost]
@@ -347,6 +479,14 @@ public class CategoryMappingController : ControllerBase
 
             await fieldMappingRepo.AddAsync(copy);
             fieldsCreated++;
+        }
+
+        // Carry over the visual node graph (keyed by externalFieldKey / attributeId, which are
+        // identical for the duplicate since it shares the same local category).
+        if (!string.IsNullOrWhiteSpace(original.graphJson))
+        {
+            duplicate.graphJson = original.graphJson;
+            await mappingRepo.UpdateAsync(duplicate);
         }
 
         return Ok(new { id = duplicate.Id, fieldsCreated });
@@ -771,6 +911,18 @@ public class CategoryMappingController : ControllerBase
         return fieldsCreated;
     }
 
+    /// <summary>
+    /// Format a graph output value for preview display.
+    /// </summary>
+    private static string? FormatGraphValue(object? value)
+    {
+        if (value == null) return null;
+        if (value is string s) return s;
+        if (value is System.Collections.IEnumerable en && value is not string)
+            return string.Join(", ", en.Cast<object?>().Select(x => x?.ToString()));
+        return value.ToString();
+    }
+
     #endregion
 
     #region Auto-mapping helpers
@@ -1014,6 +1166,41 @@ public class CategoryMappingController : ControllerBase
         public int? localCategoryId { get; set; }
         public List<string>? selectedFieldKeys { get; set; }
         public string? operationId { get; set; }
+    }
+
+    /// <summary>
+    /// Body for saving a visual node graph. A null graph clears it (reverts to per-field export).
+    /// </summary>
+    public struct SaveGraphInput
+    {
+        public JsonElement? graph { get; set; }
+
+        /// <summary>
+        /// Per-field projection of the graph back onto FieldMapping rows so the existing import
+        /// (reverse) path keeps working. Reversible attribute-lanes carry a real source +
+        /// modifiersJson; fan-in / op / non-attribute lanes are Static (import skips them).
+        /// </summary>
+        public List<FieldProjection>? fields { get; set; }
+    }
+
+    /// <summary>
+    /// One field's projected source + modifier chain (computed by the editor from the graph).
+    /// </summary>
+    public struct FieldProjection
+    {
+        public string externalFieldKey { get; set; }
+        public FieldMappingSourceType sourceType { get; set; }
+        public int? sourceAttributeId { get; set; }
+        public string? modifiersJson { get; set; }
+    }
+
+    /// <summary>
+    /// Body for previewing a node graph against a product. graph is optional (unsaved edits).
+    /// </summary>
+    public struct GraphPreviewInput
+    {
+        public int productId { get; set; }
+        public JsonElement? graph { get; set; }
     }
 
     #endregion

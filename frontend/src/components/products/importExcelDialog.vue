@@ -1,6 +1,6 @@
 <template>
   <Dialog v-model:open="isOpen">
-    <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+    <DialogContent size="3xl" class="max-h-[85vh] overflow-hidden flex flex-col">
       <DialogHeader>
         <DialogTitle>Импорт из Excel</DialogTitle>
         <DialogDescription>

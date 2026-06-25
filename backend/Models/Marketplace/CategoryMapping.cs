@@ -63,6 +63,14 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// JSON-serialized node graph for the whole-category visual mapping editor
+    /// (nodes + edges). When present, the graph is the source of truth for export;
+    /// when null, export falls back to per-field <see cref="FieldMapping.modifiersJson"/>
+    /// / <see cref="FieldMapping.transformExpression"/>. Stored as LONGTEXT.
+    /// </summary>
+    public string? graphJson { get; set; }
+
+    /// <summary>
     /// Collection of field mappings for this category mapping.
     /// </summary>
     public virtual ICollection<FieldMapping> fieldMappings { get; set; } = new List<FieldMapping>();
@@ -106,6 +114,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             externalCategoryName = externalCategoryName,
             name = name,
             fieldMappingsCount = fieldMappings?.Count ?? 0,
+            hasGraph = !string.IsNullOrEmpty(graphJson),
             createdAt = createdAt
         };
     }
@@ -265,6 +274,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// Number of field mappings configured.
         /// </summary>
         public int fieldMappingsCount { get; set; }
+
+        /// <summary>
+        /// Whether a visual node graph is configured for this mapping.
+        /// The graph itself is fetched via the dedicated graph endpoint to keep list responses small.
+        /// </summary>
+        public bool hasGraph { get; set; }
 
         /// <summary>
         /// Timestamp when the mapping was created.

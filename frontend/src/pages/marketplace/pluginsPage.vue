@@ -1,8 +1,11 @@
 <script>
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import { PageHeader } from "@/components/ui/page-header";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
@@ -90,16 +93,16 @@ export default {
   data() {
     return {
       plugins: [],
+      breadcrumbs: [
+        { label: "Адаптеры", to: "/adapter" },
+        { label: "Плагины" },
+      ],
       isLoading: false,
       isUploading: false,
       isDeleting: false,
       isReloading: null,
       showUploadDialog: false,
       selectedFile: null,
-      breadcrumbs: [
-        { label: "Адаптеры", to: "/adapter" },
-        { label: "Плагины" },
-      ],
     };
   },
   methods: {
@@ -234,6 +237,7 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
+
 
     <PageHeader
       title="Плагины"

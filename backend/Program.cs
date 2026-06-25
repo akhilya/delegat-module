@@ -173,6 +173,7 @@ builder.Services.AddScoped<ProductFolderController>();
 // Quotas
 builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<QuotaService>();
+builder.Services.AddScoped<StoreStorageController>();
 
 // Excel import/export
 builder.Services.AddScoped<ExcelProductService>();

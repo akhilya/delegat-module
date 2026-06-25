@@ -133,6 +133,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .Property(fm => fm.modifiersJson)
             .HasColumnType("longtext");
 
+        // CategoryMapping graphJson - LONGTEXT for the whole-category visual node graph
+        builder.Entity<CategoryMapping>()
+            .Property(m => m.graphJson)
+            .HasColumnType("longtext");
+
         // Product grouping indexes
         builder.Entity<ProductGroupMember>()
             .HasIndex(m => new { m.groupId, m.productId })

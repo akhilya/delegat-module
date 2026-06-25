@@ -1,8 +1,11 @@
 <script>
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -72,9 +75,9 @@ export default {
         isActive: true,
       },
       isEditDialogOpen: false,
+      breadcrumbs: [{ label: "Пользователи" }],
       isLoading: false,
       savingUserId: null,
-      breadcrumbs: [{ label: "Пользователи" }],
     };
   },
   computed: {
@@ -242,6 +245,7 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
+
 
     <PageHeader
       title="Пользователи"

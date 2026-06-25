@@ -508,6 +508,9 @@ namespace PrintO.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<string>("graphJson")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("localCategoryId")
                         .HasColumnType("int");
 

@@ -12,3 +12,6 @@ export { default as SidebarMenuButton } from "./SidebarMenuButton.vue";
 export { default as SidebarInset } from "./SidebarInset.vue";
 export { default as SidebarTrigger } from "./SidebarTrigger.vue";
 export { default as SidebarRail } from "./SidebarRail.vue";
+export { default as SidebarMenuSub } from "./SidebarMenuSub.vue";
+export { default as SidebarMenuSubItem } from "./SidebarMenuSubItem.vue";
+export { default as SidebarMenuSubButton } from "./SidebarMenuSubButton.vue";
