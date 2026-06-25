@@ -20,6 +20,7 @@ import {
   Maximize2,
   Minimize2,
   AlertTriangle,
+  EyeOff,
   Loader2,
 } from "lucide-vue-next";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -29,6 +30,7 @@ import SourceNode from "./nodes/SourceNode.vue";
 import ModifierNode from "./nodes/ModifierNode.vue";
 import OpNode from "./nodes/OpNode.vue";
 import AdapterFieldsNode from "./nodes/AdapterFieldsNode.vue";
+import RerouteNode from "./nodes/RerouteNode.vue";
 import {
   autoMigrate,
   validateGraph,
@@ -36,6 +38,8 @@ import {
   createSourceNode,
   createModifierNode,
   createOpNode,
+  createRerouteNode,
+  syncAdapterFields,
   analyzeFields,
   nodeOutputType,
   nodeInputType,
@@ -56,7 +60,7 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   previewProductId: { type: [Number, String], default: null },
 });
-const emit = defineEmits(["preview-result"]);
+const emit = defineEmits(["preview-result", "clear-preview"]);
 
 const store = useStore();
 const vf = useVueFlow();
@@ -78,6 +82,8 @@ const {
   onPaneClick,
   onNodesChange,
   onEdgesChange,
+  onEdgeDoubleClick,
+  onNodeDoubleClick,
   getSelectedNodes,
   addSelectedNodes,
   removeSelectedNodes,
@@ -334,6 +340,53 @@ onEdgesChange((changes) => {
   }
 });
 
+// Double-click a wire ⇒ drop a draggable reroute node on it (split the edge in two through it).
+onEdgeDoubleClick(({ event, edge }) => {
+  const pt = event?.changedTouches?.[0] || event;
+  const p = toFlow({ x: pt?.clientX ?? 0, y: pt?.clientY ?? 0 });
+  const rr = createRerouteNode({ x: p.x - 7, y: p.y - 7 }); // centre the 14px dot on the cursor
+  addNodes([rr]);
+  addEdges([
+    {
+      id: genId("e"),
+      source: edge.source,
+      sourceHandle: edge.sourceHandle,
+      target: rr.id,
+      targetHandle: "in",
+    },
+    {
+      id: genId("e"),
+      source: rr.id,
+      sourceHandle: "out",
+      target: edge.target,
+      targetHandle: edge.targetHandle,
+    },
+  ]);
+  removeEdges([edge.id]);
+  schedulePreview();
+});
+
+// Double-click a reroute node ⇒ splice it out, reconnecting its upstream source to each downstream target.
+onNodeDoubleClick(({ node }) => {
+  if (!node || node.type !== "reroute") return;
+  const src = edges.value.find((e) => e.target === node.id);
+  const outs = edges.value.filter((e) => e.source === node.id);
+  if (src) {
+    addEdges(
+      outs.map((out) => ({
+        id: genId("e"),
+        source: src.source,
+        sourceHandle: src.sourceHandle,
+        target: out.target,
+        targetHandle: out.targetHandle,
+      })),
+    );
+  }
+  if (selected.value?.id === node.id) selected.value = null;
+  removeNodes([node.id]); // also removes the reroute's own edges
+  schedulePreview();
+});
+
 async function load() {
   if (!props.connectionId || !props.mappingId) return; // ids arrive after parent mounted()
   loading.value = true;
@@ -355,6 +408,8 @@ async function load() {
       graph = autoMigrate(props.fieldMappings, props.availableSources);
       migrated = true;
     }
+    // Bring the adapter sink up to date with any marketplace fields added since the graph was saved.
+    graph.nodes = syncAdapterFields(graph.nodes, props.fieldMappings);
     // Saved graphs keep the user's layout; auto-migrated ones get a compact layered layout.
     setNodes(
       migrated ? layoutGraph(graph.nodes, graph.edges) : graph.nodes || [],
@@ -725,6 +780,16 @@ function autoArrange() {
           <Loader2 class="size-3.5 animate-spin" /> предпросмотр…
         </span>
         <Button
+          v-if="previewProductId"
+          size="sm"
+          variant="ghost"
+          @click="emit('clear-preview')"
+          title="Сбросить товар предпросмотра"
+        >
+          <EyeOff class="mr-1.5 size-4" />
+          Сбросить
+        </Button>
+        <Button
           size="sm"
           variant="ghost"
           @click="autoArrange"
@@ -806,6 +871,7 @@ function autoArrange() {
         <template #node-adapterFields="p"
           ><AdapterFieldsNode v-bind="p"
         /></template>
+        <template #node-reroute="p"><RerouteNode v-bind="p" /></template>
       </VueFlow>
 
       <!-- context menu + click-away catcher -->

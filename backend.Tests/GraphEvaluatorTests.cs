@@ -333,6 +333,24 @@ public class GraphEvaluatorTests
         Assert.Equal(new object?[] { "a.pdf", "b.pdf" }, list);
     }
 
+    [Fact]
+    public void Reroute_PassesValueThrough_Unchanged()
+    {
+        var graph = new MappingGraph
+        {
+            nodes = new()
+            {
+                Attr("a", 1),
+                new GraphNode { id = "rr", type = "reroute" },
+                new GraphNode { id = "out", type = "output", data = new() { fieldKey = "x", outputType = "string" } },
+            },
+            edges = new() { Edge("a", "rr"), Edge("rr", "out") }
+        };
+
+        var result = GraphEvaluator.Evaluate(graph, Context(catAttr: _ => "hello"));
+        Assert.Equal("hello", result.Outputs["x"]);
+    }
+
     // ---- Helpers ----
 
     private static GraphNode Attr(string id, int attributeId) =>

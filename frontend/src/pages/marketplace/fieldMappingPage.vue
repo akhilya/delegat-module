@@ -1207,6 +1207,7 @@ export default {
             :available-sources="{ ...availableSources, storeFiles }"
             :preview-product-id="previewProductId"
             @preview-result="onGraphPreview"
+            @clear-preview="onPreviewProductChange(null)"
           />
         </div>
 

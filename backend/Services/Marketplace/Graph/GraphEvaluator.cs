@@ -113,6 +113,10 @@ public static class GraphEvaluator
                     case "productFilesByExtension":
                         pins[nodeId] = new PinValue(ctx.ResolveProductFilesByExtension(data.fileExtension));
                         break;
+                    case "reroute":
+                        // Transparent pass-through (a wire bend) — forward the input pin unchanged.
+                        pins[nodeId] = SingleInput(incoming, pins, nodeId);
+                        break;
 
                     case "modifier":
                     {

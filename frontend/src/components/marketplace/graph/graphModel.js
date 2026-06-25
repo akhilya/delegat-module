@@ -512,6 +512,39 @@ export function createOpNode(type, position) {
   return { id: genId(type), type, position, data };
 }
 
+/** A transparent pass-through "reroute" node (inserted by double-clicking a wire to bend its path). */
+export function createRerouteNode(position) {
+  return { id: genId("rr"), type: "reroute", position, data: {} };
+}
+
+// ---- Adapter field reconciliation ----------------------------------------
+
+/**
+ * Ensure the single "adapterFields" sink exposes a pin for every current marketplace field.
+ * The platform's field sync (CategoryImportService) keeps the FieldMapping rows complete, but a saved
+ * graph holds a snapshot — so fields added to the category later are missing. Append (never prune, so a
+ * wired field is never lost) the missing ones, matching autoMigrate's field shape. Returns `nodes`.
+ */
+export function syncAdapterFields(nodes, fieldMappings) {
+  const adapter = (nodes || []).find((n) => n.type === "adapterFields");
+  if (!adapter) return nodes;
+  const fields = adapter.data?.fields || [];
+  const have = new Set(fields.map((f) => f.fieldKey));
+  for (const fm of fieldMappings || []) {
+    const key = fm.externalFieldKey;
+    if (!key || have.has(key)) continue;
+    fields.push({
+      fieldKey: key,
+      label: fm.externalFieldName || key,
+      outputType: fm.externalFieldType || "string",
+      isRequired: !!fm.isRequired,
+    });
+    have.add(key);
+  }
+  adapter.data = { ...(adapter.data || {}), fields };
+  return nodes;
+}
+
 // ---- Display helpers -----------------------------------------------------
 
 export function modifierNodeLabel(data) {
@@ -798,6 +831,13 @@ export function analyzeFields(nodes, edges) {
             params: cur.data.params || {},
             enabled: true,
           });
+          cur = byId.get(ins[0].source);
+        } else if (cur.type === "reroute") {
+          // Reroute is a transparent pass-through — step through it without affecting the lane.
+          if (ins.length !== 1) {
+            ok = false;
+            break;
+          }
           cur = byId.get(ins[0].source);
         } else if (cur.type === "attribute" || cur.type === "storeAttribute") {
           if (cur.data?.attributeId != null) {
