@@ -12,11 +12,11 @@ import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2 } from "lucide-vue-next";
 
+
 const breadcrumbs = [
   { label: "Настройки", to: "/settings" },
   { label: "Пользователь" },
 ];
-
 const me = ref(null);
 const isLoading = ref(false);
 const isSavingProfile = ref(false);

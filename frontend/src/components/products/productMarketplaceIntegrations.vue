@@ -1193,7 +1193,7 @@ export default {
 
     <!-- Import Preview Dialog -->
     <Dialog v-model:open="showImportPreviewDialog">
-      <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Подтверждение импорта</DialogTitle>
           <DialogDescription>
@@ -1223,7 +1223,7 @@ export default {
 
     <!-- Bulk Mapping Selection Dialog -->
     <Dialog v-model:open="showBulkMappingDialog">
-      <DialogContent class="sm:max-w-lg">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Выберите маппинг</DialogTitle>
           <DialogDescription>
@@ -1268,7 +1268,7 @@ export default {
 
     <!-- Recreate Product Dialog -->
     <Dialog v-model:open="showRecreateDialog">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Пересоздать товар</DialogTitle>
           <DialogDescription>
@@ -1300,7 +1300,7 @@ export default {
 
     <!-- Manual Link Dialog -->
     <Dialog v-model:open="showLinkDialog">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{{ isRelinking ? 'Перепривязать товар' : 'Привязать товар' }}</DialogTitle>
           <DialogDescription>

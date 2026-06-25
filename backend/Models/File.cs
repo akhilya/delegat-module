@@ -121,9 +121,18 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public object MapToDTO(IServiceProvider serviceProvider)
     {
         var rawName = displayName ?? Path.GetFileName(filePath);
-        var fileName = Path.HasExtension(rawName)
-            ? rawName
-            : rawName + ExtensionFromContentType(contentType);
+        string fileName;
+        if (Path.HasExtension(rawName))
+        {
+            fileName = rawName;
+        }
+        else
+        {
+            var ext = ExtensionFromContentType(contentType);
+            if (string.IsNullOrEmpty(ext))
+                ext = Path.GetExtension(filePath);
+            fileName = rawName + ext;
+        }
         return new
         {
             Id,

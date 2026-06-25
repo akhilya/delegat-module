@@ -147,7 +147,7 @@ export default {
             Добавить категорию
           </Button>
         </DialogTrigger>
-        <DialogContent class="sm:max-w-md">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Новая категория</DialogTitle>
             <DialogDescription>

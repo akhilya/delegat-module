@@ -1,8 +1,11 @@
 <script>
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import Button from "@/components/ui/button/Button.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -43,11 +46,11 @@ export default {
   data() {
     return {
       tokens: [],
+      breadcrumbs: [{ label: "Токены приглашения" }],
       isLoading: false,
       isCreating: false,
       lastCreatedToken: null,
       copiedToken: null,
-      breadcrumbs: [{ label: "Токены приглашения" }],
     };
   },
   methods: {
@@ -116,6 +119,7 @@ export default {
   <Page class="flex flex-col">
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
+
 
     <PageHeader title="Токены приглашения" description="Управление токенами для регистрации пользователей">
       <Button @click="handleCreateToken" :disabled="isCreating">

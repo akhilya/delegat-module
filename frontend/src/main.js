@@ -47,6 +47,11 @@ http.interceptors.response.use(undefined, async (error) => {
 
   // Auto-refresh on 401
   if (error.response?.status === 401 && !originalRequest._retry) {
+    // Auth endpoints return 401 for invalid credentials — don't attempt refresh
+    if (/\/auth\/(signIn|signUp|refresh)/.test(originalRequest.url || '')) {
+      return Promise.reject(error);
+    }
+
     originalRequest._retry = true;
 
     try {

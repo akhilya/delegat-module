@@ -178,7 +178,7 @@ export default {
             Создать группу
           </Button>
         </DialogTrigger>
-        <DialogContent class="sm:max-w-md">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Новая группа</DialogTitle>
             <DialogDescription>

@@ -10,6 +10,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import {
   Select,
@@ -26,30 +29,43 @@ import { displaySonnerError } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { useDark, useToggle } from "@vueuse/core";
 import {
+  AlertTriangle,
   Boxes,
+  FolderOpen,
+  Globe,
   HardDrive,
+  Key,
   Layers,
   LogOut,
   Moon,
   PackagePlus,
   Plug,
   Settings2,
+  ShoppingBag,
   Store,
   Sun,
   Trash2,
   UserCog,
-  Bug,
+  Users,
+  Wand2,
 } from "lucide-vue-next";
 import {
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_PLUGINS,
+  PAGE_ADMIN_STORES,
+  PAGE_ADMIN_TOKENS,
+  PAGE_ADMIN_USERS,
+  PAGE_CATEGORIES,
+  PAGE_MARKETPLACE,
   PAGE_PRODUCT_CREATION,
   PAGE_PRODUCT_GROUPS,
   PAGE_PRODUCTS,
   PAGE_SETTINGS,
   PAGE_SETTINGS_STORE,
   PAGE_SETTINGS_USER,
+  PAGE_STORE_ATTRIBUTES,
   PAGE_STORE_STORAGE,
+  PAGE_TOOLS,
 } from "@/router";
 
 export default {
@@ -64,6 +80,9 @@ export default {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
     Select,
     SelectContent,
     SelectGroup,
@@ -72,24 +91,35 @@ export default {
     SelectTrigger,
     SelectValue,
     Button,
+    AlertTriangle,
     Boxes,
+    FolderOpen,
+    Globe,
     HardDrive,
+    Key,
     Layers,
     LogOut,
     Moon,
     PackagePlus,
     Plug,
     Settings2,
+    ShoppingBag,
     Store,
     Sun,
     Trash2,
     UserCog,
-    Bug,
+    Users,
+    Wand2,
   },
   setup() {
     const isDark = useDark();
     const toggleDark = useToggle(isDark);
-    return { isDark, toggleDark };
+    return {
+      isDark,
+      toggleDark,
+      PAGE_SETTINGS,
+      PAGE_SETTINGS_STORE,
+    };
   },
   data() {
     return {
@@ -119,20 +149,23 @@ export default {
         { label: "Мои настройки", to: PAGE_SETTINGS_USER, icon: UserCog },
       ];
     },
-    storeSettingsItems() {
+    storeSettingsSubItems() {
       if (!this.canManageSelectedStore) return [];
-
       return [
-        { label: "Настройки магазина", to: PAGE_SETTINGS_STORE, icon: Store },
+        { label: "Адаптеры", to: PAGE_MARKETPLACE, icon: ShoppingBag },
+        { label: "Категории", to: PAGE_CATEGORIES, icon: FolderOpen },
+        { label: "Глобальные атрибуты", to: PAGE_STORE_ATTRIBUTES, icon: Globe },
+        { label: "Инструменты", to: PAGE_TOOLS, icon: Wand2 },
       ];
     },
-    adminSettingsItems() {
+    adminSettingsSubItems() {
       if (!this.me?.isAdmin) return [];
-
       return [
-        { label: "Общие настройки", to: PAGE_SETTINGS, icon: Settings2 },
-        { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: Bug },
+        { label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
+        { label: "Пользователи", to: PAGE_ADMIN_USERS, icon: Users },
+        { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
         { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
+        { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
       ];
     },
   },
@@ -281,33 +314,53 @@ export default {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <SidebarGroup v-if="storeSettingsItems.length > 0">
+      <SidebarGroup v-if="canManageSelectedStore">
         <SidebarGroupLabel>Настройки магазина</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="item in storeSettingsItems" :key="item.label">
-              <SidebarMenuButton as-child :is-active="isActive(item.to)">
-                <RouterLink :to="item.to">
-                  <component :is="item.icon" />
-                  <span>{{ item.label }}</span>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child :is-active="isActive(PAGE_SETTINGS_STORE)">
+                <RouterLink :to="PAGE_SETTINGS_STORE">
+                  <Store />
+                  <span>Настройки магазина</span>
                 </RouterLink>
               </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem v-for="item in storeSettingsSubItems" :key="item.label">
+                  <SidebarMenuSubButton as-child :is-active="isActive(item.to)">
+                    <RouterLink :to="item.to">
+                      <component :is="item.icon" />
+                      {{ item.label }}
+                    </RouterLink>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <SidebarGroup v-if="adminSettingsItems.length > 0">
+      <SidebarGroup v-if="me?.isAdmin">
         <SidebarGroupLabel>Администрирование</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="item in adminSettingsItems" :key="item.label">
-              <SidebarMenuButton as-child :is-active="isActive(item.to)">
-                <RouterLink :to="item.to">
-                  <component :is="item.icon" />
-                  <span>{{ item.label }}</span>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child :is-active="isActive(PAGE_SETTINGS)">
+                <RouterLink :to="PAGE_SETTINGS">
+                  <Settings2 />
+                  <span>Настройки администратора</span>
                 </RouterLink>
               </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem v-for="item in adminSettingsSubItems" :key="item.label">
+                  <SidebarMenuSubButton as-child :is-active="isActive(item.to)">
+                    <RouterLink :to="item.to">
+                      <component :is="item.icon" />
+                      {{ item.label }}
+                    </RouterLink>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>

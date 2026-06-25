@@ -1,6 +1,6 @@
 <template>
   <Dialog v-model:open="isOpen">
-    <DialogContent class="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <DialogContent size="2xl" class="max-h-[85vh] overflow-hidden flex flex-col">
       <DialogHeader>
         <DialogTitle>Массовое редактирование</DialogTitle>
         <DialogDescription>

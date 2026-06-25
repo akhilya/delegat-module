@@ -2205,7 +2205,7 @@ export default {
                       API Лимиты
                     </Button>
                   </DialogTrigger>
-                  <DialogContent class="sm:max-w-lg">
+                  <DialogContent size="lg">
                     <DialogHeader>
                       <DialogTitle>API Лимиты</DialogTitle>
                       <DialogDescription>
@@ -2973,7 +2973,7 @@ export default {
 
     <!-- Single Import Preview Dialog -->
     <Dialog v-model:open="showSingleImportPreviewDialog">
-      <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Подтверждение импорта</DialogTitle>
           <DialogDescription>
@@ -3029,7 +3029,7 @@ export default {
 
     <!-- Import Dialog -->
     <Dialog v-model:open="showImportDialog">
-      <DialogContent class="sm:max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent size="2xl" class="max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Импорт товаров</DialogTitle>
           <DialogDescription>
@@ -3142,7 +3142,7 @@ export default {
     </Dialog>
     <!-- Rename Mapping Dialog -->
     <Dialog v-model:open="showRenameMappingDialog">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Переименовать маппинг</DialogTitle>
           <DialogDescription>Укажите новое название для маппинга</DialogDescription>
@@ -3168,7 +3168,7 @@ export default {
 
     <!-- Delete Mapping Dialog -->
     <Dialog v-model:open="showDeleteMappingDialog">
-      <DialogContent class="sm:max-w-lg">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Удалить маппинг</DialogTitle>
           <DialogDescription>
@@ -3249,7 +3249,7 @@ export default {
 
     <!-- Mapping Settings Dialog -->
     <Dialog v-model:open="showMappingSettingsDialog">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Настройки маппинга</DialogTitle>
           <DialogDescription>Настройте параметры маппинга категорий</DialogDescription>
@@ -3277,7 +3277,7 @@ export default {
 
     <!-- Mapping Selection Dialog (pre-export) -->
     <Dialog v-model:open="showMappingSelectionDialog" @update:open="!$event && cancelMappingSelection()">
-      <DialogContent class="sm:max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Выберите маппинг для товаров</DialogTitle>
           <DialogDescription>

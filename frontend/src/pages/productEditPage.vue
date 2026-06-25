@@ -1023,7 +1023,7 @@ export default {
 
                   <!-- SKU change dialog -->
                   <Dialog v-model:open="showSkuDialog">
-                    <DialogContent class="sm:max-w-md">
+                    <DialogContent size="md">
                       <DialogHeader>
                         <DialogTitle>Изменить артикул</DialogTitle>
                         <DialogDescription>
@@ -1133,7 +1133,7 @@ export default {
 
             <!-- Group change dialog -->
             <Dialog v-model:open="showGroupDialog">
-              <DialogContent class="sm:max-w-md">
+              <DialogContent size="md">
                 <DialogHeader>
                   <DialogTitle>Сменить группу товаров</DialogTitle>
                   <DialogDescription>

@@ -194,7 +194,7 @@ export default {
             Добавить участника
           </Button>
         </DialogTrigger>
-        <DialogContent class="sm:max-w-md">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Добавить участника</DialogTitle>
             <DialogDescription>

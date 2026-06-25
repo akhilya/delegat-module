@@ -1,10 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
+
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+
+
 import Button from "@/components/ui/button/Button.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
@@ -27,11 +30,11 @@ import {
   Wand2,
 } from "lucide-vue-next";
 
+
 const breadcrumbs = [
   { label: "Настройки", to: "/settings" },
   { label: "Магазин" },
 ];
-
 const me = ref(null);
 const memberships = ref([]);
 const isLoading = ref(false);

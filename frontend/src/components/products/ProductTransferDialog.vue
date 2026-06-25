@@ -276,7 +276,7 @@ function close() {
 
 <template>
   <Dialog :open="open" @update:open="(v) => emit('update:open', v)">
-    <DialogContent class="sm:max-w-3xl">
+    <DialogContent size="3xl" class="flex max-h-[85vh] flex-col overflow-hidden">
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <ArrowRightLeft class="size-5" />
@@ -288,7 +288,7 @@ function close() {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-5 py-2">
+      <div class="-mx-6 min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-2 thin-scrollbar">
         <!-- Mode toggle -->
         <div class="space-y-2">
           <Label class="text-sm">Режим</Label>

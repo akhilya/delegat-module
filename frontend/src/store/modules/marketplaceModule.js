@@ -539,6 +539,48 @@ export default {
     },
 
     /**
+     * Fetches the saved visual node graph for a category mapping.
+     * @returns {Promise<{hasGraph: boolean, graph: object|null}>}
+     */
+    async getMappingGraph(ctx, { connectionId, mappingId }) {
+      const response = await http.get(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`
+      );
+      return response.data;
+    },
+
+    /**
+     * Lists the selected store's shared-storage files (for the graph's «Файл магазина» blocks).
+     */
+    async getStoreFiles() {
+      const response = await http.get(`/store-storage/files`);
+      return response.data;
+    },
+
+    /**
+     * Saves (or clears, when graph is null) the visual node graph for a category mapping.
+     */
+    async saveMappingGraph(ctx, { connectionId, mappingId, graph, fields }) {
+      const response = await http.put(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
+        { graph, fields }
+      );
+      return response.data;
+    },
+
+    /**
+     * Previews a node graph against a product.
+     * @returns {Promise<{outputs: object, fieldTypes: object}>}
+     */
+    async previewMappingGraph(ctx, { connectionId, mappingId, productId, graph }) {
+      const response = await http.post(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph/preview`,
+        { productId, graph }
+      );
+      return response.data;
+    },
+
+    /**
      * Fetches external category fields for preview before import.
      */
     async getExternalCategoryFields(ctx, { connectionId, externalCategoryId, onSuccess, onError }) {

@@ -87,19 +87,45 @@ public static class ModifierPipeline
             if (descriptor.enabled == false)
                 continue;
 
-            if (!_modifiers.TryGetValue(descriptor.type, out var modifier))
-                continue;
-
-            var parameters = descriptor.@params ?? new Dictionary<string, object>();
-
-            if (modifier is IContextAwareModifier contextAware && context != null)
-                current = contextAware.ApplyWithContext(current, parameters, context);
-            else
-                current = modifier.Apply(current, parameters);
+            current = ApplySingle(descriptor.type, current, descriptor.@params, context);
         }
 
         return current;
     }
+
+    /// <summary>
+    /// Apply a single modifier by type to a value. Shared by the linear chain
+    /// (<see cref="ApplyModifiers"/>) and the visual node-graph evaluator so both paths
+    /// run the exact same modifier implementations. Unknown types pass the value through.
+    /// </summary>
+    public static object? ApplySingle(string type, object? value, Dictionary<string, object>? parameters,
+        ModifierContext? context = null)
+    {
+        if (string.IsNullOrEmpty(type))
+            return value;
+
+        if (!_modifiers.TryGetValue(type, out var modifier))
+            return value;
+
+        var p = parameters ?? new Dictionary<string, object>();
+
+        if (modifier is IContextAwareModifier contextAware && context != null)
+            return contextAware.ApplyWithContext(value, p, context);
+
+        return modifier.Apply(value, p);
+    }
+
+    /// <summary>
+    /// Whether a modifier type is registered. Used by graph validation.
+    /// </summary>
+    public static bool IsKnownModifier(string? type) =>
+        !string.IsNullOrEmpty(type) && _modifiers.ContainsKey(type);
+
+    /// <summary>
+    /// Whether a single modifier type is reversible (import direction).
+    /// </summary>
+    public static bool IsReversible(string? type) =>
+        !string.IsNullOrEmpty(type) && _modifiers.TryGetValue(type, out var m) && m.IsReversible;
 
     /// <summary>
     /// Apply modifier chain in reverse (import direction).

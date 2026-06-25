@@ -12,8 +12,13 @@ import Switch from "@/components/ui/switch/Switch.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import MultiSelectDropdown from "@/components/ui/multi-select/MultiSelectDropdown.vue";
 import ModifierStack from "@/components/marketplace/ModifierStack.vue";
+import MappingCanvas from "@/components/marketplace/graph/MappingCanvas.vue";
 import { mapActions } from "vuex";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
 import { setPageTitle } from "@/router";
 import {
   ArrowLeft,
@@ -37,6 +42,7 @@ import {
   X,
   EllipsisVertical,
   Search,
+  Workflow,
 } from "lucide-vue-next";
 import {
   Tooltip,
@@ -98,6 +104,7 @@ export default {
   components: {
     Page,
     PageSection,
+    MappingCanvas,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -122,6 +129,7 @@ export default {
     FileText,
     Type,
     Boxes,
+    Workflow,
     Plus,
     Trash2,
     Eye,
@@ -175,6 +183,7 @@ export default {
   },
   data() {
     return {
+      viewMode: "graph",
       connectionId: null,
       mappingId: null,
       fieldMappings: [],
@@ -183,6 +192,7 @@ export default {
         categoryAttributes: [],
         storeAttributes: [],
       },
+      storeFiles: [],
       isLoading: false,
       isSaving: false,
       hasChanges: false,
@@ -227,13 +237,15 @@ export default {
         { label: "Подключение", to: `/adapter/${this.connectionId}` },
       ];
       if (this.mappingInfo) {
-        items.push({ label: this.mappingInfo.externalCategoryName || "Категория" });
+        items.push({
+          label: this.mappingInfo.externalCategoryName || "Категория",
+        });
       }
       return items;
     },
     requiredFieldsMapped() {
       return this.fieldMappings.filter(
-        (fm) => fm.isRequired && fm.isEnabled && this.hasValidSource(fm)
+        (fm) => fm.isRequired && fm.isEnabled && this.hasValidSource(fm),
       ).length;
     },
     totalRequiredFields() {
@@ -241,7 +253,7 @@ export default {
     },
     unmappedRequiredFields() {
       return this.fieldMappings.filter(
-        (fm) => fm.isRequired && fm.isEnabled && !this.hasValidSource(fm)
+        (fm) => fm.isRequired && fm.isEnabled && !this.hasValidSource(fm),
       );
     },
     hasUnmappedRequired() {
@@ -261,23 +273,32 @@ export default {
             sourceValue,
             resultValue,
             error,
-            isChanged: sourceValue != resultValue && resultValue != null && !error,
+            isChanged:
+              sourceValue != resultValue && resultValue != null && !error,
           };
         });
     },
     sortedFieldMappings() {
       const required = this.fieldMappings.filter((fm) => fm.isRequired);
-      const enabled = this.fieldMappings.filter((fm) => !fm.isRequired && fm.isEnabled);
-      const disabled = this.fieldMappings.filter((fm) => !fm.isRequired && !fm.isEnabled);
+      const enabled = this.fieldMappings.filter(
+        (fm) => !fm.isRequired && fm.isEnabled,
+      );
+      const disabled = this.fieldMappings.filter(
+        (fm) => !fm.isRequired && !fm.isEnabled,
+      );
       return [...required, ...enabled, ...disabled];
     },
     editingSourceFieldOptions() {
       const fm = this.editingFieldMapping;
       if (!fm) return [];
       if (fm.sourceType === "CategoryAttribute" && fm.sourceAttributeId) {
-        return this._attributeOptionsCache[`category:${fm.sourceAttributeId}`] || [];
+        return (
+          this._attributeOptionsCache[`category:${fm.sourceAttributeId}`] || []
+        );
       } else if (fm.sourceType === "StoreAttribute" && fm.sourceAttributeId) {
-        return this._attributeOptionsCache[`store:${fm.sourceAttributeId}`] || [];
+        return (
+          this._attributeOptionsCache[`store:${fm.sourceAttributeId}`] || []
+        );
       }
       return [];
     },
@@ -289,6 +310,7 @@ export default {
       "toggleFieldMapping",
       "updateFieldMapping",
       "getAvailableSources",
+      "getStoreFiles",
       "getExternalFields",
       "previewFieldMappings",
       "getAllProducts",
@@ -301,6 +323,7 @@ export default {
       await Promise.all([
         this.fetchFieldMappings(),
         this.fetchAvailableSources(),
+        this.fetchStoreFiles(),
       ]);
       // fetchPreviewProducts needs localCategoryId from mappingInfo, so run after fetchFieldMappings
       await this.fetchPreviewProducts();
@@ -321,10 +344,22 @@ export default {
             _newStaticValue: "",
             _optionSearch: "",
             parsedOptions: fm.externalFieldOptions
-              ? (() => { try { return JSON.parse(fm.externalFieldOptions); } catch { return []; } })()
+              ? (() => {
+                  try {
+                    return JSON.parse(fm.externalFieldOptions);
+                  } catch {
+                    return [];
+                  }
+                })()
               : [],
             parsedModifiers: fm.modifiersJson
-              ? (() => { try { return JSON.parse(fm.modifiersJson); } catch { return []; } })()
+              ? (() => {
+                  try {
+                    return JSON.parse(fm.modifiersJson);
+                  } catch {
+                    return [];
+                  }
+                })()
               : [],
           }));
           this.mappingInfo = {
@@ -358,6 +393,14 @@ export default {
       });
     },
 
+    async fetchStoreFiles() {
+      try {
+        this.storeFiles = (await this.getStoreFiles()) || [];
+      } catch {
+        this.storeFiles = []; // shared storage is optional — don't block the editor
+      }
+    },
+
     async fetchExternalFieldDescriptions() {
       await this.getExternalFields({
         mappingId: this.mappingId,
@@ -372,7 +415,9 @@ export default {
           this.externalFieldDescriptions = descMap;
           this.aspectFields = aspectMap;
         },
-        onError: () => { /* non-critical */ },
+        onError: () => {
+          /* non-critical */
+        },
       });
     },
 
@@ -476,13 +521,17 @@ export default {
 
     getAvailableOptions(fm) {
       const selected = this._parseMultiselectValue(fm.staticValue);
-      return (fm.parsedOptions || []).filter((o) => !selected.includes(o.value));
+      return (fm.parsedOptions || []).filter(
+        (o) => !selected.includes(o.value),
+      );
     },
 
     filterOptions(fm, options) {
       if (!fm._optionSearch) return options.slice(0, 100);
       const q = fm._optionSearch.toLowerCase();
-      return options.filter(o => o.label.toLowerCase().includes(q)).slice(0, 200);
+      return options
+        .filter((o) => o.label.toLowerCase().includes(q))
+        .slice(0, 200);
     },
 
     addFreeformStaticValue(fm) {
@@ -508,14 +557,26 @@ export default {
     hasValidSource(fieldMapping) {
       switch (fieldMapping.sourceType) {
         case "ProductField":
-          return !!fieldMapping.sourceField
-            && (this.availableSources.productFields || []).some(f => f.key === fieldMapping.sourceField);
+          return (
+            !!fieldMapping.sourceField &&
+            (this.availableSources.productFields || []).some(
+              (f) => f.key === fieldMapping.sourceField,
+            )
+          );
         case "CategoryAttribute":
-          return !!fieldMapping.sourceAttributeId
-            && (this.availableSources.categoryAttributes || []).some(a => a.id === fieldMapping.sourceAttributeId);
+          return (
+            !!fieldMapping.sourceAttributeId &&
+            (this.availableSources.categoryAttributes || []).some(
+              (a) => a.id === fieldMapping.sourceAttributeId,
+            )
+          );
         case "StoreAttribute":
-          return !!fieldMapping.sourceAttributeId
-            && (this.availableSources.storeAttributes || []).some(a => a.id === fieldMapping.sourceAttributeId);
+          return (
+            !!fieldMapping.sourceAttributeId &&
+            (this.availableSources.storeAttributes || []).some(
+              (a) => a.id === fieldMapping.sourceAttributeId,
+            )
+          );
         case "Static":
           return !!fieldMapping.staticValue;
         case "GroupName":
@@ -526,11 +587,19 @@ export default {
     },
 
     isUnmappedRequired(fieldMapping) {
-      return fieldMapping.isRequired && fieldMapping.isEnabled && !this.hasValidSource(fieldMapping);
+      return (
+        fieldMapping.isRequired &&
+        fieldMapping.isEnabled &&
+        !this.hasValidSource(fieldMapping)
+      );
     },
 
     isUnmappedOptional(fieldMapping) {
-      return !fieldMapping.isRequired && fieldMapping.isEnabled && !this.hasValidSource(fieldMapping);
+      return (
+        !fieldMapping.isRequired &&
+        fieldMapping.isEnabled &&
+        !this.hasValidSource(fieldMapping)
+      );
     },
 
     getSourceTypeIcon(sourceType) {
@@ -571,17 +640,17 @@ export default {
       switch (fieldMapping.sourceType) {
         case "ProductField":
           const pf = this.availableSources.productFields?.find(
-            (f) => f.key === fieldMapping.sourceField
+            (f) => f.key === fieldMapping.sourceField,
           );
           return pf?.displayName || fieldMapping.sourceField || "Не выбрано";
         case "CategoryAttribute":
           const ca = this.availableSources.categoryAttributes?.find(
-            (a) => a.id === fieldMapping.sourceAttributeId
+            (a) => a.id === fieldMapping.sourceAttributeId,
           );
           return ca?.name || "Не выбрано";
         case "StoreAttribute":
           const sa = this.availableSources.storeAttributes?.find(
-            (a) => a.id === fieldMapping.sourceAttributeId
+            (a) => a.id === fieldMapping.sourceAttributeId,
           );
           return sa?.name || "Не выбрано";
         case "Static":
@@ -603,9 +672,10 @@ export default {
         sourceAttributeId: fm.sourceAttributeId,
         staticValue: fm.staticValue,
         isEnabled: fm.isEnabled,
-        modifiersJson: fm.parsedModifiers && fm.parsedModifiers.length > 0
-          ? JSON.stringify(fm.parsedModifiers)
-          : null,
+        modifiersJson:
+          fm.parsedModifiers && fm.parsedModifiers.length > 0
+            ? JSON.stringify(fm.parsedModifiers)
+            : null,
       }));
 
       await this.saveFieldMappings({
@@ -643,7 +713,11 @@ export default {
       if (!type || !id) return;
 
       const cacheKey = `${type}:${id}`;
-      if (this._attributeOptionsCache[cacheKey] || this._attributeOptionsLoading[cacheKey]) return;
+      if (
+        this._attributeOptionsCache[cacheKey] ||
+        this._attributeOptionsLoading[cacheKey]
+      )
+        return;
 
       this._attributeOptionsLoading[cacheKey] = true;
       this.getAttributeOptions({
@@ -653,9 +727,14 @@ export default {
           const data = extractResponseData(response, {});
           let parsed = [];
           if (data.options) {
-            try { parsed = JSON.parse(data.options); } catch {}
+            try {
+              parsed = JSON.parse(data.options);
+            } catch {}
           }
-          this._attributeOptionsCache = { ...this._attributeOptionsCache, [cacheKey]: parsed };
+          this._attributeOptionsCache = {
+            ...this._attributeOptionsCache,
+            [cacheKey]: parsed,
+          };
           this._attributeOptionsLoading[cacheKey] = false;
         },
         onError: () => {
@@ -745,6 +824,21 @@ export default {
       this.isLoadingPreview = false;
     },
 
+    // Graph editor pushes its preview outputs up so the Сводка sheet (previewSummary)
+    // reflects the graph instead of the legacy table preview.
+    onGraphPreview({ outputs }) {
+      const next = {};
+      for (const [key, value] of Object.entries(outputs || {})) {
+        next[key] = {
+          externalFieldKey: key,
+          sourceValue: null,
+          resultValue: value,
+          error: null,
+        };
+      }
+      this.previewData = next;
+    },
+
     debouncedPreview() {
       if (this.previewDebounceTimer) clearTimeout(this.previewDebounceTimer);
       if (!this.previewProductId) return;
@@ -777,12 +871,14 @@ export default {
     isImageValue(value) {
       if (!value) return false;
       // Handle arrays (Vue may pass the raw object from API)
-      if (Array.isArray(value)) return value.some(v => typeof v === 'string' && v.includes('http'));
+      if (Array.isArray(value))
+        return value.some((v) => typeof v === "string" && v.includes("http"));
       const str = String(value);
       // JSON array of URLs
-      if (str.startsWith('[') && str.includes('http')) return true;
+      if (str.startsWith("[") && str.includes("http")) return true;
       // Single URL with image extension (even with query params like presigned URLs)
-      if (/https?:\/\/\S+\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(str)) return true;
+      if (/https?:\/\/\S+\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(str))
+        return true;
       // Presigned MinIO URL (contains /images/ path segment)
       if (/https?:\/\/\S+\/images\/\S+/i.test(str)) return true;
       return false;
@@ -790,17 +886,24 @@ export default {
     parseImageUrls(value) {
       if (!value) return [];
       // Already an array
-      if (Array.isArray(value)) return value.filter(u => typeof u === 'string' && u.includes('http'));
+      if (Array.isArray(value))
+        return value.filter((u) => typeof u === "string" && u.includes("http"));
       const str = String(value);
       // Try JSON parse
       try {
         const parsed = JSON.parse(str);
-        if (Array.isArray(parsed)) return parsed.filter(u => typeof u === 'string' && u.includes('http'));
+        if (Array.isArray(parsed))
+          return parsed.filter(
+            (u) => typeof u === "string" && u.includes("http"),
+          );
       } catch {}
       // Single URL
-      if (str.startsWith('http')) return [str];
+      if (str.startsWith("http")) return [str];
       // Comma-separated
-      return str.split(',').map(s => s.trim()).filter(s => s.startsWith('http'));
+      return str
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.startsWith("http"));
     },
     async saveMappingSettings() {
       this.isSavingSettings = true;
@@ -814,7 +917,9 @@ export default {
         displaySonnerSuccess("Настройки сохранены");
         this.showMappingSettings = false;
       } catch (error) {
-        displaySonnerError(error.response?.data?.message || "Ошибка сохранения");
+        displaySonnerError(
+          error.response?.data?.message || "Ошибка сохранения",
+        );
       } finally {
         this.isSavingSettings = false;
       }
@@ -843,7 +948,7 @@ export default {
 
       // Проверяем что такого ключа ещё нет
       const exists = this.fieldMappings.some(
-        (fm) => fm.externalFieldKey === this.newField.externalFieldKey
+        (fm) => fm.externalFieldKey === this.newField.externalFieldKey,
       );
       if (exists) {
         displaySonnerError({ message: "Поле с таким ключом уже существует" });
@@ -854,7 +959,9 @@ export default {
       const newMapping = {
         id: null, // Будет создан на сервере
         externalFieldKey: this.newField.externalFieldKey.trim(),
-        externalFieldName: this.newField.externalFieldName.trim() || this.newField.externalFieldKey.trim(),
+        externalFieldName:
+          this.newField.externalFieldName.trim() ||
+          this.newField.externalFieldKey.trim(),
         isRequired: false,
         isEnabled: true,
         sourceType: this.newField.sourceType,
@@ -871,7 +978,9 @@ export default {
 
     removeField(fieldMapping) {
       if (!fieldMapping.isCustom && fieldMapping.id) {
-        displaySonnerError({ message: "Нельзя удалить поле адаптера. Можно только отключить." });
+        displaySonnerError({
+          message: "Нельзя удалить поле адаптера. Можно только отключить.",
+        });
         return;
       }
       const index = this.fieldMappings.indexOf(fieldMapping);
@@ -891,9 +1000,10 @@ export default {
         sourceField: fm.sourceField,
         sourceAttributeId: fm.sourceAttributeId,
         staticValue: fm.staticValue,
-        modifiersJson: fm.parsedModifiers && fm.parsedModifiers.length
-          ? JSON.stringify(fm.parsedModifiers)
-          : null,
+        modifiersJson:
+          fm.parsedModifiers && fm.parsedModifiers.length
+            ? JSON.stringify(fm.parsedModifiers)
+            : null,
       }));
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
@@ -921,18 +1031,23 @@ export default {
           let updated = 0;
           for (const item of imported) {
             const fm = this.fieldMappings.find(
-              (f) => f.externalFieldKey === item.externalFieldKey
+              (f) => f.externalFieldKey === item.externalFieldKey,
             );
             if (!fm) continue;
             if (item.isEnabled !== undefined) fm.isEnabled = item.isEnabled;
             if (item.sourceType !== undefined) fm.sourceType = item.sourceType;
-            if (item.sourceField !== undefined) fm.sourceField = item.sourceField;
-            if (item.sourceAttributeId !== undefined) fm.sourceAttributeId = item.sourceAttributeId;
-            if (item.staticValue !== undefined) fm.staticValue = item.staticValue;
+            if (item.sourceField !== undefined)
+              fm.sourceField = item.sourceField;
+            if (item.sourceAttributeId !== undefined)
+              fm.sourceAttributeId = item.sourceAttributeId;
+            if (item.staticValue !== undefined)
+              fm.staticValue = item.staticValue;
             if (item.modifiersJson) {
               try {
                 fm.parsedModifiers = JSON.parse(item.modifiersJson);
-              } catch { /* ignore bad modifiers */ }
+              } catch {
+                /* ignore bad modifiers */
+              }
             }
             updated++;
           }
@@ -972,13 +1087,19 @@ export default {
         <div>
           <h1 class="text-lg font-semibold">Маппинг полей</h1>
           <p v-if="mappingInfo" class="text-sm text-muted-foreground">
-            {{ mappingInfo.localCategoryName }} → {{ mappingInfo.externalCategoryName }}
+            {{ mappingInfo.localCategoryName }} →
+            {{ mappingInfo.externalCategoryName }}
           </p>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <input ref="importFileInput" type="file" accept=".json" class="hidden"
-               @change="importMappings" />
+        <input
+          ref="importFileInput"
+          type="file"
+          accept=".json"
+          class="hidden"
+          @change="importMappings"
+        />
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="outline" size="icon">
@@ -986,11 +1107,17 @@ export default {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem @click="openMappingSettings" class="cursor-pointer">
+            <DropdownMenuItem
+              @click="openMappingSettings"
+              class="cursor-pointer"
+            >
               <Settings2 class="size-4 mr-2" />
               Настройки
             </DropdownMenuItem>
-            <DropdownMenuItem @click="openAddFieldDialog" class="cursor-pointer">
+            <DropdownMenuItem
+              @click="openAddFieldDialog"
+              class="cursor-pointer"
+            >
               <Plus class="size-4 mr-2" />
               Добавить поле
             </DropdownMenuItem>
@@ -1013,477 +1140,687 @@ export default {
     </div>
 
     <PageSection :loading="isLoading">
-    <template v-if="!isLoading">
-      <Card class="mb-4">
-        <CardHeader class="">
-          <CardTitle class="text-base flex items-center gap-2">
-            <component
-              :is="requiredFieldsMapped === totalRequiredFields ? CheckCircle : AlertCircle"
-              :class="[
-                'size-5',
-                requiredFieldsMapped === totalRequiredFields
-                  ? 'text-success'
-                  : 'text-warning',
-              ]"
-            />
-            Обязательные поля: {{ requiredFieldsMapped }} / {{ totalRequiredFields }}
-          </CardTitle>
-          <CardDescription>
-            Настройте источники данных для полей адаптера
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <template v-if="!isLoading">
+        <!-- Preview product selector -->
+        <div class="mb-4 flex items-center gap-3">
+          <div class="flex items-center gap-2 text-sm text-muted-foreground">
+            <Eye class="size-4" />
+            <span>Предпросмотр:</span>
+          </div>
+          <SearchableSelect
+            class="w-[500px]"
+            :options="previewProducts"
+            :model-value="previewProductId ? String(previewProductId) : ''"
+            @update:modelValue="onPreviewProductChange"
+            placeholder="Выберите товар для предпросмотра..."
+          />
+          <Loader2
+            v-if="isLoadingPreview"
+            class="size-4 animate-spin text-muted-foreground"
+          />
+          <Button
+            v-if="previewProductId && !isLoadingPreview"
+            variant="outline"
+            size="sm"
+            @click="showPreviewSheet = true"
+          >
+            <Eye class="size-4 mr-2" /> Сводка
+          </Button>
 
-      <!-- Предупреждение о незамапленных обязательных полях -->
-      <div
-        v-if="hasUnmappedRequired"
-        class="mb-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg flex items-start gap-3"
-      >
-        <AlertCircle class="size-5 text-destructive shrink-0 mt-0.5" />
-        <div>
-          <p class="font-medium text-destructive">
-            Не настроены обязательные поля
-          </p>
-          <p class="text-sm text-destructive/80 mt-1">
-            Экспорт товаров не будет работать, пока не настроены следующие поля:
-            <span class="font-medium">
-              {{ unmappedRequiredFields.map(f => f.externalFieldName || f.externalFieldKey).join(', ') }}
-            </span>
-          </p>
-        </div>
-      </div>
-
-      <!-- Preview product selector -->
-      <div class="mb-4 flex items-center gap-3">
-        <div class="flex items-center gap-2 text-sm text-muted-foreground">
-          <Eye class="size-4" />
-          <span>Предпросмотр:</span>
-        </div>
-        <SearchableSelect
-          class="w-[500px]"
-          :options="previewProducts"
-          :model-value="previewProductId ? String(previewProductId) : ''"
-          @update:modelValue="onPreviewProductChange"
-          placeholder="Выберите товар для предпросмотра..."
-        />
-        <Loader2 v-if="isLoadingPreview" class="size-4 animate-spin text-muted-foreground" />
-        <Button v-if="previewProductId && !isLoadingPreview" variant="outline" size="sm"
-                @click="showPreviewSheet = true">
-          <Eye class="size-4 mr-2" /> Сводка
-        </Button>
-      </div>
-
-      <Card class="p-0 gap-0 h-full w-full grow mb-4 overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-[50px]">Вкл</TableHead>
-              <TableHead class="w-[250px]">Поле адаптера</TableHead>
-              <TableHead class="w-[180px]">Тип источника</TableHead>
-              <TableHead>Источник данных</TableHead>
-              <TableHead class="w-[100px]">Статус</TableHead>
-              <!-- preview column removed — shown inline under data source -->
-              <TableHead class="w-[80px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-for="fm in sortedFieldMappings" :key="fm.id">
-            <TableRow
-              :class="[
-                { 'opacity-50': !fm.isEnabled },
-                { 'bg-destructive/5 border-l-2 border-l-destructive': isUnmappedRequired(fm) },
-                { 'bg-warning/5 border-l-2 border-l-warning': isUnmappedOptional(fm) },
-                { '!border-b-0': previewProductId && shouldShowInlinePreview(fm.externalFieldKey) }
-              ]"
+          <div class="ml-auto inline-flex rounded-md border p-0.5">
+            <button
+              type="button"
+              class="rounded-sm px-2.5 py-1 text-sm"
+              :class="
+                viewMode === 'table'
+                  ? 'bg-accent font-medium'
+                  : 'text-muted-foreground'
+              "
+              @click="viewMode = 'table'"
             >
-              <TableCell>
-                <Switch
-                  v-if="!fm.isRequired"
-                  :model-value="fm.isEnabled"
-                  @update:model-value="handleToggleField(fm)"
-                />
-              </TableCell>
-              <TableCell>
-                <div class="flex flex-col">
-                  <span class="font-medium flex items-center gap-2">
-                    {{ fm.externalFieldName || fm.externalFieldKey }}
-                    <span v-if="fm.isRequired" class="text-destructive">*</span>
-                    <Badge v-if="fm.isCustom" variant="outline" class="text-xs py-0 h-5">
-                      вручную
-                    </Badge>
-                    <Badge v-if="aspectFields[fm.externalFieldKey]" variant="secondary" class="text-xs py-0 h-5">
-                      аспектный
-                    </Badge>
-                    <TooltipProvider v-if="externalFieldDescriptions[fm.externalFieldKey]">
-                      <Tooltip>
-                        <TooltipTrigger as-child>
-                          <Info class="size-3.5 text-muted-foreground cursor-help shrink-0" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" class="max-w-xs">
-                          <p>{{ externalFieldDescriptions[fm.externalFieldKey] }}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </span>
-                  <span class="text-xs text-muted-foreground">
-                    {{ fm.externalFieldKey }}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Select
-                  :model-value="fm.sourceType"
-                  @update:modelValue="(v) => onSourceTypeChange(fm, v)"
-                  :disabled="!fm.isEnabled"
+              Таблица
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-sm"
+              :class="
+                viewMode === 'graph'
+                  ? 'bg-accent font-medium'
+                  : 'text-muted-foreground'
+              "
+              @click="viewMode = 'graph'"
+            >
+              <Workflow class="size-3.5" /> Граф
+            </button>
+          </div>
+        </div>
+
+        <!-- Visual node graph editor (whole-category Blueprint) -->
+        <div
+          v-if="viewMode === 'graph' && connectionId && mappingId"
+          class="mb-4 h-[calc(100vh-280px)] min-h-[480px] w-full"
+        >
+          <MappingCanvas
+            :connection-id="connectionId"
+            :mapping-id="mappingId"
+            :field-mappings="fieldMappings"
+            :available-sources="{ ...availableSources, storeFiles }"
+            :preview-product-id="previewProductId"
+            @preview-result="onGraphPreview"
+          />
+        </div>
+
+        <p
+          v-if="viewMode === 'graph'"
+          class="mb-4 -mt-2 text-center text-xs text-muted-foreground"
+        >
+          ЛКМ — рамка выделения · ПКМ — панорама / меню · Tab — добавить узел ·
+          Del — удалить
+        </p>
+
+        <Card
+          v-show="viewMode === 'table'"
+          class="p-0 gap-0 h-full w-full grow mb-4 overflow-auto"
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[50px]">Вкл</TableHead>
+                <TableHead class="w-[250px]">Поле адаптера</TableHead>
+                <TableHead class="w-[180px]">Тип источника</TableHead>
+                <TableHead>Источник данных</TableHead>
+                <TableHead class="w-[100px]">Статус</TableHead>
+                <!-- preview column removed — shown inline under data source -->
+                <TableHead class="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <template v-for="fm in sortedFieldMappings" :key="fm.id">
+                <TableRow
+                  :class="[
+                    { 'opacity-50': !fm.isEnabled },
+                    {
+                      'bg-destructive/5 border-l-2 border-l-destructive':
+                        isUnmappedRequired(fm),
+                    },
+                    {
+                      'bg-warning/5 border-l-2 border-l-warning':
+                        isUnmappedOptional(fm),
+                    },
+                    {
+                      '!border-b-0':
+                        previewProductId &&
+                        shouldShowInlinePreview(fm.externalFieldKey),
+                    },
+                  ]"
                 >
-                  <SelectTrigger class="w-full">
-                    <SelectValue>
-                      <span class="flex items-center gap-2">
-                        <component :is="getSourceTypeIcon(fm.sourceType)" class="size-4" />
-                        {{ getSourceTypeLabel(fm.sourceType) }}
+                  <TableCell>
+                    <Switch
+                      v-if="!fm.isRequired"
+                      :model-value="fm.isEnabled"
+                      @update:model-value="handleToggleField(fm)"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex flex-col">
+                      <span class="font-medium flex items-center gap-2">
+                        {{ fm.externalFieldName || fm.externalFieldKey }}
+                        <span v-if="fm.isRequired" class="text-destructive"
+                          >*</span
+                        >
+                        <Badge
+                          v-if="fm.isCustom"
+                          variant="outline"
+                          class="text-xs py-0 h-5"
+                        >
+                          вручную
+                        </Badge>
+                        <Badge
+                          v-if="aspectFields[fm.externalFieldKey]"
+                          variant="secondary"
+                          class="text-xs py-0 h-5"
+                        >
+                          аспектный
+                        </Badge>
+                        <TooltipProvider
+                          v-if="externalFieldDescriptions[fm.externalFieldKey]"
+                        >
+                          <Tooltip>
+                            <TooltipTrigger as-child>
+                              <Info
+                                class="size-3.5 text-muted-foreground cursor-help shrink-0"
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" class="max-w-xs">
+                              <p>
+                                {{
+                                  externalFieldDescriptions[fm.externalFieldKey]
+                                }}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ProductField">
-                      <span class="flex items-center gap-2">
-                        <Database class="size-4" />
-                        Поле товара
+                      <span class="text-xs text-muted-foreground">
+                        {{ fm.externalFieldKey }}
                       </span>
-                    </SelectItem>
-                    <SelectItem value="CategoryAttribute">
-                      <span class="flex items-center gap-2">
-                        <Tag class="size-4" />
-                        Атрибут категории
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="StoreAttribute">
-                      <span class="flex items-center gap-2">
-                        <FileText class="size-4" />
-                        Атрибут магазина
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="Static">
-                      <span class="flex items-center gap-2">
-                        <Type class="size-4" />
-                        Статическое значение
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="GroupName">
-                      <span class="flex items-center gap-2">
-                        <Boxes class="size-4" />
-                        Название группы
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </TableCell>
-              <TableCell>
-                <template v-if="fm.sourceType === 'ProductField'">
-                  <Select
-                    :model-value="fm.sourceField"
-                    @update:modelValue="(v) => onSourceFieldChange(fm, v)"
-                    :disabled="!fm.isEnabled"
-                  >
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Выберите поле" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        v-for="field in availableSources.productFields"
-                        :key="field.key"
-                        :value="field.key"
-                      >
-                        {{ field.displayName }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </template>
-
-                <template v-else-if="fm.sourceType === 'CategoryAttribute'">
-                  <Select
-                    :model-value="fm.sourceAttributeId?.toString()"
-                    @update:modelValue="(v) => onSourceFieldChange(fm, v)"
-                    :disabled="!fm.isEnabled"
-                  >
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Выберите атрибут" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        v-for="attr in availableSources.categoryAttributes"
-                        :key="attr.id"
-                        :value="attr.id.toString()"
-                      >
-                        {{ attr.name }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </template>
-
-                <template v-else-if="fm.sourceType === 'StoreAttribute'">
-                  <Select
-                    :model-value="fm.sourceAttributeId?.toString()"
-                    @update:modelValue="(v) => onSourceFieldChange(fm, v)"
-                    :disabled="!fm.isEnabled"
-                  >
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Выберите атрибут" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        v-for="attr in availableSources.storeAttributes"
-                        :key="attr.id"
-                        :value="attr.id.toString()"
-                      >
-                        {{ attr.name }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </template>
-
-                <template v-else-if="fm.sourceType === 'Static'">
-                  <!-- Raw text mode: plain input for any field type -->
-                  <template v-if="fm.rawTextMode">
-                    <div class="flex items-center gap-2">
-                      <Input
-                        class="flex-1"
-                        :model-value="fm.staticValue"
-                        @update:modelValue="(v) => onStaticValueChange(fm, v)"
-                        placeholder="Введите значение"
-                        :disabled="!fm.isEnabled"
-                      />
-                      <button
-                        type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
-                        @click="toggleRawTextMode(fm)"
-                      >Выбрать из списка</button>
                     </div>
-                  </template>
-
-                  <!-- Select field with SearchableSelect -->
-                  <template v-else-if="fm.externalFieldType === 'select' && fm.parsedOptions?.length">
-                    <div class="flex items-center gap-2">
-                      <SearchableSelect
-                        class="flex-1"
-                        :options="fm.parsedOptions"
-                        :model-value="fm.staticValue || ''"
-                        @update:modelValue="(v) => onStaticValueChange(fm, v)"
-                        placeholder="Выберите значение"
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      :model-value="fm.sourceType"
+                      @update:modelValue="(v) => onSourceTypeChange(fm, v)"
+                      :disabled="!fm.isEnabled"
+                    >
+                      <SelectTrigger class="w-full">
+                        <SelectValue>
+                          <span class="flex items-center gap-2">
+                            <component
+                              :is="getSourceTypeIcon(fm.sourceType)"
+                              class="size-4"
+                            />
+                            {{ getSourceTypeLabel(fm.sourceType) }}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ProductField">
+                          <span class="flex items-center gap-2">
+                            <Database class="size-4" />
+                            Поле товара
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="CategoryAttribute">
+                          <span class="flex items-center gap-2">
+                            <Tag class="size-4" />
+                            Атрибут категории
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="StoreAttribute">
+                          <span class="flex items-center gap-2">
+                            <FileText class="size-4" />
+                            Атрибут магазина
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="Static">
+                          <span class="flex items-center gap-2">
+                            <Type class="size-4" />
+                            Статическое значение
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="GroupName">
+                          <span class="flex items-center gap-2">
+                            <Boxes class="size-4" />
+                            Название группы
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <template v-if="fm.sourceType === 'ProductField'">
+                      <Select
+                        :model-value="fm.sourceField"
+                        @update:modelValue="(v) => onSourceFieldChange(fm, v)"
                         :disabled="!fm.isEnabled"
-                      />
-                      <button
-                        type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
-                        @click="toggleRawTextMode(fm)"
-                      >Вручную</button>
-                    </div>
-                  </template>
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите поле" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            v-for="field in availableSources.productFields"
+                            :key="field.key"
+                            :value="field.key"
+                          >
+                            {{ field.displayName }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </template>
 
-                  <!-- Multiselect field with chip/tag UI -->
-                  <template v-else-if="fm.externalFieldType === 'multiselect'">
-                    <div class="flex items-center gap-2">
-                      <!-- С опциями адаптера: chips + Plus popover -->
-                      <template v-if="fm.parsedOptions?.length">
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs">
-                          <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
-                                 class="flex items-center gap-1 pl-2 pr-1 py-0.5">
-                            <span class="text-xs">{{ v.label }}</span>
-                            <button type="button" @click="removeStaticValue(fm, i)"
-                                    class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
-                              <X class="size-3" />
-                            </button>
-                          </Badge>
-                          <span v-if="!getStaticValues(fm).length" class="text-sm text-muted-foreground">Нет значений</span>
-                        </div>
-                        <Popover @update:open="open => { if (!open) fm._optionSearch = '' }">
-                          <PopoverTrigger as-child>
-                            <Button variant="outline" size="icon" class="shrink-0" :disabled="!fm.isEnabled || !getAvailableOptions(fm).length">
-                              <Plus class="size-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" class="w-[250px] p-0 max-h-72 overflow-hidden flex flex-col">
-                            <div v-if="getAvailableOptions(fm).length > 5" class="p-2 border-b">
-                              <div class="relative">
-                                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                                <input
-                                  type="text"
-                                  v-model="fm._optionSearch"
-                                  placeholder="Поиск..."
-                                  class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                                  @click.stop
-                                />
-                              </div>
-                            </div>
-                            <div class="overflow-auto flex-1 p-1">
-                              <template v-for="filteredOpts in [filterOptions(fm, getAvailableOptions(fm))]" :key="0">
-                                <div v-for="option in filteredOpts"
-                                     :key="option.value"
-                                     class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
-                                     @click="addStaticValue(fm, option.value)">
-                                  <span class="text-sm truncate" :title="option.label">{{ option.label }}</span>
-                                </div>
-                                <div v-if="!filteredOpts.length" class="p-3 text-sm text-muted-foreground text-center">
-                                  Ничего не найдено
-                                </div>
-                              </template>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </template>
-                      <!-- Без опций: chips внутри поля ввода -->
-                      <template v-else>
-                        <div class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs focus-within:ring-1 focus-within:ring-ring">
-                          <Badge v-for="(v, i) in getStaticValues(fm)" :key="i" variant="secondary"
-                                 class="flex items-center gap-1 pl-2 pr-1 py-0.5">
-                            <span class="text-xs">{{ v.label }}</span>
-                            <button type="button" @click="removeStaticValue(fm, i)"
-                                    class="hover:bg-muted rounded-sm p-0.5" :disabled="!fm.isEnabled">
-                              <X class="size-3" />
-                            </button>
-                          </Badge>
-                          <input
-                            class="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                            :value="fm._newStaticValue"
-                            @input="e => fm._newStaticValue = e.target.value"
-                            @keydown.enter.prevent="addFreeformStaticValue(fm)"
-                            placeholder="Введите и нажмите Enter"
+                    <template v-else-if="fm.sourceType === 'CategoryAttribute'">
+                      <Select
+                        :model-value="fm.sourceAttributeId?.toString()"
+                        @update:modelValue="(v) => onSourceFieldChange(fm, v)"
+                        :disabled="!fm.isEnabled"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите атрибут" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            v-for="attr in availableSources.categoryAttributes"
+                            :key="attr.id"
+                            :value="attr.id.toString()"
+                          >
+                            {{ attr.name }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </template>
+
+                    <template v-else-if="fm.sourceType === 'StoreAttribute'">
+                      <Select
+                        :model-value="fm.sourceAttributeId?.toString()"
+                        @update:modelValue="(v) => onSourceFieldChange(fm, v)"
+                        :disabled="!fm.isEnabled"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите атрибут" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            v-for="attr in availableSources.storeAttributes"
+                            :key="attr.id"
+                            :value="attr.id.toString()"
+                          >
+                            {{ attr.name }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </template>
+
+                    <template v-else-if="fm.sourceType === 'Static'">
+                      <!-- Raw text mode: plain input for any field type -->
+                      <template v-if="fm.rawTextMode">
+                        <div class="flex items-center gap-2">
+                          <Input
+                            class="flex-1"
+                            :model-value="fm.staticValue"
+                            @update:modelValue="
+                              (v) => onStaticValueChange(fm, v)
+                            "
+                            placeholder="Введите значение"
                             :disabled="!fm.isEnabled"
                           />
+                          <button
+                            type="button"
+                            class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                            @click="toggleRawTextMode(fm)"
+                          >
+                            Выбрать из списка
+                          </button>
                         </div>
-                        <Button variant="outline" size="icon" class="shrink-0"
-                                @click="addFreeformStaticValue(fm)"
-                                :disabled="!fm.isEnabled || !fm._newStaticValue?.trim()">
-                          <Plus class="size-4" />
-                        </Button>
                       </template>
-                      <button type="button"
-                              class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
-                              @click="toggleRawTextMode(fm)">Вручную</button>
-                    </div>
-                  </template>
 
-                  <!-- Boolean with raw text toggle -->
-                  <template v-else-if="fm.externalFieldType === 'boolean'">
-                    <div class="flex items-center gap-2">
-                      <Switch
-                        :model-value="fm.staticValue === 'true'"
-                        @update:modelValue="(v) => onStaticValueChange(fm, v ? 'true' : 'false')"
-                        :disabled="!fm.isEnabled"
-                      />
-                      <button
-                        type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
-                        @click="toggleRawTextMode(fm)"
-                      >Вручную</button>
-                    </div>
-                  </template>
+                      <!-- Select field with SearchableSelect -->
+                      <template
+                        v-else-if="
+                          fm.externalFieldType === 'select' &&
+                          fm.parsedOptions?.length
+                        "
+                      >
+                        <div class="flex items-center gap-2">
+                          <SearchableSelect
+                            class="flex-1"
+                            :options="fm.parsedOptions"
+                            :model-value="fm.staticValue || ''"
+                            @update:modelValue="
+                              (v) => onStaticValueChange(fm, v)
+                            "
+                            placeholder="Выберите значение"
+                            :disabled="!fm.isEnabled"
+                          />
+                          <button
+                            type="button"
+                            class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                            @click="toggleRawTextMode(fm)"
+                          >
+                            Вручную
+                          </button>
+                        </div>
+                      </template>
 
-                  <!-- Number field -->
-                  <template v-else-if="fm.externalFieldType === 'number'">
-                    <Input
-                      type="number"
-                      :model-value="fm.staticValue"
-                      @update:modelValue="(v) => onStaticValueChange(fm, v)"
-                      placeholder="Введите число"
-                      :disabled="!fm.isEnabled"
-                    />
-                  </template>
+                      <!-- Multiselect field with chip/tag UI -->
+                      <template
+                        v-else-if="fm.externalFieldType === 'multiselect'"
+                      >
+                        <div class="flex items-center gap-2">
+                          <!-- С опциями адаптера: chips + Plus popover -->
+                          <template v-if="fm.parsedOptions?.length">
+                            <div
+                              class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs"
+                            >
+                              <Badge
+                                v-for="(v, i) in getStaticValues(fm)"
+                                :key="i"
+                                variant="secondary"
+                                class="flex items-center gap-1 pl-2 pr-1 py-0.5"
+                              >
+                                <span class="text-xs">{{ v.label }}</span>
+                                <button
+                                  type="button"
+                                  @click="removeStaticValue(fm, i)"
+                                  class="hover:bg-muted rounded-sm p-0.5"
+                                  :disabled="!fm.isEnabled"
+                                >
+                                  <X class="size-3" />
+                                </button>
+                              </Badge>
+                              <span
+                                v-if="!getStaticValues(fm).length"
+                                class="text-sm text-muted-foreground"
+                                >Нет значений</span
+                              >
+                            </div>
+                            <Popover
+                              @update:open="
+                                (open) => {
+                                  if (!open) fm._optionSearch = '';
+                                }
+                              "
+                            >
+                              <PopoverTrigger as-child>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  class="shrink-0"
+                                  :disabled="
+                                    !fm.isEnabled ||
+                                    !getAvailableOptions(fm).length
+                                  "
+                                >
+                                  <Plus class="size-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="start"
+                                class="w-[250px] p-0 max-h-72 overflow-hidden flex flex-col"
+                              >
+                                <div
+                                  v-if="getAvailableOptions(fm).length > 5"
+                                  class="p-2 border-b"
+                                >
+                                  <div class="relative">
+                                    <Search
+                                      class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
+                                    />
+                                    <input
+                                      type="text"
+                                      v-model="fm._optionSearch"
+                                      placeholder="Поиск..."
+                                      class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                      @click.stop
+                                    />
+                                  </div>
+                                </div>
+                                <div class="overflow-auto flex-1 p-1">
+                                  <template
+                                    v-for="filteredOpts in [
+                                      filterOptions(
+                                        fm,
+                                        getAvailableOptions(fm),
+                                      ),
+                                    ]"
+                                    :key="0"
+                                  >
+                                    <div
+                                      v-for="option in filteredOpts"
+                                      :key="option.value"
+                                      class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                                      @click="addStaticValue(fm, option.value)"
+                                    >
+                                      <span
+                                        class="text-sm truncate"
+                                        :title="option.label"
+                                        >{{ option.label }}</span
+                                      >
+                                    </div>
+                                    <div
+                                      v-if="!filteredOpts.length"
+                                      class="p-3 text-sm text-muted-foreground text-center"
+                                    >
+                                      Ничего не найдено
+                                    </div>
+                                  </template>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </template>
+                          <!-- Без опций: chips внутри поля ввода -->
+                          <template v-else>
+                            <div
+                              class="flex-1 flex flex-wrap items-center gap-1 border border-input rounded-md px-2 py-1.5 min-h-9 bg-transparent dark:bg-input/30 shadow-xs focus-within:ring-1 focus-within:ring-ring"
+                            >
+                              <Badge
+                                v-for="(v, i) in getStaticValues(fm)"
+                                :key="i"
+                                variant="secondary"
+                                class="flex items-center gap-1 pl-2 pr-1 py-0.5"
+                              >
+                                <span class="text-xs">{{ v.label }}</span>
+                                <button
+                                  type="button"
+                                  @click="removeStaticValue(fm, i)"
+                                  class="hover:bg-muted rounded-sm p-0.5"
+                                  :disabled="!fm.isEnabled"
+                                >
+                                  <X class="size-3" />
+                                </button>
+                              </Badge>
+                              <input
+                                class="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                                :value="fm._newStaticValue"
+                                @input="
+                                  (e) => (fm._newStaticValue = e.target.value)
+                                "
+                                @keydown.enter.prevent="
+                                  addFreeformStaticValue(fm)
+                                "
+                                placeholder="Введите и нажмите Enter"
+                                :disabled="!fm.isEnabled"
+                              />
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              class="shrink-0"
+                              @click="addFreeformStaticValue(fm)"
+                              :disabled="
+                                !fm.isEnabled || !fm._newStaticValue?.trim()
+                              "
+                            >
+                              <Plus class="size-4" />
+                            </Button>
+                          </template>
+                          <button
+                            type="button"
+                            class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                            @click="toggleRawTextMode(fm)"
+                          >
+                            Вручную
+                          </button>
+                        </div>
+                      </template>
 
-                  <!-- String / default -->
-                  <template v-else>
-                    <Input
-                      :model-value="fm.staticValue"
-                      @update:modelValue="(v) => onStaticValueChange(fm, v)"
-                      placeholder="Введите значение"
-                      :disabled="!fm.isEnabled"
-                    />
-                  </template>
-                </template>
+                      <!-- Boolean with raw text toggle -->
+                      <template v-else-if="fm.externalFieldType === 'boolean'">
+                        <div class="flex items-center gap-2">
+                          <Switch
+                            :model-value="fm.staticValue === 'true'"
+                            @update:modelValue="
+                              (v) =>
+                                onStaticValueChange(fm, v ? 'true' : 'false')
+                            "
+                            :disabled="!fm.isEnabled"
+                          />
+                          <button
+                            type="button"
+                            class="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer whitespace-nowrap"
+                            @click="toggleRawTextMode(fm)"
+                          >
+                            Вручную
+                          </button>
+                        </div>
+                      </template>
 
-                <template v-else-if="fm.sourceType === 'GroupName'">
-                  <span class="text-sm text-muted-foreground">
-                    Значение берётся из названия группы товара
-                  </span>
-                </template>
+                      <!-- Number field -->
+                      <template v-else-if="fm.externalFieldType === 'number'">
+                        <Input
+                          type="number"
+                          :model-value="fm.staticValue"
+                          @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                          placeholder="Введите число"
+                          :disabled="!fm.isEnabled"
+                        />
+                      </template>
 
-              </TableCell>
-              <TableCell>
-                <Badge
-                  :variant="hasValidSource(fm) && fm.isEnabled ? 'default' : isUnmappedRequired(fm) ? 'destructive' : 'outline'"
-                  :class="isUnmappedOptional(fm) ? 'border-warning text-warning-foreground' : ''"
-                  :title="!fm.isEnabled ? 'Поле отключено' : !hasValidSource(fm) ? 'Выберите источник данных' : getCurrentSourceLabel(fm)"
-                >
-                  <component
-                    :is="hasValidSource(fm) && fm.isEnabled ? CheckCircle : AlertCircle"
-                    :class="['size-3 mr-1', isUnmappedOptional(fm) ? 'text-warning' : '']"
-                  />
-                  {{ hasValidSource(fm) && fm.isEnabled ? "Настроено" : isUnmappedRequired(fm) ? "Обязательно!" : isUnmappedOptional(fm) ? "Не заполнено" : "Не настроено" }}
-                </Badge>
-              </TableCell>
-              <!-- preview moved inline under data source cell -->
-              <TableCell>
-                <div class="flex items-center gap-1">
-                  <Button
-                    v-if="fm.isEnabled"
-                    variant="ghost"
-                    size="icon"
-                    class="size-8 relative"
-                    @click="openModifierSheet(fm)"
-                    title="Настроить модификаторы"
-                  >
-                    <Settings2 class="size-4" />
-                    <span
-                      v-if="getModifierCount(fm) > 0"
-                      class="absolute -top-0.5 -right-0.5 flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium"
+                      <!-- String / default -->
+                      <template v-else>
+                        <Input
+                          :model-value="fm.staticValue"
+                          @update:modelValue="(v) => onStaticValueChange(fm, v)"
+                          placeholder="Введите значение"
+                          :disabled="!fm.isEnabled"
+                        />
+                      </template>
+                    </template>
+
+                    <template v-else-if="fm.sourceType === 'GroupName'">
+                      <span class="text-sm text-muted-foreground">
+                        Значение берётся из названия группы товара
+                      </span>
+                    </template>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      :variant="
+                        hasValidSource(fm) && fm.isEnabled
+                          ? 'default'
+                          : isUnmappedRequired(fm)
+                            ? 'destructive'
+                            : 'outline'
+                      "
+                      :class="
+                        isUnmappedOptional(fm)
+                          ? 'border-warning text-warning-foreground'
+                          : ''
+                      "
+                      :title="
+                        !fm.isEnabled
+                          ? 'Поле отключено'
+                          : !hasValidSource(fm)
+                            ? 'Выберите источник данных'
+                            : getCurrentSourceLabel(fm)
+                      "
                     >
-                      {{ getModifierCount(fm) }}
-                    </span>
-                  </Button>
-                  <Button
-                    v-if="fm.isCustom"
-                    variant="ghost"
-                    size="icon"
-                    class="size-8 text-destructive hover:text-destructive"
-                    @click="removeField(fm)"
-                    title="Удалить поле"
-                  >
-                    <Trash2 class="size-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-            <!-- Preview sub-row -->
-            <TableRow
-              v-if="previewProductId && shouldShowInlinePreview(fm.externalFieldKey)"
-              :key="fm.id + '-preview'"
-              class="border-t-0 !border-b hover:bg-transparent"
-            >
-              <TableCell :colspan="6" class="pt-0 pb-1.5 px-4">
-                <div class="flex items-center gap-1.5 text-xs leading-none min-w-0">
-                  <Eye class="size-3 shrink-0 text-muted-foreground" />
-                  <template v-if="getPreviewForField(fm.externalFieldKey).error">
-                    <span class="text-destructive truncate">{{ getPreviewForField(fm.externalFieldKey).error }}</span>
-                  </template>
-                  <template v-else>
-                    <span class="text-muted-foreground truncate max-w-[250px]" :title="getPreviewForField(fm.externalFieldKey).sourceValue">{{ getPreviewForField(fm.externalFieldKey).sourceValue || '—' }}</span>
-                    <span class="text-muted-foreground shrink-0">→</span>
-                    <span class="font-medium truncate max-w-[250px]" :title="getPreviewForField(fm.externalFieldKey).resultValue">{{ getPreviewForField(fm.externalFieldKey).resultValue || '—' }}</span>
-                  </template>
-                </div>
-              </TableCell>
-            </TableRow>
-            </template>
+                      <component
+                        :is="
+                          hasValidSource(fm) && fm.isEnabled
+                            ? CheckCircle
+                            : AlertCircle
+                        "
+                        :class="[
+                          'size-3 mr-1',
+                          isUnmappedOptional(fm) ? 'text-warning' : '',
+                        ]"
+                      />
+                      {{
+                        hasValidSource(fm) && fm.isEnabled
+                          ? "Настроено"
+                          : isUnmappedRequired(fm)
+                            ? "Обязательно!"
+                            : isUnmappedOptional(fm)
+                              ? "Не заполнено"
+                              : "Не настроено"
+                      }}
+                    </Badge>
+                  </TableCell>
+                  <!-- preview moved inline under data source cell -->
+                  <TableCell>
+                    <div class="flex items-center gap-1">
+                      <Button
+                        v-if="fm.isEnabled"
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 relative"
+                        @click="openModifierSheet(fm)"
+                        title="Настроить модификаторы"
+                      >
+                        <Settings2 class="size-4" />
+                        <span
+                          v-if="getModifierCount(fm) > 0"
+                          class="absolute -top-0.5 -right-0.5 flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium"
+                        >
+                          {{ getModifierCount(fm) }}
+                        </span>
+                      </Button>
+                      <Button
+                        v-if="fm.isCustom"
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 text-destructive hover:text-destructive"
+                        @click="removeField(fm)"
+                        title="Удалить поле"
+                      >
+                        <Trash2 class="size-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                <!-- Preview sub-row -->
+                <TableRow
+                  v-if="
+                    previewProductId &&
+                    shouldShowInlinePreview(fm.externalFieldKey)
+                  "
+                  :key="fm.id + '-preview'"
+                  class="border-t-0 !border-b hover:bg-transparent"
+                >
+                  <TableCell :colspan="6" class="pt-0 pb-1.5 px-4">
+                    <div
+                      class="flex items-center gap-1.5 text-xs leading-none min-w-0"
+                    >
+                      <Eye class="size-3 shrink-0 text-muted-foreground" />
+                      <template
+                        v-if="getPreviewForField(fm.externalFieldKey).error"
+                      >
+                        <span class="text-destructive truncate">{{
+                          getPreviewForField(fm.externalFieldKey).error
+                        }}</span>
+                      </template>
+                      <template v-else>
+                        <span
+                          class="text-muted-foreground truncate max-w-[250px]"
+                          :title="
+                            getPreviewForField(fm.externalFieldKey).sourceValue
+                          "
+                          >{{
+                            getPreviewForField(fm.externalFieldKey)
+                              .sourceValue || "—"
+                          }}</span
+                        >
+                        <span class="text-muted-foreground shrink-0">→</span>
+                        <span
+                          class="font-medium truncate max-w-[250px]"
+                          :title="
+                            getPreviewForField(fm.externalFieldKey).resultValue
+                          "
+                          >{{
+                            getPreviewForField(fm.externalFieldKey)
+                              .resultValue || "—"
+                          }}</span
+                        >
+                      </template>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </template>
 
-            <TableRow v-if="fieldMappings.length === 0">
-              <TableCell :colspan="6" class="text-center py-8 text-muted-foreground">
-                Нет полей для маппинга. Нажмите "Добавить поле" чтобы создать вручную.
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </Card>
-    </template>
+              <TableRow v-if="fieldMappings.length === 0">
+                <TableCell
+                  :colspan="6"
+                  class="text-center py-8 text-muted-foreground"
+                >
+                  Нет полей для маппинга. Нажмите "Добавить поле" чтобы создать
+                  вручную.
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Card>
+      </template>
     </PageSection>
 
     <!-- Боковое окно модификаторов -->
@@ -1492,18 +1829,30 @@ export default {
         <SheetHeader>
           <SheetTitle>Модификаторы</SheetTitle>
           <SheetDescription v-if="editingFieldMapping">
-            {{ editingFieldMapping.externalFieldName || editingFieldMapping.externalFieldKey }}
+            {{
+              editingFieldMapping.externalFieldName ||
+              editingFieldMapping.externalFieldKey
+            }}
           </SheetDescription>
         </SheetHeader>
 
         <template v-if="editingFieldMapping">
           <!-- Source info -->
           <div class="mt-4 p-3 rounded-md bg-muted/50 text-sm">
-            <div class="text-muted-foreground text-xs mb-1">Источник данных</div>
+            <div class="text-muted-foreground text-xs mb-1">
+              Источник данных
+            </div>
             <div class="flex items-center gap-2">
-              <component :is="getSourceTypeIcon(editingFieldMapping.sourceType)" class="size-4 text-muted-foreground" />
-              <span>{{ getSourceTypeLabel(editingFieldMapping.sourceType) }}:</span>
-              <span class="font-medium">{{ getCurrentSourceLabel(editingFieldMapping) }}</span>
+              <component
+                :is="getSourceTypeIcon(editingFieldMapping.sourceType)"
+                class="size-4 text-muted-foreground"
+              />
+              <span
+                >{{ getSourceTypeLabel(editingFieldMapping.sourceType) }}:</span
+              >
+              <span class="font-medium">{{
+                getCurrentSourceLabel(editingFieldMapping)
+              }}</span>
             </div>
           </div>
 
@@ -1517,25 +1866,51 @@ export default {
               :source-field-options="editingSourceFieldOptions"
               :available-sources="availableSources"
               :disabled="!editingFieldMapping.isEnabled"
-              @update:modifiers="(v) => onModifiersChange(editingFieldMapping, v)"
+              @update:modifiers="
+                (v) => onModifiersChange(editingFieldMapping, v)
+              "
             />
-            <p v-if="!editingFieldMapping.parsedModifiers?.length" class="text-xs text-muted-foreground mt-2">
-              Модификаторы преобразуют значение перед отправкой на адаптер. Нажмите "+ Модификатор" чтобы добавить.
+            <p
+              v-if="!editingFieldMapping.parsedModifiers?.length"
+              class="text-xs text-muted-foreground mt-2"
+            >
+              Модификаторы преобразуют значение перед отправкой на адаптер.
+              Нажмите "+ Модификатор" чтобы добавить.
             </p>
           </div>
 
           <!-- Preview in sheet -->
-          <div v-if="previewProductId && getPreviewForField(editingFieldMapping.externalFieldKey)" class="mt-6">
+          <div
+            v-if="
+              previewProductId &&
+              getPreviewForField(editingFieldMapping.externalFieldKey)
+            "
+            class="mt-6"
+          >
             <div class="text-sm font-medium mb-2">Предпросмотр</div>
             <div class="p-3 rounded-md border text-sm space-y-2">
-              <div v-if="getPreviewForField(editingFieldMapping.externalFieldKey).error" class="text-destructive">
-                {{ getPreviewForField(editingFieldMapping.externalFieldKey).error }}
+              <div
+                v-if="
+                  getPreviewForField(editingFieldMapping.externalFieldKey).error
+                "
+                class="text-destructive"
+              >
+                {{
+                  getPreviewForField(editingFieldMapping.externalFieldKey).error
+                }}
               </div>
               <template v-else>
                 <div>
-                  <span class="text-xs text-muted-foreground">Исходное значение:</span>
-                  <div class="font-mono text-xs mt-0.5 break-all whitespace-pre-wrap">
-                    {{ getPreviewForField(editingFieldMapping.externalFieldKey).sourceValue || '—' }}
+                  <span class="text-xs text-muted-foreground"
+                    >Исходное значение:</span
+                  >
+                  <div
+                    class="font-mono text-xs mt-0.5 break-all whitespace-pre-wrap"
+                  >
+                    {{
+                      getPreviewForField(editingFieldMapping.externalFieldKey)
+                        .sourceValue || "—"
+                    }}
                   </div>
                 </div>
                 <div class="flex items-center gap-2 text-muted-foreground">
@@ -1543,8 +1918,13 @@ export default {
                 </div>
                 <div>
                   <span class="text-xs text-muted-foreground">Результат:</span>
-                  <div class="font-mono text-xs mt-0.5 font-medium break-all whitespace-pre-wrap">
-                    {{ getPreviewForField(editingFieldMapping.externalFieldKey).resultValue || '—' }}
+                  <div
+                    class="font-mono text-xs mt-0.5 font-medium break-all whitespace-pre-wrap"
+                  >
+                    {{
+                      getPreviewForField(editingFieldMapping.externalFieldKey)
+                        .resultValue || "—"
+                    }}
                   </div>
                 </div>
               </template>
@@ -1559,7 +1939,10 @@ export default {
       <SheetContent side="right" class="overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Предпросмотр</SheetTitle>
-          <SheetDescription>Сводка всех полей. Изменённые значения выделены цветом.</SheetDescription>
+          <SheetDescription
+            >Сводка всех полей. Изменённые значения выделены
+            цветом.</SheetDescription
+          >
         </SheetHeader>
 
         <div class="mt-4 space-y-2">
@@ -1573,16 +1956,28 @@ export default {
             }"
           >
             <div v-if="item.error">
-              <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
-              <div class="text-destructive text-xs break-all whitespace-pre-wrap">{{ item.error }}</div>
+              <div class="font-medium text-xs text-muted-foreground mb-1">
+                {{ item.fieldName }}
+              </div>
+              <div
+                class="text-destructive text-xs break-all whitespace-pre-wrap"
+              >
+                {{ item.error }}
+              </div>
             </div>
             <div v-else-if="isImageValue(item.resultValue)">
               <Tabs default-value="visual">
                 <div class="flex items-center justify-between mb-1">
-                  <span class="font-medium text-xs text-muted-foreground">{{ item.fieldName }}</span>
+                  <span class="font-medium text-xs text-muted-foreground">{{
+                    item.fieldName
+                  }}</span>
                   <TabsList class="h-6 p-0.5">
-                    <TabsTrigger value="visual" class="text-[11px] h-5 px-2">Просмотр</TabsTrigger>
-                    <TabsTrigger value="raw" class="text-[11px] h-5 px-2">Данные</TabsTrigger>
+                    <TabsTrigger value="visual" class="text-[11px] h-5 px-2"
+                      >Просмотр</TabsTrigger
+                    >
+                    <TabsTrigger value="raw" class="text-[11px] h-5 px-2"
+                      >Данные</TabsTrigger
+                    >
                   </TabsList>
                 </div>
                 <TabsContent value="visual" class="mt-0">
@@ -1600,40 +1995,63 @@ export default {
                         @error="$event.target.classList.add('opacity-0')"
                       />
                       <!-- Fallback: shows image index when img fails -->
-                      <div class="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground pointer-events-none">
+                      <div
+                        class="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground pointer-events-none"
+                      >
                         {{ idx + 1 }}
                       </div>
                     </div>
                   </div>
-                  <p class="text-[10px] text-muted-foreground mt-2">{{ parseImageUrls(item.resultValue).length }} изображений. Если не отображаются — URL может быть недоступен из браузера.</p>
+                  <p class="text-[10px] text-muted-foreground mt-2">
+                    {{ parseImageUrls(item.resultValue).length }} изображений.
+                    Если не отображаются — URL может быть недоступен из
+                    браузера.
+                  </p>
                 </TabsContent>
                 <TabsContent value="raw" class="mt-0 space-y-1 text-xs">
                   <div class="flex gap-2 min-w-0">
                     <span class="text-muted-foreground shrink-0">Исх:</span>
-                    <span class="text-muted-foreground font-mono break-all whitespace-pre-wrap">{{ item.sourceValue ?? '—' }}</span>
+                    <span
+                      class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
+                      >{{ item.sourceValue ?? "—" }}</span
+                    >
                   </div>
                   <div class="flex gap-2 min-w-0">
                     <span class="text-muted-foreground shrink-0">Рез:</span>
-                    <span class="font-medium font-mono break-all whitespace-pre-wrap">{{ item.resultValue ?? '—' }}</span>
+                    <span
+                      class="font-medium font-mono break-all whitespace-pre-wrap"
+                      >{{ item.resultValue ?? "—" }}</span
+                    >
                   </div>
                 </TabsContent>
               </Tabs>
             </div>
             <div v-else>
-              <div class="font-medium text-xs text-muted-foreground mb-1">{{ item.fieldName }}</div>
+              <div class="font-medium text-xs text-muted-foreground mb-1">
+                {{ item.fieldName }}
+              </div>
               <div class="space-y-1 text-xs">
-              <div class="flex gap-2 min-w-0">
-                <span class="text-muted-foreground shrink-0">Исх:</span>
-                <span class="text-muted-foreground font-mono break-all whitespace-pre-wrap">{{ item.sourceValue ?? '—' }}</span>
-              </div>
-              <div class="flex gap-2 min-w-0">
-                <span class="text-muted-foreground shrink-0">Рез:</span>
-                <span class="font-medium font-mono break-all whitespace-pre-wrap">{{ item.resultValue ?? '—' }}</span>
-              </div>
+                <div class="flex gap-2 min-w-0">
+                  <span class="text-muted-foreground shrink-0">Исх:</span>
+                  <span
+                    class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
+                    >{{ item.sourceValue ?? "—" }}</span
+                  >
+                </div>
+                <div class="flex gap-2 min-w-0">
+                  <span class="text-muted-foreground shrink-0">Рез:</span>
+                  <span
+                    class="font-medium font-mono break-all whitespace-pre-wrap"
+                    >{{ item.resultValue ?? "—" }}</span
+                  >
+                </div>
               </div>
             </div>
           </div>
-          <div v-if="previewSummary.length === 0" class="text-center text-muted-foreground py-8 text-sm">
+          <div
+            v-if="previewSummary.length === 0"
+            class="text-center text-muted-foreground py-8 text-sm"
+          >
             Нет активных полей
           </div>
         </div>
@@ -1643,7 +2061,7 @@ export default {
     <!-- Диалог добавления нового поля -->
     <!-- Mapping Settings Dialog -->
     <Dialog v-model:open="showMappingSettings">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Настройки маппинга</DialogTitle>
           <DialogDescription>Настройте параметры маппинга</DialogDescription>
@@ -1651,10 +2069,7 @@ export default {
         <div class="space-y-4 py-4">
           <div class="space-y-2">
             <Label>Название</Label>
-            <Input
-              v-model="settingsName"
-              placeholder="Название маппинга"
-            />
+            <Input v-model="settingsName" placeholder="Название маппинга" />
           </div>
         </div>
         <DialogFooter>
@@ -1702,7 +2117,9 @@ export default {
               <SelectContent>
                 <SelectItem value="Static">Статическое значение</SelectItem>
                 <SelectItem value="ProductField">Поле товара</SelectItem>
-                <SelectItem value="CategoryAttribute">Атрибут категории</SelectItem>
+                <SelectItem value="CategoryAttribute"
+                  >Атрибут категории</SelectItem
+                >
                 <SelectItem value="StoreAttribute">Атрибут магазина</SelectItem>
                 <SelectItem value="GroupName">Название группы</SelectItem>
               </SelectContent>
@@ -1710,10 +2127,7 @@ export default {
           </div>
           <div v-if="newField.sourceType === 'Static'" class="space-y-2">
             <Label>Значение</Label>
-            <Input
-              v-model="newField.staticValue"
-              placeholder="Значение поля"
-            />
+            <Input v-model="newField.staticValue" placeholder="Значение поля" />
           </div>
         </div>
 
