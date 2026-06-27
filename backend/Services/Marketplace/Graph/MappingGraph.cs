@@ -42,6 +42,8 @@ public class GraphNodeData
     public string? field { get; set; }
     /// <summary>Literal value for "static" sources.</summary>
     public string? staticValue { get; set; }
+    /// <summary>Frontend-only display label for source nodes (ignored by the evaluator).</summary>
+    public string? label { get; set; }
     /// <summary>Store shared-storage file id for "storeFileUrl" / "storeFileContent" sources.</summary>
     public int? storeFileId { get; set; }
     /// <summary>Product file name for "productFileByName" / "productFileContentByName" sources.</summary>
@@ -88,6 +90,18 @@ public class AdapterField
     public string? label { get; set; }
     public string? outputType { get; set; }
     public bool isRequired { get; set; }
+    /// <summary>Optional direct source binding (set via the adapter dropdown) — when present the field
+    /// has no input pin and its value is resolved straight from this source instead of an edge.</summary>
+    public AdapterFieldSource? source { get; set; }
+}
+
+/// <summary>A standard source bound directly to an adapter field (no node/wire).</summary>
+public class AdapterFieldSource
+{
+    /// <summary>"attribute" | "storeAttribute" | "productField" | "groupName".</summary>
+    public string? type { get; set; }
+    public int? attributeId { get; set; }
+    public string? field { get; set; }
 }
 
 /// <summary>

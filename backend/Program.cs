@@ -200,6 +200,8 @@ builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
 builder.Services.AddHostedService<ProductTransferBackgroundService>();
+// TEMP — one-time backfill of graphJson for mappings without a graph. Remove after it has run in prod.
+builder.Services.AddHostedService<GraphBackfillBackgroundService>();
 
 // SignalR for real-time operation logs
 builder.Services.AddSignalR();

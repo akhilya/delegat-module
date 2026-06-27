@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using static PrintO.Services.Marketplace.Modifiers.ModifierHelpers;
@@ -613,10 +614,10 @@ internal static class ModifierHelpers
             if (val is JsonElement je)
             {
                 if (je.ValueKind == JsonValueKind.Number && je.TryGetInt32(out var i)) return i;
-                if (int.TryParse(je.ToString(), out var parsed)) return parsed;
+                if (int.TryParse(je.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             if (val is int i2) return i2;
-            if (int.TryParse(val?.ToString(), out var p)) return p;
+            if (int.TryParse(val?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var p)) return p;
         }
         return defaultValue;
     }
@@ -628,10 +629,10 @@ internal static class ModifierHelpers
             if (val is JsonElement je)
             {
                 if (je.ValueKind == JsonValueKind.Number && je.TryGetDecimal(out var d)) return d;
-                if (decimal.TryParse(je.ToString(), out var parsed)) return parsed;
+                if (decimal.TryParse(je.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             if (val is decimal d2) return d2;
-            if (decimal.TryParse(val?.ToString(), out var p)) return p;
+            if (decimal.TryParse(val?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var p)) return p;
         }
         return defaultValue;
     }
@@ -641,7 +642,7 @@ internal static class ModifierHelpers
         if (value == null) return null;
         if (value is decimal d) return d;
         if (value is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetDecimal(out var jd)) return jd;
-        if (decimal.TryParse(value.ToString(), out var parsed)) return parsed;
+        if (decimal.TryParse(value.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)) return parsed;
         return null;
     }
 

@@ -305,12 +305,28 @@ export function autoMigrate(fieldMappings, sources = {}) {
 
   const fields = [];
   enabled.forEach((fm, i) => {
+    const field = {
+      fieldKey: fm.externalFieldKey,
+      label: fm.externalFieldName || fm.externalFieldKey,
+      outputType: fm.externalFieldType || "string",
+      isRequired: !!fm.isRequired,
+    };
+
+    const mods = activeModifiers(fm);
+    // Trivial 1:1 fields (a standard source, no transforms) bind directly on the adapter — no node/wire.
+    const binding = mods.length === 0 ? directBinding(fm) : null;
+    if (binding) {
+      field.source = binding;
+      fields.push(field);
+      return;
+    }
+
     const y = i * ROW_H;
     const source = makeSourceNode(fm, { x: 0, y }, sources);
     nodes.push(source);
 
     let prevId = source.id;
-    activeModifiers(fm).forEach((mod, k) => {
+    mods.forEach((mod, k) => {
       const node = {
         id: genId("mod"),
         type: "modifier",
@@ -322,12 +338,7 @@ export function autoMigrate(fieldMappings, sources = {}) {
       prevId = node.id;
     });
 
-    fields.push({
-      fieldKey: fm.externalFieldKey,
-      label: fm.externalFieldName || fm.externalFieldKey,
-      outputType: fm.externalFieldType || "string",
-      isRequired: !!fm.isRequired,
-    });
+    fields.push(field);
     edges.push(makeEdge(prevId, ADAPTER_NODE_ID, `f:${fm.externalFieldKey}`));
   });
 
@@ -347,6 +358,19 @@ function activeModifiers(fm) {
   return (fm.parsedModifiers || []).filter(
     (m) => m && m.enabled !== false && m.type,
   );
+}
+
+/** Direct adapter-field source binding for a simple 1:1 field mapping (or null if not bindable). */
+function directBinding(fm) {
+  const kind = normalizeSourceType(fm.sourceType);
+  if (kind === "CategoryAttribute" && fm.sourceAttributeId != null)
+    return { type: "attribute", attributeId: fm.sourceAttributeId };
+  if (kind === "StoreAttribute" && fm.sourceAttributeId != null)
+    return { type: "storeAttribute", attributeId: fm.sourceAttributeId };
+  if (kind === "ProductField" && fm.sourceField)
+    return { type: "productField", field: fm.sourceField };
+  if (kind === "GroupName") return { type: "groupName" };
+  return null;
 }
 
 function makeSourceNode(fm, position, sources) {
@@ -695,6 +719,17 @@ export function firstInputHandle(node) {
 }
 
 /**
+ * Operand params of a modifier that can be driven by an optional override pin (handle `p:<key>`).
+ * Scalar operands only (number/text) — config params (select/checkbox) and complex editors
+ * (valueMap/optionMap/template/tagInput) keep their in-block control.
+ */
+export function overridableParams(modifierType) {
+  return (MODIFIER_CATALOG[modifierType]?.params || []).filter(
+    (p) => p.type === "number" || p.type === "text",
+  );
+}
+
+/**
  * The type a node's INPUT handle expects (for the drag-from-input → producer menu).
  * Sources have no input ⇒ null. Lists collapse to a representative type; null means "any".
  */
@@ -702,6 +737,14 @@ export function nodeInputType(node, handleId) {
   if (!node) return null;
   switch (node.type) {
     case "modifier": {
+      // A param-override pin (`p:<key>`) expects that param's type, not the value type.
+      if (String(handleId || "").startsWith("p:")) {
+        const k = String(handleId).slice(2);
+        const p = overridableParams(node.data?.modifierType).find(
+          (x) => x.key === k,
+        );
+        return p ? (p.type === "number" ? "number" : "string") : null;
+      }
       const list = MODIFIER_CATALOG[node.data?.modifierType]?.applicableTypes;
       return list && list.length ? list[0] : null;
     }
@@ -805,6 +848,31 @@ export function analyzeFields(nodes, edges) {
 
   for (const f of adapter.data?.fields || []) {
     const key = f.fieldKey;
+
+    // A field bound directly to a standard source (dropdown in the adapter) has no pin/edge.
+    if (f.source?.type) {
+      const s = f.source;
+      if (s.type === "attribute" || s.type === "storeAttribute") {
+        analysis[key] = { importable: true, reversible: true, connected: true };
+        projections.push({
+          externalFieldKey: key,
+          sourceType:
+            s.type === "attribute" ? "CategoryAttribute" : "StoreAttribute",
+          sourceAttributeId: s.attributeId ?? null,
+          modifiersJson: null,
+        });
+      } else {
+        // productField / groupName: export works via the graph, but import writes back only attributes.
+        analysis[key] = {
+          importable: false,
+          reversible: false,
+          connected: true,
+        };
+        projections.push(exportOnly(key));
+      }
+      continue;
+    }
+
     const inEdge = (incoming.get(adapter.id) || []).find(
       (e) => e.targetHandle === `f:${key}`,
     );
@@ -869,4 +937,59 @@ export function analyzeFields(nodes, edges) {
   }
 
   return { analysis, projections };
+}
+
+/**
+ * For each adapter field, a short label of what feeds it — for display inside the adapter block.
+ * Walks back through single-input pass-throughs (modifier / single-input op / reroute) to the
+ * originating source node's label; on fan-in (>1 input) returns the producing op's display label.
+ * Returns { fieldKey: label } (unconnected fields omitted).
+ */
+export function adapterSourceLabels(nodes, edges) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = new Map();
+  nodes.forEach((n) => incoming.set(n.id, []));
+  (edges || []).forEach((e) => {
+    if (incoming.has(e.target)) incoming.get(e.target).push(e);
+  });
+
+  const adapter = nodes.find((n) => n.type === "adapterFields");
+  const out = {};
+  if (!adapter) return out;
+  const isSource = new Set(SOURCE_NODE_TYPES);
+
+  for (const f of adapter.data?.fields || []) {
+    const key = f.fieldKey;
+    const inEdge = (incoming.get(adapter.id) || []).find(
+      (e) => e.targetHandle === `f:${key}`,
+    );
+    if (!inEdge) continue;
+
+    let cur = byId.get(inEdge.source);
+    const seen = new Set();
+    let label = null;
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (isSource.has(cur.type)) {
+        label = cur.data?.label || cur.type;
+        break;
+      }
+      const ins = incoming.get(cur.id) || [];
+      if (ins.length === 1) {
+        cur = byId.get(ins[0].source); // transparent pass-through
+      } else {
+        // fan-in / op — name the producing node
+        label =
+          OP_SPECS[cur.type]?.label ||
+          (cur.type === "modifier"
+            ? MODIFIER_CATALOG[cur.data?.modifierType]?.displayName
+            : null) ||
+          cur.data?.label ||
+          cur.type;
+        break;
+      }
+    }
+    if (label) out[key] = label;
+  }
+  return out;
 }

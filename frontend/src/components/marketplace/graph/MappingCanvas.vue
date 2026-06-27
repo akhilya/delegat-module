@@ -41,6 +41,7 @@ import {
   createRerouteNode,
   syncAdapterFields,
   analyzeFields,
+  adapterSourceLabels,
   nodeOutputType,
   nodeInputType,
   firstInputHandle,
@@ -120,10 +121,49 @@ const errorCount = computed(
 const warningCount = computed(
   () => issues.value.filter((i) => i.level === "warning").length,
 );
-// Per-field import analysis, mirrored into the adapter node for its per-row export-only marker.
+// Per-field import analysis + the data the adapter sink needs for its inline source dropdown.
 function refreshAnalysis() {
   const { analysis } = analyzeFields(nodes.value, edges.value);
-  updateNodeData(ADAPTER_NODE_ID, { analysis });
+  updateNodeData(ADAPTER_NODE_ID, {
+    analysis,
+    sources: adapterSourceLabels(nodes.value, edges.value),
+    availableSources: props.availableSources,
+    setFieldSource,
+  });
+}
+
+// Bind/unbind an adapter field to a standard source directly (from the adapter dropdown).
+function parseSourceValue(v) {
+  if (!v) return null;
+  if (v === "g") return { type: "groupName" };
+  const rest = v.slice(2);
+  if (v[0] === "p") return { type: "productField", field: rest };
+  if (v[0] === "a") return { type: "attribute", attributeId: Number(rest) };
+  if (v[0] === "s")
+    return { type: "storeAttribute", attributeId: Number(rest) };
+  return null;
+}
+function setFieldSource(fieldKey, value) {
+  const adapter = findNode(ADAPTER_NODE_ID);
+  if (!adapter) return;
+  const src = parseSourceValue(value);
+  const fields = (adapter.data?.fields || []).map((f) => {
+    if (f.fieldKey !== fieldKey) return f;
+    const nf = { ...f };
+    if (src) nf.source = src;
+    else delete nf.source;
+    return nf;
+  });
+  updateNodeData(ADAPTER_NODE_ID, { fields });
+  if (src) {
+    // Bound directly ⇒ the pin disappears, so drop any wire feeding it.
+    const dead = edges.value.filter(
+      (e) => e.target === ADAPTER_NODE_ID && e.targetHandle === `f:${fieldKey}`,
+    );
+    if (dead.length) removeEdges(dead.map((e) => e.id));
+  }
+  refreshAnalysis();
+  schedulePreview();
 }
 
 // ---- Option resolution for valueMap/optionMap editors ----
@@ -325,6 +365,8 @@ onBeforeUnmount(() => {
 });
 watch(() => props.mappingId, load);
 watch(() => props.previewProductId, schedulePreview);
+// Sources can arrive after the initial load — re-push them to the adapter's dropdown when they do.
+watch(() => props.availableSources, refreshAnalysis, { deep: true });
 // Only react to structural changes (add/remove — e.g. the Delete key), not position/select/data,
 // to avoid a feedback loop with preview's own updateNodeData() calls.
 onNodesChange((changes) => {
@@ -366,9 +408,15 @@ onEdgeDoubleClick(({ event, edge }) => {
   schedulePreview();
 });
 
-// Double-click a reroute node ⇒ splice it out, reconnecting its upstream source to each downstream target.
+// Double-click: a reroute node splices out; the adapter sink is left alone; any other block toggles
+// its collapsed "pill" form.
 onNodeDoubleClick(({ node }) => {
-  if (!node || node.type !== "reroute") return;
+  if (!node) return;
+  if (node.type === "adapterFields") return;
+  if (node.type !== "reroute") {
+    updateNodeData(node.id, { collapsed: !node.data?.collapsed });
+    return;
+  }
   const src = edges.value.find((e) => e.target === node.id);
   const outs = edges.value.filter((e) => e.source === node.id);
   if (src) {
@@ -410,9 +458,12 @@ async function load() {
     }
     // Bring the adapter sink up to date with any marketplace fields added since the graph was saved.
     graph.nodes = syncAdapterFields(graph.nodes, props.fieldMappings);
-    // Saved graphs keep the user's layout; auto-migrated ones get a compact layered layout.
+    // Saved graphs keep the user's layout; auto-migrated ones — and backend-backfilled graphs, which
+    // carry no node positions — get the compact layered layout.
+    const needsLayout =
+      migrated || (graph.nodes || []).some((n) => !n.position);
     setNodes(
-      migrated ? layoutGraph(graph.nodes, graph.edges) : graph.nodes || [],
+      needsLayout ? layoutGraph(graph.nodes, graph.edges) : graph.nodes || [],
     );
     setEdges(graph.edges || []);
     await nextTick();
@@ -604,6 +655,9 @@ function cleanData(d) {
   delete rest.preview;
   delete rest.previewValue;
   delete rest.analysis;
+  delete rest.sources; // adapter: transient traced-source labels
+  delete rest.availableSources; // adapter: transient dropdown options
+  delete rest.setFieldSource; // adapter: transient callback
   return rest;
 }
 
@@ -923,6 +977,55 @@ function autoArrange() {
   width: 100%;
 }
 
+/* Let a drag that starts over a wire pan the canvas: disable only the wide invisible interaction
+   path; the visible line keeps pointer events so double-click reroute still works. */
+.vf-canvas .vue-flow__edge-interaction {
+  pointer-events: none;
+}
+
+/* `.vf-card.<mod>` (specificity 0,2,0) so these beat the base `.vf-card` rule that appears later. */
+.vf-card.vf-card--collapsed {
+  min-width: 0;
+  max-width: 180px;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+.vf-card--collapsed .vf-card__head {
+  gap: 6px;
+}
+/* Collapsed multi/fixed-input ops keep height so their left input pins still spread out. */
+.vf-card--collapsed-multi {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* Modifiers that expose operand params as override pins: a row per input handle. Metrics must
+   match HEADER/ROW in ModifierNode.vue so the left pins line up with their rows. */
+.vf-card.vf-card--haspins {
+  min-width: 180px;
+  padding: 0;
+}
+.vf-card--haspins .vf-card__head {
+  height: 26px;
+  padding: 0 10px;
+}
+.vf-mod__pin-row {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 10px 0 14px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.vf-mod__pin-row--value {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.vf-mod__body {
+  padding: 4px 10px 8px;
+}
+
 .vf-card {
   position: relative;
   min-width: 150px;
@@ -1027,7 +1130,7 @@ function autoArrange() {
 /* Single "Поля адаптера" sink node — metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
   min-width: 230px;
-  max-width: 300px;
+  max-width: 320px;
   padding: 0;
 }
 .vf-adapter__head {
@@ -1041,10 +1144,19 @@ function autoArrange() {
 .vf-adapter__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   height: 24px;
   padding: 0 10px;
   font-size: 12px;
+}
+.vf-adapter__bound {
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--primary);
 }
 .vf-adapter__row:hover {
   background: var(--accent);

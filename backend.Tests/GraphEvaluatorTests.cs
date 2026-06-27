@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using PrintO.Enums;
+using PrintO.Models.Marketplace;
+using PrintO.Services.Marketplace;
 using PrintO.Services.Marketplace.Graph;
 using PrintO.Services.Marketplace.Modifiers;
 using Xunit;
@@ -349,6 +352,107 @@ public class GraphEvaluatorTests
 
         var result = GraphEvaluator.Evaluate(graph, Context(catAttr: _ => "hello"));
         Assert.Equal("hello", result.Outputs["x"]);
+    }
+
+    [Fact]
+    public void AdapterField_BoundDirectlyToAttribute_ResolvesWithoutEdge()
+    {
+        var graph = new MappingGraph
+        {
+            nodes = new()
+            {
+                new GraphNode
+                {
+                    id = "adapter",
+                    type = "adapterFields",
+                    data = new()
+                    {
+                        fields = new()
+                        {
+                            new AdapterField
+                            {
+                                fieldKey = "desc",
+                                outputType = "string",
+                                source = new AdapterFieldSource { type = "attribute", attributeId = 5 },
+                            },
+                        },
+                    },
+                },
+            },
+            edges = new(),
+        };
+
+        var result = GraphEvaluator.Evaluate(graph, Context(catAttr: id => id == 5 ? "Hello" : null));
+        Assert.Equal("Hello", result.Outputs["desc"]);
+    }
+
+    [Fact]
+    public void ModifierParamPin_OverridesInBlockDefault()
+    {
+        var graph = new MappingGraph
+        {
+            nodes = new()
+            {
+                new GraphNode { id = "v", type = "static", data = new() { staticValue = "10" } },
+                new GraphNode { id = "a", type = "static", data = new() { staticValue = "5" } },
+                // add modifier with its in-block default addend (0) — overridden by the p:addend pin.
+                Mod("add", "add", "{\"addend\":0}"),
+                new GraphNode { id = "out", type = "output", data = new() { fieldKey = "x", outputType = "number" } },
+            },
+            edges = new()
+            {
+                Edge("v", "add", "in"),
+                Edge("a", "add", "p:addend"),
+                Edge("add", "out"),
+            }
+        };
+
+        var result = GraphEvaluator.Evaluate(graph, Context());
+        Assert.Equal(15m, Convert.ToDecimal(result.Outputs["x"]));
+    }
+
+    // ---- Backfill: generated graph evaluates the same as the per-field mapping ----
+
+    [Fact]
+    public void GraphBackfill_GeneratedGraph_ReproducesFieldMappings()
+    {
+        var mapping = new CategoryMapping
+        {
+            fieldMappings = new List<FieldMapping>
+            {
+                // Direct attribute binding (no modifiers).
+                new() { externalFieldKey = "color", externalFieldType = "string", isEnabled = true, sortOrder = 0,
+                    sourceType = FieldMappingSourceType.CategoryAttribute, sourceAttributeId = 1 },
+                // Attribute + a modifier chain ⇒ source node + modifier node.
+                new() { externalFieldKey = "len", externalFieldType = "number", isEnabled = true, sortOrder = 1,
+                    sourceType = FieldMappingSourceType.CategoryAttribute, sourceAttributeId = 2,
+                    modifiersJson = "[{\"type\":\"multiply\",\"params\":{\"factor\":10},\"enabled\":true}]" },
+                // Product field direct binding.
+                new() { externalFieldKey = "title", externalFieldType = "string", isEnabled = true, sortOrder = 2,
+                    sourceType = FieldMappingSourceType.ProductField, sourceField = "name" },
+                // Static source ⇒ static node.
+                new() { externalFieldKey = "brand", externalFieldType = "string", isEnabled = true, sortOrder = 3,
+                    sourceType = FieldMappingSourceType.Static, staticValue = "ACME" },
+                // Disabled rows are skipped.
+                new() { externalFieldKey = "skip", externalFieldType = "string", isEnabled = false, sortOrder = 4,
+                    sourceType = FieldMappingSourceType.CategoryAttribute, sourceAttributeId = 9 },
+            },
+        };
+
+        var json = GraphBackfillBackgroundService.BuildGraphJson(mapping);
+        var graph = JsonSerializer.Deserialize<MappingGraph>(json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+        var ctx = Context(
+            catAttr: id => id switch { 1 => "красный", 2 => "3", _ => null },
+            productField: f => f == "name" ? "Виджет" : null);
+        var result = GraphEvaluator.Evaluate(graph, ctx);
+
+        Assert.Equal("красный", result.Outputs["color"]);
+        Assert.Equal(30m, Convert.ToDecimal(result.Outputs["len"])); // 3 × 10
+        Assert.Equal("Виджет", result.Outputs["title"]);
+        Assert.Equal("ACME", result.Outputs["brand"]);
+        Assert.False(result.Outputs.ContainsKey("skip")); // disabled
     }
 
     // ---- Helpers ----
