@@ -342,12 +342,18 @@ using (var scope = app.Services.CreateScope())
 // Usage inside container: dotnet Delegat.dll --reset-admin
 if (args.Contains("--reset-admin"))
 {
-    var resetSettings = adminSettings with { ForceReset = true };
-    if (string.IsNullOrEmpty(resetSettings.Email) || string.IsNullOrEmpty(resetSettings.Password))
+    if (string.IsNullOrEmpty(adminSettings.Email) || string.IsNullOrEmpty(adminSettings.Password))
     {
         Console.Error.WriteLine("ADMIN_EMAIL and ADMIN_PASSWORD must be set.");
         return 1;
     }
+    var resetSettings = new AdminSeedSettings
+    {
+        Email = adminSettings.Email,
+        Username = adminSettings.Username,
+        Password = adminSettings.Password,
+        ForceReset = true,
+    };
     using var resetScope = app.Services.CreateScope();
     await DatabaseSeeder.SeedAsync(resetScope.ServiceProvider, resetSettings);
     Console.WriteLine("Admin reset complete.");
@@ -415,3 +421,4 @@ app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthCh
 });
 
 await app.RunAsync("http://0.0.0.0:5000");
+return 0;
