@@ -2,9 +2,6 @@ services:
   # Backend API (ASP.NET Core)
   delegat-api:
     image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
     ports:
       - "5000:5000"
     environment:
@@ -46,9 +43,6 @@ services:
   # Frontend (Nginx + Vue SPA)
   frontend:
     image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
       interval: 10s
