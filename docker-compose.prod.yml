@@ -1,7 +1,7 @@
 services:
   # Backend API (ASP.NET Core)
   delegat-api:
-    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG:-latest}
+    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -11,23 +11,23 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - MYSQL_SERVER=mysql
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-delegat}
-      - MYSQL_USER=${MYSQL_USER:-delegat}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-delegat}
+      - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_SECURE=false
       - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-}
       - MINIO_PUBLIC_SECURE=${MINIO_PUBLIC_SECURE:-false}
       - JWT_KEY=${JWT_KEY}
-      - JWT_ISSUER=${JWT_ISSUER:-your-domain.com}
-      - JWT_AUDIENCE=${JWT_AUDIENCE:-your-domain.com}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-      - CORS_ORIGINS=${CORS_ORIGINS:-https://dashboard.your-domain.com}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     depends_on:
       mysql:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
 
   # Frontend (Nginx + Vue SPA)
   frontend:
-    image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG}
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -73,8 +73,8 @@ services:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-delegat}
-      MYSQL_USER: ${MYSQL_USER:-delegat}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
@@ -123,7 +123,7 @@ services:
     environment:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-delegat}
+      - MINIO_BUCKET=${MINIO_BUCKET}
     networks:
       - delegat-network
 

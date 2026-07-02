@@ -1,32 +1,32 @@
-# Delegat SaaS — архитектура дистрибуции
+# Delegat.Module — SaaS Distribution Architecture
 
-> Этот документ описывает инфраструктуру дистрибуции: провижининг, масштабирование, управление квотами, центральный портал.
+> This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal.
 >
-> Возможности самой платформы: [../platform/capabilities.md](../platform/capabilities.md)
+> Platform features and roadmap: [../platform/capabilities.md](../platform/capabilities.md)
 
 ---
 
-## 1. Модель изоляции: per-instance
+## 1. Isolation Model: Per-Instance
 
-Каждый клиент получает **изолированный Docker stack**: свой MySQL, MinIO, delegat-api, frontend.
+Each customer receives an **isolated Docker stack**: dedicated MySQL, MinIO, delegat-api, and frontend.
 
-**Почему не shared MySQL/MinIO:**
-- Миграция с shared на per-instance требует дампа каждой схемы, координированного downtime и обновления connection string в Dokploy для каждого инстанса — сложность неоправданно высока
-- Физическая изоляция исключает cross-tenant утечку данных по архитектуре
+**Why not shared MySQL/MinIO:**
+- Migrating from shared to per-instance requires schema dumps, coordinated downtime, and updating connection strings in Dokploy for every instance — unjustifiably complex
+- Physical isolation makes cross-tenant data leakage architecturally impossible
 
-**Потребление ресурсов per-instance (idle):**
+**Per-instance resource consumption (idle):**
 
-| Сервис | RAM |
-|--------|-----|
+| Service | RAM |
+|---------|-----|
 | delegat-api (.NET 8) | 150–250 MB |
 | frontend (nginx) | 10–20 MB |
-| MySQL 8.4 (оптимизированный) | 180–350 MB |
+| MySQL 8.4 (tuned) | 180–350 MB |
 | MinIO | 50–80 MB |
-| **Итого** | **390–700 MB** |
+| **Total** | **390–700 MB** |
 
-На ВМ 8 GB: 10–12 инстансов. На 16 GB: 20–24 инстанса.
+8 GB VM: 10–12 instances. 16 GB VM: 20–24 instances.
 
-**Оптимизация MySQL** (добавить в `docker-compose.prod.yml`):
+**MySQL tuning** (add to `docker-compose.prod.yml`):
 ```yaml
 services:
   mysql:
@@ -36,113 +36,113 @@ services:
       --max-connections=50
       --skip-name-resolve
 ```
-Снижает потребление MySQL с ~350 MB до ~180 MB.
+Reduces MySQL consumption from ~350 MB to ~180 MB.
 
 ---
 
-## 2. DNS — Selectel wildcard
+## 2. DNS — Selectel Wildcard
 
-**Текущая конфигурация:** Selectel DNS с wildcard-записью `*.your-domain.com → IP ноды`.
+**Current configuration:** Selectel DNS with wildcard record `*.your-domain.com → node IP`.
 
-Отдельные A-записи для каждого поддомена **не нужны** — wildcard покрывает все поддомены автоматически.
+Individual A records per subdomain are **not needed** — the wildcard covers all subdomains automatically.
 
-**Мульти-нодная схема:**
-При наличии нескольких нод с разными IP, wildcard работает только с одним IP. Варианты:
-- **Вариант A (рекомендуется для старта):** Один nginx/HAProxy перед всеми нодами — один IP, маршрутизация по HTTP Host header к нужной ноде
-- **Вариант B:** Per-node wildcard (`*.node-a.your-domain.com`, `*.node-b.your-domain.com`) — разные поддомены для разных нод
+**Multi-node DNS routing:**
+When multiple nodes have different IPs, the wildcard maps to a single IP. Options:
+- **Option A (recommended for start):** A single nginx/HAProxy in front of all nodes — one IP, routes by HTTP Host header
+- **Option B:** Per-node wildcards (`*.node-a.your-domain.com`, `*.node-b.your-domain.com`)
 
 ---
 
-## 3. Общая схема
+## 3. Overall Architecture
 
 ```
 [Selectel DNS]
-  *.your-domain.com → L4 балансировщик (или IP единственной ноды)
+  *.your-domain.com → L4 load balancer (or single node IP)
 
-[Node A — ВМ 16 GB]        [Node B — ВМ 16 GB]
-  Dokploy Agent               Dokploy Agent
+[Node A — 16 GB VM]          [Node B — 16 GB VM]
+  Dokploy Agent                 Dokploy Agent
   ├── client1.your-domain.com   ├── client3.your-domain.com
-  │   ├── delegat-api          │   ├── delegat-api
-  │   ├── frontend            │   └── ...
+  │   ├── delegat-api           │   ├── delegat-api
+  │   ├── frontend              │   └── ...
   │   ├── mysql
   │   └── minio
   └── client2.your-domain.com
       └── ...
 
-[Central Portal — отдельная ВМ, 4 GB]
+[Central Portal — 4 GB VM]
   PostgreSQL (Registry DB)
   Provisioner Service
   Monitoring Poller
 
 [CI/CD — GitHub Actions]
-  push → build image → push GHCR → rolling update всех инстансов
+  push → build images → push GHCR → rolling update all instances
 ```
 
 ---
 
-## 4. Управление квотами при смене плана
+## 4. Quota Management on Plan Changes
 
-**Текущая реализация** (уже в коде):
-- `AppSettingsService` читает из env vars: `MAX_STORAGE_GB`, `MAX_PRODUCTS`, `MAX_FILES`, `MAX_CONNECTIONS`
-- `QuotaService` проверяет per-store (по `storeId`)
-- При превышении → `ApiException.Conflict` (409)
+**Current implementation (already in code):**
+- `AppSettingsService` reads from env vars: `MAX_STORAGE_GB`, `MAX_PRODUCTS`, `MAX_FILES`, `MAX_CONNECTIONS`
+- `QuotaService` enforces per-store (by `storeId`)
+- Exceeded quota → `ApiException.Conflict` (409)
 
-**Таблица планов:**
+**Plan tiers:**
 
-| План | MAX_STORAGE_GB | MAX_PRODUCTS | MAX_CONNECTIONS |
+| Plan | MAX_STORAGE_GB | MAX_PRODUCTS | MAX_CONNECTIONS |
 |------|---------------|--------------|----------------|
-| Starter | 15 | 5 000 | 3 |
-| Pro | 50 | 50 000 | 10 |
-| Business | 150 | 200 000 | 25 |
+| Starter | 15 | 5,000 | 3 |
+| Pro | 50 | 50,000 | 10 |
+| Business | 150 | 200,000 | 25 |
 | Enterprise | 500 | — | — |
 
-**Апгрейд** (15 GB → 500 GB):
-1. Портал обновляет `MAX_STORAGE_GB=500` через Dokploy API
-2. Trigger redeploy (~30–60 сек)
+**Upgrade** (15 GB → 500 GB):
+1. Portal updates `MAX_STORAGE_GB=500` via Dokploy API
+2. Trigger redeploy (~30–60 sec downtime)
 
-**Даунгрейд** (500 GB → 15 GB) — стратегия «мягкий кап»:
-1. Установить новый лимит через Dokploy API → trigger redeploy
-2. Существующие данные не удаляются (грандфазеринг)
-3. Новые загрузки блокируются (`EnsureStorageQuotaAsync` уже это делает)
-4. Пользователю отправить email: текущее использование + дедлайн для удаления лишних файлов
+**Downgrade** (500 GB → 15 GB) — soft-cap strategy:
+1. Set new limit via Dokploy API → trigger redeploy
+2. Existing data is **not deleted** (grandfathered)
+3. New uploads are blocked (`EnsureStorageQuotaAsync` handles this already)
+4. Email customer: current usage + deadline to remove excess files
 
 ---
 
-## 5. Масштабирование
+## 5. Scaling
 
-**Алгоритм выбора ноды при провизионинге:**
+**Node selection algorithm:**
 ```
 1. SELECT * FROM nodes WHERE is_active AND current_instances < max_instances
-2. ORDER BY current_instances ASC → берём наименее загруженную
-3. Если список пуст → alert администратору
-4. Создать инстанс на выбранной ноде, current_instances++
+2. ORDER BY current_instances ASC → pick least-loaded node
+3. If empty → alert administrator
+4. Create instance on selected node, current_instances++
 ```
 
-**Когда все ноды заполнены:**
-- **Этап A (старт):** email/Telegram алерт → администратор вручную добавляет ВМ, устанавливает Dokploy, регистрирует в Registry DB
-- **Этап B (при росте >1 ВМ/нед):** авто-создание ВМ через Hetzner Cloud API + cloud-init скрипт
+**When all nodes are full:**
+- **Stage A (startup):** email/Telegram alert → admin manually adds a VM, installs Dokploy, registers in Registry DB
+- **Stage B (>1 VM/week):** auto-provision VM via Hetzner Cloud API + cloud-init script
 
 ---
 
-## 6. Redis — не нужен
+## 6. Redis — Not Needed
 
-| Кейс | Нужен Redis? | Решение |
-|------|-------------|---------|
-| Rate limiting | ❌ | In-memory (1 API контейнер per-instance) |
-| Refresh tokens | ❌ | MySQL достаточно |
-| SignalR backplane | ❌ | In-memory (1 API контейнер) |
-| Кэш маркетплейс-API | ⚠️ | `IMemoryCache` (встроен в ASP.NET) — TTL 1 час |
+| Use case | Redis needed? | Solution |
+|----------|--------------|---------|
+| Rate limiting | ❌ | In-memory (1 API container per instance) |
+| Refresh tokens | ❌ | MySQL is sufficient |
+| SignalR backplane | ❌ | In-memory (1 API container) |
+| Marketplace API cache | ⚠️ | `IMemoryCache` (built into ASP.NET) — 1 hour TTL |
 
-**Единственный ценный кейс — кэш `GetCategoryFieldsAsync`:**
+**The only worthwhile case — caching `GetCategoryFieldsAsync`:**
 
-Запрос к маркетплейсу занимает 1–5 сек. Открытие `fieldMappingPage` каждый раз делает новый запрос.
+Marketplace API calls take 1–5 seconds. Opening `fieldMappingPage` triggers a new request each time.
 
-Решение без Redis:
+Solution without Redis:
 ```csharp
 // Program.cs
 builder.Services.AddMemoryCache();
 
-// В CategoryMappingController:
+// In CategoryMappingController:
 var cacheKey = $"category-fields:{connection.adapterKey}:{externalCategoryId}";
 if (!_cache.TryGetValue(cacheKey, out List<ExternalField> fields))
 {
@@ -151,15 +151,15 @@ if (!_cache.TryGetValue(cacheKey, out List<ExternalField> fields))
 }
 ```
 
-Redis добавлять только если: горизонтальное масштабирование API внутри одного инстанса (не планируется).
+Add Redis only if: horizontal scaling of the API within an instance (not planned).
 
 ---
 
-## 7. Центральный портал
+## 7. Central Portal
 
-**Стек:** .NET 8 + PostgreSQL + Vue 3. Отдельная ВМ (~4 GB RAM).
+**Stack:** .NET 8 + PostgreSQL + Vue 3. Separate VM (~4 GB RAM).
 
-### Registry DB
+### Registry DB Schema
 
 ```sql
 nodes (
@@ -181,26 +181,26 @@ users (id, email, password_hash, current_plan_id FK, subscription_status)
 plans (id, name, max_storage_gb, max_products, max_connections, price_monthly)
 ```
 
-### Provisioner flow
+### Provisioner Flow
 
 ```
-Триггер: успешная оплата
-  1. Выбрать ноду (least-loaded)
-  2. Сгенерировать секреты (JWT_KEY, MYSQL_PASSWORD, MINIO_ACCESS_KEY, MINIO_SECRET_KEY,
-                             ENCRYPTION_KEY, ADMIN_PASSWORD)
-  3. Зашифровать и сохранить в Registry DB (AES-256)
-  4. Dokploy API → создать compose-проект из шаблона с env vars
-  5. Поллить {subdomain}.your-domain.com/api/health до status=ok (timeout 5 мин)
-  6. Отправить welcome email: ссылка + логин admin + временный пароль
+Trigger: successful payment
+  1. Select node (least-loaded)
+  2. Generate secrets (JWT_KEY, MYSQL_PASSWORD, MINIO_ACCESS_KEY, MINIO_SECRET_KEY,
+                       ENCRYPTION_KEY, ADMIN_PASSWORD)
+  3. Encrypt and store in Registry DB (AES-256)
+  4. Dokploy API → create compose project from template with env vars
+  5. Poll {subdomain}.your-domain.com/api/health until status=ok (timeout: 5 min)
+  6. Send welcome email: URL + admin login + temporary password
   7. instances.status = 'active'
 ```
 
-### Шаблон compose для провизионинга
+### Compose Template for Provisioning
 
 ```yaml
 services:
   delegat-api:
-    image: ghcr.io/delegat-studio/dashboard-api:${IMAGE_TAG}
+    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG}
     environment:
       MYSQL_SERVER: mysql
       MYSQL_DATABASE: delegat
@@ -226,63 +226,61 @@ services:
       --innodb-buffer-pool-size=64M
       --performance-schema=OFF
       --max-connections=50
-      --skip-name-resolve
-  # ... остальное как в docker-compose.prod.yml
 ```
 
 ### Plan Change Handler
 
 ```
-Триггер: смена тарифа пользователем
-  1. Обновить env vars через Dokploy API (MAX_STORAGE_GB, MAX_PRODUCTS, MAX_CONNECTIONS)
+Trigger: customer changes plan
+  1. Update env vars via Dokploy API (MAX_STORAGE_GB, MAX_PRODUCTS, MAX_CONNECTIONS)
   2. Trigger redeploy
-  3. Если downgrade → email пользователю с текущим использованием хранилища
-  4. Обновить instances.plan_id в Registry DB
+  3. If downgrade → email customer with current storage usage
+  4. Update instances.plan_id in Registry DB
 ```
 
 ### Update Manager
 
 ```
-Триггер: POST /internal/update-all с { imageTag }
-  Rolling update для каждого активного инстанса:
-    1. Обновить image tag в Dokploy проекте
+Trigger: POST /internal/update-all with { imageTag }
+  Rolling update for each active instance:
+    1. Update image tag in Dokploy project
     2. Trigger redeploy
-    3. Поллить /api/health (timeout 3 мин)
-    4. Fail → rollback к предыдущему тегу + alert
-    5. Записать last_deployed_version
+    3. Poll /api/health (timeout: 3 min)
+    4. Fail → rollback to previous tag + alert
+    5. Record last_deployed_version
 ```
 
 ### Monitoring Poller
 
 ```
-Cron: каждые 5 мин
-  Для каждого активного инстанса:
+Cron: every 5 minutes
+  For each active instance:
     GET {subdomain}.your-domain.com/api/health
     → 200: instances.last_seen_at = now()
-    → 3 подряд fail: email/Telegram алерт
-    → 10 подряд fail: instances.status = 'degraded'
+    → 3 consecutive failures: email/Telegram alert
+    → 10 consecutive failures: instances.status = 'degraded'
 ```
 
 ---
 
 ## 8. Roadmap
 
-| Этап | Задача | Статус |
-|------|--------|--------|
-| 0 | Health check, квоты, admin seed, startup recovery | ✅ Готово |
-| 1 | MySQL оптимизация в `docker-compose.prod.yml` | Быстро |
-| 2 | IMemoryCache для маркетплейс-API | 1–2 дня |
-| 3 | First-run wizard в Dashboard | До первых клиентов |
-| 4 | Central Portal backend (Registry DB + Provisioner) | 2–3 недели |
-| 5 | Central Portal frontend + billing | 1–2 недели |
-| 6 | Auto-scaling (Hetzner API + cloud-init) | При росте >1 ВМ/нед |
+| Stage | Task | Status |
+|-------|------|--------|
+| 0 | Health check, quotas, admin seed, startup recovery | ✅ Done |
+| 1 | MySQL tuning in `docker-compose.prod.yml` | Quick |
+| 2 | IMemoryCache for marketplace API | 1–2 days |
+| 3 | First-run wizard in Dashboard | Before first customers |
+| 4 | Central Portal backend (Registry DB + Provisioner) | 2–3 weeks |
+| 5 | Central Portal frontend + billing | 1–2 weeks |
+| 6 | Auto-scaling (Hetzner API + cloud-init) | At >1 VM/week growth |
 
 ---
 
-## Открытые вопросы
+## Open Questions
 
-1. **DNS мульти-нод**: L4 балансировщик (один IP на все ноды) или per-node wildcard?
-2. **Оплата**: ЮКасса (РФ) или Stripe (зарубежные клиенты)?
-3. **Email-провайдер**: SendGrid / Postmark / собственный SMTP?
-4. **License key**: нужна offline-защита (HMAC) или достаточно закрытого репозитория?
-5. **Алерты**: только email или добавить Telegram-бот для мониторинга?
+1. **Multi-node DNS:** L4 load balancer (single IP for all nodes) or per-node wildcard?
+2. **Payments:** Russian payment provider or Stripe for international customers?
+3. **Email provider:** SendGrid / Postmark / self-hosted SMTP?
+4. **License key:** offline HMAC protection or closed-source repo is sufficient?
+5. **Alerts:** email only or add Telegram bot for monitoring alerts?

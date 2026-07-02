@@ -1,18 +1,18 @@
-# Документация Delegat Dashboard
+# Documentation
 
-## Архитектура
+## Architecture
 
-- [**saas-architecture.md**](architecture/saas-architecture.md) — Per-instance SaaS: провижининг, масштабирование, квоты, Redis, центральный портал
+- [**saas-architecture.md**](architecture/saas-architecture.md) — Per-instance SaaS: provisioning, scaling, quotas, Redis, central portal
 
-## Платформа
+## Platform
 
-- [**capabilities.md**](platform/capabilities.md) — Текущие возможности + что ещё нужно реализовать
-- [**product.md**](platform/product.md) — Продуктовый бриф: пользователи, цели, дизайн-принципы, бренд
+- [**capabilities.md**](platform/capabilities.md) — Current features and roadmap
+- [**product.md**](platform/product.md) — Product brief: users, goals, design principles, brand
 
-## Адаптеры
+## Adapters
 
 - [**opencart.md**](adapters/opencart.md) — OpenCart bridge: credentials, actions, payload format
 
-## Планы реализации
+## Implementation Plans
 
-- [**2026-03-17-product-soft-delete.md**](plans/2026-03-17-product-soft-delete.md) — Soft delete для товаров
+- [**2026-03-17-product-soft-delete.md**](plans/2026-03-17-product-soft-delete.md) — Soft delete for products
