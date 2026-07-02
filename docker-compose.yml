@@ -73,7 +73,9 @@ services:
 
 volumes:
   mysql_data:
+    name: ${MYSQL_VOLUME_NAME:-delegat-mysql-data}
   minio_data:
+    name: ${MINIO_VOLUME_NAME:-delegat-minio-data}
 
 networks:
   delegat-network:
