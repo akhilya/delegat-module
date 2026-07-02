@@ -1,7 +1,7 @@
 services:
   # Backend API (ASP.NET Core)
   delegat-api:
-    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG}
+    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -45,7 +45,7 @@ services:
 
   # Frontend (Nginx + Vue SPA)
   frontend:
-    image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG}
+    image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
