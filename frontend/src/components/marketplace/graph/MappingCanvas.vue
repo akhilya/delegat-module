@@ -122,6 +122,20 @@ const lastMouse = ref({ x: 0, y: 0 });
 const rightDown = ref(null);
 const rightMoved = ref(false);
 const maximized = ref(false);
+const debugMode = ref(false);
+
+const debugInfo = computed(() => {
+  const { analysis } = analyzeFields(nodes.value, edges.value);
+  return {
+    analysis,
+    edges: edges.value.map((e) => ({
+      id: e.id,
+      type: e.type ?? "default",
+      src: e.source,
+      tgt: e.target,
+    })),
+  };
+});
 
 const issues = computed(() => validateGraph(nodes.value, edges.value));
 const errorCount = computed(
@@ -649,6 +663,12 @@ function onKeydown(e) {
     return;
   }
 
+  if (e.shiftKey && e.code === "Tab") {
+    e.preventDefault();
+    debugMode.value = !debugMode.value;
+    return;
+  }
+
   if (e.code !== "Tab" && e.code !== "KeyF") return;
   const rect = flowWrap.value?.getBoundingClientRect();
   if (!rect) return;
@@ -983,6 +1003,33 @@ function autoArrange() {
         </Badge>
       </div>
 
+      <div v-if="debugMode" class="vf-debug-panel">
+        <div class="vf-debug-section">
+          <b>Анализ полей</b>
+          <div
+            v-for="(v, k) in debugInfo.analysis"
+            :key="k"
+            :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
+          >
+            <span class="badge">{{ v.importable ? "IMPORT" : "EXPORT" }}</span>
+            {{ k }}: connected={{ v.connected }}, rev={{ v.reversible }}
+          </div>
+          <div v-if="!Object.keys(debugInfo.analysis).length" class="text-xs opacity-50">нет полей</div>
+        </div>
+        <div class="vf-debug-section">
+          <b>Рёбра ({{ debugInfo.edges.length }})</b>
+          <div
+            v-for="e in debugInfo.edges"
+            :key="e.id"
+            :class="['vf-debug-row', e.type === 'vf-import' ? 'ok' : e.type === 'vf-export' ? 'no' : '']"
+          >
+            <span class="badge">{{ e.type }}</span>
+            <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
+          </div>
+        </div>
+        <div class="vf-debug-hint">Shift+Tab — скрыть</div>
+      </div>
+
       <VueFlow
         :min-zoom="0.2"
         :max-zoom="1.75"
@@ -1020,8 +1067,8 @@ function autoArrange() {
           </template>
         </Controls>
 
-        <template #edge-vf-import="p"><ImportableEdge v-bind="p" /></template>
-        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" /></template>
+        <template #edge-vf-import="p"><ImportableEdge v-bind="p" :debug="debugMode" /></template>
+        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" :debug="debugMode" /></template>
 
         <template #node-attribute="p"><SourceNode v-bind="p" /></template>
         <template #node-storeAttribute="p"><SourceNode v-bind="p" /></template>
@@ -1353,24 +1400,24 @@ function autoArrange() {
 .vf-bidi-fwd {
   stroke: var(--vue-flow-edge-color, #b1b1b7);
   stroke-width: 2;
-  stroke-dasharray: 5 20;
+  stroke-dasharray: 3 13;
   opacity: 0.9;
-  animation: vf-bidi-fwd 1.2s linear infinite;
+  animation: vf-bidi-fwd 1s linear infinite;
 }
 .vf-bidi-bwd {
   stroke: var(--vue-flow-edge-color, #b1b1b7);
   stroke-width: 2;
-  stroke-dasharray: 5 20;
-  opacity: 0.5;
-  animation: vf-bidi-bwd 2.5s linear infinite;
+  stroke-dasharray: 9 7;
+  opacity: 0.55;
+  animation: vf-bidi-bwd 2.2s linear infinite;
 }
 @keyframes vf-bidi-fwd {
-  from { stroke-dashoffset: 25; }
+  from { stroke-dashoffset: 16; }
   to   { stroke-dashoffset: 0; }
 }
 @keyframes vf-bidi-bwd {
-  from { stroke-dashoffset: 12.5; }
-  to   { stroke-dashoffset: 37.5; }
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: 16; }
 }
 /* Selected state */
 .vue-flow__edge.selected .vf-bidi-base,
@@ -1394,5 +1441,62 @@ function autoArrange() {
 .vue-flow__edge.selected .vf-export-path {
   stroke: hsl(var(--primary));
   opacity: 0.8;
+}
+
+/* Debug overlay panel */
+.vf-debug-panel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.88);
+  color: #e5e7eb;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-width: 400px;
+  max-height: 65vh;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vf-debug-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vf-debug-section b {
+  color: #9ca3af;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.vf-debug-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.vf-debug-row .badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: bold;
+  background: #374151;
+  color: #9ca3af;
+}
+.vf-debug-row.ok .badge { background: #14532d; color: #4ade80; }
+.vf-debug-row.no .badge { background: #7c2d12; color: #fb923c; }
+.vf-debug-hint {
+  font-size: 9px;
+  color: #6b7280;
+  text-align: right;
 }
 </style>

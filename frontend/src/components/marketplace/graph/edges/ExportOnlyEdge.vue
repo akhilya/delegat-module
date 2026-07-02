@@ -11,21 +11,36 @@ const props = defineProps({
   targetPosition: String,
   markerEnd: String,
   selected: Boolean,
+  debug: Boolean,
 });
 
-const path = computed(
-  () =>
-    getBezierPath({
-      sourceX: props.sourceX,
-      sourceY: props.sourceY,
-      sourcePosition: props.sourcePosition,
-      targetX: props.targetX,
-      targetY: props.targetY,
-      targetPosition: props.targetPosition,
-    })[0],
+const bezier = computed(() =>
+  getBezierPath({
+    sourceX: props.sourceX,
+    sourceY: props.sourceY,
+    sourcePosition: props.sourcePosition,
+    targetX: props.targetX,
+    targetY: props.targetY,
+    targetPosition: props.targetPosition,
+  }),
 );
+
+const pathD = computed(() => bezier.value[0]);
+const labelX = computed(() => bezier.value[1]);
+const labelY = computed(() => bezier.value[2]);
 </script>
 
 <template>
-  <path :d="path" fill="none" class="vf-export-path" />
+  <g>
+    <path :d="pathD" fill="none" class="vf-export-path" />
+    <g v-if="debug">
+      <rect :x="labelX - 23" :y="labelY - 9" width="46" height="17" rx="3" fill="rgba(0,0,0,0.85)" />
+      <text
+        :x="labelX" :y="labelY"
+        fill="#fb923c" font-size="9" font-family="monospace"
+        text-anchor="middle" dominant-baseline="middle"
+        font-weight="bold"
+      >EXPORT</text>
+    </g>
+  </g>
 </template>
