@@ -48,11 +48,18 @@ const addInput = () =>
   updateNodeData(props.id, { inputCount: count.value + 1 });
 const removeInput = () =>
   updateNodeData(props.id, { inputCount: Math.max(1, count.value - 1) });
+const collapsed = computed(() => !!props.data.collapsed);
 </script>
 
 <template>
   <div
-    :class="['vf-card', 'vf-card--combine', selected && 'vf-card--selected']"
+    :class="[
+      'vf-card',
+      'vf-card--combine',
+      selected && 'vf-card--selected',
+      collapsed && 'vf-card--collapsed',
+      collapsed && (isMulti || isFixed) && 'vf-card--collapsed-multi',
+    ]"
   >
     <template v-if="isMulti">
       <Handle
@@ -80,40 +87,42 @@ const removeInput = () =>
       <component :is="icon" class="size-3.5 text-muted-foreground" />
       <span class="vf-card__kind">{{ spec.label }}</span>
     </div>
-    <div v-if="summary" class="vf-card__title vf-card__title--sm">
-      {{ summary }}
-    </div>
-    <div
-      v-if="isFixed && spec.inputLabels?.length"
-      class="vf-pin-label"
-      style="margin-top: 4px"
-    >
-      {{ spec.inputLabels.join(" · ") }}
-    </div>
-
-    <div v-if="isMulti" class="vf-combine__inputs">
-      <span class="vf-pin-label">входов: {{ count }}</span>
-      <button
-        type="button"
-        class="vf-iconbtn nodrag"
-        title="Убрать вход"
-        @mousedown.stop
-        @click="removeInput"
+    <template v-if="!collapsed">
+      <div v-if="summary" class="vf-card__title vf-card__title--sm">
+        {{ summary }}
+      </div>
+      <div
+        v-if="isFixed && spec.inputLabels?.length"
+        class="vf-pin-label"
+        style="margin-top: 4px"
       >
-        <Minus class="size-3" />
-      </button>
-      <button
-        type="button"
-        class="vf-iconbtn nodrag"
-        title="Добавить вход"
-        @mousedown.stop
-        @click="addInput"
-      >
-        <Plus class="size-3" />
-      </button>
-    </div>
+        {{ spec.inputLabels.join(" · ") }}
+      </div>
 
-    <NodePreview :value="data.previewValue" />
+      <div v-if="isMulti" class="vf-combine__inputs">
+        <span class="vf-pin-label">входов: {{ count }}</span>
+        <button
+          type="button"
+          class="vf-iconbtn nodrag"
+          title="Убрать вход"
+          @mousedown.stop
+          @click="removeInput"
+        >
+          <Minus class="size-3" />
+        </button>
+        <button
+          type="button"
+          class="vf-iconbtn nodrag"
+          title="Добавить вход"
+          @mousedown.stop
+          @click="addInput"
+        >
+          <Plus class="size-3" />
+        </button>
+      </div>
+
+      <NodePreview :value="data.previewValue" />
+    </template>
 
     <Handle
       id="out"

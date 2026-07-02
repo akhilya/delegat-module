@@ -22,6 +22,7 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly ILogger<MarketplaceConnectionController> _logger;
     private readonly EncryptionService? _encryptionService;
     private readonly QuotaService _quotaService;
+    private readonly DataContext _db;
 
     public MarketplaceConnectionController(
         ICurrentUserService currentUserService,
@@ -30,6 +31,7 @@ public class MarketplaceConnectionController : ControllerBase
         IMarketplaceAdapterRegistry adapterRegistry,
         ILogger<MarketplaceConnectionController> logger,
         QuotaService quotaService,
+        DataContext db,
         EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
@@ -39,6 +41,7 @@ public class MarketplaceConnectionController : ControllerBase
         _logger = logger;
         _quotaService = quotaService;
         _encryptionService = encryptionService;
+        _db = db;
     }
 
     /// <summary>
@@ -73,18 +76,20 @@ public class MarketplaceConnectionController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
-        var repo = _unitOfWork.Repository<MarketplaceConnection>();
-
-        var connections = await repo.FindAllAsync(
-            c => c.storeId == selectedStoreId.Value,
-            query => query
-                .Include(c => c.categoryMappings)
-                .Include(c => c.productLinks));
-
-        var result = connections
+        var result = await _db.marketplaceConnections
+            .Where(c => c.storeId == selectedStoreId.Value)
             .OrderByDescending(c => c.createdAt)
-            .Select(c => ((Infrastructure.Interfaces.IMapToDTO<MarketplaceConnection.ConnectionDTO>)c).MapToDTO(_serviceProvider))
-            .ToList();
+            .Select(c => new MarketplaceConnection.ConnectionDTO
+            {
+                id = c.Id,
+                name = c.name,
+                adapterKey = c.adapterKey,
+                isActive = c.isActive,
+                lastSyncAt = c.lastSyncAt,
+                categoryMappingsCount = c.categoryMappings.Count(),
+                productLinksCount = c.productLinks.Count(),
+            })
+            .ToListAsync();
 
         return Ok(result);
     }
