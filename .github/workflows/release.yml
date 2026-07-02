@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    paths: ['VERSION']
 
 env:
   REGISTRY: ghcr.io
@@ -20,17 +20,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
+      - name: Read version from VERSION file
         id: version
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#v}
+          VERSION=$(cat VERSION | tr -d '[:space:]')
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f1-2)
-          echo "tag=$TAG"         >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "major=$MAJOR"     >> $GITHUB_OUTPUT
-          echo "minor=$MINOR"     >> $GITHUB_OUTPUT
+          echo "version=$VERSION"   >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION"      >> $GITHUB_OUTPUT
+          echo "major=$MAJOR"       >> $GITHUB_OUTPUT
+          echo "minor=$MINOR"       >> $GITHUB_OUTPUT
+
+      - name: Create and push git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -48,6 +54,8 @@ jobs:
           context: .
           file: backend/Dockerfile
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/api:${{ steps.version.outputs.tag }}
             ${{ env.IMAGE_PREFIX }}/api:${{ steps.version.outputs.version }}
@@ -63,6 +71,8 @@ jobs:
           context: frontend
           file: frontend/Dockerfile
           push: true
+          build-args: |
+            VITE_APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.version.outputs.tag }}
             ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.version.outputs.version }}
@@ -75,5 +85,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           name: Delegat.Module ${{ steps.version.outputs.tag }}
           generate_release_notes: true

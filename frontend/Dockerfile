@@ -12,9 +12,11 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build argument for API server
+# Build arguments
 ARG VITE_API_SERVER=/api
 ENV VITE_API_SERVER=$VITE_API_SERVER
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
 # Build the application
 RUN npm run build

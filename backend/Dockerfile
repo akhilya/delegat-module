@@ -23,7 +23,8 @@ COPY plugins/ plugins/
 RUN find backend sdk plugins -type d \( -name bin -o -name obj -o -name .vs \) -prune -exec rm -rf {} +
 
 # Publish backend app
-RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app
+ARG APP_VERSION=dev
+RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:InformationalVersion=$APP_VERSION
 
 # Build plugins and copy DLLs to app
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon
