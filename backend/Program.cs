@@ -338,6 +338,22 @@ using (var scope = app.Services.CreateScope())
     await DatabaseSeeder.SeedAsync(scope.ServiceProvider, adminSettings);
 }
 
+// --reset-admin mode: reset superadmin credentials and exit without starting the web server.
+// Usage inside container: dotnet Delegat.dll --reset-admin
+if (args.Contains("--reset-admin"))
+{
+    var resetSettings = adminSettings with { ForceReset = true };
+    if (string.IsNullOrEmpty(resetSettings.Email) || string.IsNullOrEmpty(resetSettings.Password))
+    {
+        Console.Error.WriteLine("ADMIN_EMAIL and ADMIN_PASSWORD must be set.");
+        return 1;
+    }
+    using var resetScope = app.Services.CreateScope();
+    await DatabaseSeeder.SeedAsync(resetScope.ServiceProvider, resetSettings);
+    Console.WriteLine("Admin reset complete.");
+    return 0;
+}
+
 // Reset stuck InProgress tasks to Pending on startup (prevents permanent hang after container restart)
 using (var scope = app.Services.CreateScope())
 {
