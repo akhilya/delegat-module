@@ -2,7 +2,11 @@
 import { computed } from "vue";
 import { getBezierPath } from "@vue-flow/core";
 
+const SPEED_PX_PER_S = 65;
+const SPACING_PX = 48;
+
 const props = defineProps({
+  id: String,
   sourceX: Number,
   sourceY: Number,
   targetX: Number,
@@ -12,6 +16,7 @@ const props = defineProps({
   markerEnd: String,
   selected: Boolean,
   debug: Boolean,
+  animate: { type: Boolean, default: true },
 });
 
 const bezier = computed(() =>
@@ -25,22 +30,98 @@ const bezier = computed(() =>
   }),
 );
 
-const pathD = computed(() => bezier.value[0]);
+const pathD  = computed(() => bezier.value[0]);
 const labelX = computed(() => bezier.value[1]);
 const labelY = computed(() => bezier.value[2]);
+
+// Reversed bezier: same curve, opposite direction — used for leftward arrows so
+// rotate="auto" with forward keyPoints correctly points the arrowhead left.
+const revPathD = computed(() => {
+  const nums = (pathD.value.match(/-?[\d.]+(?:e[+-]?\d+)?/g) || []).map(Number);
+  if (nums.length < 8) return pathD.value;
+  const [sx, sy, cp1x, cp1y, cp2x, cp2y, tx, ty] = nums;
+  return `M ${tx},${ty} C ${cp2x},${cp2y} ${cp1x},${cp1y} ${sx},${sy}`;
+});
+
+const pathId    = computed(() => `vf-wp-${props.id}`);
+const revPathId = computed(() => `vf-wp-bwd-${props.id}`);
+const wire      = computed(() => props.selected ? "#3b82f6" : "#b1b1b7");
+const baseOp    = computed(() => props.selected ? 0.65 : 0.2);
+const fwdOp     = computed(() => props.selected ? 1 : 0.85);
+const bwdOp     = computed(() => props.selected ? 0.75 : 0.5);
+
+const wireLength = computed(() =>
+  Math.sqrt((props.targetX - props.sourceX) ** 2 + (props.targetY - props.sourceY) ** 2),
+);
+const dur      = computed(() => Math.max(0.8, wireLength.value / SPEED_PX_PER_S));
+const fwdCount = computed(() => Math.max(1, Math.round(wireLength.value / SPACING_PX)));
+const bwdCount = computed(() => Math.max(1, Math.round(wireLength.value / (SPACING_PX * 1.5))));
 </script>
 
 <template>
   <g>
-    <path :d="pathD" fill="none" class="vf-bidi-base" />
-    <path :d="pathD" fill="none" class="vf-bidi-fwd" />
-    <path :d="pathD" fill="none" class="vf-bidi-bwd" />
+    <!-- invisible forward track -->
+    <path :id="pathId" :d="pathD" fill="none" stroke="none" />
+    <!-- invisible reversed track for leftward arrows -->
+    <path :id="revPathId" :d="revPathD" fill="none" stroke="none" />
+    <!-- visible wire -->
+    <path :d="pathD" fill="none" :stroke="wire" stroke-width="2.5" :opacity="baseOp" />
+    <!-- rightward arrows (export direction) -->
+    <path
+      v-if="animate"
+      v-for="i in fwdCount"
+      :key="`f${i}`"
+      d="M-4,-3 L3,0 L-4,3"
+      fill="none"
+      :stroke="wire"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      :opacity="fwdOp"
+    >
+      <animateMotion
+        :dur="`${dur}s`"
+        repeatCount="indefinite"
+        rotate="auto"
+        :begin="`${-((i - 1) * dur / fwdCount)}s`"
+      >
+        <mpath :href="`#${pathId}`" />
+      </animateMotion>
+    </path>
+    <!-- leftward arrows (import direction): use the reversed path so rotate="auto"
+         naturally orients the chevron to the left without browser quirks -->
+    <path
+      v-if="animate"
+      v-for="i in bwdCount"
+      :key="`b${i}`"
+      d="M-4,-3 L3,0 L-4,3"
+      fill="none"
+      :stroke="wire"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      :opacity="bwdOp"
+    >
+      <animateMotion
+        :dur="`${dur * 1.35}s`"
+        repeatCount="indefinite"
+        rotate="auto"
+        :begin="`${-((i - 1) * dur * 1.35 / bwdCount)}s`"
+      >
+        <mpath :href="`#${revPathId}`" />
+      </animateMotion>
+    </path>
+    <!-- debug label -->
     <g v-if="debug">
       <rect :x="labelX - 23" :y="labelY - 9" width="46" height="17" rx="3" fill="rgba(0,0,0,0.85)" />
       <text
-        :x="labelX" :y="labelY"
-        fill="#4ade80" font-size="9" font-family="monospace"
-        text-anchor="middle" dominant-baseline="middle"
+        :x="labelX"
+        :y="labelY"
+        fill="#4ade80"
+        font-size="9"
+        font-family="monospace"
+        text-anchor="middle"
+        dominant-baseline="middle"
         font-weight="bold"
       >IMPORT</text>
     </g>

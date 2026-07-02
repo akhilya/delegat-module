@@ -126,6 +126,7 @@ export default {
       me: null,
       memberships: [],
       platformVersion: null,
+      appVersion: import.meta.env.VITE_APP_VERSION || null,
     };
   },
   computed: {
@@ -377,8 +378,8 @@ export default {
         <LogOut class="size-4" />
         Выйти
       </Button>
-      <div v-if="platformVersion" class="px-2 text-[10px] text-muted-foreground">
-        v{{ platformVersion }}
+      <div v-if="appVersion || platformVersion" class="px-2 text-[10px] text-muted-foreground">
+        v{{ appVersion || platformVersion }}
       </div>
     </SidebarFooter>
   </Sidebar>

@@ -121,6 +121,7 @@ const requiredCount = computed(
 // Adapter sink: per-field source binding lives here (in settings), not as dropdowns inside the block.
 const adapterFields = computed(() => data.value.fields || []);
 const adapterAvail = computed(() => data.value.availableSources || {});
+const adapterPreview = computed(() => data.value.preview || {});
 const adapterSourceValue = (f) => {
   const s = f.source;
   if (!s) return "";
@@ -429,6 +430,13 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
                   <SelectItem value="g">Название группы</SelectItem>
                 </SelectContent>
               </Select>
+              <div
+                v-if="adapterPreview[f.fieldKey] != null"
+                class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                :title="String(adapterPreview[f.fieldKey])"
+              >
+                {{ adapterPreview[f.fieldKey] }}
+              </div>
             </div>
           </div>
         </div>

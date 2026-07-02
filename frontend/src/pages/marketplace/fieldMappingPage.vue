@@ -132,6 +132,10 @@ export default {
           label: this.mappingInfo?.connectionName || "Подключение",
           to: `/adapter/${this.connectionId}`,
         },
+        {
+          label: "Маппинги",
+          to: `/adapter/${this.connectionId}?tab=mappings`,
+        },
       ];
       if (this.mappingInfo) {
         items.push({

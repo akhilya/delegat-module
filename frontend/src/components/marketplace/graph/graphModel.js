@@ -853,7 +853,10 @@ export function analyzeFields(nodes, edges) {
     if (f.source?.type) {
       const s = f.source;
       if (s.type === "attribute" || s.type === "storeAttribute") {
-        analysis[key] = { importable: true, reversible: true, connected: true };
+        analysis[key] = {
+          importable: true, reversible: true, connected: true,
+          _sk: `${s.type}:${s.attributeId}`,
+        };
         projections.push({
           externalFieldKey: key,
           sourceType:
@@ -862,12 +865,7 @@ export function analyzeFields(nodes, edges) {
           modifiersJson: null,
         });
       } else {
-        // productField / groupName: export works via the graph, but import writes back only attributes.
-        analysis[key] = {
-          importable: false,
-          reversible: false,
-          connected: true,
-        };
+        analysis[key] = { importable: false, reversible: false, connected: true };
         projections.push(exportOnly(key));
       }
       continue;
@@ -880,6 +878,7 @@ export function analyzeFields(nodes, edges) {
     let importable = false;
     let reversible = false;
     let projection = exportOnly(key);
+    let terminalSk = null;
 
     if (inEdge) {
       const mods = [];
@@ -921,6 +920,7 @@ export function analyzeFields(nodes, edges) {
               sourceAttributeId: cur.data.attributeId,
               modifiersJson: mods.length ? JSON.stringify(mods) : null,
             };
+            if (importable) terminalSk = `${cur.type}:${cur.data.attributeId}`;
           }
           break;
         } else if (SOURCE_NODE_TYPES.includes(cur.type) && cur.type !== "static") {
@@ -928,6 +928,12 @@ export function analyzeFields(nodes, edges) {
           // animation purposes when the modifier chain is fully reversible.
           // Backend projection stays exportOnly — no actual write-back for these types.
           importable = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          if (importable) {
+            terminalSk =
+              cur.type === "productField"
+                ? `productField:${cur.data?.field ?? cur.id}`
+                : `${cur.type}:${cur.id}`;
+          }
           break;
         } else {
           // static value or op nodes (fan-in / lossy) ⇒ always export-only
@@ -938,9 +944,32 @@ export function analyzeFields(nodes, edges) {
       if (!importable) projection = exportOnly(key);
     }
 
-    analysis[key] = { importable, reversible, connected: !!inEdge };
+    analysis[key] = { importable, reversible, connected: !!inEdge, _sk: terminalSk };
     projections.push(projection);
   }
+
+  // Detect fan-out: if 2+ importable fields share the same logical source,
+  // import is ambiguous — downgrade all of them to export-only and warn.
+  const skToFields = new Map();
+  for (const [key, v] of Object.entries(analysis)) {
+    if (v.importable && v._sk) {
+      const arr = skToFields.get(v._sk) ?? [];
+      arr.push(key);
+      skToFields.set(v._sk, arr);
+    }
+  }
+  for (const keys of skToFields.values()) {
+    if (keys.length > 1) {
+      for (const key of keys) {
+        analysis[key].importable = false;
+        analysis[key].reversible = false;
+        analysis[key].fanOut = true;
+        const pidx = projections.findIndex((p) => p.externalFieldKey === key);
+        if (pidx !== -1) projections[pidx] = exportOnly(key);
+      }
+    }
+  }
+  for (const v of Object.values(analysis)) delete v._sk;
 
   return { analysis, projections };
 }

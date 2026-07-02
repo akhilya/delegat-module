@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   EyeOff,
   Loader2,
+  Activity,
 } from "lucide-vue-next";
 import {
   SplitterGroup,
@@ -123,6 +124,55 @@ const rightDown = ref(null);
 const rightMoved = ref(false);
 const maximized = ref(false);
 const debugMode = ref(false);
+const animateWires = ref(true);
+
+// ---- Undo / Redo ----
+const history = ref([]);
+const histIdx = ref(-1);
+let isRestoring = false;
+let historyPending = false;
+
+function makeSnapshot() {
+  return {
+    nodes: nodes.value.map((n) => {
+      if (n.id === ADAPTER_NODE_ID) {
+        const { analysis, sources, setFieldSource, availableSources, ...rest } = n.data || {};
+        return JSON.parse(JSON.stringify({ ...n, data: rest }));
+      }
+      return JSON.parse(JSON.stringify(n));
+    }),
+    edges: JSON.parse(JSON.stringify(edges.value)),
+  };
+}
+
+function scheduleHistory() {
+  if (isRestoring || historyPending) return;
+  historyPending = true;
+  nextTick(() => {
+    history.value = history.value.slice(0, histIdx.value + 1);
+    history.value.push(makeSnapshot());
+    if (history.value.length > 60) history.value.shift();
+    else histIdx.value++;
+    historyPending = false;
+  });
+}
+
+function restoreAt(idx) {
+  const snap = history.value[idx];
+  if (!snap) return;
+  isRestoring = true;
+  setNodes(snap.nodes);
+  setEdges(snap.edges);
+  histIdx.value = idx;
+  nextTick(() => {
+    refreshAnalysis();
+    schedulePreview();
+    isRestoring = false;
+  });
+}
+
+const canUndo = computed(() => histIdx.value > 0);
+const canRedo = computed(() => histIdx.value < history.value.length - 1);;
 
 const debugInfo = computed(() => {
   const { analysis } = analyzeFields(nodes.value, edges.value);
@@ -455,6 +505,7 @@ onNodesChange((changes) => {
   // Mark dirty on structural changes or on drag-end (position change, dragging===false).
   if (!loading.value && (structural || cs.some((c) => c.type === "position" && !c.dragging))) {
     dirty.value = true;
+    scheduleHistory();
   }
 });
 onEdgesChange((changes) => {
@@ -463,7 +514,10 @@ onEdgesChange((changes) => {
   if (structural) {
     refreshAnalysis();
     schedulePreview();
-    if (!loading.value) dirty.value = true;
+    if (!loading.value) {
+      dirty.value = true;
+      scheduleHistory();
+    }
   }
 });
 
@@ -552,10 +606,16 @@ async function load() {
     );
     setEdges(graph.edges || []);
     await nextTick();
+    // Ensure adapter node is never deletable regardless of serialized graph state
+    const adNode = findNode(ADAPTER_NODE_ID);
+    if (adNode) adNode.deletable = false;
     refreshAnalysis();
     fitView({ padding: 0.2 });
     dirty.value = false;
     schedulePreview();
+    // Capture initial history state
+    history.value = [makeSnapshot()];
+    histIdx.value = 0;
   } catch (e) {
     displaySonnerError(e);
   } finally {
@@ -652,7 +712,17 @@ function onKeydown(e) {
   // Clipboard shortcuts (Ctrl/Cmd + C / V / D). Use e.code (physical key) so they work
   // regardless of the active keyboard layout — with a Cyrillic layout e.key would be "с"/"м"/"в".
   if (e.ctrlKey || e.metaKey) {
-    if (e.code === "KeyC") {
+    if (e.code === "KeyZ") {
+      e.preventDefault();
+      if (e.shiftKey) { if (canRedo.value) restoreAt(histIdx.value + 1); }
+      else            { if (canUndo.value) restoreAt(histIdx.value - 1); }
+    } else if (e.code === "KeyY") {
+      e.preventDefault();
+      if (canRedo.value) restoreAt(histIdx.value + 1);
+    } else if (e.code === "KeyS") {
+      e.preventDefault();
+      save();
+    } else if (e.code === "KeyC") {
       if (copySelection()) e.preventDefault();
     } else if (e.code === "KeyV") {
       if (pasteClipboard()) e.preventDefault();
@@ -1012,7 +1082,7 @@ function autoArrange() {
             :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
           >
             <span class="badge">{{ v.importable ? "IMPORT" : "EXPORT" }}</span>
-            {{ k }}: connected={{ v.connected }}, rev={{ v.reversible }}
+            {{ k }}: connected={{ v.connected }}, rev={{ v.reversible }}<span v-if="v.fanOut" style="color:#f59e0b;margin-left:4px">⚠ fan-out</span>
           </div>
           <div v-if="!Object.keys(debugInfo.analysis).length" class="text-xs opacity-50">нет полей</div>
         </div>
@@ -1043,8 +1113,16 @@ function autoArrange() {
         class="vf-canvas"
       >
         <Background />
-        <MiniMap pannable zoomable />
+        <MiniMap pannable zoomable node-color="var(--muted-foreground)" mask-color="var(--muted)" />
         <Controls :show-interactive="false">
+          <button
+            class="vue-flow__controls-button"
+            :title="animateWires ? 'Выключить анимацию проводов' : 'Включить анимацию проводов'"
+            :style="animateWires ? {} : { opacity: 0.4 }"
+            @click="animateWires = !animateWires"
+          >
+            <Activity class="size-3.5" />
+          </button>
           <template #control-fit-view>
             <button
               class="vue-flow__controls-button"
@@ -1067,8 +1145,8 @@ function autoArrange() {
           </template>
         </Controls>
 
-        <template #edge-vf-import="p"><ImportableEdge v-bind="p" :debug="debugMode" /></template>
-        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" :debug="debugMode" /></template>
+        <template #edge-vf-import="p"><ImportableEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
+        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
 
         <template #node-attribute="p"><SourceNode v-bind="p" /></template>
         <template #node-storeAttribute="p"><SourceNode v-bind="p" /></template>
@@ -1363,15 +1441,6 @@ function autoArrange() {
   border: 1px solid transparent;
   line-height: 1.5;
 }
-.vf-adapter__preview {
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--muted-foreground);
-}
 
 /* Windows-style marquee selection rectangle */
 .vue-flow__selection,
@@ -1388,59 +1457,15 @@ function autoArrange() {
   background: var(--muted-foreground);
 }
 
-/* Bidirectional (importable) lane — two overlapping dash layers going opposite directions.
-   VueFlow convention: decreasing dashoffset = dashes drift toward target (forward/rightward).
-   fwd: 25→0 (decreasing) = toward target.
-   bwd: 12.5→37.5 (increasing) = toward source, interleaved half-period offset from fwd. */
-.vf-bidi-base {
-  stroke: var(--vue-flow-edge-color, #b1b1b7);
-  stroke-width: 2;
-  opacity: 0.12;
+/* Default (static / floating) edges — plain wire, no animation. */
+.vf-canvas .vue-flow__edge-path {
+  stroke: #b1b1b7;
+  stroke-width: 2.5;
+  opacity: 0.35;
 }
-.vf-bidi-fwd {
-  stroke: var(--vue-flow-edge-color, #b1b1b7);
-  stroke-width: 2;
-  stroke-dasharray: 3 13;
-  opacity: 0.9;
-  animation: vf-bidi-fwd 1s linear infinite;
-}
-.vf-bidi-bwd {
-  stroke: var(--vue-flow-edge-color, #b1b1b7);
-  stroke-width: 2;
-  stroke-dasharray: 9 7;
-  opacity: 0.55;
-  animation: vf-bidi-bwd 2.2s linear infinite;
-}
-@keyframes vf-bidi-fwd {
-  from { stroke-dashoffset: 16; }
-  to   { stroke-dashoffset: 0; }
-}
-@keyframes vf-bidi-bwd {
-  from { stroke-dashoffset: 0; }
-  to   { stroke-dashoffset: 16; }
-}
-/* Selected state */
-.vue-flow__edge.selected .vf-bidi-base,
-.vue-flow__edge.selected .vf-bidi-fwd,
-.vue-flow__edge.selected .vf-bidi-bwd {
-  stroke: hsl(var(--primary));
-}
-
-/* Export-only lane: single dashes drifting toward target — one direction only. */
-.vf-export-path {
-  stroke: var(--muted-foreground, #b1b1b7);
-  stroke-width: 2;
-  stroke-dasharray: 6 4;
-  opacity: 0.55;
-  animation: vf-export-drift 2.4s linear infinite;
-}
-@keyframes vf-export-drift {
-  from { stroke-dashoffset: 30; }
-  to   { stroke-dashoffset: 0; }
-}
-.vue-flow__edge.selected .vf-export-path {
-  stroke: hsl(var(--primary));
-  opacity: 0.8;
+.vf-canvas .vue-flow__edge.selected .vue-flow__edge-path {
+  stroke: #3b82f6;
+  opacity: 0.85;
 }
 
 /* Debug overlay panel */
@@ -1498,5 +1523,62 @@ function autoArrange() {
   font-size: 9px;
   color: #6b7280;
   text-align: right;
+}
+
+/* ---- Controls panel ---- */
+.vf-canvas .vue-flow__controls {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.vf-canvas .vue-flow__controls-button {
+  background: var(--card);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+.vf-canvas .vue-flow__controls-button:last-child {
+  border-bottom: none;
+}
+.vf-canvas .vue-flow__controls-button:hover {
+  background: var(--muted);
+}
+.vf-canvas .vue-flow__controls-button svg {
+  width: 14px;
+  max-width: 14px;
+  height: 14px;
+  max-height: 14px;
+  fill: currentColor;
+}
+/* Bottom two buttons: larger icons */
+.vf-canvas .vue-flow__controls-button:nth-last-child(-n+2) {
+  width: 30px;
+  height: 32px;
+}
+.vf-canvas .vue-flow__controls-button:nth-last-child(-n+2) svg {
+  width: 16px;
+  max-width: 16px;
+  height: 16px;
+  max-height: 16px;
+}
+
+/* ---- MiniMap ---- */
+.vf-canvas .vue-flow__minimap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.vf-canvas .vue-flow__minimap-mask {
+  fill: var(--muted);
+  opacity: 0.65;
 }
 </style>

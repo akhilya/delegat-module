@@ -426,9 +426,11 @@ export default {
       return parseInt(this.$route.params.connId);
     },
     breadcrumbs() {
+      const tabLabels = { settings: "Настройки", mappings: "Маппинги", products: "Товары" };
       return [
         { label: "Адаптеры", to: PAGE_MARKETPLACE },
-        { label: this.connection?.name || "Подключение" },
+        { label: this.connection?.name || "Подключение", to: this.$route.fullPath.split("?")[0] },
+        { label: tabLabels[this.activeTab] || "Настройки" },
       ];
     },
     selectedAdapterSchema() {

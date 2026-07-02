@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Target } from "lucide-vue-next";
+import { Target, AlertTriangle } from "lucide-vue-next";
 import { pinColor } from "../graphModel.js";
 
 const props = defineProps({
@@ -11,7 +11,7 @@ const props = defineProps({
 });
 
 const fields = computed(() => props.data.fields || []);
-const preview = computed(() => props.data.preview || {});
+const analysis = computed(() => props.data.analysis || {});
 const avail = computed(() => props.data.availableSources || {});
 const productFields = computed(() => avail.value.productFields || []);
 const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
@@ -79,17 +79,17 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           {{ f.label || f.fieldKey
           }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
+        <AlertTriangle
+          v-if="analysis[f.fieldKey]?.fanOut"
+          class="size-2.5 shrink-0 cursor-help text-amber-500"
+          title="Импорт отключён: этот источник уже используется несколькими полями адаптера"
+        />
         <span
           v-if="f.source"
           class="vf-adapter__pill"
           :style="pillStyle(f.outputType)"
           :title="`Источник: ${boundLabel(f)}`"
         >{{ boundLabel(f) }}</span>
-        <span
-          v-if="preview[f.fieldKey] != null"
-          class="vf-adapter__preview"
-          :title="String(preview[f.fieldKey])"
-        >{{ preview[f.fieldKey] }}</span>
       </div>
     </div>
   </div>
