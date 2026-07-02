@@ -209,6 +209,7 @@ export default {
     FileText,
     Settings2,
     FieldChangesTable,
+    PasswordInput,
   },
   data() {
     const validTabs = ["settings", "mappings", "products"];
@@ -655,9 +656,11 @@ export default {
         this.fetchCapabilities(),
         this.fetchMappings(),
         this.fetchLocalCategories(),
-        this.fetchLimits(),
       ]);
       this.isLoading = false;
+      // fetchLimits makes an external API call (GetQuotasAsync) that can be slow;
+      // run it after the page is already visible so it doesn't block rendering.
+      this.fetchLimits();
       this.startLimitsAutoRefresh();
 
       // If products tab was restored from URL, fetch products now
@@ -2318,24 +2321,6 @@ export default {
 <template>
   <Page class="flex flex-col">
     <NavigationBar>
-      <template v-if="connection" #left>
-        <div class="flex min-w-0 items-center gap-2.5">
-          <div class="min-w-0">
-            <div class="truncate text-sm leading-tight font-semibold">
-              {{ connection.name }}
-            </div>
-            <div class="truncate text-xs leading-tight text-muted-foreground">
-              {{ adapterDisplayName }}
-            </div>
-          </div>
-          <Badge
-            :variant="connection.isActive ? 'default' : 'secondary'"
-            class="hidden shrink-0 sm:inline-flex"
-          >
-            {{ connection.isActive ? "Активен" : "Неактивен" }}
-          </Badge>
-        </div>
-      </template>
       <template v-if="connection" #center>
         <Tabs v-model="activeTab">
           <TabsList>
@@ -2613,17 +2598,12 @@ export default {
 
           <!-- Mappings Tab -->
           <TabsContent value="mappings" class="space-y-4">
-            <div class="flex flex-wrap items-end justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <h2 class="text-base font-semibold">Маппинги категорий</h2>
-                  <Badge v-if="categoryMappings.length" variant="secondary">
-                    {{ categoryMappings.length }}
-                  </Badge>
-                </div>
-                <p class="mt-0.5 text-sm text-muted-foreground">
-                  Связывают локальные категории с {{ adapterDisplayName }}
-                </p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">Маппинги категорий</h2>
+                <Badge v-if="categoryMappings.length" variant="secondary">
+                  {{ categoryMappings.length }}
+                </Badge>
               </div>
               <div class="flex shrink-0 flex-wrap gap-2">
                 <Dialog
@@ -2907,46 +2887,47 @@ export default {
               </p>
             </div>
 
-            <div v-else class="grid gap-4 lg:grid-cols-2">
-              <Card
-                v-for="mapping in categoryMappings"
-                :key="mapping.id"
-                role="button"
-                tabindex="0"
-                :aria-label="`Открыть маппинг: ${mapping.localCategoryName}`"
-                class="group cursor-pointer transition-colors hover:border-foreground/20 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                @click="openFieldMapping(mapping.id)"
-                @keydown.enter.prevent="openFieldMapping(mapping.id)"
-                @keydown.space.prevent="openFieldMapping(mapping.id)"
-              >
-                <CardContent>
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="flex min-w-0 items-start gap-3">
-                      <div
-                        class="mt-0.5 grid size-10 shrink-0 place-items-center rounded-lg border bg-muted/40"
-                      >
-                        <FolderTree class="size-5 text-muted-foreground" />
-                      </div>
-                      <div class="min-w-0">
-                        <div
-                          class="truncate text-base leading-tight font-semibold"
-                        >
-                          {{ mapping.localCategoryName }}
-                        </div>
-                        <div
-                          v-if="mapping.name"
-                          class="mt-0.5 truncate text-sm text-muted-foreground"
-                        >
-                          {{ mapping.name }}
-                        </div>
-                      </div>
+            <div v-else class="rounded-lg border overflow-hidden">
+              <ul class="divide-y divide-border">
+                <li
+                  v-for="mapping in categoryMappings"
+                  :key="mapping.id"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`Открыть маппинг: ${mapping.localCategoryName}`"
+                  class="group flex items-center gap-4 px-5 py-4 hover:bg-accent/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  @click="openFieldMapping(mapping.id)"
+                  @keydown.enter.prevent="openFieldMapping(mapping.id)"
+                  @keydown.space.prevent="openFieldMapping(mapping.id)"
+                >
+                  <!-- Main content -->
+                  <div class="flex-1 min-w-0">
+                    <!-- Categories row -->
+                    <div class="flex items-baseline gap-2 min-w-0">
+                      <span class="font-semibold truncate">{{ mapping.localCategoryName }}</span>
+                      <span class="text-muted-foreground shrink-0 text-sm">→</span>
+                      <span class="font-semibold truncate text-muted-foreground">{{ mapping.externalCategoryName || mapping.externalCategoryId }}</span>
                     </div>
+                    <!-- Mapping name -->
+                    <div v-if="mapping.name" class="mt-0.5 text-sm text-muted-foreground truncate">
+                      {{ mapping.name }}
+                    </div>
+                  </div>
+
+                  <!-- Right side: products count + open hint + menu -->
+                  <div class="flex items-center gap-4 shrink-0">
+                    <span v-if="mapping.linkedProductsCount" class="text-sm text-muted-foreground">
+                      {{ mapping.linkedProductsCount }} товаров
+                    </span>
+                    <span class="text-sm text-muted-foreground/60 group-hover:text-foreground transition-colors">
+                      Открыть →
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger as-child>
                         <Button
                           variant="ghost"
                           size="icon"
-                          class="-mr-1 shrink-0"
+                          class="shrink-0 text-muted-foreground"
                           aria-label="Действия с маппингом"
                           @click.stop
                         >
@@ -2954,16 +2935,10 @@ export default {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          @click.stop="openRenameMapping(mapping)"
-                        >
-                          <Pencil class="size-4 mr-2" />
+                        <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
                           Переименовать
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          @click.stop="requestDuplicateMapping(mapping.id)"
-                        >
-                          <Copy class="size-4 mr-2" />
+                        <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
                           Дублировать
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -2971,48 +2946,13 @@ export default {
                           class="text-destructive"
                           @click.stop="handleDeleteMapping(mapping)"
                         >
-                          <Trash2 class="size-4 mr-2" />
                           Удалить
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-
-                  <div
-                    class="mt-3 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm"
-                  >
-                    <ArrowRight class="size-4 shrink-0 text-muted-foreground" />
-                    <span class="shrink-0 text-muted-foreground"
-                      >{{ adapterDisplayName }}:</span
-                    >
-                    <span class="truncate font-medium">{{
-                      mapping.externalCategoryName || mapping.externalCategoryId
-                    }}</span>
-                  </div>
-
-                  <div
-                    class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3 text-sm text-muted-foreground"
-                  >
-                    <span class="inline-flex items-center gap-1.5">
-                      <ListChecks class="size-4" />
-                      {{ mapping.fieldMappingsCount }} полей
-                    </span>
-                    <span
-                      v-if="mapping.linkedProductsCount"
-                      class="inline-flex items-center gap-1.5"
-                    >
-                      <Package class="size-4" />
-                      {{ mapping.linkedProductsCount }} товаров
-                    </span>
-                    <span
-                      class="ml-auto inline-flex items-center gap-1 font-medium text-foreground/60 transition group-hover:text-foreground"
-                    >
-                      Открыть
-                      <ArrowRight class="size-3.5" />
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+                </li>
+              </ul>
             </div>
           </TabsContent>
 

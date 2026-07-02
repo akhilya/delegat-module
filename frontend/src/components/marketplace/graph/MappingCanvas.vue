@@ -17,12 +17,15 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Save,
   LayoutGrid,
-  Maximize2,
-  Minimize2,
   AlertTriangle,
   EyeOff,
   Loader2,
 } from "lucide-vue-next";
+import {
+  SplitterGroup,
+  SplitterPanel,
+  SplitterResizeHandle,
+} from "reka-ui";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import NodeContextMenu from "./NodeContextMenu.vue";
 import NodeInspector from "./NodeInspector.vue";
@@ -33,6 +36,8 @@ import ModifierNode from "./nodes/ModifierNode.vue";
 import OpNode from "./nodes/OpNode.vue";
 import AdapterFieldsNode from "./nodes/AdapterFieldsNode.vue";
 import RerouteNode from "./nodes/RerouteNode.vue";
+import ImportableEdge from "./edges/ImportableEdge.vue";
+import ExportOnlyEdge from "./edges/ExportOnlyEdge.vue";
 import {
   autoMigrate,
   validateGraph,
@@ -98,6 +103,7 @@ const {
 const flowWrap = ref(null);
 const loading = ref(true);
 const saving = ref(false);
+const dirty = ref(false);
 const previewing = ref(false);
 const selected = ref(null);
 const menu = ref({
@@ -125,6 +131,7 @@ const warningCount = computed(
   () => issues.value.filter((i) => i.level === "warning").length,
 );
 // Per-field import analysis + the data the adapter sink needs for its inline source dropdown.
+// Also marks edges feeding export-only fields as `animated` (dashed) vs. solid (importable).
 function refreshAnalysis() {
   const { analysis } = analyzeFields(nodes.value, edges.value);
   updateNodeData(ADAPTER_NODE_ID, {
@@ -133,6 +140,42 @@ function refreshAnalysis() {
     availableSources: props.availableSources,
     setFieldSource,
   });
+  // Mark edges by lane type: importable (bidirectional) vs export-only (one-way).
+  // BFS backward from each connected adapter field to tag all edges in its lane.
+  const importableIds = new Set();
+  const exportOnlyIds = new Set();
+  const adapterIncoming = edges.value.filter((e) => e.target === ADAPTER_NODE_ID);
+  for (const e of adapterIncoming) {
+    const key = e.targetHandle?.slice(2);
+    const a = analysis[key];
+    if (!a?.connected) continue;
+    const target = a.importable ? importableIds : exportOnlyIds;
+    target.add(e.id);
+    const visited = new Set();
+    const nodeQueue = [e.source];
+    while (nodeQueue.length) {
+      const nid = nodeQueue.shift();
+      if (visited.has(nid)) continue;
+      visited.add(nid);
+      for (const edge of edges.value) {
+        if (edge.target === nid) {
+          target.add(edge.id);
+          if (!visited.has(edge.source)) nodeQueue.push(edge.source);
+        }
+      }
+    }
+  }
+  const laneType = (e) =>
+    exportOnlyIds.has(e.id) ? "vf-export" : importableIds.has(e.id) ? "vf-import" : "default";
+  const needsUpdate = edges.value.some((e) => (e.type || "default") !== laneType(e));
+  if (needsUpdate) {
+    setEdges(
+      edges.value.map((e) => {
+        const type = laneType(e);
+        return (e.type || "default") === type ? e : { ...e, type, animated: false };
+      }),
+    );
+  }
 }
 
 // Bind/unbind an adapter field to a standard source directly (from the adapter dropdown).
@@ -165,6 +208,7 @@ function setFieldSource(fieldKey, value) {
     );
     if (dead.length) removeEdges(dead.map((e) => e.id));
   }
+  dirty.value = true;
   refreshAnalysis();
   schedulePreview();
 }
@@ -300,6 +344,7 @@ onConnect((conn) => {
   );
   if (dupes.length) removeEdges(dupes.map((e) => e.id));
   addEdges([{ ...conn, id: genId("e") }]);
+  dirty.value = true;
   schedulePreview();
 });
 
@@ -354,17 +399,28 @@ onPaneClick(() => {
   closeMenu();
 });
 
+function onBeforeUnload(e) {
+  if (!dirty.value) return;
+  e.preventDefault();
+  e.returnValue = "";
+}
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("beforeunload", onBeforeUnload);
   // Capture phase: fires even while Vue Flow captures pointer events on the pane.
   document.addEventListener("pointerdown", onPointerDown, true);
   document.addEventListener("pointermove", onPointerMove, true);
+  // Capture + non-passive so we can preventDefault for trackpad horizontal pan.
+  flowWrap.value?.addEventListener("wheel", onWheelGesture, { capture: true, passive: false });
   load();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("beforeunload", onBeforeUnload);
   document.removeEventListener("pointerdown", onPointerDown, true);
   document.removeEventListener("pointermove", onPointerMove, true);
+  flowWrap.value?.removeEventListener("wheel", onWheelGesture, { capture: true });
 });
 watch(() => props.mappingId, load);
 watch(
@@ -376,15 +432,24 @@ watch(() => props.availableSources, refreshAnalysis, { deep: true });
 // Only react to structural changes (add/remove — e.g. the Delete key), not position/select/data,
 // to avoid a feedback loop with preview's own updateNodeData() calls.
 onNodesChange((changes) => {
-  if ((changes || []).some((c) => c.type === "remove" || c.type === "add")) {
+  const cs = changes || [];
+  const structural = cs.some((c) => c.type === "remove" || c.type === "add");
+  if (structural) {
     refreshAnalysis();
     schedulePreview();
   }
+  // Mark dirty on structural changes or on drag-end (position change, dragging===false).
+  if (!loading.value && (structural || cs.some((c) => c.type === "position" && !c.dragging))) {
+    dirty.value = true;
+  }
 });
 onEdgesChange((changes) => {
-  if ((changes || []).some((c) => c.type === "remove" || c.type === "add")) {
+  const cs = changes || [];
+  const structural = cs.some((c) => c.type === "remove" || c.type === "add");
+  if (structural) {
     refreshAnalysis();
     schedulePreview();
+    if (!loading.value) dirty.value = true;
   }
 });
 
@@ -475,6 +540,7 @@ async function load() {
     await nextTick();
     refreshAnalysis();
     fitView({ padding: 0.2 });
+    dirty.value = false;
     schedulePreview();
   } catch (e) {
     displaySonnerError(e);
@@ -542,6 +608,25 @@ function onContextMenu(e) {
   }
   openMenuAt(e.clientX, e.clientY);
 }
+
+// Prevent self-connections and output→output (or input→input) connections.
+// All output handles in this graph are named "out"; all input handles have other names.
+function isValidConnection(conn) {
+  if (conn.source === conn.target) return false;
+  if (conn.targetHandle === "out") return false; // output→output
+  return true;
+}
+
+// Trackpad two-finger pan: intercept wheel events with a horizontal component
+// and convert them to viewport pan, leaving pure vertical scroll for VueFlow's zoom.
+function onWheelGesture(e) {
+  if (e.ctrlKey) return; // pinch or Ctrl+scroll → VueFlow handles zoom
+  if (Math.abs(e.deltaX) <= 1) return; // pure vertical (mouse scroll) → VueFlow handles zoom
+  e.preventDefault();
+  e.stopPropagation();
+  const vp = vf.viewport.value;
+  vf.setViewport({ x: vp.x - e.deltaX, y: vp.y - e.deltaY, zoom: vp.zoom });
+}
 function onKeydown(e) {
   const t = e.target;
   if (
@@ -564,14 +649,15 @@ function onKeydown(e) {
     return;
   }
 
-  if (e.key !== "Tab") return;
+  if (e.code !== "Tab" && e.code !== "KeyF") return;
   const rect = flowWrap.value?.getBoundingClientRect();
   if (!rect) return;
   const { x, y } = lastMouse.value;
   if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom)
     return; // only over canvas
   e.preventDefault();
-  openMenuAt(x, y);
+  if (e.code === "Tab") openMenuAt(x, y);
+  else toggleMaximize();
 }
 
 function toFlow(client) {
@@ -626,6 +712,7 @@ function onInspectorUpdate(patch) {
     ...selected.value,
     data: { ...selected.value.data, ...patch },
   };
+  dirty.value = true;
   schedulePreview();
 }
 function onInspectorDelete() {
@@ -763,6 +850,7 @@ async function save() {
       graph: buildGraph(),
       fields: projections,
     });
+    dirty.value = false;
     displaySonnerSuccess("Граф сохранён");
   } catch (e) {
     displaySonnerError(e);
@@ -772,6 +860,7 @@ async function save() {
 }
 
 let previewTimer = null;
+let previewToken = 0;
 function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   if (!props.previewProductId) return;
@@ -791,6 +880,9 @@ function clearNodePreview() {
 async function runPreview() {
   if (!props.previewProductId || !props.connectionId || !props.mappingId)
     return;
+  // Guard: if graph is still loading, defer until load() calls schedulePreview() at the end.
+  if (loading.value) return;
+  const token = ++previewToken;
   previewing.value = true;
   try {
     const data = await store.dispatch("previewMappingGraph", {
@@ -799,6 +891,8 @@ async function runPreview() {
       productId: props.previewProductId,
       graph: buildGraph(),
     });
+    // Discard stale responses if a newer preview was requested in the meantime.
+    if (token !== previewToken) return;
     const outputs = data?.outputs || {};
     const nodeValues = data?.nodeValues || {};
     nodes.value.forEach((n) => {
@@ -808,9 +902,10 @@ async function runPreview() {
     });
     emit("preview-result", { outputs, fieldTypes: data?.fieldTypes || {} });
   } catch (e) {
+    if (token !== previewToken) return;
     displaySonnerError(e);
   } finally {
-    previewing.value = false;
+    if (token === previewToken) previewing.value = false;
   }
 }
 
@@ -823,15 +918,17 @@ function autoArrange() {
 </script>
 
 <template>
-  <div
+  <SplitterGroup
+    direction="horizontal"
     :class="[
       'flex min-h-0 overflow-hidden border bg-background',
       maximized ? 'fixed inset-0 z-50' : 'relative h-full w-full rounded-lg',
     ]"
   >
+    <SplitterPanel :min-size="40">
     <div
       ref="flowWrap"
-      class="relative min-w-0 flex-1"
+      class="relative min-w-0 h-full w-full"
       @contextmenu="onContextMenu"
     >
       <div
@@ -876,25 +973,13 @@ function autoArrange() {
           <template #trigger>
             <Button size="sm" variant="ghost" title="Авторасстановка блоков">
               <LayoutGrid class="mr-1.5 size-4" />
-              Авто
+              Авто расстановка
             </Button>
           </template>
         </ConfirmDialog>
-        <Button
-          size="sm"
-          variant="ghost"
-          @click="toggleMaximize"
-          :title="maximized ? 'Свернуть' : 'На весь экран'"
-        >
-          <Minimize2 v-if="maximized" class="size-4" />
-          <Maximize2 v-else class="size-4" />
-        </Button>
-        <span class="mx-1 h-5 w-px bg-border" />
+        <span v-if="errorCount" class="mx-1 h-5 w-px bg-border" />
         <Badge v-if="errorCount" variant="destructive" class="gap-1">
           <AlertTriangle class="size-3" /> {{ errorCount }}
-        </Badge>
-        <Badge v-if="warningCount" variant="outline" class="gap-1 text-warning">
-          <AlertTriangle class="size-3" /> {{ warningCount }}
         </Badge>
       </div>
 
@@ -905,13 +990,38 @@ function autoArrange() {
         :selection-key-code="true"
         :pan-on-drag="[1, 2]"
         :only-render-visible-elements="true"
-        :elevate-edges-on-select="false"
+        :elevate-edges-on-select="true"
+        :is-valid-connection="isValidConnection"
         fit-view-on-init
         class="vf-canvas"
       >
         <Background />
         <MiniMap pannable zoomable />
-        <Controls :show-interactive="false" />
+        <Controls :show-interactive="false">
+          <template #control-fit-view>
+            <button
+              class="vue-flow__controls-button"
+              :title="maximized ? 'Свернуть (F)' : 'На весь экран (F)'"
+              @click="toggleMaximize"
+            >
+              <svg v-if="maximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+                <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+                <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+              </svg>
+            </button>
+          </template>
+        </Controls>
+
+        <template #edge-vf-import="p"><ImportableEdge v-bind="p" /></template>
+        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" /></template>
 
         <template #node-attribute="p"><SourceNode v-bind="p" /></template>
         <template #node-storeAttribute="p"><SourceNode v-bind="p" /></template>
@@ -984,17 +1094,23 @@ function autoArrange() {
         <Loader2 class="size-6 animate-spin text-muted-foreground" />
       </div>
     </div>
+    </SplitterPanel>
 
-    <NodeInspector
-      :node="selected"
-      :external-field-options="selectedExternalOptions"
-      :source-field-options="selectedSourceOptions"
-      :store-file-options="availableSources.storeFiles || []"
-      @update="onInspectorUpdate"
-      @delete="onInspectorDelete"
-      @close="selected = null"
-    />
-  </div>
+    <template v-if="selected">
+      <SplitterResizeHandle class="w-1 bg-border hover:bg-primary/30 transition-colors cursor-col-resize" />
+      <SplitterPanel :default-size="25" :min-size="15" :max-size="50">
+        <NodeInspector
+          :node="selected"
+          :external-field-options="selectedExternalOptions"
+          :source-field-options="selectedSourceOptions"
+          :store-file-options="availableSources.storeFiles || []"
+          @update="onInspectorUpdate"
+          @delete="onInspectorDelete"
+          @close="selected = null"
+        />
+      </SplitterPanel>
+    </template>
+  </SplitterGroup>
 </template>
 
 <!-- Global (non-scoped) styles: node cards render into the Vue Flow tree via slots, so scoped
@@ -1177,38 +1293,28 @@ function autoArrange() {
   padding: 0 10px;
   font-size: 12px;
 }
-.vf-adapter__bound {
-  flex-shrink: 0;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  color: var(--primary);
-}
 .vf-adapter__row:hover {
   background: var(--accent);
 }
 .vf-adapter__label {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vf-adapter__type {
-  font-size: 10px;
-  color: var(--muted-foreground);
-}
-.vf-adapter__marker {
+.vf-adapter__pill {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-}
-.vf-adapter__marker--warn {
-  color: var(--warning, #d97706);
-}
-.vf-adapter__marker--muted {
-  color: var(--muted-foreground);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  line-height: 1.5;
 }
 .vf-adapter__preview {
   max-width: 96px;
@@ -1233,5 +1339,60 @@ function autoArrange() {
   height: 9px;
   border: 2px solid var(--card);
   background: var(--muted-foreground);
+}
+
+/* Bidirectional (importable) lane — two overlapping dash layers going opposite directions.
+   VueFlow convention: decreasing dashoffset = dashes drift toward target (forward/rightward).
+   fwd: 25→0 (decreasing) = toward target.
+   bwd: 12.5→37.5 (increasing) = toward source, interleaved half-period offset from fwd. */
+.vf-bidi-base {
+  stroke: var(--vue-flow-edge-color, #b1b1b7);
+  stroke-width: 2;
+  opacity: 0.12;
+}
+.vf-bidi-fwd {
+  stroke: var(--vue-flow-edge-color, #b1b1b7);
+  stroke-width: 2;
+  stroke-dasharray: 5 20;
+  opacity: 0.9;
+  animation: vf-bidi-fwd 1.2s linear infinite;
+}
+.vf-bidi-bwd {
+  stroke: var(--vue-flow-edge-color, #b1b1b7);
+  stroke-width: 2;
+  stroke-dasharray: 5 20;
+  opacity: 0.5;
+  animation: vf-bidi-bwd 2.5s linear infinite;
+}
+@keyframes vf-bidi-fwd {
+  from { stroke-dashoffset: 25; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes vf-bidi-bwd {
+  from { stroke-dashoffset: 12.5; }
+  to   { stroke-dashoffset: 37.5; }
+}
+/* Selected state */
+.vue-flow__edge.selected .vf-bidi-base,
+.vue-flow__edge.selected .vf-bidi-fwd,
+.vue-flow__edge.selected .vf-bidi-bwd {
+  stroke: hsl(var(--primary));
+}
+
+/* Export-only lane: single dashes drifting toward target — one direction only. */
+.vf-export-path {
+  stroke: var(--muted-foreground, #b1b1b7);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0.55;
+  animation: vf-export-drift 2.4s linear infinite;
+}
+@keyframes vf-export-drift {
+  from { stroke-dashoffset: 30; }
+  to   { stroke-dashoffset: 0; }
+}
+.vue-flow__edge.selected .vf-export-path {
+  stroke: hsl(var(--primary));
+  opacity: 0.8;
 }
 </style>

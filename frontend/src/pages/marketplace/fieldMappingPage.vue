@@ -128,7 +128,10 @@ export default {
     breadcrumbs() {
       const items = [
         { label: "Адаптеры", to: "/adapter" },
-        { label: "Подключение", to: `/adapter/${this.connectionId}` },
+        {
+          label: this.mappingInfo?.connectionName || "Подключение",
+          to: `/adapter/${this.connectionId}`,
+        },
       ];
       if (this.mappingInfo) {
         items.push({
@@ -258,6 +261,7 @@ export default {
           }));
           this.mappingInfo = {
             name: data.name,
+            connectionName: data.connectionName,
             localCategoryId: data.localCategoryId,
             localCategoryName: data.localCategoryName,
             externalCategoryId: data.externalCategoryId,
@@ -924,28 +928,13 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-4">
-        <Button variant="ghost" size="icon" @click="goBack">
-          <ArrowLeft class="size-4" />
-        </Button>
-        <div>
-          <h1 class="text-lg font-semibold">Маппинг полей</h1>
-          <p v-if="mappingInfo" class="text-sm text-muted-foreground">
-            {{ mappingInfo.localCategoryName }} →
-            {{ mappingInfo.externalCategoryName }}
-          </p>
-        </div>
-      </div>
-    </div>
-
     <PageSection :loading="isLoading">
       <template v-if="!isLoading">
         <!-- Visual node graph editor (whole-category Blueprint) — the sole mapping editor.
              The preview-product selector lives in the canvas toolbar. -->
         <div
           v-if="connectionId && mappingId"
-          class="mb-4 h-[calc(100vh-220px)] min-h-[480px] w-full"
+          class="mb-4 h-[calc(100vh-150px)] min-h-[480px] w-full"
         >
           <MappingCanvas
             :connection-id="connectionId"
@@ -960,10 +949,7 @@ export default {
           />
         </div>
 
-        <p class="mb-4 -mt-2 text-center text-xs text-muted-foreground">
-          ЛКМ — рамка выделения · ПКМ — панорама / меню · Tab — добавить узел ·
-          Del — удалить
-        </p>
+
       </template>
     </PageSection>
 

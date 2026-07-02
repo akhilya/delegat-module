@@ -1,8 +1,8 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Target, ArrowUpFromLine } from "lucide-vue-next";
-import { pinColor, pinTypeLabel } from "../graphModel.js";
+import { Target } from "lucide-vue-next";
+import { pinColor } from "../graphModel.js";
 
 const props = defineProps({
   id: String,
@@ -12,20 +12,11 @@ const props = defineProps({
 
 const fields = computed(() => props.data.fields || []);
 const preview = computed(() => props.data.preview || {});
-const analysis = computed(() => props.data.analysis || {});
 const avail = computed(() => props.data.availableSources || {});
 const productFields = computed(() => avail.value.productFields || []);
 const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
 const storeAttributes = computed(() => avail.value.storeAttributes || []);
 
-// Export-only marker: lanes whose source isn't an attribute (fan-in / op / storage) can't be read
-// back on import. Irreversibility of individual transforms is shown on the modifier blocks instead.
-function isExportOnly(fieldKey) {
-  const a = analysis.value[fieldKey];
-  return !!a && a.connected && !a.importable;
-}
-
-// Human name of a field's direct source binding (chosen in the block's settings).
 function boundLabel(f) {
   const s = f.source;
   if (!s) return "";
@@ -47,8 +38,16 @@ function boundLabel(f) {
   return "";
 }
 
-// Pixel-aligned handle positions: header + row center. Bound fields (with a source) render no pin,
-// but the row index `i` still drives `top`, so the remaining pins stay aligned to their rows.
+// Pill background/border derived from pin type color (12% / 28% opacity as hex suffix).
+function pillStyle(type) {
+  const c = pinColor(type);
+  return {
+    background: `${c}1f`,
+    borderColor: `${c}47`,
+    color: c,
+  };
+}
+
 const HEADER = 30;
 const ROW = 24;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
@@ -82,22 +81,15 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         </span>
         <span
           v-if="f.source"
-          class="vf-adapter__bound"
+          class="vf-adapter__pill"
+          :style="pillStyle(f.outputType)"
           :title="`Источник: ${boundLabel(f)}`"
-          >← {{ boundLabel(f) }}</span
-        >
-        <ArrowUpFromLine
-          v-if="isExportOnly(f.fieldKey)"
-          class="vf-adapter__marker vf-adapter__marker--muted"
-          title="Только экспорт: обратное чтение (импорт) для этого поля недоступно"
-        />
-        <span class="vf-adapter__type">{{ pinTypeLabel(f.outputType) }}</span>
+        >{{ boundLabel(f) }}</span>
         <span
           v-if="preview[f.fieldKey] != null"
           class="vf-adapter__preview"
           :title="String(preview[f.fieldKey])"
-          >{{ preview[f.fieldKey] }}</span
-        >
+        >{{ preview[f.fieldKey] }}</span>
       </div>
     </div>
   </div>

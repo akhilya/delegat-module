@@ -100,6 +100,7 @@ public class FieldMappingController : ControllerBase
         {
             fieldMappings = Array.Empty<object>(),
             name = mapping.name,
+            connectionName = mapping.connection?.name,
             localCategoryId = mapping.localCategoryId,
             localCategoryName = mapping.localCategory?.name,
             externalCategoryId = mapping.externalCategoryId,

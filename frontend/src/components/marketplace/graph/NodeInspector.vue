@@ -175,7 +175,7 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
 </script>
 
 <template>
-  <div v-if="node" class="flex h-full w-72 shrink-0 flex-col border-l bg-card">
+  <div v-if="node" class="flex h-full w-full flex-col border-l bg-card">
     <div class="flex items-center justify-between gap-2 border-b px-3 py-2">
       <div class="truncate text-sm font-semibold">{{ heading }}</div>
       <button
@@ -188,17 +188,6 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
     </div>
 
     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 thin-scrollbar">
-      <!-- Per-node preview value (intermediate) -->
-      <div
-        v-if="data.previewValue != null"
-        class="rounded-md border bg-muted/40 px-2.5 py-2"
-      >
-        <div class="text-xs text-muted-foreground">Значение на выходе</div>
-        <div class="mt-0.5 break-words font-mono text-xs">
-          {{ data.previewValue }}
-        </div>
-      </div>
-
       <!-- Store shared-storage file picker (URL / text content) -->
       <template v-if="isStoreFile">
         <div class="space-y-1.5">
@@ -569,6 +558,16 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
           У модификатора нет параметров.
         </p>
       </template>
+    </div>
+
+    <div
+      v-if="data.previewValue != null"
+      class="border-t px-3 py-2"
+    >
+      <div class="text-xs text-muted-foreground">Значение на выходе</div>
+      <div class="mt-0.5 break-words font-mono text-xs">
+        {{ data.previewValue }}
+      </div>
     </div>
 
     <div v-if="deletable" class="border-t p-2">
