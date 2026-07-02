@@ -1,0 +1,70 @@
+{
+  "hash": "8f9675f1",
+  "configHash": "41a9e28f",
+  "lockfileHash": "fc227cfa",
+  "browserHash": "c8b9d2a4",
+  "optimized": {
+    "vue-router": {
+      "src": "../../node_modules/vue-router/dist/vue-router.mjs",
+      "file": "vue-router.js",
+      "fileHash": "218195d7",
+      "needsInterop": false
+    },
+    "@vueuse/integrations/useAxios": {
+      "src": "../../node_modules/@vueuse/integrations/useAxios.mjs",
+      "file": "@vueuse_integrations_useAxios.js",
+      "fileHash": "787a90b8",
+      "needsInterop": false
+    },
+    "@microsoft/signalr": {
+      "src": "../../node_modules/@microsoft/signalr/dist/esm/index.js",
+      "file": "@microsoft_signalr.js",
+      "fileHash": "4bdc21c3",
+      "needsInterop": false
+    },
+    "vue": {
+      "src": "../../node_modules/vue/dist/vue.runtime.esm-bundler.js",
+      "file": "vue.js",
+      "fileHash": "7b5a1204",
+      "needsInterop": false
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "ca327a8e",
+      "needsInterop": false
+    },
+    "axios-cache-interceptor": {
+      "src": "../../node_modules/axios-cache-interceptor/dist/index.mjs",
+      "file": "axios-cache-interceptor.js",
+      "fileHash": "439068b0",
+      "needsInterop": false
+    },
+    "vue-sonner": {
+      "src": "../../node_modules/vue-sonner/lib/index.js",
+      "file": "vue-sonner.js",
+      "fileHash": "3adf4428",
+      "needsInterop": false
+    },
+    "vuex": {
+      "src": "../../node_modules/vuex/dist/vuex.esm-bundler.js",
+      "file": "vuex.js",
+      "fileHash": "e2216cca",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-4XUY7AL3": {
+      "file": "chunk-4XUY7AL3.js"
+    },
+    "chunk-AYVSL3LM": {
+      "file": "chunk-AYVSL3LM.js"
+    },
+    "chunk-IDACCYAP": {
+      "file": "chunk-IDACCYAP.js"
+    },
+    "chunk-6KBIBHQC": {
+      "file": "chunk-6KBIBHQC.js"
+    }
+  }
+}

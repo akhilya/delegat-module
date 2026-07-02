@@ -1,0 +1,104 @@
+# ======================
+# Environment & Secrets
+# ======================
+.env
+.env.local
+.env.dev
+.env.*.local
+
+# ======================
+# Logs
+# ======================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ======================
+# Frontend (Node.js / Vue / Vite)
+# ======================
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vscode/*
+!frontend/.vscode/extensions.json
+node_modules/
+
+# ======================
+# Backend (.NET)
+# ======================
+backend/bin/
+backend/obj/
+backend/.vs/
+backend.Tests/bin/
+backend.Tests/obj/
+backend.Tests/.vs/
+sdk/**/bin/
+sdk/**/obj/
+sdk/**/.vs/
+plugins/**/bin/
+plugins/**/obj/
+plugins/**/.vs/
+backend/Properties/
+backend/appsettings.json
+backend/appsettings.*.json
+backend/products.json
+
+# .NET binaries
+*.com
+*.class
+*.dll
+*.exe
+*.pdb
+*.dll.config
+*.cache
+*.suo
+
+# NuGet
+*.nupkg
+nupkg/
+publish/
+
+# ======================
+# IDE & Editor
+# ======================
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln.docstates
+*.sw?
+.DS_Store
+
+# ======================
+# Archives
+# ======================
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ======================
+# AI Tools
+# ======================
+.claude/
+.agents/
+.codex/
+.superpowers/
+.impeccable/
+.impeccable.md
+**/.impeccable/
+
+# ======================
+# Misc
+# ======================
+nul
+Thumbs.db
+".vs/"
