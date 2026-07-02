@@ -923,8 +923,14 @@ export function analyzeFields(nodes, edges) {
             };
           }
           break;
+        } else if (SOURCE_NODE_TYPES.includes(cur.type) && cur.type !== "static") {
+          // Non-attribute source (productField, groupName, file types): importable for
+          // animation purposes when the modifier chain is fully reversible.
+          // Backend projection stays exportOnly — no actual write-back for these types.
+          importable = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          break;
         } else {
-          // op node (fan-in / lossy) or productField/static/groupName ⇒ export-only
+          // static value or op nodes (fan-in / lossy) ⇒ always export-only
           ok = false;
           break;
         }
