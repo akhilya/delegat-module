@@ -1,50 +1,50 @@
 # Delegat.Module
 
-Инструмент синхронизации товаров с маркетплейсами (Ozon, Wildberries, OpenCart).
+Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart).
 
-## Стек
+## Stack
 
-| Слой | Технологии |
-|------|------------|
+| Layer | Technologies |
+|-------|-------------|
 | Backend | .NET 8 · EF Core · MySQL 8.4 · MinIO |
 | Frontend | Vue 3 · Vite · Tailwind CSS 4 |
-| Инфраструктура | Docker Compose · Dokploy |
+| Infrastructure | Docker Compose · Dokploy |
 
-## Быстрый старт
+## Quick Start
 
 ```bash
 cp .env.example .env
-# Заполнить значения в .env
+# Fill in the values in .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-## Структура
+## Structure
 
 ```
 backend/          — ASP.NET Core API
 frontend/         — Vue 3 SPA
-plugins/          — Плагины маркетплейсов (DLL)
+plugins/          — Marketplace plugins (DLL)
   Delegat.Marketplace.Ozon/
   Delegat.Marketplace.Wildberries/
   Delegat.Marketplace.OpenCart/
-sdk/              — SDK для разработки плагинов
+sdk/              — SDK for plugin development
   Delegat.Marketplace.SDK/
-docs/             — Документация
+docs/             — Documentation
 ```
 
-## Документация
+## Documentation
 
-- [Возможности платформы](docs/platform/capabilities.md)
-- [SaaS-архитектура](docs/architecture/saas-architecture.md)
-- [OpenCart адаптер](docs/adapters/opencart.md)
+- [Platform capabilities](docs/platform/capabilities.md)
+- [SaaS architecture](docs/architecture/saas-architecture.md)
+- [OpenCart adapter](docs/adapters/opencart.md)
 
-## Релизы
+## Releases
 
-Релизы создаются через git-теги:
+Releases are created via git tags:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-CI автоматически собирает Docker-образы и публикует в GHCR.
+CI automatically builds Docker images and publishes them to GHCR.
