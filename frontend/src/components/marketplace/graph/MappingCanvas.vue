@@ -445,11 +445,13 @@ onConnect((conn) => {
     if (src?.type === "static" && src.data?.isAdapterValue) {
       const def = props.externalFieldDefs[fieldKey];
       if (def?.options?.length) {
+        const newValueType = def.type === "multiselect" ? "array" : "string";
+        const sameType = src.data.valueType === newValueType;
         updateNodeData(src.id, {
           options: def.options,
-          valueType: def.type === "multiselect" ? "array" : "string",
-          staticValue: "",
-          label: "",
+          valueType: newValueType,
+          // Clear the selected value only when type changes (incompatible).
+          ...(sameType ? {} : { staticValue: "", label: "" }),
         });
       }
     }
@@ -783,6 +785,19 @@ function onKeydown(e) {
   if (e.shiftKey && e.code === "Tab") {
     e.preventDefault();
     debugMode.value = !debugMode.value;
+    return;
+  }
+
+  if (e.code === "Period") {
+    const rect = flowWrap.value?.getBoundingClientRect();
+    if (!rect) return;
+    const { x, y } = lastMouse.value;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+    e.preventDefault();
+    const p = toFlow({ x, y });
+    const rr = createRerouteNode({ x: p.x - 7, y: p.y - 7 });
+    addNodes([rr]);
+    dirty.value = true;
     return;
   }
 

@@ -48,7 +48,8 @@ onMounted(async () => {
 });
 
 const q = computed(() => search.value.trim().toLowerCase());
-const match = (t) => !q.value || (t || "").toLowerCase().includes(q.value);
+const match = (label, ...aliases) =>
+  !q.value || [label, ...aliases].some((a) => (a || "").toLowerCase().includes(q.value));
 
 const connecting = computed(
   () => !!props.filterType && props.filterType !== "any",
@@ -78,8 +79,8 @@ const opVisible = (desc, inputList) => {
 const sourceItems = computed(() => {
   const s = props.availableSources;
   const out = [];
-  const push = (icon, label, desc) => {
-    if (match(label) && srcVisible(desc)) out.push({ icon, label, desc });
+  const push = (icon, label, desc, ...aliases) => {
+    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
   (s.productFields || []).forEach((f) =>
     push(Database, f.displayName || f.key, {
@@ -98,28 +99,28 @@ const sourceItems = computed(() => {
       payload: a,
     }),
   );
-  push(Boxes, "Название группы", { group: "source", kind: "groupName" });
+  push(Boxes, "Название группы", { group: "source", kind: "groupName" }, "group name", "group");
   return out;
 });
 
 // Typed literal constants (backed by the `static` node + valueType).
 const literalItems = computed(() => {
   const out = [];
-  const push = (icon, label, valueType, staticValue) => {
+  const push = (icon, label, valueType, staticValue, ...aliases) => {
     const desc = {
       group: "source",
       kind: "static",
       payload: { valueType, staticValue, label },
     };
-    if (match(label) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
-  push(Hash, "Число", "number", "0");
-  push(Type, "Текст", "string", "");
-  push(ToggleLeft, "Логическое", "boolean", "false");
-  push(List, "Список", "array", "");
+  push(Hash, "Число", "number", "0", "number", "int", "float", "цифра");
+  push(Type, "Текст", "string", "", "text", "string", "str", "строка");
+  push(ToggleLeft, "Логическое", "boolean", "false", "boolean", "bool", "true", "false", "flag", "флаг");
+  push(List, "Список", "array", "", "array", "list", "массив", "arr");
   // Adapter value: static node backed by the adapter field's parsedOptions.
   // Options are populated on connect or manually in the inspector.
-  if (match("Стандартное значение") && srcVisible({ group: "source", kind: "static" })) {
+  if (match("Стандартное значение", "default", "enum", "preset", "select", "выбор") && srcVisible({ group: "source", kind: "static" })) {
     out.push({
       icon: ListChecks,
       label: "Стандартное значение",
@@ -132,13 +133,13 @@ const literalItems = computed(() => {
 // Product files referenced by name / extension (resolved per product at eval).
 const productFileItems = computed(() => {
   const out = [];
-  const push = (icon, label, kind) => {
+  const push = (icon, label, kind, ...aliases) => {
     const desc = { group: "source", kind };
-    if (match(label) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
-  push(Link, "Файл товара по имени · ссылка", "productFileByName");
-  push(FileText, "Файл товара по имени · текст", "productFileContentByName");
-  push(Files, "Файлы товара по расширению", "productFilesByExtension");
+  push(Link, "Файл товара по имени · ссылка", "productFileByName", "file", "url", "link", "image", "файл");
+  push(FileText, "Файл товара по имени · текст", "productFileContentByName", "file", "text", "content", "файл", "содержимое");
+  push(Files, "Файлы товара по расширению", "productFilesByExtension", "extension", "ext", "files", "расширение");
   return out;
 });
 
@@ -146,14 +147,14 @@ const storageItems = computed(() => {
   const s = props.availableSources;
   const files = s.storeFiles || [];
   const out = [];
-  const push = (icon, label, kind) => {
+  const push = (icon, label, kind, ...aliases) => {
     const desc = { group: "source", kind };
-    if (match(label) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
   // Pre-pick a file only when there's exactly one (otherwise chosen in the inspector).
   const only = files.length === 1 ? files[0] : null;
-  push(HardDrive, "Файл магазина · ссылка", "storeFileUrl");
-  push(FileText, "Файл магазина · текст", "storeFileContent");
+  push(HardDrive, "Файл магазина · ссылка", "storeFileUrl", "store", "storage", "хранилище", "file", "url");
+  push(FileText, "Файл магазина · текст", "storeFileContent", "store", "storage", "хранилище", "file", "text");
   if (only)
     out.forEach(
       (it) =>
@@ -168,7 +169,7 @@ const opEntries = (logic) =>
     .filter(
       ([type, sp]) =>
         (sp.category === "logic") === logic &&
-        match(sp.label) &&
+        match(sp.label, ...(sp.aliases || [])) &&
         opVisible({ group: "op", opType: type }, sp.accepts),
     )
     .map(([type, sp]) => ({
@@ -183,7 +184,7 @@ const modifierGroups = computed(() => {
   const byCat = {};
   Object.values(MODIFIER_CATALOG).forEach((m) => {
     const desc = { group: "modifier", modifierType: m.type };
-    if (match(m.displayName) && opVisible(desc, m.applicableTypes))
+    if (match(m.displayName, ...(m.aliases || [])) && opVisible(desc, m.applicableTypes))
       (byCat[m.category] ||= []).push({
         icon: Wand2,
         label: m.displayName,
@@ -217,12 +218,16 @@ const groups = computed(() =>
 const empty = computed(() => groups.value.length === 0);
 
 // Collapsed groups (by key). A search query force-expands everything.
-const collapsed = ref(new Set());
+const COLLAPSED_KEY = "vfCtxCollapsed";
+const collapsed = ref(
+  new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]")),
+);
 const isOpen = (g) => !!q.value || !collapsed.value.has(g.key);
 const toggle = (g) => {
   const next = new Set(collapsed.value);
   next.has(g.key) ? next.delete(g.key) : next.add(g.key);
   collapsed.value = next;
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
 };
 
 const pick = (desc) => {

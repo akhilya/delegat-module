@@ -84,6 +84,7 @@ export const SOURCE_NODE_TYPES = [
 export const OP_SPECS = {
   formatString: {
     label: "Формат строки",
+    aliases: ["format", "sprintf", "template", "шаблон", "format string"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
@@ -94,6 +95,7 @@ export const OP_SPECS = {
   },
   join: {
     label: "Объединить",
+    aliases: ["join", "concat", "merge", "combine", "склеить", "соединить"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
@@ -104,6 +106,7 @@ export const OP_SPECS = {
   },
   makeArray: {
     label: "Создать массив",
+    aliases: ["array", "create", "new array", "make array", "список", "коллекция"],
     icon: "List",
     inputs: "multi",
     output: "array",
@@ -112,6 +115,7 @@ export const OP_SPECS = {
   },
   arrayAppend: {
     label: "Добавить в массив",
+    aliases: ["push", "append", "add", "insert", "добавить"],
     icon: "List",
     inputs: 2,
     inputLabels: ["массив", "элемент"],
@@ -121,6 +125,7 @@ export const OP_SPECS = {
   },
   splitToArray: {
     label: "Разбить в массив",
+    aliases: ["split", "explode", "parse", "separate", "разделить", "разбить"],
     icon: "List",
     inputs: "single",
     output: "array",
@@ -131,6 +136,7 @@ export const OP_SPECS = {
   },
   arrayIndex: {
     label: "Элемент по индексу",
+    aliases: ["index", "get", "nth", "at", "взять", "получить", "element"],
     icon: "List",
     inputs: "single",
     output: "string",
@@ -139,6 +145,7 @@ export const OP_SPECS = {
   },
   arrayLength: {
     label: "Длина массива",
+    aliases: ["length", "count", "size", "len", "количество"],
     icon: "List",
     inputs: "single",
     output: "number",
@@ -149,6 +156,7 @@ export const OP_SPECS = {
   // ---- General-purpose logic / predicate blocks (pure functions) ----
   ifElse: {
     label: "Если",
+    aliases: ["if", "condition", "ternary", "when", "условие", "тернар"],
     icon: "GitBranch",
     category: "logic",
     inputs: 3,
@@ -159,6 +167,7 @@ export const OP_SPECS = {
   },
   not: {
     label: "Не",
+    aliases: ["not", "negate", "invert", "!", "логическое не"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -168,6 +177,7 @@ export const OP_SPECS = {
   },
   and: {
     label: "И",
+    aliases: ["and", "&&", "all", "both", "все"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -177,6 +187,7 @@ export const OP_SPECS = {
   },
   or: {
     label: "Или",
+    aliases: ["or", "||", "any", "OR", "один из"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -186,6 +197,7 @@ export const OP_SPECS = {
   },
   equals: {
     label: "Равно",
+    aliases: ["equals", "equal", "==", "compare", "eq", "сравнить"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
@@ -196,6 +208,7 @@ export const OP_SPECS = {
   },
   notEquals: {
     label: "Не равно",
+    aliases: ["not equal", "!=", "different", "neq", "не равно"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
@@ -206,6 +219,7 @@ export const OP_SPECS = {
   },
   greaterThan: {
     label: "Больше",
+    aliases: ["greater", ">", "more than", "gt", "больше чем"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -216,6 +230,7 @@ export const OP_SPECS = {
   },
   lessThan: {
     label: "Меньше",
+    aliases: ["less", "<", "less than", "lt", "меньше чем"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -226,6 +241,7 @@ export const OP_SPECS = {
   },
   contains: {
     label: "Содержит",
+    aliases: ["contains", "includes", "indexOf", "has", "search", "поиск", "include"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -236,6 +252,7 @@ export const OP_SPECS = {
   },
   isEmpty: {
     label: "Пусто",
+    aliases: ["empty", "null", "nil", "undefined", "is empty", "нет значения", "isnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -245,6 +262,7 @@ export const OP_SPECS = {
   },
   isValid: {
     label: "Заполнено",
+    aliases: ["filled", "not empty", "has value", "not null", "непусто", "isnotnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -876,8 +894,21 @@ export function analyzeFields(nodes, edges) {
           : s.type === "groupName"
           ? "groupName"
           : `${s.type}:${JSON.stringify(s)}`;
-        analysis[key] = { importable: false, reversible: false, connected: true, _sk: sk };
-        projections.push(exportOnly(key));
+        if (s.type === "productField") {
+          // productField-пил двунаправленный по умолчанию.
+          // explicitImport=true позволяет fan-out-детектору выбрать его "победителем",
+          // даже если другие graph-пути к тому же productField явно export-only.
+          analysis[key] = { importable: true, reversible: true, connected: true, _sk: sk, explicitImport: true };
+          projections.push({
+            externalFieldKey: key,
+            sourceType: "ProductField",
+            sourceField: s.field,
+            modifiersJson: null,
+          });
+        } else {
+          analysis[key] = { importable: false, reversible: false, connected: true, _sk: sk };
+          projections.push(exportOnly(key));
+        }
       }
       continue;
     }
