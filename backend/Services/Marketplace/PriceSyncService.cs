@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Enums;
+using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 
@@ -228,9 +230,11 @@ public class PriceSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             return PriceSyncResult.Failure("Адаптер не поддерживает экспорт цен");
 
-        // Get links
+        // Get links with attribute values for old_price / min_price lookup
         var linksQuery = _context.productMarketplaceLinks
             .Include(l => l.product)
+                .ThenInclude(p => p!.attributeValues)
+                    .ThenInclude(av => av.attribute)
             .Where(l => l.connectionId == connectionId);
 
         if (linkIds != null && linkIds.Any())
@@ -250,29 +254,48 @@ public class PriceSyncService
 
         var exportableLinks = links
             .Where(l => l.product?.price != null)
+            .Where(l => !string.IsNullOrWhiteSpace(l.externalProductId)
+                     || !string.IsNullOrWhiteSpace(l.externalSku))
             .ToList();
 
         // Marketplaces such as Wildberries reject duplicate product IDs in one price upload.
+        // Use sku:-prefixed key for links that only have externalSku so they aren't collapsed together.
         var uniqueExportableLinks = exportableLinks
-            .GroupBy(l => l.externalProductId, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.externalProductId)
+                ? "sku:" + l.externalSku
+                : l.externalProductId,
+                StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
 
-        // Build data for export
+        // Build data for export, reading old_price / min_price from product attribute values by key
         var pricesToExport = uniqueExportableLinks
-            .Select(l => new PriceInfo(
-                l.externalProductId,
-                l.product!.price,
-                null, // oldPrice
-                l.product.storageQuantity
-            ))
+            .Select(l =>
+            {
+                var avs = l.product!.attributeValues;
+                return new PriceInfo(
+                    ExternalProductId: l.externalProductId,
+                    Price: l.product!.price,
+                    OldPrice: ParsePriceAttr(avs, "old_price"),
+                    Stock: l.product.storageQuantity,
+                    MinPrice: ParsePriceAttr(avs, "min_price"),
+                    ExternalSku: l.externalSku
+                );
+            })
             .ToList();
 
-        var skippedNoPrice = links.Count - exportableLinks.Count;
+        var skippedNoPrice = links.Count(l => l.product?.price == null);
+        var skippedNoIdentifier = links.Count(l =>
+            l.product?.price != null
+            && string.IsNullOrWhiteSpace(l.externalProductId)
+            && string.IsNullOrWhiteSpace(l.externalSku));
         var skippedDuplicateExternalIds = exportableLinks.Count - uniqueExportableLinks.Count;
         if (canLog && skippedNoPrice > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Пропущено {skippedNoPrice} товаров без цены");
+        if (canLog && skippedNoIdentifier > 0)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                $"Пропущено {skippedNoIdentifier} товаров без внешнего идентификатора");
         if (canLog && skippedDuplicateExternalIds > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Пропущено {skippedDuplicateExternalIds} дублей внешних ID в одном запросе");
@@ -532,6 +555,14 @@ public class PriceSyncService
             stock.ExternalProductId,
             stock.VariantId ?? "",
             stock.WarehouseId ?? "");
+    }
+
+    private static decimal? ParsePriceAttr(IEnumerable<ProductAttributeValue> avs, string key)
+    {
+        var av = avs.FirstOrDefault(x => x.attribute?.key == key);
+        if (av == null) return null;
+        return decimal.TryParse(av.value, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) && v > 0
+            ? v : null;
     }
 }
 

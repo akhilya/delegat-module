@@ -981,6 +981,7 @@ public class OzonPlugin : MarketplacePluginBase
             Console.WriteLine($"[OzonPlugin.Export]   CategoryId={importItem.DescriptionCategoryId}, TypeId={importItem.TypeId}");
             Console.WriteLine($"[OzonPlugin.Export]   Price={importItem.Price}, Weight={importItem.Weight}, Dimensions={importItem.Height}x{importItem.Width}x{importItem.Depth}");
             Console.WriteLine($"[OzonPlugin.Export]   Images: {importItem.Images?.Count ?? 0}, PrimaryImage={importItem.PrimaryImage?.Substring(0, Math.Min(50, importItem.PrimaryImage?.Length ?? 0))}");
+            Console.WriteLine($"[OzonPlugin.Export]   Barcode={importItem.Barcode ?? "null"}");
             Console.WriteLine($"[OzonPlugin.Export]   Attributes count: {importItem.Attributes.Count}");
             foreach (var attr in importItem.Attributes)
             {
@@ -1095,21 +1096,51 @@ public class OzonPlugin : MarketplacePluginBase
                 {
                     foreach (var e in resultItem.Errors)
                     {
-                        var errorDetail = $"{e.Field}: {e.Message}";
+                        string errorDetail;
 
-                        // Try to find which attribute this error refers to
-                        if (!string.IsNullOrEmpty(e.Field) && long.TryParse(e.Field, out var attrId))
+                        // Prefer e.AttributeId; fall back to parsing e.Field as numeric attribute id
+                        var attrId = e.AttributeId;
+                        if (attrId == 0 && !string.IsNullOrEmpty(e.Field)
+                            && long.TryParse(e.Field, out var parsedId))
+                            attrId = parsedId;
+
+                        if (attrId > 0)
                         {
-                            // Find the attribute in our sent data
                             var sentAttr = importItem.Attributes.FirstOrDefault(a => a.Id == attrId);
+                            var attrLabel = !string.IsNullOrEmpty(e.AttributeName)
+                                ? $"[{attrId}] {e.AttributeName}"
+                                : $"[{attrId}]";
+
                             if (sentAttr != null)
                             {
                                 var sentValue = sentAttr.Values.FirstOrDefault();
                                 var valueInfo = sentValue?.DictionaryValueId > 0
                                     ? $"DictionaryId={sentValue.DictionaryValueId}"
                                     : $"Value='{sentValue?.Value}'";
-                                errorDetail = $"Атрибут {attrId}: {e.Message} (отправлено: {valueInfo})";
+                                errorDetail = $"{attrLabel}: {e.Message} (отправлено: {valueInfo})";
                             }
+                            else
+                            {
+                                errorDetail = $"{attrLabel}: {e.Message} (не отправлен)";
+                            }
+                        }
+                        else if (e.Field == "barcode")
+                        {
+                            var barcodeInfo = string.IsNullOrEmpty(importItem.Barcode)
+                                ? "null/пусто" : $"'{importItem.Barcode}'";
+                            errorDetail = $"Штрихкод (barcode): {e.Message} (отправлен: {barcodeInfo})";
+                        }
+                        else if (!string.IsNullOrEmpty(e.Field))
+                        {
+                            errorDetail = $"{e.Field}: {e.Message}";
+                        }
+                        else if (!string.IsNullOrEmpty(e.AttributeName))
+                        {
+                            errorDetail = $"{e.AttributeName}: {e.Message}";
+                        }
+                        else
+                        {
+                            errorDetail = e.Message;
                         }
 
                         Console.WriteLine($"[OzonPlugin.Export]   Error: {errorDetail}");
@@ -1642,8 +1673,9 @@ public class OzonPlugin : MarketplacePluginBase
             Console.WriteLine($"[OzonPlugin.BuildItem] Images: not found or null");
         }
 
-        // Barcode
-        item.Barcode = GetString(productData, "barcode");
+        // Barcode (treat empty string as null so Ozon doesn't receive invalid empty barcode)
+        var barcodeRaw = GetString(productData, "barcode");
+        item.Barcode = string.IsNullOrWhiteSpace(barcodeRaw) ? null : barcodeRaw;
 
         // Extract field type metadata (injected by MappingService)
         Dictionary<string, string>? fieldTypes = null;
@@ -1927,14 +1959,29 @@ public class OzonPlugin : MarketplacePluginBase
     {
         var client = CreateClient(context);
 
-        var items = prices.Select(p => new PriceImportItem
-        {
-            ProductId = long.TryParse(p.ExternalProductId, out var id) ? id : null,
-            Price = p.Price?.ToString("F0") ?? "0",
-            OldPrice = p.OldPrice?.ToString("F0"),
-            MinPrice = p.MinPrice?.ToString("F0"),
-            CurrencyCode = p.Currency
-        }).ToList();
+        // Build price items; use ProductId when available, fall back to OfferId (offer_id) otherwise.
+        // Per Ozon docs, if both are present offer_id takes priority — so we set only one.
+        var items = prices
+            .Select(p =>
+            {
+                long? productId = long.TryParse(p.ExternalProductId, out var id) && id > 0 ? id : null;
+                string? offerId = productId == null && !string.IsNullOrWhiteSpace(p.ExternalSku)
+                    ? p.ExternalSku : null;
+                if (productId == null && offerId == null)
+                    return null;
+                return new PriceImportItem
+                {
+                    ProductId = productId,
+                    OfferId = offerId,
+                    Price = p.Price?.ToString("F0") ?? "0",
+                    OldPrice = p.OldPrice?.ToString("F0"),
+                    MinPrice = p.MinPrice?.ToString("F0"),
+                    CurrencyCode = p.Currency
+                };
+            })
+            .Where(item => item != null)
+            .Select(item => item!)
+            .ToList();
 
         var response = await client.UpdatePricesAsync(items, ct);
 

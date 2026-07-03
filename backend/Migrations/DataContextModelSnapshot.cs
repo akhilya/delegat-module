@@ -1081,8 +1081,7 @@ namespace Delegat.Migrations
 
                     b.Property<string>("value")
                         .IsRequired()
-                        .HasMaxLength(10000)
-                        .HasColumnType("varchar(10000)");
+                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 

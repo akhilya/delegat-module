@@ -41,7 +41,6 @@ public class ProductAttributeValue : IEntity, IMapToDTO<ProductAttributeValue.Va
     /// <summary>
     /// String representation of the attribute value.
     /// </summary>
-    [StringLength(VALUE_MAX_LENGTH)]
     public string value { get; set; } = null!;
 
     public bool AddFill(AddForm form)

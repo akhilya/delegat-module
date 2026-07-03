@@ -384,7 +384,10 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             p.OldPrice,
             p.Stock,
             p.DiscountedPrice,
-            p.Currency
+            p.Currency,
+            p.VariantId,
+            p.MinPrice,
+            p.ExternalSku
         )).ToList();
     }
 
@@ -400,7 +403,10 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             p.OldPrice,
             p.Stock,
             p.DiscountedPrice,
-            p.Currency
+            p.Currency,
+            p.VariantId,
+            p.MinPrice,
+            p.ExternalSku
         )).ToList();
 
         var result = await _plugin.ExportPricesAsync(context, sdkPrices, ct);

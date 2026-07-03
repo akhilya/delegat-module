@@ -37,7 +37,17 @@ public record PriceInfo(
     /// <summary>
     /// Variant identifier for multi-size products (e.g. chrtId for WB).
     /// </summary>
-    string? VariantId = null
+    string? VariantId = null,
+
+    /// <summary>
+    /// Minimum price (floor price for marketplace discounts, e.g. Ozon min_price).
+    /// </summary>
+    decimal? MinPrice = null,
+
+    /// <summary>
+    /// Seller's article / offer_id — used as identifier fallback when ExternalProductId is unavailable.
+    /// </summary>
+    string? ExternalSku = null
 );
 
 /// <summary>

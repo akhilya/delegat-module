@@ -42,7 +42,12 @@ public record PriceInfo(
     /// <summary>
     /// Minimum price (floor price for marketplace discounts)
     /// </summary>
-    decimal? MinPrice = null
+    decimal? MinPrice = null,
+
+    /// <summary>
+    /// Seller's article / offer_id — used as identifier fallback when ExternalProductId is unavailable
+    /// </summary>
+    string? ExternalSku = null
 );
 
 /// <summary>

@@ -200,6 +200,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<ProductAttributeValue>()
             .HasIndex(pav => pav.attributeId);
 
+        builder.Entity<ProductAttributeValue>()
+            .Property(x => x.value)
+            .HasColumnType("longtext");
+
         builder.Entity<StoreProductAttributeValue>()
             .HasIndex(spav => spav.productId);
 
