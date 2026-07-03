@@ -31,16 +31,16 @@ const emit = defineEmits(['change-group']);
 
 const scrollRef = ref(null);
 
-// Cancel any in-flight smooth scroll before starting a new one
 function scrollCurrentIntoView() {
   nextTick(() => {
     const container = scrollRef.value;
     if (!container) return;
-    container.scrollTo({ top: container.scrollTop, behavior: 'instant' });
     const currentEl = container.querySelector('[data-current-member]');
-    if (currentEl) {
-      currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (!currentEl) return;
+    const containerRect = container.getBoundingClientRect();
+    const elRect = currentEl.getBoundingClientRect();
+    const scrollAdj = elRect.top - containerRect.top - (container.clientHeight - currentEl.offsetHeight) / 2;
+    container.scrollTop += scrollAdj;
   });
 }
 

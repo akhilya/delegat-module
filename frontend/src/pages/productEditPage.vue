@@ -48,7 +48,6 @@ import ProductAttributeForm from "@/components/products/productAttributeForm.vue
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
 import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.vue";
-import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import Separator from "@/components/ui/separator/Separator.vue";
@@ -77,6 +76,7 @@ import {
 import { PAGE_PRODUCTS, setPageTitle } from "@/router";
 import { useStore } from "vuex";
 import { useRoute } from "vue-router";
+import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
@@ -223,22 +223,26 @@ export default {
     const groupSidebarRef = ref(null);
     const mainScrollRef = ref(null);
 
-    // Reload product data when switching between group members (component is reused)
-    // Preserve page scroll position; sidebar scroll is handled by scrollCurrentMemberIntoView
-    watch(productId, () => {
-      const savedPageScroll = window.scrollY;
+    watch(productId, (newId) => {
+      // Если новый товар — в той же группе, просто обновляем isCurrent на клиенте.
+      // Это сохраняет скролл сайдбара и не вызывает перерисовку списка.
+      // Если товар из другой группы — перезагружаем группу полностью.
+      const memberInCurrentGroup = productGroup.value?.members?.find(m => m.productId === newId);
+      if (memberInCurrentGroup) {
+        productGroup.value.members.forEach(m => { m.isCurrent = m.productId === newId; });
+      } else {
+        fetchProductGroup(false);
+      }
 
-      // Lock scroll position while data loads to prevent jumps
+      const savedPageScroll = window.scrollY;
       const lockScroll = () => window.scrollTo(0, savedPageScroll);
       window.addEventListener('scroll', lockScroll);
-
       fetchProduct().then(() => {
         nextTick(() => {
           window.removeEventListener('scroll', lockScroll);
           window.scrollTo(0, savedPageScroll);
         });
       });
-      fetchProductGroup();
     });
 
     function autoResizeDescription() {
@@ -249,13 +253,12 @@ export default {
       el.style.height = el.scrollHeight + 'px';
     }
 
-    // Scroll the current product into view in the sidebar
     function scrollCurrentMemberIntoView() {
       groupSidebarRef.value?.scrollCurrentIntoView();
     }
 
     // Fetch product group
-    async function fetchProductGroup() {
+    async function fetchProductGroup(shouldScroll = false) {
       isLoadingGroup.value = true;
       await store.dispatch("getProductGroup", {
         productId: productId.value,
@@ -265,7 +268,7 @@ export default {
             productGroup.value = null;
           } else {
             productGroup.value = data.group;
-            scrollCurrentMemberIntoView();
+            if (shouldScroll) scrollCurrentMemberIntoView();
           }
         },
         onError: () => {
@@ -291,7 +294,7 @@ export default {
 
     fetchStoreAttributes();
     fetchProduct();
-    fetchProductGroup();
+    fetchProductGroup(true);
 
     async function fetchProduct() {
       // Подавляем autosave-watcher'ы пока fetch не закончится и данные не запишутся.
@@ -902,7 +905,7 @@ export default {
         Выбрать группу
       </button>
     </div>
-    <PageSection :loading="isProductLoading" class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
+    <PageSection :loading="isProductLoading && !productSKU" class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
       <ProductGroupSidebar
         ref="groupSidebarRef"
@@ -916,7 +919,10 @@ export default {
         @change-group="openGroupDialog"
       />
       <!-- Main content -->
-      <div ref="mainScrollRef" class="grow flex flex-col min-w-0">
+      <div ref="mainScrollRef" class="grow flex flex-col min-w-0 relative">
+        <div v-if="isProductLoading && productSKU" class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]">
+          <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        </div>
         <div class="grow flex flex-col">
           <form
             v-if="form"
