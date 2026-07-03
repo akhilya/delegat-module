@@ -66,6 +66,8 @@ const props = defineProps({
   connectionId: { type: [Number, String], required: true },
   mappingId: { type: [Number, String], required: true },
   fieldMappings: { type: Array, default: () => [] },
+  // Live field definitions from /external-fields: { [fieldKey]: { name, type, options: [{value,label}] } }
+  externalFieldDefs: { type: Object, default: () => ({}) },
   availableSources: { type: Object, default: () => ({}) },
   previewProductId: { type: [Number, String], default: null },
   previewProducts: { type: Array, default: () => [] },
@@ -107,6 +109,7 @@ const saving = ref(false);
 const dirty = ref(false);
 const previewing = ref(false);
 const selected = ref(null);
+const focusAdapterField = ref(null);
 const menu = ref({
   open: false,
   left: 0,
@@ -198,11 +201,17 @@ const warningCount = computed(
 // Also marks edges feeding export-only fields as `animated` (dashed) vs. solid (importable).
 function refreshAnalysis() {
   const { analysis } = analyzeFields(nodes.value, edges.value);
+  const fieldOptionsMap = {};
+  for (const [key, def] of Object.entries(props.externalFieldDefs)) {
+    if (def.options?.length) fieldOptionsMap[key] = def.options;
+  }
   updateNodeData(ADAPTER_NODE_ID, {
     analysis,
+    fieldOptionsMap,
     sources: adapterSourceLabels(nodes.value, edges.value),
     availableSources: props.availableSources,
     setFieldSource,
+    openField: openAdapterField,
   });
   // Mark edges by lane type: importable (bidirectional) vs export-only (one-way).
   // BFS backward from each connected adapter field to tag all edges in its lane.
@@ -381,10 +390,29 @@ const selectedExternalOptions = computed(() => {
   if (!isMapModifier(selected.value)) return [];
   const key = traceDownField(selected.value.id);
   if (!key) return [];
-  const fm = (props.fieldMappings || []).find(
-    (f) => f.externalFieldKey === key,
-  );
-  return fm?.parsedOptions || [];
+  return props.externalFieldDefs[key]?.options || [];
+});
+
+const adapterFieldsWithOptions = computed(() =>
+  Object.entries(props.externalFieldDefs)
+    .filter(([, d]) => d.options?.length > 0)
+    .map(([key, d]) => ({
+      fieldKey: key,
+      label: d.name || key,
+      options: d.options,
+      valueType: d.type === "multiselect" ? "array" : "string",
+    })),
+);
+
+const templateFieldRefs = computed(() => {
+  const refs = [{ group: "value", label: "Исходное значение", snippet: "{{value}}" }];
+  for (const pf of props.availableSources.productFields || [])
+    refs.push({ group: "product", label: pf.displayName, snippet: `{{${pf.key}}}` });
+  for (const ca of props.availableSources.categoryAttributes || [])
+    refs.push({ group: "category", label: ca.name, snippet: `{{attr:${ca.id}}}` });
+  for (const sa of props.availableSources.storeAttributes || [])
+    refs.push({ group: "store", label: sa.name, snippet: `{{storeAttr:${sa.id}}}` });
+  return refs;
 });
 
 const selectedSourceOptions = computed(() => {
@@ -408,6 +436,25 @@ onConnect((conn) => {
   );
   if (dupes.length) removeEdges(dupes.map((e) => e.id));
   addEdges([{ ...conn, id: genId("e") }]);
+
+  // When a "Стандартное значение" node connects to an adapter field that has predefined
+  // options, auto-populate the node's options and valueType from the field definition.
+  if (conn.target === ADAPTER_NODE_ID && conn.targetHandle?.startsWith("f:")) {
+    const fieldKey = conn.targetHandle.slice(2);
+    const src = nodes.value.find((n) => n.id === conn.source);
+    if (src?.type === "static" && src.data?.isAdapterValue) {
+      const def = props.externalFieldDefs[fieldKey];
+      if (def?.options?.length) {
+        updateNodeData(src.id, {
+          options: def.options,
+          valueType: def.type === "multiselect" ? "array" : "string",
+          staticValue: "",
+          label: "",
+        });
+      }
+    }
+  }
+
   dirty.value = true;
   schedulePreview();
 });
@@ -802,8 +849,14 @@ function onInspectorUpdate(patch) {
     ...selected.value,
     data: { ...selected.value.data, ...patch },
   };
+  if ("importable" in patch) nextTick(refreshAnalysis);
   dirty.value = true;
   schedulePreview();
+}
+
+function openAdapterField(fieldKey) {
+  selected.value = findNode(ADAPTER_NODE_ID) ?? selected.value;
+  nextTick(() => { focusAdapterField.value = fieldKey; });
 }
 function onInspectorDelete() {
   if (!selected.value || selected.value.deletable === false) return;
@@ -838,9 +891,11 @@ function cleanData(d) {
   delete rest.preview;
   delete rest.previewValue;
   delete rest.analysis;
+  delete rest.fieldOptionsMap; // adapter: transient, rebuilt from props on every refresh
   delete rest.sources; // adapter: transient traced-source labels
   delete rest.availableSources; // adapter: transient dropdown options
   delete rest.setFieldSource; // adapter: transient callback
+  delete rest.openField; // adapter: transient callback
   return rest;
 }
 
@@ -1229,9 +1284,13 @@ function autoArrange() {
           :external-field-options="selectedExternalOptions"
           :source-field-options="selectedSourceOptions"
           :store-file-options="availableSources.storeFiles || []"
+          :adapter-fields-with-options="adapterFieldsWithOptions"
+          :template-field-refs="templateFieldRefs"
+          :focus-field-key="focusAdapterField"
           @update="onInspectorUpdate"
           @delete="onInspectorDelete"
           @close="selected = null"
+          @field-focused="focusAdapterField = null"
         />
       </SplitterPanel>
     </template>
@@ -1398,8 +1457,8 @@ function autoArrange() {
 
 /* Single "Поля адаптера" sink node — metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
-  min-width: 230px;
-  max-width: 320px;
+  min-width: 300px;
+  max-width: 420px;
   padding: 0;
 }
 .vf-adapter__head {
@@ -1440,6 +1499,21 @@ function autoArrange() {
   border-radius: 9999px;
   border: 1px solid transparent;
   line-height: 1.5;
+  cursor: pointer;
+}
+.vf-adapter__pill:hover {
+  opacity: 0.8;
+}
+.vf-adapter__dir {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  opacity: 0.45;
+  color: var(--muted-foreground);
+}
+.vf-adapter__dir--import {
+  opacity: 0.65;
+  color: var(--primary);
 }
 
 /* Windows-style marquee selection rectangle */

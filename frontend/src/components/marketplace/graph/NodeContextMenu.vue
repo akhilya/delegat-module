@@ -9,6 +9,7 @@ import {
   Wand2,
   Braces,
   List,
+  ListChecks,
   HardDrive,
   FileText,
   Hash,
@@ -116,6 +117,15 @@ const literalItems = computed(() => {
   push(Type, "Текст", "string", "");
   push(ToggleLeft, "Логическое", "boolean", "false");
   push(List, "Список", "array", "");
+  // Adapter value: static node backed by the adapter field's parsedOptions.
+  // Options are populated on connect or manually in the inspector.
+  if (match("Стандартное значение") && srcVisible({ group: "source", kind: "static" })) {
+    out.push({
+      icon: ListChecks,
+      label: "Стандартное значение",
+      desc: { group: "source", kind: "static", payload: { isAdapterValue: true, valueType: "string", staticValue: "", label: "" } },
+    });
+  }
   return out;
 });
 

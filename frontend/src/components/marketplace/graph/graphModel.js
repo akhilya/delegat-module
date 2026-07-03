@@ -505,10 +505,16 @@ export function createSourceNode(kind, position, payload = {}) {
     case "static":
     default:
       // Also backs the typed literal nodes (Число / Текст / Логическое / Список) via valueType.
+      // When payload.isAdapterValue is true, creates a "Стандартное значение" node with
+      // options populated from the adapter field's parsedOptions. Stored as "static" for
+      // backend compatibility — backend evaluates staticValue as a plain constant.
       return node("static", position, {
         staticValue: payload.staticValue ?? "",
-        label: payload.label || "Статическое значение",
+        label: payload.label || "",
         valueType: payload.valueType || "string",
+        ...(payload.isAdapterValue
+          ? { isAdapterValue: true, options: payload.options || [] }
+          : {}),
       });
   }
 }
@@ -865,7 +871,12 @@ export function analyzeFields(nodes, edges) {
           modifiersJson: null,
         });
       } else {
-        analysis[key] = { importable: false, reversible: false, connected: true };
+        const sk = s.type === "productField"
+          ? `productField:${s.field}`
+          : s.type === "groupName"
+          ? "groupName"
+          : `${s.type}:${JSON.stringify(s)}`;
+        analysis[key] = { importable: false, reversible: false, connected: true, _sk: sk };
         projections.push(exportOnly(key));
       }
       continue;
@@ -879,6 +890,7 @@ export function analyzeFields(nodes, edges) {
     let reversible = false;
     let projection = exportOnly(key);
     let terminalSk = null;
+    let explicitImport = false;
 
     if (inEdge) {
       const mods = [];
@@ -927,9 +939,16 @@ export function analyzeFields(nodes, edges) {
           // Non-attribute source (productField, groupName, file types): importable for
           // animation purposes when the modifier chain is fully reversible.
           // Backend projection stays exportOnly — no actual write-back for these types.
-          // productField nodes can be explicitly forced to export-only via data.importable = false.
+          // productField nodes: data.importable=false forces export-only; =true forces importable
+          // regardless of modifier chain (display only — backend projection stays exportOnly).
           const forcedExport = cur.type === "productField" && cur.data?.importable === false;
-          importable = !forcedExport && ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          const forcedImport = cur.type === "productField" && cur.data?.importable === true;
+          const modsReversible = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          importable = !forcedExport && (forcedImport || modsReversible);
+          // Only mark as explicit winner when modifier chain is reversible — a path through an
+          // irreversible modifier (e.g. truncate) must never be explicitImport=true, otherwise
+          // two paths to the same _sk both become explicit and neither wins fan-out resolution.
+          if (importable && modsReversible) explicitImport = true;
           if (importable) {
             terminalSk =
               cur.type === "productField"
@@ -946,15 +965,15 @@ export function analyzeFields(nodes, edges) {
       if (!importable) projection = exportOnly(key);
     }
 
-    analysis[key] = { importable, reversible, connected: !!inEdge, _sk: terminalSk };
+    analysis[key] = { importable, reversible, connected: !!inEdge, _sk: terminalSk, explicitImport };
     projections.push(projection);
   }
 
-  // Detect fan-out: if 2+ importable fields share the same logical source,
+  // Detect fan-out: if 2+ fields share the same logical source (via wires or direct bindings),
   // import is ambiguous — downgrade all of them to export-only and warn.
   const skToFields = new Map();
   for (const [key, v] of Object.entries(analysis)) {
-    if (v.importable && v._sk) {
+    if (v._sk) {
       const arr = skToFields.get(v._sk) ?? [];
       arr.push(key);
       skToFields.set(v._sk, arr);
@@ -962,7 +981,12 @@ export function analyzeFields(nodes, edges) {
   }
   for (const keys of skToFields.values()) {
     if (keys.length > 1) {
+      // If exactly one path was explicitly marked importable by the user, let it win.
+      // All other conflicting paths become export-only with a warning.
+      const explicit = keys.filter((k) => analysis[k].explicitImport);
+      const winner = explicit.length === 1 ? explicit[0] : null;
       for (const key of keys) {
+        if (key === winner) continue;
         analysis[key].importable = false;
         analysis[key].reversible = false;
         analysis[key].fanOut = true;

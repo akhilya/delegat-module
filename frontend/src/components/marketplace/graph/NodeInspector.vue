@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import ValueMapEditor from "../ValueMapEditor.vue";
 import OptionMapEditor from "../OptionMapEditor.vue";
+import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import { Trash2, X, ChevronDown } from "lucide-vue-next";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
@@ -28,8 +29,33 @@ const props = defineProps({
   externalFieldOptions: { type: Array, default: () => [] },
   sourceFieldOptions: { type: Array, default: () => [] },
   storeFileOptions: { type: Array, default: () => [] },
+  adapterFieldsWithOptions: { type: Array, default: () => [] },
+  templateFieldRefs: { type: Array, default: () => [] },
+  focusFieldKey: { type: String, default: null },
 });
-const emit = defineEmits(["update", "delete", "close"]);
+const emit = defineEmits(["update", "delete", "close", "field-focused"]);
+
+const scrollEl = ref(null);
+
+const highlightedField = ref(null);
+
+watch(
+  () => props.focusFieldKey,
+  (key) => {
+    if (!key) return;
+    nextTick(() => {
+      const row = scrollEl.value?.querySelector(`[data-fk="${key}"]`);
+      row?.scrollIntoView({ behavior: "instant", block: "nearest" });
+      // Reset first so animation replays even if same field clicked twice
+      highlightedField.value = null;
+      nextTick(() => {
+        highlightedField.value = key;
+        setTimeout(() => { highlightedField.value = null; }, 700);
+      });
+      emit("field-focused");
+    });
+  },
+);
 
 const data = computed(() => props.node?.data || {});
 const type = computed(() => props.node?.type || "");
@@ -173,6 +199,87 @@ const splitTags = (v) =>
     .map((s) => s.trim())
     .filter(Boolean);
 const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
+
+// --- "Стандартное значение" (isAdapterValue static node) ---
+
+function onAdapterValuePick(val) {
+  const opt = (data.value.options || []).find((o) => o.value === val);
+  emit("update", { staticValue: val, label: opt?.label ?? val });
+}
+
+function onAdapterFieldPick(fieldKey) {
+  const f = props.adapterFieldsWithOptions.find((f) => f.fieldKey === fieldKey);
+  if (f)
+    emit("update", {
+      options: f.options,
+      valueType: f.valueType,
+      staticValue: "",
+      label: "",
+    });
+}
+
+const selectedArrayValues = computed(() => {
+  const v = data.value.staticValue;
+  return v ? String(v).split(",").map((s) => s.trim()).filter(Boolean) : [];
+});
+
+function toggleArrayValue(val) {
+  const cur = selectedArrayValues.value;
+  const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
+  const keys = next.join(",");
+  const labels = next
+    .map((k) => (data.value.options || []).find((o) => o.value === k)?.label ?? k)
+    .join(", ");
+  emit("update", { staticValue: keys, label: labels });
+}
+
+// --- Template modifier: field reference insertion ---
+
+const templateTextareaRef = ref(null);
+
+const templateFieldGroups = computed(() => {
+  const map = {
+    value:    { key: "value",    label: "Исходное значение" },
+    product:  { key: "product",  label: "Поля товара" },
+    category: { key: "category", label: "Атрибуты категории" },
+    store:    { key: "store",    label: "Атрибуты магазина" },
+  };
+  const grouped = {};
+  for (const r of props.templateFieldRefs) {
+    (grouped[r.group] ??= []).push(r);
+  }
+  return Object.entries(grouped)
+    .map(([g, refs]) => ({ ...map[g], refs }))
+    .filter((g) => g.refs.length > 0);
+});
+
+function insertTemplateRef(paramKey, snippet) {
+  const ta = templateTextareaRef.value;
+  const cur = data.value.params?.[paramKey] ?? "";
+  if (ta) {
+    const s = ta.selectionStart ?? cur.length;
+    const e = ta.selectionEnd ?? cur.length;
+    const next = cur.slice(0, s) + snippet + cur.slice(e);
+    setParam(paramKey, next);
+    nextTick(() => {
+      ta.selectionStart = ta.selectionEnd = s + snippet.length;
+      ta.focus();
+    });
+  } else {
+    setParam(paramKey, cur + snippet);
+  }
+}
+
+// --- Adapter field preview: resolve key → label for select/multiselect fields ---
+
+function resolvePreview(fieldKey, raw) {
+  const opts = data.value.fieldOptionsMap?.[fieldKey];
+  if (!opts?.length || raw == null) return raw;
+  return String(raw)
+    .split(",")
+    .map((k) => opts.find((o) => o.value === k.trim())?.label ?? k.trim())
+    .join(", ");
+}
 </script>
 
 <template>
@@ -188,7 +295,7 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
       </button>
     </div>
 
-    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 thin-scrollbar">
+    <div ref="scrollEl" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 thin-scrollbar">
       <!-- Store shared-storage file picker (URL / text content) -->
       <template v-if="isStoreFile">
         <div class="space-y-1.5">
@@ -296,6 +403,70 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
         </div>
       </template>
 
+      <!-- "Стандартное значение" — static node with predefined options from adapter field -->
+      <template v-else-if="type === 'static' && data.isAdapterValue">
+        <div class="space-y-1.5">
+          <Label>Значение</Label>
+
+          <!-- Options available: single select -->
+          <template v-if="data.options?.length && data.valueType !== 'array'">
+            <SearchableSelect
+              :options="data.options"
+              :model-value="data.staticValue"
+              placeholder="Выберите значение..."
+              @update:model-value="onAdapterValuePick($event)"
+            />
+          </template>
+
+          <!-- Options available: multi-select (array type) — checkbox list -->
+          <template v-else-if="data.options?.length && data.valueType === 'array'">
+            <div class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5">
+              <label
+                v-for="opt in data.options"
+                :key="opt.value"
+                class="flex cursor-pointer items-center gap-2 text-xs"
+              >
+                <input
+                  type="checkbox"
+                  :checked="selectedArrayValues.includes(opt.value)"
+                  class="size-3 shrink-0 accent-primary"
+                  @change="toggleArrayValue(opt.value)"
+                />
+                <span>{{ opt.label }}</span>
+              </label>
+            </div>
+          </template>
+
+          <!-- No options from adapter: free-text fallback (user types the ID manually) -->
+          <template v-else>
+            <Input
+              :model-value="data.staticValue"
+              placeholder="Введите значение..."
+              @update:model-value="setData({ staticValue: $event, label: $event })"
+            />
+            <p class="text-[11px] text-muted-foreground">
+              Для автоматической загрузки вариантов подключите блок к полю адаптера, у которого есть предустановленные значения.
+            </p>
+          </template>
+
+          <!-- Manual field picker: load options from a known field -->
+          <template v-if="adapterFieldsWithOptions.length">
+            <Select :model-value="NONE" @update:model-value="onAdapterFieldPick($event)">
+              <SelectTrigger class="h-7 text-xs">
+                <SelectValue placeholder="Загрузить варианты из поля..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="f in adapterFieldsWithOptions"
+                  :key="f.fieldKey"
+                  :value="f.fieldKey"
+                >{{ f.label }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </template>
+        </div>
+      </template>
+
       <!-- Static / typed literal (Число / Текст / Логическое / Список) -->
       <template v-else-if="type === 'static'">
         <div class="space-y-1.5">
@@ -371,7 +542,12 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
           </p>
 
           <div class="space-y-2">
-            <div v-for="f in adapterFields" :key="f.fieldKey" class="space-y-1">
+            <div
+              v-for="f in adapterFields"
+              :key="f.fieldKey"
+              :data-fk="f.fieldKey"
+              :class="['space-y-1 px-1', highlightedField === f.fieldKey && 'vf-field-flash']"
+            >
               <Label class="text-xs">
                 {{ f.label || f.fieldKey
                 }}<span v-if="f.isRequired" class="text-destructive"> *</span>
@@ -442,9 +618,9 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
               <div
                 v-if="adapterPreview[f.fieldKey] != null"
                 class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-                :title="String(adapterPreview[f.fieldKey])"
+                :title="String(resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]))"
               >
-                {{ adapterPreview[f.fieldKey] }}
+                {{ resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]) }}
               </div>
             </div>
           </div>
@@ -531,13 +707,33 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
             }}</span>
           </div>
 
-          <textarea
-            v-else-if="p.type === 'template'"
-            rows="2"
-            class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-            :value="data.params?.[p.key]"
-            @input="setParam(p.key, $event.target.value)"
-          />
+          <div v-else-if="p.type === 'template'" class="space-y-2">
+            <textarea
+              ref="templateTextareaRef"
+              rows="3"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm"
+              :value="data.params?.[p.key]"
+              @input="setParam(p.key, $event.target.value)"
+            />
+            <div v-if="templateFieldGroups.length" class="space-y-2">
+              <p class="text-[11px] text-muted-foreground">Нажмите — вставится в позицию курсора:</p>
+              <div v-for="group in templateFieldGroups" :key="group.key" class="space-y-1">
+                <p class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                  {{ group.label }}
+                </p>
+                <div class="flex flex-wrap gap-1">
+                  <button
+                    v-for="r in group.refs"
+                    :key="r.snippet"
+                    type="button"
+                    class="rounded border border-dashed border-border px-1.5 py-0.5 text-[11px] transition-colors hover:border-primary hover:text-primary"
+                    :title="r.snippet"
+                    @click="insertTemplateRef(p.key, r.snippet)"
+                  >{{ r.label }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <Input
             v-else-if="p.type === 'tagInput'"
@@ -600,3 +796,13 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes vf-flash {
+  0%   { background-color: rgba(120, 120, 120, 0.18); }
+  100% { background-color: rgba(120, 120, 120, 0); }
+}
+.vf-field-flash {
+  animation: vf-flash 0.9s ease-out forwards;
+}
+</style>

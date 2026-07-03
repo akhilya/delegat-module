@@ -12,6 +12,7 @@ import {
   Hash,
   ToggleLeft,
   List,
+  ListChecks,
   Link,
   Files,
   ArrowRight,
@@ -48,8 +49,10 @@ const LITERAL = {
 };
 
 const info = computed(() => {
-  if (props.type === "static")
+  if (props.type === "static") {
+    if (props.data.isAdapterValue) return { icon: ListChecks, kind: "Стандартное значение" };
     return LITERAL[props.data.valueType] || { icon: Type, kind: "Значение" };
+  }
   return META[props.type] || META.static;
 });
 const outType = computed(() => props.data.valueType || "any");

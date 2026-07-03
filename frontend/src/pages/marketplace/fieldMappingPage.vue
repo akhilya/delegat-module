@@ -101,6 +101,8 @@ export default {
       externalFieldDescriptions: {},
       // Aspect fields (size, color) keyed by externalFieldKey
       aspectFields: {},
+      // Live field definitions from /external-fields (options, type, name) keyed by externalFieldKey
+      externalFieldDefs: {},
       // Modifier sheet
       editingFieldMapping: null,
       showModifierSheet: false,
@@ -310,12 +312,15 @@ export default {
           const fields = extractResponseData(response, []);
           const descMap = {};
           const aspectMap = {};
+          const defsMap = {};
           for (const f of fields) {
             if (f.description) descMap[f.key] = f.description;
             if (f.isAspect) aspectMap[f.key] = true;
+            defsMap[f.key] = { name: f.name, type: f.type, options: f.options || [] };
           }
           this.externalFieldDescriptions = descMap;
           this.aspectFields = aspectMap;
+          this.externalFieldDefs = defsMap;
         },
         onError: () => {
           /* non-critical */
@@ -944,6 +949,7 @@ export default {
             :connection-id="connectionId"
             :mapping-id="mappingId"
             :field-mappings="fieldMappings"
+            :external-field-defs="externalFieldDefs"
             :available-sources="{ ...availableSources, storeFiles }"
             :preview-product-id="previewProductId"
             :preview-products="previewProducts"
