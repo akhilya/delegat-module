@@ -285,6 +285,15 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
             переподключите.
           </p>
         </div>
+        <div v-if="type === 'productField'" class="flex items-center gap-2">
+          <Switch
+            :model-value="data.importable !== false"
+            @update:model-value="setData({ importable: $event })"
+          />
+          <Label class="cursor-pointer font-normal" @click="setData({ importable: data.importable !== false ? false : true })">
+            Импортируемый
+          </Label>
+        </div>
       </template>
 
       <!-- Static / typed literal (Число / Текст / Логическое / Список) -->

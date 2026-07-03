@@ -14,6 +14,7 @@ import {
   List,
   Link,
   Files,
+  ArrowRight,
 } from "lucide-vue-next";
 import { pinColor, pinTypeLabel } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
@@ -69,6 +70,11 @@ const collapsed = computed(() => !!props.data.collapsed);
       <span class="vf-card__kind" :title="data.label">{{
         collapsed ? data.label || info.kind : info.kind
       }}</span>
+      <ArrowRight
+        v-if="type === 'productField' && data.importable === false"
+        class="ml-auto size-3 shrink-0 text-muted-foreground/60"
+        title="Только экспорт"
+      />
     </div>
     <template v-if="!collapsed">
       <div class="vf-card__title" :title="data.label">

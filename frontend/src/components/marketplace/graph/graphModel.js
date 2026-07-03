@@ -927,7 +927,9 @@ export function analyzeFields(nodes, edges) {
           // Non-attribute source (productField, groupName, file types): importable for
           // animation purposes when the modifier chain is fully reversible.
           // Backend projection stays exportOnly — no actual write-back for these types.
-          importable = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          // productField nodes can be explicitly forced to export-only via data.importable = false.
+          const forcedExport = cur.type === "productField" && cur.data?.importable === false;
+          importable = !forcedExport && ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
           if (importable) {
             terminalSk =
               cur.type === "productField"
