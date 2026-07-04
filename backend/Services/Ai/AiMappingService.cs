@@ -123,6 +123,25 @@ public class AiMappingService
             {
                 sb.Append($"- attribute:{attr.Id} — \"{attr.name}\" (type: {attr.type}");
                 if (attr.isRequired) sb.Append(", required");
+                if (attr.group != null) sb.Append($", group:\"{attr.group}\"");
+                if (attr.description != null) sb.Append($", hint:\"{attr.description}\"");
+
+                // Show options for select/multiselect so AI can build valueMap
+                if (!string.IsNullOrWhiteSpace(attr.options))
+                {
+                    try
+                    {
+                        var parsed = System.Text.Json.JsonSerializer.Deserialize<List<string>>(attr.options);
+                        if (parsed is { Count: > 0 })
+                        {
+                            var shown = parsed.Take(20).ToList();
+                            sb.Append($", options:[{string.Join(", ", shown.Select(o => $"\"{o}\""))}]");
+                            if (parsed.Count > 20) sb.Append($" +{parsed.Count - 20} more");
+                        }
+                    }
+                    catch { /* not a string list, skip */ }
+                }
+
                 sb.AppendLine(")");
             }
             sb.AppendLine();
@@ -134,9 +153,25 @@ public class AiMappingService
         {
             sb.Append($"- key:\"{field.Key}\" label:\"{field.Name}\" type:{field.Type}");
             if (field.IsRequired) sb.Append(" REQUIRED");
-            if (field.Description != null) sb.Append($" hint:\"{field.Description}\"");
+            if (field.IsAspect) sb.Append(" ASPECT(defines variations)");
+            if (field.Unit != null) sb.Append($" unit:\"{field.Unit}\"");
             if (field.MaxLength.HasValue) sb.Append($" maxLength:{field.MaxLength}");
-            if (field.Unit != null) sb.Append($" unit:{field.Unit}");
+            if (field.MinValue.HasValue) sb.Append($" minValue:{field.MinValue}");
+            if (field.MaxValue.HasValue) sb.Append($" maxValue:{field.MaxValue}");
+            if (field.ValidationPattern != null) sb.Append($" pattern:\"{field.ValidationPattern}\"");
+            if (field.Description != null) sb.Append($" hint:\"{field.Description}\"");
+
+            // For select/multiselect: show allowed values (limit to first 30 to keep prompt manageable)
+            if (field.Options is { Count: > 0 })
+            {
+                var shown = field.Options.Take(30).ToList();
+                var optStr = string.Join(", ", shown.Select(o =>
+                    o.Value == o.Label ? $"\"{o.Value}\"" : $"\"{o.Value}\"({o.Label})"));
+                sb.Append($" allowedValues:[{optStr}]");
+                if (field.Options.Count > 30)
+                    sb.Append($" (+{field.Options.Count - 30} more)");
+            }
+
             sb.AppendLine();
         }
         sb.AppendLine();
@@ -144,14 +179,14 @@ public class AiMappingService
         // Example mappings if available
         if (exampleMappings.Count > 0)
         {
-            sb.AppendLine("EXAMPLE MAPPINGS FROM OTHER CATEGORIES (for reference):");
+            sb.AppendLine("EXAMPLE MAPPINGS FROM OTHER CATEGORIES (reference — same adapter, different category):");
             foreach (var example in exampleMappings)
             {
                 var graph = TryParseGraph(example.graphJson);
                 var sink = graph?.nodes.FirstOrDefault(n => n.type == "adapterFields");
                 if (sink?.data?.fields == null) continue;
 
-                sb.AppendLine($"  Category mapping \"{example.name ?? example.externalCategoryName}\":");
+                sb.AppendLine($"  \"{example.name ?? example.externalCategoryName}\":");
                 foreach (var field in sink.data.fields.Where(f => f.source != null))
                 {
                     var src = field.source!;
@@ -159,8 +194,10 @@ public class AiMappingService
                     {
                         "productField" => $"productField:{src.field}",
                         "attribute" => $"attribute:{src.attributeId}",
+                        "static" => $"static:\"{src.field}\"",
                         _ => src.type ?? "unknown"
                     };
+
                     sb.AppendLine($"    \"{field.fieldKey}\" ← {srcDesc}");
                 }
             }

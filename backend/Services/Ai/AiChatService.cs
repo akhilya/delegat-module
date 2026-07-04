@@ -80,15 +80,19 @@ public class AiChatService
         var productCount = await _context.products.AsNoTracking()
             .CountAsync(p => p.storeId == storeId, ct);
         var connections = await _context.marketplaceConnections.AsNoTracking()
-            .Where(c => c.storeId == storeId && c.isActive)
-            .Select(c => new { c.name, c.adapterKey })
+            .Where(c => c.storeId == storeId)
+            .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
             .ToListAsync(ct);
+        var currentUser = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.UserName, u.isAdmin })
+            .FirstOrDefaultAsync(ct);
 
-        var connStr = connections.Count > 0
-            ? string.Join(", ", connections.Select(c => $"{c.name} ({c.adapterKey})"))
-            : "none";
-
-        var systemPrompt = AiPrompts.ChatSystem(storeName, productCount, connStr);
+        var systemPrompt = AiPrompts.ChatSystem(
+            storeName, storeId, productCount, connections
+                .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
+                .ToList(),
+            currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false);
 
         // Convert user messages to AI format
         var messages = userMessages.Select(m => new AiMessage
