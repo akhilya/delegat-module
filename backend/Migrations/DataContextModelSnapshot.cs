@@ -82,6 +82,96 @@ namespace Delegat.Migrations
                     b.ToTable("UserRoles");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Ai.AiModelConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("apiKeyEncrypted")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("apiUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("isDefault")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("maxTokens")
+                        .HasColumnType("int");
+
+                    b.Property<string>("modelId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("provider")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("isDefault");
+
+                    b.ToTable("aiModelConfigs");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiOperation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("canRollback")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("operationType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("rollbackDataJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("userId", "storeId", "createdAt");
+
+                    b.ToTable("aiOperations");
+                });
+
             modelBuilder.Entity("Delegat.Models.AppSetting", b =>
                 {
                     b.Property<int>("Id")

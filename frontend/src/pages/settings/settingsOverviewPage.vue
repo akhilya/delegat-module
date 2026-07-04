@@ -26,6 +26,7 @@ import {
   UserCog,
 } from "lucide-vue-next";
 import {
+  PAGE_ADMIN_AI,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_PLUGINS,
   PAGE_ADMIN_STORES,
@@ -82,6 +83,12 @@ const adminSections = [
     description: "Сохранённые серверные ошибки с деталями для диагностики.",
     to: PAGE_ADMIN_ERROR_LOGS,
     icon: AlertTriangle,
+  },
+  {
+    title: "AI Модели",
+    description: "Подключение AI-моделей по API (Anthropic, OpenAI-compatible) для AI-ассистента.",
+    to: PAGE_ADMIN_AI,
+    icon: Plug,
   },
 ];
 

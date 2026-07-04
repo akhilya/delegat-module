@@ -13,6 +13,7 @@ using Delegat.Models;
 using Delegat.Controllers;
 using Delegat.Services;
 using Delegat.Services.DataMigrations;
+using Delegat.Services.Ai;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Plugins;
 using System.Text;
@@ -183,6 +184,14 @@ builder.Services.AddScoped<ProductTransferService>();
 
 // Persisted error logs
 builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
+
+// AI services
+builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<AiModelConfigService>();
+builder.Services.AddScoped<AiChatService>();
+builder.Services.AddScoped<AiMappingService>();
+builder.Services.AddScoped<GraphMutationService>();
+builder.Services.AddScoped<AiOperationService>();
 
 // Sync services
 builder.Services.AddScoped<MappingService>();

@@ -1,5 +1,7 @@
 import { createStore as _createStore } from "vuex";
 
+import aiChatModule from "./modules/aiChatModule";
+import aiModelsModule from "./modules/aiModelsModule";
 import authModule from "./modules/authModule";
 import userModule from "./modules/userModule";
 import productModule from "./modules/productModule";
@@ -48,6 +50,8 @@ export function createStore() {
       marketplaceModule,
       errorLogModule,
       operations,
+      aiChat: aiChatModule,
+      aiModels: aiModelsModule,
     },
   });
 }

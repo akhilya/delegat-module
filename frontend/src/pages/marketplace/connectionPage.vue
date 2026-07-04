@@ -1,4 +1,5 @@
 <script>
+import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
@@ -115,6 +116,7 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 export default {
   components: {
+    AiErrorExplainer,
     Page,
     PageSection,
     NavigationBar,
@@ -2568,6 +2570,12 @@ export default {
                           : testResult.errorMessage || "Ошибка подключения"
                       }}
                     </span>
+                    <AiErrorExplainer
+                      v-if="!testResult.success && (testResult.errorMessage || 'Ошибка подключения')"
+                      :error-message="testResult.errorMessage || 'Ошибка подключения'"
+                      :context="`test_connection`"
+                      :connection-id="connection?.id"
+                    />
                   </div>
                 </div>
               </CardContent>

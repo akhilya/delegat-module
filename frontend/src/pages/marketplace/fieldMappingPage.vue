@@ -124,6 +124,7 @@ export default {
         sourceType: "Static",
         staticValue: "",
       },
+      isAiImproving: false,
     };
   },
   computed: {
@@ -918,6 +919,22 @@ export default {
       reader.readAsText(file);
       event.target.value = "";
     },
+
+    async aiImproveMapping() {
+      if (!this.mappingId || this.isAiImproving) return;
+      this.isAiImproving = true;
+      try {
+        const { http } = await import("@/main");
+        const result = await http.post(`/api/ai/mapping-suggest/${this.mappingId}`);
+        const { connected, skipped } = result.data;
+        displaySonnerSuccess(`AI настроил ${connected} полей автоматически (пропущено: ${skipped})`);
+        await this.fetchData();
+      } catch (e) {
+        displaySonnerError(e);
+      } finally {
+        this.isAiImproving = false;
+      }
+    },
   },
   mounted() {
     this.connectionId = this.$route.params.connId;
@@ -941,6 +958,17 @@ export default {
       <template v-if="!isLoading">
         <!-- Visual node graph editor (whole-category Blueprint) — the sole mapping editor.
              The preview-product selector lives in the canvas toolbar. -->
+        <div v-if="connectionId && mappingId" class="mb-2 flex justify-end">
+          <Button
+            variant="outline"
+            :disabled="isAiImproving"
+            @click="aiImproveMapping"
+            class="text-sm"
+          >
+            {{ isAiImproving ? "AI работает..." : "✦ AI: улучшить маппинг" }}
+          </Button>
+        </div>
+
         <div
           v-if="connectionId && mappingId"
           class="mb-4 h-[calc(100vh-150px)] min-h-[480px] w-full"

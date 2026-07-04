@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import Button from "@/components/ui/button/Button.vue";
 import { Monitor } from "lucide-vue-next";
+import AiChatPanel from "@/components/ai/AiChatPanel.vue";
 
 export default {
   components: {
@@ -25,6 +26,7 @@ export default {
     Loader2,
     Button,
     Monitor,
+    AiChatPanel,
   },
   setup() {
     const route = useRoute();
@@ -93,6 +95,7 @@ export default {
   <template v-if="!isPublicPage">
     <OperationsPanel />
     <OperationsTriggerButton />
+    <AiChatPanel />
   </template>
 
   <!-- Mobile device warning -->

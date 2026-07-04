@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
+using Delegat.Models.Ai;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
 
@@ -68,6 +69,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
     // Platform settings editable by administrators
     public DbSet<AppSetting> appSettings { get; set; }
+
+    public DbSet<AiModelConfig> aiModelConfigs { get; set; }
+    public DbSet<AiOperation> aiOperations { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
@@ -341,5 +345,13 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .WithMany()
             .HasForeignKey(s => s.updatedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // AiModelConfig indexes
+        builder.Entity<AiModelConfig>()
+            .HasIndex(m => m.isDefault);
+
+        // AiOperation indexes
+        builder.Entity<AiOperation>()
+            .HasIndex(o => new { o.userId, o.storeId, o.createdAt });
     }
 }
