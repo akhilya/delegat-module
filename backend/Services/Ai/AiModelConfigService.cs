@@ -7,10 +7,10 @@ namespace Delegat.Services.Ai;
 public class AiModelConfigService
 {
     private readonly DataContext _context;
-    private readonly EncryptionService _encryption;
+    private readonly EncryptionService? _encryption;
     private readonly AiApiClient _apiClient;
 
-    public AiModelConfigService(DataContext context, EncryptionService encryption, AiApiClient apiClient)
+    public AiModelConfigService(DataContext context, AiApiClient apiClient, EncryptionService? encryption = null)
     {
         _context = context;
         _encryption = encryption;
@@ -36,7 +36,7 @@ public class AiModelConfigService
         {
             name = name,
             apiUrl = apiUrl,
-            apiKeyEncrypted = _encryption.Encrypt(plainApiKey),
+            apiKeyEncrypted = _encryption?.Encrypt(plainApiKey) ?? plainApiKey,
             modelId = modelId,
             provider = provider,
             maxTokens = maxTokens,
@@ -52,7 +52,7 @@ public class AiModelConfigService
     {
         if (name != null) model.name = name;
         if (apiUrl != null) model.apiUrl = apiUrl;
-        if (plainApiKey != null) model.apiKeyEncrypted = _encryption.Encrypt(plainApiKey);
+        if (plainApiKey != null) model.apiKeyEncrypted = _encryption?.Encrypt(plainApiKey) ?? plainApiKey;
         if (modelId != null) model.modelId = modelId;
         if (provider.HasValue) model.provider = provider.Value;
         if (maxTokens.HasValue) model.maxTokens = maxTokens.Value;
@@ -94,7 +94,7 @@ public class AiModelConfigService
             Id = model.Id,
             name = model.name,
             apiUrl = model.apiUrl,
-            apiKeyEncrypted = _encryption.Decrypt(model.apiKeyEncrypted),
+            apiKeyEncrypted = _encryption?.Decrypt(model.apiKeyEncrypted) ?? model.apiKeyEncrypted,
             modelId = model.modelId,
             provider = model.provider,
             maxTokens = model.maxTokens,
