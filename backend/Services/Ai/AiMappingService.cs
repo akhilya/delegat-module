@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Services.Marketplace.Graph;
 
 namespace Delegat.Services.Ai;
@@ -71,9 +72,7 @@ public class AiMappingService
         {
             model = decrypted.modelId,
             max_tokens = 4096,
-            system = "You are an expert at mapping product catalog fields to marketplace API fields. " +
-                     "Analyze field names, types, and semantics to suggest the best connections. " +
-                     "Respond ONLY with a valid JSON array, no markdown, no explanation.",
+            system = AiPrompts.MappingSystem,
             messages = [new AiMessage { role = "user", content = prompt }]
         };
 
@@ -168,26 +167,9 @@ public class AiMappingService
             sb.AppendLine();
         }
 
-        sb.AppendLine("TASK: For each marketplace field, suggest the best source.");
-        sb.AppendLine("Rules:");
-        sb.AppendLine("1. Match by semantic meaning, not just name similarity");
-        sb.AppendLine("2. Common mappings: name↔title/Название, sku↔article/Артикул, price↔Цена, barcode↔Barcode/EAN/Штрихкод, description↔Описание, quantity↔Остаток");
-        sb.AppendLine("3. Suggest modifiers when needed: truncate for long text fields with maxLength, round for decimal prices");
-        sb.AppendLine("4. Use static value for constant fields (e.g., country of origin if obvious)");
-        sb.AppendLine("5. Set confidence 0.0-1.0 (only include suggestions with confidence >= 0.4)");
-        sb.AppendLine("6. Set sourceType to null if no suitable source found");
+        sb.AppendLine(AiPrompts.MappingRules);
         sb.AppendLine();
-        sb.AppendLine("Respond with ONLY a JSON array (no markdown):");
-        sb.AppendLine("[{");
-        sb.AppendLine("  \"adapterFieldKey\": \"field_key\",");
-        sb.AppendLine("  \"sourceType\": \"productField\" | \"attribute\" | \"storeAttribute\" | \"static\" | null,");
-        sb.AppendLine("  \"sourceField\": \"sku\" | \"name\" | \"price\" | \"barcode\" | \"description\" | \"storageQuantity\" | null,");
-        sb.AppendLine("  \"sourceAttributeId\": 123 | null,");
-        sb.AppendLine("  \"staticValue\": \"...\" | null,");
-        sb.AppendLine("  \"modifiers\": [{\"type\": \"truncate\", \"params\": {\"length\": 1000}}] | null,");
-        sb.AppendLine("  \"confidence\": 0.9,");
-        sb.AppendLine("  \"reason\": \"brief explanation\"");
-        sb.AppendLine("}]");
+        sb.AppendLine(AiPrompts.MappingResponseSchema);
 
         return sb.ToString();
     }

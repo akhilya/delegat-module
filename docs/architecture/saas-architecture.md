@@ -89,12 +89,16 @@ When multiple nodes have different IPs, the wildcard maps to a single IP. Option
 
 **Plan tiers:**
 
-| Plan | MAX_STORAGE_GB | MAX_PRODUCTS | MAX_CONNECTIONS |
-|------|---------------|--------------|----------------|
-| Starter | 15 | 5,000 | 3 |
-| Pro | 50 | 50,000 | 10 |
-| Business | 150 | 200,000 | 25 |
-| Enterprise | 500 | — | — |
+| Plan | MAX_STORAGE_GB | MAX_PRODUCTS | MAX_CONNECTIONS | AI_ENABLED |
+|------|---------------|--------------|----------------|------------|
+| Starter | 15 | 5,000 | 3 | false |
+| Pro | 50 | 50,000 | 10 | true |
+| Business | 150 | 200,000 | 25 | true |
+| Enterprise | 500 | — | — | true |
+
+`AI_ENABLED=true` unlocks the chat assistant, auto-mapping, and inline error explanation.
+The AI model itself is configured by the instance admin in `/settings/admin/ai` — the platform
+does not supply an API key; customers bring their own (Anthropic, OpenAI, etc.).
 
 **Upgrade** (15 GB → 500 GB):
 1. Portal updates `MAX_STORAGE_GB=500` via Dokploy API
@@ -178,7 +182,7 @@ instances (
 )
 
 users (id, email, password_hash, current_plan_id FK, subscription_status)
-plans (id, name, max_storage_gb, max_products, max_connections, price_monthly)
+plans (id, name, max_storage_gb, max_products, max_connections, ai_enabled BOOLEAN, price_monthly)
 ```
 
 ### Provisioner Flow
@@ -232,10 +236,12 @@ services:
 
 ```
 Trigger: customer changes plan
-  1. Update env vars via Dokploy API (MAX_STORAGE_GB, MAX_PRODUCTS, MAX_CONNECTIONS)
+  1. Update env vars via Dokploy API:
+       MAX_STORAGE_GB, MAX_PRODUCTS, MAX_CONNECTIONS, AI_ENABLED
   2. Trigger redeploy
   3. If downgrade → email customer with current storage usage
-  4. Update instances.plan_id in Registry DB
+  4. If AI_ENABLED: false → AI chat panel is hidden on frontend (AiChatPanel checks env)
+  5. Update instances.plan_id in Registry DB
 ```
 
 ### Update Manager

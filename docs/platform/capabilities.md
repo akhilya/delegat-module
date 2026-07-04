@@ -56,11 +56,23 @@
 - isAdmin flag (no RBAC — sufficient for per-instance model)
 - Admin seed via env vars (ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD)
 
+### AI Assistant
+- Embedded Claude-powered agent via `AiChatPanel` (floating chat, all pages)
+- 50+ tools: full platform coverage (products, categories, mappings, export, groups, analytics)
+- **Auto-mapping:** on category mapping creation, AI semantically connects adapter fields to local attributes
+- **Inline error explanation:** "✦ Объяснить ошибку" button next to sync/adapter errors
+- **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
+- **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
+- **Admin model management:** `/settings/admin/ai` — connect any Anthropic or OpenAI-compatible model
+- **Access:** controlled by `AI_ENABLED` env var (tariff feature — see architecture docs)
+- All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` — editable without rebuilding services
+
 ### Quotas
 - `MAX_PRODUCTS` — max products per store
 - `MAX_STORAGE_GB` — max storage per store
 - `MAX_FILES` — max files per store
 - `MAX_CONNECTIONS` — max marketplace connections
+- `AI_ENABLED` — whether AI assistant is available (`true` / `false`)
 - Configurable via env vars; editable through admin UI
 
 ### Background Services

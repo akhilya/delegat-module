@@ -9,6 +9,7 @@ using Delegat.Models.Ai;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
 
@@ -87,22 +88,7 @@ public class AiChatService
             ? string.Join(", ", connections.Select(c => $"{c.name} ({c.adapterKey})"))
             : "none";
 
-        var systemPrompt = $"""
-            You are an AI assistant embedded in a product catalog and marketplace management platform.
-            You help users manage products, categories, field mappings, exports and imports to marketplaces.
-
-            Language: Always respond in Russian, unless the user explicitly requests a different language.
-
-            Store context: name="{storeName}", products={productCount}, connections=[{connStr}]
-
-            Confirmation rules:
-            - Read-only operations (list, get, preview, search, analyze, find) → execute immediately without propose_plan
-            - Any mutating operation (update, create, delete, export, import, connect, add) → ALWAYS call propose_plan first
-            - Before propose_plan: do read operations first to get exact counts/names
-
-            After every successful mutation, inform user that changes can be undone by saying "отмени".
-            Format responses with markdown. Be concise and practical.
-            """;
+        var systemPrompt = AiPrompts.ChatSystem(storeName, productCount, connStr);
 
         // Convert user messages to AI format
         var messages = userMessages.Select(m => new AiMessage
@@ -242,13 +228,13 @@ public class AiChatService
         {
             model = decrypted.modelId,
             max_tokens = 512,
-            system = "You are a marketplace integration expert. Explain errors in simple Russian language. Be concise.",
+            system = AiPrompts.ExplainErrorSystem,
             messages =
             [
                 new AiMessage
                 {
                     role = "user",
-                    content = $"Ошибка при {context}: \"{errorMessage}\"\n\nОбъясни причину и предложи решение на русском. Ответ дай в формате: Причина: ...\nРешение: ..."
+                    content = AiPrompts.ExplainErrorUser(errorMessage, context)
                 }
             ]
         };
