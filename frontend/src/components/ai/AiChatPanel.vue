@@ -162,7 +162,7 @@ function renderMarkdown(text) {
 <style scoped>
 .ai-fab {
   position: fixed;
-  bottom: 24px;
+  bottom: 84px;
   right: 24px;
   width: 48px;
   height: 48px;
@@ -193,7 +193,7 @@ function renderMarkdown(text) {
 
 .ai-panel {
   position: fixed;
-  bottom: 84px;
+  bottom: 144px;
   right: 24px;
   width: 380px;
   height: 520px;

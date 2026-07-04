@@ -50,6 +50,7 @@ import {
   Wand2,
 } from "lucide-vue-next";
 import {
+  PAGE_ADMIN_AI,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_PLUGINS,
   PAGE_ADMIN_STORES,
@@ -167,6 +168,7 @@ export default {
         { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
         { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
         { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
+        { label: "AI Модели", to: PAGE_ADMIN_AI, icon: Wand2 },
       ];
     },
   },
