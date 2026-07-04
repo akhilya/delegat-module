@@ -639,7 +639,7 @@ public class AiChatService
             categoryId = p.CategoryId,
             name = p.Name,
             key = key,
-            type = Enum.TryParse<AttributeType>(p.Type, true, out var t) ? t : AttributeType.Text,
+            type = System.Enum.TryParse<AttributeType>(p.Type, true, out var t) ? t : AttributeType.Text,
             isRequired = p.IsRequired ?? false,
             group = p.Group,
             sortOrder = maxSort + 10
@@ -1156,9 +1156,9 @@ public class AiChatService
     private async Task<(object, string)> AddProductsToGroupAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<GroupProductsInput>(json);
-        var existing = await _context.productGroupMembers.AsNoTracking()
+        var existing = (await _context.productGroupMembers.AsNoTracking()
             .Where(m => m.groupId == p.GroupId && p.ProductIds.Contains(m.productId))
-            .Select(m => m.productId).ToHashSetAsync(ct);
+            .Select(m => m.productId).ToListAsync(ct)).ToHashSet();
         var toAdd = p.ProductIds.Where(id => !existing.Contains(id)).ToList();
         foreach (var pid in toAdd)
             _context.productGroupMembers.Add(new ProductGroupMember { groupId = p.GroupId, productId = pid });

@@ -38,13 +38,19 @@ public class AiController : ControllerBase
         var userId = _currentUserService.GetUserId();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
 
+        if (userId == null || storeId == null)
+        {
+            Response.StatusCode = 401;
+            return;
+        }
+
         Response.Headers.ContentType = "text/event-stream";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers.Connection = "keep-alive";
         Response.Headers["X-Accel-Buffering"] = "no";
 
         await foreach (var chunk in _chatService.StreamChatAsync(
-            request.Messages, storeId, userId, request.ModelId, ct))
+            request.Messages, storeId.Value, userId.Value, request.ModelId, ct))
         {
             var bytes = Encoding.UTF8.GetBytes(chunk);
             await Response.Body.WriteAsync(bytes, ct);
@@ -112,7 +118,8 @@ public class AiController : ControllerBase
     {
         var userId = _currentUserService.GetUserId();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
-        var ops = await _operationService.GetRecentAsync(userId, storeId, 10, ct);
+        if (userId == null || storeId == null) return Unauthorized();
+        var ops = await _operationService.GetRecentAsync(userId.Value, storeId.Value, 10, ct);
         return Ok(ops.Select(o => new
         {
             o.Id,
