@@ -121,3 +121,14 @@ public record ProductAttributeSnapshot
     public int AttributeId { get; set; }
     public string? OldValue { get; set; }
 }
+
+public record BarcodeRollbackData
+{
+    public List<BarcodeSnapshot> Products { get; set; } = new();
+}
+
+public record BarcodeSnapshot
+{
+    public int Id { get; set; }
+    public string? OldBarcode { get; set; }
+}

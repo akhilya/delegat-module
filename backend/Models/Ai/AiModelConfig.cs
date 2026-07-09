@@ -22,11 +22,16 @@ public class AiModelConfig : IEntity
 
     public bool isDefault { get; set; }
 
+    public bool isEnabled { get; set; } = true;
+
     public AiModelProvider provider { get; set; } = AiModelProvider.Anthropic;
 
     public int maxTokens { get; set; } = 8192;
 
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
+
+    [StringLength(500)]
+    public string? proxyUrl { get; set; }
 }
 
 public enum AiModelProvider

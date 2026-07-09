@@ -242,7 +242,7 @@ export default {
           description="Пригласите участников через токены, чтобы они могли работать с товарами магазина"
         >
           <template #icon>
-            <Users class="size-12 mb-4 text-muted-foreground" />
+            <Users />
           </template>
         </EmptyState>
 

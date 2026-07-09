@@ -149,6 +149,7 @@ const adapterFields = computed(() => data.value.fields || []);
 const adapterAvail = computed(() => data.value.availableSources || {});
 const adapterPreview = computed(() => data.value.preview || {});
 const adapterSourceValue = (f) => {
+  if (f.aliasOf) return `m:${f.aliasOf}`;
   const s = f.source;
   if (!s) return "";
   if (s.type === "groupName") return "g";
@@ -157,6 +158,10 @@ const adapterSourceValue = (f) => {
   if (s.type === "storeAttribute") return `s:${s.attributeId}`;
   return "";
 };
+
+// Merge candidates: other non-alias fields (a field can't alias itself or another alias)
+const mergeCandidates = (f) =>
+  adapterFields.value.filter((x) => x.fieldKey !== f.fieldKey && !x.aliasOf);
 const setAdapterSource = (fieldKey, value) =>
   data.value.setFieldSource?.(fieldKey, value === NONE ? "" : value);
 
@@ -164,6 +169,10 @@ const setAdapterSource = (fieldKey, value) =>
 // Select per field freezes the UI). Resting rows are cheap buttons; clicking one opens its editor.
 const editingField = ref(null);
 const currentSourceLabel = (f) => {
+  if (f.aliasOf) {
+    const primary = adapterFields.value.find((x) => x.fieldKey === f.aliasOf);
+    return `= ${primary?.label || f.aliasOf}`;
+  }
   const s = f.source;
   if (!s) return "по проводу";
   if (s.type === "groupName") return "Название группы";
@@ -613,6 +622,16 @@ function resolvePreview(fieldKey, raw) {
                     </SelectItem>
                   </SelectGroup>
                   <SelectItem value="g">Название группы</SelectItem>
+                  <SelectGroup v-if="mergeCandidates(f).length">
+                    <SelectLabel>Объединить с полем (дубликат)</SelectLabel>
+                    <SelectItem
+                      v-for="mf in mergeCandidates(f)"
+                      :key="mf.fieldKey"
+                      :value="`m:${mf.fieldKey}`"
+                    >
+                      = {{ mf.label || mf.fieldKey }}
+                    </SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               <div

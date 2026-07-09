@@ -3,33 +3,84 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Delegat.Enums;
+using Delegat.Services.Ai.Tools;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
 using Delegat.Models.Ai;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
+using Delegat.Infrastructure.Storage;
 using Delegat.Services.Ai.Prompts;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
+using System.Security.Cryptography;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Delegat.Services.Ai;
 
 public class AiChatService
 {
+    // Tracks active SSE sessions so the stop endpoint can cancel them immediately,
+    // without waiting for Kestrel to detect the client disconnect on the next FlushAsync.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource>
+        _activeSessions = new();
+
+    public static bool StopSession(string sessionId)
+    {
+        if (_activeSessions.TryRemove(sessionId, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+            return true;
+        }
+        return false;
+    }
+
     private readonly AiModelConfigService _modelService;
     private readonly AiApiClient _apiClient;
     private readonly AiMappingService _mappingService;
     private readonly GraphMutationService _graphMutation;
     private readonly AiOperationService _operationService;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
+    private readonly PriceSyncService _priceSyncService;
+    private readonly IStorageService _storageService;
+    private readonly ThumbnailService _thumbnailService;
     private readonly DataContext _context;
     private readonly ILogger<AiChatService> _logger;
+    private readonly Delegat.Services.Ai.Tools.ToolDispatcher _toolDispatcher;
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    // Maps tool names to UI refresh effects. Frontend reacts generically — no tool lists in JS.
+    private static readonly Dictionary<string, string[]> _toolEffects = new()
+    {
+        ["connect_field"]                = ["mapping"],
+        ["connect_fields"]               = ["mapping"],
+        ["remove_field_connection"]      = ["mapping"],
+        ["set_field_static_value"]       = ["mapping"],
+        ["set_fields_static_value"]      = ["mapping"],
+        ["add_field_modifier"]           = ["mapping"],
+        ["generate_mapping_suggestions"] = ["mapping"],
+        ["update_product"]               = ["product"],
+        ["create_product"]               = ["product"],
+        ["create_products"]              = ["product"],
+        ["update_product_sku"]           = ["product"],
+        ["update_product_prices"]        = ["product"],
+        ["update_product_attribute"]     = ["product"],
+        ["update_product_attributes"]    = ["product"],
+        ["delete_products"]              = ["product"],
+        ["restore_products"]             = ["product"],
+        ["rollback_last_operation"]      = ["product", "mapping"],
+        ["import_prices"]                = ["product"],
+        ["import_stocks"]                = ["product"],
+        ["import_products"]              = ["product"],
+        ["generate_barcodes"]            = ["product"],
     };
 
     public AiChatService(
@@ -39,7 +90,11 @@ public class AiChatService
         GraphMutationService graphMutation,
         AiOperationService operationService,
         IMarketplaceAdapterRegistry adapterRegistry,
+        PriceSyncService priceSyncService,
+        IStorageService storageService,
+        ThumbnailService thumbnailService,
         DataContext context,
+        Delegat.Services.Ai.Tools.ToolDispatcher toolDispatcher,
         ILogger<AiChatService> logger)
     {
         _modelService = modelService;
@@ -48,7 +103,11 @@ public class AiChatService
         _graphMutation = graphMutation;
         _operationService = operationService;
         _adapterRegistry = adapterRegistry;
+        _priceSyncService = priceSyncService;
+        _storageService = storageService;
+        _thumbnailService = thumbnailService;
         _context = context;
+        _toolDispatcher = toolDispatcher;
         _logger = logger;
     }
 
@@ -57,8 +116,20 @@ public class AiChatService
         int storeId,
         int userId,
         int? modelId = null,
+        AiPageContext? pageContext = null,
+        string? sessionId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Create a linked CTS so /ai/stop can cancel this stream explicitly,
+        // independent of the client-disconnect detection delay in Kestrel.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (!string.IsNullOrEmpty(sessionId))
+            _activeSessions[sessionId] = cts;
+        ct = cts.Token;
+
+        try
+        {
+
         AiModelConfig? modelConfig;
         if (modelId.HasValue)
             modelConfig = await _modelService.GetByIdAsync(modelId.Value, ct);
@@ -87,12 +158,15 @@ public class AiChatService
             .Where(u => u.Id == userId)
             .Select(u => new { u.UserName, u.isAdmin })
             .FirstOrDefaultAsync(ct);
+        var storeSettings = await _context.aiStoreSettings.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
 
         var systemPrompt = AiPrompts.ChatSystem(
             storeName, storeId, productCount, connections
                 .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
                 .ToList(),
-            currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false);
+            currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false,
+            pageContext, storeSettings);
 
         // Convert user messages to AI format
         var messages = userMessages.Select(m => new AiMessage
@@ -101,7 +175,8 @@ public class AiChatService
             content = m.content
         }).ToList();
 
-        var tools = BuildToolDefinitions();
+        var tools = BuildToolDefinitions(pageContext);
+        var autoContinued = false;
 
         // Agentic loop
         for (var iteration = 0; iteration < 20; iteration++)
@@ -113,7 +188,8 @@ public class AiChatService
                 system = systemPrompt,
                 messages = messages,
                 tools = tools,
-                stream = true
+                stream = true,
+                user = sessionId,
             };
 
             var textBuffer = new StringBuilder();
@@ -122,6 +198,7 @@ public class AiChatService
             var currentToolName = "";
             var currentToolInput = new StringBuilder();
             var isCollectingTool = false;
+            var gotApiError = false;
 
             await foreach (var ev in _apiClient.StreamAsync(model, request, ct))
             {
@@ -159,10 +236,47 @@ public class AiChatService
 
                     case "message_stop":
                         break;
+
+                    case "error":
+                        gotApiError = true;
+                        _logger.LogWarning("API error event in iteration {Iter}: {Err}", iteration, ev.error);
+                        break;
                 }
             }
 
-            if (toolUses.Count == 0) break;
+            if (gotApiError)
+            {
+                yield return Sse(SseEventType.Error, new { message = "Ошибка запроса к AI API. Попробуйте снова." });
+                break;
+            }
+
+            // Safety net: stream ended without content_block_stop for an open tool block
+            if (isCollectingTool && currentToolName.Length > 0)
+            {
+                _logger.LogWarning("Stream ended with unclosed tool block '{Tool}' — finalizing", currentToolName);
+                toolUses.Add((currentToolId, currentToolName, currentToolInput.ToString()));
+            }
+
+            if (toolUses.Count == 0)
+            {
+                // Anti-early-stopping: the model announced an action ("сейчас обновлю...")
+                // but ended the turn without calling any tool. Nudge it once to follow through.
+                var finalText = textBuffer.ToString();
+                if (!autoContinued && EndsWithUnfulfilledIntent(finalText))
+                {
+                    autoContinued = true;
+                    _logger.LogWarning("Model ended turn announcing an action without a tool call — auto-continuing (text tail: \"{Tail}\")",
+                        finalText.Length > 120 ? finalText[^120..] : finalText);
+                    messages.Add(new AiMessage { role = "assistant", content = finalText });
+                    messages.Add(new AiMessage
+                    {
+                        role = "user",
+                        content = "Продолжай — выполни действие, которое ты анонсировал, вызвав соответствующий инструмент. Не отвечай текстом без вызова инструмента."
+                    });
+                    continue;
+                }
+                break;
+            }
 
             // Build assistant message with content blocks
             var assistantContent = new List<object>();
@@ -199,11 +313,16 @@ public class AiChatService
                     break;
                 }
 
-                yield return Sse(SseEventType.Tool, new { name = toolName, status = "running" });
+                // input + id travel to the frontend: id links running/done events for proper
+                // API-format history replay (tool_use + tool_result blocks), input preserves
+                // facts like the working search spelling across turns
+                yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
 
                 var (result, summary) = await DispatchToolAsync(toolName, toolInputJson, storeId, userId, ct);
+                var resultJson = JsonSerializer.Serialize(result, _jsonOpts);
 
-                yield return Sse(SseEventType.Tool, new { name = toolName, status = "done", summary });
+                _toolEffects.TryGetValue(toolName, out var effects);
+                yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
 
                 toolResults.Add(new
                 {
@@ -218,7 +337,14 @@ public class AiChatService
             if (shouldBreak) break;
         }
 
-        yield return Sse(SseEventType.Done, new { });
+        yield return Sse(SseEventType.Done, new { modelName = model.modelId });
+
+        } // end try
+        finally
+        {
+            if (!string.IsNullOrEmpty(sessionId))
+                _activeSessions.TryRemove(sessionId, out _);
+        }
     }
 
     public async Task<string> ExplainErrorAsync(string errorMessage, string context,
@@ -254,9 +380,95 @@ public class AiChatService
         }
     }
 
+    public async Task<string> GenerateTitleAsync(string firstMessage, CancellationToken ct = default)
+    {
+        var model = await _modelService.GetDefaultModelAsync(ct);
+        if (model == null) return "Новый диалог";
+
+        var decrypted = _modelService.DecryptForUse(model);
+        var request = new AiRequest
+        {
+            model = decrypted.modelId,
+            max_tokens = 20,
+            system = "Придумай короткое название (3-5 слов, без знаков препинания) для диалога на основе первого сообщения пользователя. Ответь ТОЛЬКО названием, без объяснений.",
+            messages =
+            [
+                new AiMessage { role = "user", content = (firstMessage.Length > 300 ? firstMessage[..300] : firstMessage) }
+            ]
+        };
+        try
+        {
+            var response = await _apiClient.SendAsync(decrypted, request, ct);
+            return response.content.FirstOrDefault(b => b.type == "text")?.text?.Trim() ?? "Новый диалог";
+        }
+        catch { return "Новый диалог"; }
+    }
+
     // ---- Tool Dispatcher ----
 
-    private async Task<(object result, string summary)> DispatchToolAsync(
+    // Deterministic execution of a user-confirmed plan: steps carry exact tool arguments,
+    // so no model round-trip is needed — local models kept re-proposing plans or inventing
+    // field keys when asked to execute after confirmation.
+    public async IAsyncEnumerable<string> ExecutePlanStreamAsync(
+        List<PlanStepInput> steps, int storeId, int userId,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var forbidden = new HashSet<string> { "propose_plan", "rollback_last_operation" };
+        var ok = 0;
+        var errors = new List<string>();
+
+        foreach (var step in steps)
+        {
+            if (ct.IsCancellationRequested) break;
+            var tool = step.Tool ?? "";
+            // Strip legacy "functions." prefix emitted by some OpenAI-compatible models
+            if (tool.StartsWith("functions.", StringComparison.OrdinalIgnoreCase))
+                tool = tool["functions.".Length..];
+            var argsJson = step.Args.HasValue ? step.Args.Value.GetRawText() : "{}";
+
+            var stepId = Guid.NewGuid().ToString("N")[..8];
+            yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "running", input = argsJson });
+
+            string summary;
+            bool failed;
+            string resultJson;
+            if (forbidden.Contains(tool))
+            {
+                summary = "Инструмент недопустим внутри плана";
+                failed = true;
+                resultJson = "{}";
+            }
+            else
+            {
+                var (result, s) = await DispatchToolAsync(tool, argsJson, storeId, userId, ct);
+                summary = s;
+                failed = JsonSerializer.SerializeToElement(result, _jsonOpts).TryGetProperty("error", out _);
+                resultJson = JsonSerializer.Serialize(result, _jsonOpts);
+            }
+
+            if (failed) errors.Add($"{tool} — {summary}");
+            else ok++;
+
+            _toolEffects.TryGetValue(tool, out var effects);
+            yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
+        }
+
+        var text = errors.Count == 0
+            ? $"✅ План выполнен: {ok} из {steps.Count} шагов."
+            : $"План выполнен частично: успешно {ok} из {steps.Count} шагов.\n\nОшибки:\n"
+              + string.Join("\n", errors.Select(e => $"- {e}"))
+              + "\n\nИзменения можно откатить: напишите «отмени».";
+        yield return Sse(SseEventType.Text, new { delta = text });
+        yield return Sse(SseEventType.Done, new { });
+    }
+
+    private Task<(object result, string summary)> DispatchToolAsync(
+        string toolName, string inputJson, int storeId, int userId, CancellationToken ct)
+        => _toolDispatcher.DispatchAsync(toolName, inputJson, storeId, userId, ct);
+
+    // Keep the old switch stub below only during transition; it will be removed once
+    // the build confirms ToolDispatcher is wired correctly.
+    private async Task<(object result, string summary)> _OldDispatchToolAsync(
         string toolName, string inputJson, int storeId, int userId, CancellationToken ct)
     {
         try
@@ -268,10 +480,12 @@ public class AiChatService
                 "get_products_count" => await GetProductsCountAsync(inputJson, storeId, ct),
                 "get_product" => await GetProductAsync(inputJson, storeId, ct),
                 "create_product" => await CreateProductAsync(inputJson, storeId, userId, ct),
+                "create_products" => await CreateProductsBulkAsync(inputJson, storeId, userId, ct),
                 "update_product" => await UpdateProductAsync(inputJson, storeId, userId, ct),
                 "update_product_sku" => await UpdateProductSkuAsync(inputJson, storeId, ct),
                 "update_product_prices" => await UpdateProductPricesAsync(inputJson, storeId, userId, ct),
                 "update_product_attribute" => await UpdateProductAttributeAsync(inputJson, storeId, userId, ct),
+                "update_product_attributes" => await UpdateProductAttributesBulkAsync(inputJson, storeId, userId, ct),
                 "delete_products" => await DeleteProductsAsync(inputJson, storeId, userId, ct),
                 "restore_products" => await RestoreProductsAsync(inputJson, storeId, ct),
                 "list_trash" => await ListTrashAsync(inputJson, storeId, ct),
@@ -296,6 +510,12 @@ public class AiChatService
                 "get_connection" => await GetConnectionAsync(inputJson, storeId, ct),
                 "test_connection" => await TestConnectionAsync(inputJson, storeId, ct),
                 "get_connection_limits" => await GetConnectionLimitsAsync(inputJson, storeId, ct),
+                "get_adapter_info" => await GetAdapterInfoAsync(inputJson, storeId, ct),
+                "preview_marketplace_products" => await PreviewMarketplaceProductsAsync(inputJson, storeId, ct),
+                "import_products" => await ImportProductsAsync(inputJson, storeId, userId, ct),
+                "import_prices" => await ImportPricesAsync(inputJson, storeId, userId, ct),
+                "import_stocks" => await ImportStocksAsync(inputJson, storeId, userId, ct),
+                "archive_product_on_marketplace" => await ArchiveProductOnMarketplaceAsync(inputJson, storeId, userId, ct),
 
                 // Mappings
                 "list_mappings" => await ListMappingsAsync(inputJson, storeId, ct),
@@ -306,12 +526,17 @@ public class AiChatService
                 "duplicate_mapping" => await DuplicateMappingAsync(inputJson, storeId, ct),
                 "list_external_categories" => await ListExternalCategoriesAsync(inputJson, storeId, ct),
                 "get_external_fields" => await GetExternalFieldsAsync(inputJson, storeId, ct),
+                "search_field_options" => await SearchFieldOptionsAsync(inputJson, storeId, ct),
+                "merge_adapter_fields" => await MergeAdapterFieldsAsync(inputJson, storeId, userId, ct),
+                "unmerge_adapter_fields" => await UnmergeAdapterFieldsAsync(inputJson, storeId, userId, ct),
                 "get_available_sources" => await GetAvailableSourcesAsync(inputJson, storeId, ct),
                 "get_mapping_coverage" => await GetMappingCoverageAsync(inputJson, storeId, ct),
                 "preview_mapping_for_product" => await PreviewMappingAsync(inputJson, storeId, ct),
                 "generate_mapping_suggestions" => await GenerateMappingSuggestionsAsync(inputJson, storeId, userId, ct),
                 "connect_field" => await ConnectFieldAsync(inputJson, storeId, userId, ct),
+                "connect_fields" => await ConnectFieldsBulkAsync(inputJson, storeId, userId, ct),
                 "set_field_static_value" => await SetFieldStaticAsync(inputJson, storeId, userId, ct),
+                "set_fields_static_value" => await SetFieldsStaticBulkAsync(inputJson, storeId, userId, ct),
                 "add_field_modifier" => await AddFieldModifierAsync(inputJson, storeId, userId, ct),
                 "remove_field_connection" => await RemoveFieldConnectionAsync(inputJson, storeId, userId, ct),
 
@@ -323,9 +548,22 @@ public class AiChatService
                 "list_product_links" => await ListProductLinksAsync(inputJson, storeId, ct),
 
                 // Groups
-                "list_groups" => await ListGroupsAsync(storeId, ct),
+                "list_groups" => await ListGroupsAsync(inputJson, storeId, ct),
+                "get_group" => await GetGroupAsync(inputJson, storeId, ct),
                 "create_group" => await CreateGroupAsync(inputJson, storeId, userId, ct),
+                "update_group" => await UpdateGroupAsync(inputJson, storeId, userId, ct),
+                "delete_group" => await DeleteGroupAsync(inputJson, storeId, userId, ct),
                 "add_products_to_group" => await AddProductsToGroupAsync(inputJson, storeId, ct),
+                "remove_products_from_group" => await RemoveProductsFromGroupAsync(inputJson, storeId, userId, ct),
+                "list_files" => await ListFilesAsync(inputJson, storeId, ct),
+                "create_folder" => await CreateFolderAsync(inputJson, storeId, userId, ct),
+                "rename_file" => await RenameFileAsync(inputJson, storeId, ct),
+                "rename_folder" => await RenameFolderAsync(inputJson, storeId, ct),
+                "move_files" => await MoveFilesAsync(inputJson, storeId, ct),
+                "delete_files" => await DeleteFilesAsync(inputJson, storeId, userId, ct),
+                "delete_folder" => await DeleteFolderAsync(inputJson, storeId, userId, ct),
+                "share_file" => await ShareFileAsync(inputJson, storeId, userId, ct),
+                "generate_barcodes" => await GenerateBarcodesAsync(inputJson, storeId, userId, ct),
 
                 // Analytics
                 "get_store_stats" => await GetStoreStatsAsync(storeId, ct),
@@ -362,6 +600,8 @@ public class AiChatService
             q = q.Where(x => x.name.Contains(p.Search) || (x.sku != null && x.sku.Contains(p.Search)));
         if (p.PriceMin.HasValue) q = q.Where(x => x.price >= p.PriceMin);
         if (p.PriceMax.HasValue) q = q.Where(x => x.price <= p.PriceMax);
+        if (p.QuantityMin.HasValue) q = q.Where(x => x.storageQuantity >= p.QuantityMin);
+        if (p.QuantityMax.HasValue) q = q.Where(x => x.storageQuantity <= p.QuantityMax);
         if (p.HasImages == true)
             q = q.Where(x => _context.images.Any(i => i.productId == x.Id));
         if (p.HasImages == false)
@@ -377,10 +617,31 @@ public class AiChatService
 
         var limit = Math.Min(p.PageSize ?? 50, 200);
         var offset = p.StartIndex ?? 0;
-        var products = await q.OrderBy(x => x.Id)
+        var desc = string.Equals(p.SortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        IOrderedQueryable<Models.Products.Product> sorted = p.SortBy?.ToLower() switch
+        {
+            "price"    => desc ? q.OrderByDescending(x => x.price)    : q.OrderBy(x => x.price),
+            "name"     => desc ? q.OrderByDescending(x => x.name)     : q.OrderBy(x => x.name),
+            "quantity" => desc ? q.OrderByDescending(x => x.storageQuantity) : q.OrderBy(x => x.storageQuantity),
+            _          => desc ? q.OrderByDescending(x => x.Id)       : q.OrderBy(x => x.Id),
+        };
+        var products = await sorted
             .Skip(offset).Take(limit)
             .Select(x => new { x.Id, x.name, x.sku, x.price, x.barcode, x.storageQuantity, x.categoryId })
             .ToListAsync(ct);
+
+        // Zero hits on a text search: nudge the model to retry with spelling variants —
+        // catalogs often mix Cyrillic and Latin (Вархаммер vs Warhammer)
+        if (products.Count == 0 && !string.IsNullOrEmpty(p.Search))
+        {
+            return (new
+            {
+                items = products,
+                count = 0,
+                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
+                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
+            }, $"0 товаров по '{p.Search}' — попробуй другое написание (латиница/кириллица)");
+        }
 
         return (new { items = products, count = products.Count }, $"Найдено {products.Count} товаров");
     }
@@ -394,6 +655,15 @@ public class AiChatService
         if (p.PriceMin.HasValue) q = q.Where(x => x.price >= p.PriceMin);
         if (p.PriceMax.HasValue) q = q.Where(x => x.price <= p.PriceMax);
         var count = await q.CountAsync(ct);
+        if (count == 0 && !string.IsNullOrEmpty(p.Search))
+        {
+            return (new
+            {
+                count = 0,
+                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
+                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
+            }, $"0 товаров по '{p.Search}' — попробуй другое написание");
+        }
         return (new { count }, $"{count} товаров");
     }
 
@@ -405,7 +675,26 @@ public class AiChatService
             .Include(x => x.attributeValues).ThenInclude(v => v.attribute)
             .FirstOrDefaultAsync(x => x.Id == p.Id && x.storeId == storeId, ct);
         if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
-        return (product, product.name);
+        var result = new
+        {
+            product.Id,
+            product.name,
+            product.sku,
+            product.price,
+            product.barcode,
+            product.description,
+            product.storageQuantity,
+            category = product.category == null ? null : new { product.category.Id, product.category.name },
+            attributes = product.attributeValues.Select(v => new
+            {
+                attributeId = v.attributeId,
+                name = v.attribute?.name,
+                key = v.attribute?.key,
+                type = v.attribute?.type.ToString(),
+                value = v.value
+            }).ToList()
+        };
+        return (result, product.name);
     }
 
     private async Task<(object, string)> CreateProductAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -414,10 +703,10 @@ public class AiChatService
         var product = new Product
         {
             name = p.Name,
-            sku = p.Sku,
+            sku = p.Sku ?? "",
             price = p.Price ?? 0,
-            barcode = p.Barcode,
-            description = p.Description,
+            barcode = p.Barcode ?? "",
+            description = p.Description ?? "",
             storageQuantity = p.Quantity ?? 0,
             categoryId = p.CategoryId,
             storeId = storeId
@@ -427,6 +716,33 @@ public class AiChatService
         await _operationService.RecordAsync(storeId, userId, "create_product",
             $"Создан товар \"{p.Name}\"", new { productId = product.Id }, canRollback: false, ct: ct);
         return (new { id = product.Id }, $"Товар \"{p.Name}\" создан (id={product.Id})");
+    }
+
+    private async Task<(object, string)> CreateProductsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<CreateProductsBulkInput>(json);
+        if (p.Products is not { Count: > 0 })
+            return (new { error = "Список товаров пуст" }, "Список пуст");
+
+        var created = new List<object>();
+        foreach (var spec in p.Products)
+        {
+            var product = new Product
+            {
+                name = spec.Name,
+                sku = spec.Sku ?? "",
+                price = spec.Price ?? 0,
+                barcode = spec.Barcode ?? "",
+                description = spec.Description ?? "",
+                storageQuantity = spec.Quantity ?? 0,
+                categoryId = spec.CategoryId,
+                storeId = storeId
+            };
+            _context.products.Add(product);
+            await _context.SaveChangesAsync(ct);
+            created.Add(new { id = product.Id, name = product.name });
+        }
+        return (new { created }, $"Создано {created.Count} товаров");
     }
 
     private async Task<(object, string)> UpdateProductAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -445,6 +761,53 @@ public class AiChatService
 
         await _context.SaveChangesAsync(ct);
         return (new { success = true }, $"Товар обновлён: {string.Join(", ", changes)}");
+    }
+
+    private async Task<(object, string)> UpdateProductAttributesBulkAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<UpdateAttributesBulkInput>(json);
+        if (p.Attributes is not { Count: > 0 })
+            return (new { error = "Список атрибутов пуст" }, "Список пуст");
+
+        var applied = 0;
+        var errors = new List<string>();
+        var allOldValues = new List<ProductAttributeSnapshot>();
+
+        foreach (var attr in p.Attributes)
+        {
+            var attrDef = await _context.categoryAttributes.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.key == attr.AttributeKey && a.category.storeId == storeId, ct);
+            if (attrDef == null) { errors.Add($"Атрибут '{attr.AttributeKey}' не найден"); continue; }
+
+            var productIds = p.ProductIds ?? await _context.products.AsNoTracking()
+                .Where(x => x.storeId == storeId && x.categoryId == attrDef.categoryId)
+                .Select(x => x.Id).ToListAsync(ct);
+
+            var existing = await _context.productAttributeValues
+                .Where(v => productIds.Contains(v.productId) && v.attributeId == attrDef.Id)
+                .ToListAsync(ct);
+
+            allOldValues.AddRange(existing.Select(v => new ProductAttributeSnapshot
+            { ProductId = v.productId, AttributeId = v.attributeId, OldValue = v.value }));
+
+            var existingIds = existing.Select(v => v.productId).ToHashSet();
+            foreach (var ev in existing) ev.value = attr.Value;
+            foreach (var pid in productIds.Where(id => !existingIds.Contains(id)))
+                _context.productAttributeValues.Add(new ProductAttributeValue
+                { productId = pid, attributeId = attrDef.Id, value = attr.Value });
+
+            applied++;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        if (allOldValues.Count > 0)
+            await _operationService.RecordAsync(storeId, userId, "update_attribute",
+                $"Обновлено {applied} атрибутов у товаров",
+                new ProductAttributeRollbackData { Products = allOldValues }, ct: ct);
+
+        var summary = $"Обновлено атрибутов: {applied}";
+        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        return (new { applied, errors }, summary);
     }
 
     private async Task<(object, string)> UpdateProductSkuAsync(string json, int storeId, CancellationToken ct)
@@ -577,8 +940,22 @@ public class AiChatService
         {
             cat.Id, cat.name, cat.description,
             attributes = cat.attributes.OrderBy(a => a.sortOrder)
-                .Select(a => new { a.Id, a.name, a.key, a.type, a.isRequired })
+                .Select(a => new
+                {
+                    a.Id, a.name, a.key,
+                    type = a.type.ToString(),
+                    a.isRequired,
+                    options = ParseAttributeOptions(a.options),
+                })
         }, cat.name);
+    }
+
+    // Select/MultiSelect options are stored as a JSON string — parse so the model sees real values
+    private static object? ParseAttributeOptions(string? optionsJson)
+    {
+        if (string.IsNullOrWhiteSpace(optionsJson)) return null;
+        try { return JsonSerializer.Deserialize<object>(optionsJson); }
+        catch { return optionsJson; }
     }
 
     private async Task<(object, string)> CreateCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -606,6 +983,18 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var cat = await _context.categories.FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
         if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+
+        var activeCount = await _context.products.CountAsync(x => x.categoryId == p.Id, ct);
+        if (activeCount > 0)
+            return (new { error = $"В категории {activeCount} товаров — сначала перемести или удали их" },
+                $"Нельзя удалить: в категории {activeCount} товаров");
+
+        // Trashed products are hidden by the global query filter, but their FK rows still
+        // block the DELETE — detach them from the category (they stay in the trash)
+        await _context.products.IgnoreQueryFilters()
+            .Where(x => x.categoryId == p.Id && x.deletedAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.categoryId, (int?)null), ct);
+
         _context.categories.Remove(cat);
         await _context.SaveChangesAsync(ct);
         return (new { success = true }, $"Категория \"{cat.name}\" удалена");
@@ -614,11 +1003,18 @@ public class AiChatService
     private async Task<(object, string)> ListCategoryFieldsAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<IdInput>(json);
-        var fields = await _context.categoryAttributes.AsNoTracking()
+        var raw = await _context.categoryAttributes.AsNoTracking()
             .Where(a => a.categoryId == p.Id && a.category.storeId == storeId)
             .OrderBy(a => a.sortOrder)
-            .Select(a => new { a.Id, a.name, a.key, a.type, a.isRequired, a.group })
+            .Select(a => new { a.Id, a.name, a.key, a.type, a.isRequired, a.group, a.options })
             .ToListAsync(ct);
+        var fields = raw.Select(a => new
+        {
+            a.Id, a.name, a.key,
+            type = a.type.ToString(),
+            a.isRequired, a.group,
+            options = ParseAttributeOptions(a.options),
+        }).ToList();
         return (new { fields, count = fields.Count }, $"{fields.Count} полей");
     }
 
@@ -761,6 +1157,204 @@ public class AiChatService
         }
     }
 
+    // Matches turn-final statements of intent: future-tense action verbs (ru) / intent phrases (en)
+    // in the last sentence. Used to detect "announced but never called the tool" early stopping.
+    private static readonly System.Text.RegularExpressions.Regex _unfulfilledIntentRegex = new(
+        @"\b(выполню|проверю|вызову|получу|сделаю|обновлю|создам|удалю|найду|посмотрю|загружу|запущу|запрошу|подключу|заполню|приступаю|начинаю|запускаю|выполняю|получаю|проверяю|I(?:'|’)?ll|I will|let me|going to|now I)\b[^.!?\n]{0,120}[.!…:]?\s*$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static bool EndsWithUnfulfilledIntent(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var tail = text.Length > 300 ? text[^300..] : text;
+        return _unfulfilledIntentRegex.IsMatch(tail);
+    }
+
+    // Resolves connection (scoped to store) + adapter, with optional capability check.
+    private async Task<(MarketplaceConnection? conn, IMarketplaceAdapter? adapter, string? error)> ResolveAdapterAsync(
+        int connectionId, int storeId, MarketplaceCapabilities? required, CancellationToken ct)
+    {
+        var conn = await _context.marketplaceConnections.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
+        if (conn == null) return (null, null, "Подключение не найдено");
+        var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
+        if (adapter == null) return (null, null, $"Адаптер '{conn.adapterKey}' не найден");
+        if (required.HasValue && !adapter.Capabilities.HasFlag(required.Value))
+            return (null, null, $"Маркетплейс {adapter.DisplayName} не поддерживает операцию {required.Value}");
+        return (conn, adapter, null);
+    }
+
+    private async Task<(object, string)> GetAdapterInfoAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<ConnectionIdRequiredInput>(json);
+        var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, null, ct);
+        if (error != null) return (new { error }, error);
+
+        // Only single-bit flags — skip composite convenience values like FullProducts
+        var capabilities = System.Enum.GetValues<MarketplaceCapabilities>()
+            .Where(v => v != 0 && ((long)v & ((long)v - 1)) == 0 && adapter!.Capabilities.HasFlag(v))
+            .Select(v => v.ToString())
+            .ToList();
+
+        var fieldGrouping = adapter!.GetFieldBasedGroupingConfig();
+        object? grouping = null;
+        if (fieldGrouping != null)
+        {
+            grouping = new
+            {
+                scheme = "field",
+                fieldKey = fieldGrouping.GroupFieldKey,
+                description = "Товары объединяются в карточку по значению этого поля маппинга (по умолчанию — groupName)",
+            };
+        }
+        else if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping))
+        {
+            grouping = new
+            {
+                scheme = "endpoint",
+                fieldKey = ProductSyncService.SyntheticGroupFieldKey,
+                description = "Товары с одинаковым вычисленным значением поля группировки объединяются API-вызовами после экспорта",
+            };
+        }
+
+        return (new
+        {
+            adapterKey = adapter.Key,
+            displayName = adapter.DisplayName,
+            description = adapter.Description,
+            connectionName = conn!.name,
+            isActive = conn.isActive,
+            capabilities,
+            grouping,
+        }, $"Адаптер {adapter.DisplayName}: {capabilities.Count} возможностей");
+    }
+
+    private async Task<(object, string)> PreviewMarketplaceProductsAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<PreviewMarketplaceInput>(json);
+        var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportAllProducts, ct);
+        if (error != null) return (new { error }, error);
+
+        var page = await adapter!.ImportAllProductsAsync(conn!, Math.Min(p.PageSize ?? 50, 200), p.Cursor, p.Search, ct);
+
+        // Mark which external products are already linked locally
+        var externalIds = page.Items.Select(i => i.ExternalId).ToList();
+        var linked = (await _context.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.connectionId == p.ConnectionId && externalIds.Contains(l.externalProductId))
+            .Select(l => l.externalProductId).ToListAsync(ct)).ToHashSet();
+
+        var items = page.Items.Select(i => new
+        {
+            externalId = i.ExternalId,
+            i.Sku, i.Name, i.Price, i.Quantity,
+            categoryId = i.CategoryId, categoryName = i.CategoryName,
+            alreadyImported = linked.Contains(i.ExternalId),
+        }).ToList();
+
+        return (new { items, hasMore = page.HasMore, nextCursor = page.NextCursor, totalCount = page.TotalCount },
+            $"На маркетплейсе: {items.Count} товаров (страница){(page.HasMore ? ", есть ещё" : "")}");
+    }
+
+    private async Task<(object, string)> ImportProductsAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ImportProductsInput>(json);
+        if (p.ExternalProductIds.Count == 0) return (new { error = "Не указаны externalProductIds" }, "Нет товаров");
+        var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportProduct, ct);
+        if (error != null) return (new { error }, error);
+
+        var batchId = Guid.NewGuid().ToString("N");
+        foreach (var extId in p.ExternalProductIds.Distinct())
+        {
+            _context.pendingProductImports.Add(new PendingProductImport
+            {
+                connectionId = p.ConnectionId,
+                externalProductId = extId,
+                targetCategoryId = p.TargetCategoryId,
+                authorUserId = userId,
+                storeId = storeId,
+                batchId = batchId,
+                status = ProductImportStatus.Pending,
+                createdAt = DateTime.UtcNow,
+            });
+        }
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "import_products",
+            $"Импорт {p.ExternalProductIds.Count} товаров с {conn!.name}", new { }, canRollback: false, ct);
+        return (new { batchId, queued = p.ExternalProductIds.Count },
+            $"Импорт {p.ExternalProductIds.Count} товаров поставлен в очередь (batchId: {batchId})");
+    }
+
+    private async Task<(object, string)> ImportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ConnectionIdRequiredInput>(json);
+        var (conn, _, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportPrices, ct);
+        if (error != null) return (new { error }, error);
+
+        var result = await _priceSyncService.ImportPricesAsync(p.ConnectionId, null, ct, storeId: storeId);
+        if (!result.IsSuccess) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+
+        await _operationService.RecordAsync(storeId, userId, "import_prices",
+            $"Импорт цен с {conn!.name}: обновлено {result.UpdatedCount}", new { }, canRollback: false, ct);
+        return (new { updated = result.UpdatedCount, skipped = result.SkippedCount },
+            $"Импорт цен: обновлено {result.UpdatedCount}, пропущено {result.SkippedCount}");
+    }
+
+    private async Task<(object, string)> ImportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ConnectionIdRequiredInput>(json);
+        var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportStocks, ct);
+        if (error != null) return (new { error }, error);
+
+        var stocks = await adapter!.ImportStocksAsync(conn!, null, ct);
+        // Sum across warehouses per external product
+        var byExternalId = stocks
+            .GroupBy(s => s.ExternalProductId)
+            .ToDictionary(g => g.Key, g => g.Sum(s => s.Quantity));
+
+        var stockExternalIds = byExternalId.Keys.ToList();
+        var links = await _context.productMarketplaceLinks
+            .Include(l => l.product)
+            .Where(l => l.connectionId == p.ConnectionId && stockExternalIds.Contains(l.externalProductId))
+            .ToListAsync(ct);
+
+        var updated = 0;
+        foreach (var link in links)
+        {
+            var qty = byExternalId[link.externalProductId];
+            if (link.product.storageQuantity != qty)
+            {
+                link.product.storageQuantity = qty;
+                updated++;
+            }
+            link.externalStock = qty;
+        }
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "import_stocks",
+            $"Импорт остатков с {conn!.name}: обновлено {updated}", new { }, canRollback: false, ct);
+        return (new { updated, totalOnMarketplace = byExternalId.Count },
+            $"Импорт остатков: обновлено {updated} товаров");
+    }
+
+    private async Task<(object, string)> ArchiveProductOnMarketplaceAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ArchiveProductInput>(json);
+        var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ArchiveProduct, ct);
+        if (error != null) return (new { error }, error);
+
+        var link = await _context.productMarketplaceLinks.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.connectionId == p.ConnectionId && l.productId == p.ProductId, ct);
+        if (link == null) return (new { error = "Товар не связан с этим маркетплейсом" }, "Связь не найдена");
+
+        var result = await adapter!.ArchiveProductAsync(conn!, link.externalProductId, ct);
+        if (!result.Success) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+
+        await _operationService.RecordAsync(storeId, userId, "archive_product",
+            $"Товар {p.ProductId} архивирован на {conn.name}", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Товар архивирован на {conn.name}");
+    }
+
     // ---- Mapping Tools ----
 
     private async Task<(object, string)> ListMappingsAsync(string json, int storeId, CancellationToken ct)
@@ -789,11 +1383,23 @@ public class AiChatService
         if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
 
         var coverage = await _graphMutation.GetCoverageAsync(p.Id, ct);
+        var fields = await _graphMutation.GetFieldStatesAsync(p.Id, ct);
         return (new
         {
             mapping.Id, mapping.name, mapping.localCategoryId, mapping.externalCategoryId,
-            mapping.externalCategoryName, coverage
-        }, $"Маппинг {mapping.name ?? mapping.externalCategoryName}: {coverage.Connected}/{coverage.Total} полей");
+            mapping.externalCategoryName,
+            // Counters only — the full per-field state (incl. isRequired/connected/source)
+            // lives in `fields`; a separate unmapped-required list would duplicate it
+            coverage = new
+            {
+                total = coverage.Total,
+                connected = coverage.Connected,
+                requiredTotal = coverage.RequiredTotal,
+                requiredConnected = coverage.RequiredConnected,
+            },
+            fields,
+        }, $"Маппинг {mapping.name ?? mapping.externalCategoryName}: {coverage.Connected}/{coverage.Total} полей " +
+           $"(обязательных {coverage.RequiredConnected}/{coverage.RequiredTotal})");
     }
 
     private async Task<(object, string)> CreateMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -825,7 +1431,7 @@ public class AiChatService
             {
                 mapping = await _context.categoryMappings.FindAsync([mapping.Id], ct) ?? mapping;
                 mapping.connection = conn;
-                var aiResult = await _mappingService.GenerateSuggestionsAsync(mapping, localCat, adapterFields, ct);
+                var aiResult = await _mappingService.GenerateSuggestionsAsync(mapping, localCat, adapterFields, ct: ct);
                 return (new
                 {
                     id = mapping.Id,
@@ -897,16 +1503,122 @@ public class AiChatService
     private async Task<(object, string)> GetExternalFieldsAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<ExternalFieldsInput>(json);
+
+        int connectionId;
+        string externalCategoryId;
+        if (p.MappingId.HasValue)
+        {
+            // Resolve connection + external category from the mapping — the AI on a mapping
+            // page knows mappingId but not the marketplace category id
+            var mapping = await _context.categoryMappings.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            connectionId = mapping.connectionId;
+            externalCategoryId = mapping.externalCategoryId;
+        }
+        else
+        {
+            if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
+                return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+            connectionId = p.ConnectionId.Value;
+            externalCategoryId = p.ExternalCategoryId;
+        }
+
         var conn = await _context.marketplaceConnections.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Не найдено" }, "Не найдено");
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
+        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
-        var fields = await adapter.GetCategoryFieldsAsync(conn, p.ExternalCategoryId, ct);
+        var fields = await adapter.GetCategoryFieldsAsync(conn, externalCategoryId, ct);
+
+        var groupingKey = ProductSyncService.ResolveGroupingFieldKey(adapter);
+
+        // Endpoint-based adapters group via API — the mapping's grouping field is synthetic
+        // and doesn't exist in the live schema, so append it for the model
+        if (groupingKey == ProductSyncService.SyntheticGroupFieldKey && fields.All(f => f.Key != groupingKey))
+        {
+            fields = fields.Concat([new ExternalField(
+                Key: ProductSyncService.SyntheticGroupFieldKey,
+                Name: "Объединение в карточку (группа)",
+                IsRequired: false,
+                Type: "string",
+                Description: "Товары с одинаковым вычисленным значением объединяются в одну карточку. По умолчанию привязано к groupName.")]).ToList();
+        }
+
+        var projected = fields.Select(f => new
+        {
+            f.Key, f.Name, f.Type, f.IsRequired, f.Description,
+            f.Unit, f.MaxLength, f.IsAspect,
+            // Large dictionaries (WB colors/brands: thousands of values) would blow up
+            // the context — show a sample and point the model at search_field_options
+            options = f.Options == null ? null
+                : f.Options.Take(15).Select(o => new { o.Value, o.Label }).ToList(),
+            optionsTotal = f.Options?.Count,
+            optionsNote = f.Options?.Count > 15
+                ? "shown 15 of " + f.Options.Count + " — use search_field_options to find a specific value"
+                : null,
+            isGroupingField = groupingKey != null && f.Key == groupingKey ? (bool?)true : null,
+        }).ToList();
+
         return (new
         {
-            fields = fields.Select(f => new { f.Key, f.Name, f.Type, f.IsRequired, f.Description }),
-            total = fields.Count, required = fields.Count(f => f.IsRequired)
-        }, $"{fields.Count} полей ({fields.Count(f => f.IsRequired)} обязательных)");
+            fields = projected,
+            total = projected.Count, required = fields.Count(f => f.IsRequired)
+        }, $"{projected.Count} полей ({fields.Count(f => f.IsRequired)} обязательных)");
+    }
+
+    private async Task<(object, string)> SearchFieldOptionsAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<SearchFieldOptionsInput>(json);
+
+        CategoryMapping? mapping = null;
+        if (p.MappingId.HasValue)
+        {
+            mapping = await _context.categoryMappings.AsNoTracking()
+                .Include(m => m.connection)
+                .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        }
+        else if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
+        {
+            return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+        }
+
+        List<ExternalField> defs;
+        if (mapping != null)
+        {
+            defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        }
+        else
+        {
+            var conn = await _context.marketplaceConnections.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
+            if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+            var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
+            defs = await adapter.GetCategoryFieldsAsync(conn, p.ExternalCategoryId!, ct);
+        }
+
+        var field = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
+        if (field == null)
+            return (new { error = $"Поле '{p.AdapterFieldKey}' не найдено у адаптера" }, "Поле не найдено");
+        if (field.Options is not { Count: > 0 })
+            return (new { options = Array.Empty<object>(), totalOptions = 0 },
+                $"У поля '{field.Name}' нет предопределённых опций — значение свободное");
+
+        var query = p.Query ?? "";
+        var matches = string.IsNullOrWhiteSpace(query)
+            ? field.Options.ToList()
+            : field.Options.Where(o =>
+                    (o.Label?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    o.Value.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        var limit = Math.Min(p.Limit ?? 20, 50);
+        return (new
+        {
+            options = matches.Take(limit).Select(o => new { o.Value, o.Label }).ToList(),
+            totalMatches = matches.Count,
+            totalOptions = field.Options.Count,
+        }, $"Найдено {matches.Count} опций по «{query}» (всего у поля {field.Options.Count})");
     }
 
     private async Task<(object, string)> GetAvailableSourcesAsync(string json, int storeId, CancellationToken ct)
@@ -969,25 +1681,55 @@ public class AiChatService
 
         // Save previous graph for rollback
         var prevGraph = mapping.graphJson ?? "";
-        var result = await _mappingService.GenerateSuggestionsAsync(mapping, localCat, adapterFields, ct);
+        var result = await _mappingService.GenerateSuggestionsAsync(mapping, localCat, adapterFields, ct: ct);
 
         await _operationService.RecordAsync(storeId, userId, "generate_mapping",
             $"AI-маппинг для маппинга {p.Id}: подключено {result.Connected} полей",
             AiOperationService.BuildGraphRollback(p.Id, prevGraph), ct: ct);
 
-        return (new { connected = result.Connected, skipped = result.Skipped },
-            $"AI подключил {result.Connected} полей, пропущено {result.Skipped}");
+        return (new
+        {
+            connected = result.Connected,
+            proposed = result.Proposed,
+            unconnectedRemaining = result.Skipped,
+            alreadyConnectedBefore = result.AlreadyConnected,
+            unknownKeys = result.UnknownKeys,
+            noSourceFound = result.NoSource,
+            invalidModifiersDropped = result.InvalidModifiers,
+        }, $"AI подключил {result.Connected} новых полей (предложено {result.Proposed}, " +
+           $"уже было подключено {result.AlreadyConnected}, осталось незаполненных {result.Skipped}" +
+           (result.InvalidModifiers.Count > 0
+               ? $"; отброшены несуществующие модификаторы: {string.Join(", ", result.InvalidModifiers.Distinct())})"
+               : ")"));
+    }
+
+    // Fetches adapter field definitions for a mapping (mapping must have connection loaded).
+    // Returns empty on adapter failure — callers degrade gracefully.
+    private async Task<List<ExternalField>> GetAdapterFieldDefsAsync(CategoryMapping mapping, CancellationToken ct)
+    {
+        try
+        {
+            var adapter = _adapterRegistry.GetByKey(mapping.connection.adapterKey);
+            if (adapter == null) return new();
+            return await adapter.GetCategoryFieldsAsync(mapping.connection, mapping.externalCategoryId, ct);
+        }
+        catch { return new(); }
     }
 
     private async Task<(object, string)> ConnectFieldAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectFieldInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
+            .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
         if (mapping == null) return (new { error = "Не найден" }, "Не найден");
 
+        // Field def lets GraphMutationService append missing-but-valid fields to the graph
+        var defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        var fieldDef = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
+
         var prevGraph = mapping.graphJson ?? "";
-        await _graphMutation.ConnectFieldAsync(p.MappingId, p.AdapterFieldKey, p.SourceType, p.SourceField, p.SourceAttributeId, ct);
+        await _graphMutation.ConnectFieldAsync(p.MappingId, p.AdapterFieldKey, p.SourceType, p.SourceField, p.SourceAttributeId, fieldDef, ct);
         await _operationService.RecordAsync(storeId, userId, "connect_field",
             $"Поле '{p.AdapterFieldKey}' подключено к {p.SourceType}:{p.SourceField ?? p.SourceAttributeId?.ToString()}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
@@ -998,11 +1740,24 @@ public class AiChatService
     {
         var p = ParseInput<SetStaticInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
+            .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
         if (mapping == null) return (new { error = "Не найден" }, "Не найден");
 
+        // Field def: enables option validation ("Стандартное значение") and graph auto-add
+        var defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        var fieldDef = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
+
         var prevGraph = mapping.graphJson ?? "";
-        await _graphMutation.SetStaticValueAsync(p.MappingId, p.AdapterFieldKey, p.Value, ct);
+        try
+        {
+            await _graphMutation.SetStaticValueAsync(p.MappingId, p.AdapterFieldKey, p.Value, fieldDef, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // e.g. value not in the allowed options — return the option list so the model can retry
+            return (new { error = ex.Message }, ex.Message);
+        }
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
             $"Поле '{p.AdapterFieldKey}' = '{p.Value}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
@@ -1013,15 +1768,145 @@ public class AiChatService
     {
         var p = ParseInput<AddModifierInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
+            .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
         if (mapping == null) return (new { error = "Не найден" }, "Не найден");
 
+        var defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        var fieldDef = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
+
         var prevGraph = mapping.graphJson ?? "";
-        await _graphMutation.AddModifierAsync(p.MappingId, p.AdapterFieldKey, p.ModifierType, p.Params, ct);
+        try
+        {
+            await _graphMutation.AddModifierAsync(p.MappingId, p.AdapterFieldKey, p.ModifierType, p.Params, fieldDef, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // e.g. unknown modifier type — the message lists valid types so the model can retry
+            return (new { error = ex.Message }, ex.Message);
+        }
         await _operationService.RecordAsync(storeId, userId, "add_modifier",
             $"Модификатор '{p.ModifierType}' добавлен к полю '{p.AdapterFieldKey}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
         return (new { success = true }, $"Модификатор '{p.ModifierType}' добавлен");
+    }
+
+    private async Task<(object, string)> ConnectFieldsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ConnectFieldsBulkInput>(json);
+        if (p.Connections is not { Count: > 0 })
+            return (new { error = "Список подключений пуст" }, "Список пуст");
+
+        var mapping = await _context.categoryMappings.AsNoTracking()
+            .Include(m => m.connection)
+            .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+
+        var defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        var prevGraph = mapping.graphJson ?? "";
+        var applied = 0; var errors = new List<string>();
+
+        foreach (var conn in p.Connections)
+        {
+            try
+            {
+                var fieldDef = defs.FirstOrDefault(d => d.Key == conn.AdapterFieldKey);
+                await _graphMutation.ConnectFieldAsync(p.MappingId, conn.AdapterFieldKey,
+                    conn.SourceType, conn.SourceField, conn.SourceAttributeId, fieldDef, ct);
+                applied++;
+            }
+            catch (Exception ex) { errors.Add($"'{conn.AdapterFieldKey}': {ex.Message}"); }
+        }
+
+        await _operationService.RecordAsync(storeId, userId, "connect_field",
+            $"Подключено {applied} полей маппинга {p.MappingId}",
+            AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
+
+        var summary = $"Подключено полей: {applied}";
+        if (errors.Count > 0) summary += $", ошибок: {errors.Count}";
+        return (new { applied, errors }, summary);
+    }
+
+    private async Task<(object, string)> SetFieldsStaticBulkAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<SetFieldsStaticBulkInput>(json);
+        if (p.Fields is not { Count: > 0 })
+            return (new { error = "Список полей пуст" }, "Список пуст");
+
+        var mapping = await _context.categoryMappings.AsNoTracking()
+            .Include(m => m.connection)
+            .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+
+        var defs = await GetAdapterFieldDefsAsync(mapping, ct);
+        var prevGraph = mapping.graphJson ?? "";
+        var applied = 0; var errors = new List<string>();
+
+        foreach (var field in p.Fields)
+        {
+            try
+            {
+                var fieldDef = defs.FirstOrDefault(d => d.Key == field.AdapterFieldKey);
+                await _graphMutation.SetStaticValueAsync(p.MappingId, field.AdapterFieldKey, field.Value, fieldDef, ct);
+                applied++;
+            }
+            catch (Exception ex) { errors.Add($"'{field.AdapterFieldKey}': {ex.Message}"); }
+        }
+
+        await _operationService.RecordAsync(storeId, userId, "set_static_value",
+            $"Установлено статических значений: {applied} для маппинга {p.MappingId}",
+            AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
+
+        var summary = $"Установлено значений: {applied}";
+        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        return (new { applied, errors }, summary);
+    }
+
+    private async Task<(object, string)> MergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<MergeFieldsInput>(json);
+        if (p.AliasFieldKeys.Count == 0) return (new { error = "Не указаны aliasFieldKeys" }, "Нет полей");
+        var mapping = await _context.categoryMappings.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+
+        var prevGraph = mapping.graphJson ?? "";
+        try
+        {
+            await _graphMutation.MergeFieldsAsync(p.MappingId, p.PrimaryFieldKey, p.AliasFieldKeys, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (new { error = ex.Message }, ex.Message);
+        }
+        await _operationService.RecordAsync(storeId, userId, "merge_fields",
+            $"Поля [{string.Join(", ", p.AliasFieldKeys)}] объединены с '{p.PrimaryFieldKey}'",
+            AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
+        return (new { success = true },
+            $"Объединено: {string.Join(", ", p.AliasFieldKeys)} → '{p.PrimaryFieldKey}' (экспорт в оба ключа, импорт только через primary)");
+    }
+
+    private async Task<(object, string)> UnmergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<UnmergeFieldsInput>(json);
+        if (p.FieldKeys.Count == 0) return (new { error = "Не указаны fieldKeys" }, "Нет полей");
+        var mapping = await _context.categoryMappings.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
+        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+
+        var prevGraph = mapping.graphJson ?? "";
+        try
+        {
+            await _graphMutation.UnmergeFieldsAsync(p.MappingId, p.FieldKeys, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (new { error = ex.Message }, ex.Message);
+        }
+        await _operationService.RecordAsync(storeId, userId, "unmerge_fields",
+            $"Разъединены поля [{string.Join(", ", p.FieldKeys)}]",
+            AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
+        return (new { success = true }, $"Разъединено: {string.Join(", ", p.FieldKeys)}");
     }
 
     private async Task<(object, string)> RemoveFieldConnectionAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1129,13 +2014,513 @@ public class AiChatService
 
     // ---- Groups ----
 
-    private async Task<(object, string)> ListGroupsAsync(int storeId, CancellationToken ct)
+    private async Task<(object, string)> ListGroupsAsync(string json, int storeId, CancellationToken ct)
     {
-        var groups = await _context.productGroups.AsNoTracking()
-            .Where(g => g.storeId == storeId)
-            .Select(g => new { g.Id, g.name, memberCount = g.members.Count })
+        var p = ParseInput<ListGroupsInput>(json);
+        var q = _context.productGroups.AsNoTracking()
+            .Where(g => g.storeId == storeId);
+        if (!string.IsNullOrEmpty(p.Search))
+            q = q.Where(g => g.name.Contains(p.Search));
+        if (p.ProductId.HasValue)
+            q = q.Where(g => g.members.Any(m => m.productId == p.ProductId));
+        var groups = await q
+            .Select(g => new { g.Id, g.name, g.description, memberCount = g.members.Count })
             .ToListAsync(ct);
         return (new { groups, count = groups.Count }, $"{groups.Count} групп");
+    }
+
+    private async Task<(object, string)> GetGroupAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<IdInput>(json);
+        var group = await _context.productGroups.AsNoTracking()
+            .Where(g => g.Id == p.Id && g.storeId == storeId)
+            .Select(g => new
+            {
+                g.Id, g.name, g.description,
+                members = g.members.OrderBy(m => m.sortOrder).Select(m => new
+                {
+                    m.productId,
+                    m.product.name,
+                    m.product.sku,
+                    m.product.price,
+                    quantity = m.product.storageQuantity,
+                }).ToList()
+            })
+            .FirstOrDefaultAsync(ct);
+        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+        return (group, $"Группа \"{group.name}\": {group.members.Count} товаров");
+    }
+
+    private async Task<(object, string)> UpdateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<UpdateGroupInput>(json);
+        var group = await _context.productGroups
+            .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
+        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+
+        var oldName = group.name;
+        if (!string.IsNullOrEmpty(p.Name)) group.name = p.Name;
+        if (p.Description != null) group.description = p.Description;
+        group.updatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "update_group",
+            $"Группа \"{oldName}\" → \"{group.name}\"", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Группа \"{group.name}\" обновлена");
+    }
+
+    private async Task<(object, string)> DeleteGroupAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<IdInput>(json);
+        var group = await _context.productGroups
+            .Include(g => g.members)
+            .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
+        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+
+        var name = group.name;
+        var memberCount = group.members.Count;
+        _context.productGroups.Remove(group);
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "delete_group",
+            $"Удалена группа \"{name}\" ({memberCount} товаров остались в магазине)", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Группа \"{name}\" удалена, товары остались");
+    }
+
+    private async Task<(object, string)> RemoveProductsFromGroupAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<GroupProductsInput>(json);
+        var groupExists = await _context.productGroups.AsNoTracking()
+            .AnyAsync(g => g.Id == p.GroupId && g.storeId == storeId, ct);
+        if (!groupExists) return (new { error = "Группа не найдена" }, "Не найдена");
+
+        var members = await _context.productGroupMembers
+            .Where(m => m.groupId == p.GroupId && p.ProductIds.Contains(m.productId))
+            .ToListAsync(ct);
+        _context.productGroupMembers.RemoveRange(members);
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "remove_from_group",
+            $"Из группы {p.GroupId} убрано {members.Count} товаров", new { }, canRollback: false, ct);
+        return (new { removed = members.Count }, $"Убрано {members.Count} товаров из группы");
+    }
+
+    // ---- Files ----
+    // scope = "product" (files of a product, requires productId for list/create) or "store" (store-level storage)
+
+    private async Task<bool> ProductInStoreAsync(int productId, int storeId, CancellationToken ct)
+        => await _context.products.AsNoTracking().AnyAsync(x => x.Id == productId && x.storeId == storeId, ct);
+
+    private async Task<(object, string)> ListFilesAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<ListFilesInput>(json);
+        if (p.Scope == "product")
+        {
+            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+
+            var fq = _context.files.AsNoTracking().Where(f => f.productId == p.ProductId);
+            if (!string.IsNullOrEmpty(p.Search))
+                fq = fq.Where(f => (f.displayName ?? f.filePath).Contains(p.Search));
+            else if (p.FolderId.HasValue)
+                fq = fq.Where(f => f.folderId == p.FolderId);
+            var files = await fq
+                .Select(f => new { f.Id, name = f.displayName ?? f.filePath, type = f.fileType.ToString(), f.contentType, size = f.length, f.isPublic, f.folderId })
+                .ToListAsync(ct);
+            var folders = await _context.productFolders.AsNoTracking()
+                .Where(f => f.productId == p.ProductId)
+                .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
+                .ToListAsync(ct);
+            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+        }
+        else
+        {
+            var fq = _context.storeFiles.AsNoTracking().Where(f => f.storeId == storeId);
+            if (!string.IsNullOrEmpty(p.Search))
+                fq = fq.Where(f => (f.displayName ?? f.filePath).Contains(p.Search));
+            else if (p.FolderId.HasValue)
+                fq = fq.Where(f => f.folderId == p.FolderId);
+            var files = await fq
+                .Select(f => new { f.Id, name = f.displayName ?? f.filePath, type = f.fileType.ToString(), f.contentType, size = f.length, f.isPublic, f.folderId })
+                .ToListAsync(ct);
+            var folders = await _context.storeFolders.AsNoTracking()
+                .Where(f => f.storeId == storeId)
+                .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
+                .ToListAsync(ct);
+            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+        }
+    }
+
+    private async Task<(object, string)> CreateFolderAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<CreateFolderInput>(json);
+        if (string.IsNullOrWhiteSpace(p.Name)) return (new { error = "Имя папки обязательно" }, "Нет имени");
+
+        if (p.Scope == "product")
+        {
+            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+            if (p.ParentFolderId.HasValue && !await _context.productFolders.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.ParentFolderId && f.productId == p.ProductId, ct))
+                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+
+            var folder = new ProductFolder { name = p.Name.Trim(), productId = p.ProductId.Value, parentFolderId = p.ParentFolderId };
+            _context.productFolders.Add(folder);
+            await _context.SaveChangesAsync(ct);
+            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+        }
+        else
+        {
+            if (p.ParentFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.ParentFolderId && f.storeId == storeId, ct))
+                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+
+            var folder = new StoreFolder { name = p.Name.Trim(), storeId = storeId, parentFolderId = p.ParentFolderId };
+            _context.storeFolders.Add(folder);
+            await _context.SaveChangesAsync(ct);
+            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+        }
+    }
+
+    private async Task<(object, string)> RenameFileAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<RenameFileInput>(json);
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (p.Scope == "product")
+        {
+            var file = await _context.files.FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
+            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            file.displayName = p.NewName.Trim();
+            await _context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
+            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            file.displayName = p.NewName.Trim();
+            await _context.SaveChangesAsync(ct);
+        }
+        return (new { success = true }, $"Файл переименован в \"{p.NewName}\"");
+    }
+
+    private async Task<(object, string)> RenameFolderAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<RenameFolderInput>(json);
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (p.Scope == "product")
+        {
+            var folder = await _context.productFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
+            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            folder.name = p.NewName.Trim();
+            await _context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            var folder = await _context.storeFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
+            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            folder.name = p.NewName.Trim();
+            await _context.SaveChangesAsync(ct);
+        }
+        return (new { success = true }, $"Папка переименована в \"{p.NewName}\"");
+    }
+
+    private async Task<(object, string)> MoveFilesAsync(string json, int storeId, CancellationToken ct)
+    {
+        var p = ParseInput<MoveFilesInput>(json);
+        var movedFiles = 0;
+        var movedFolders = 0;
+
+        if (p.Scope == "product")
+        {
+            if (p.TargetFolderId.HasValue && !await _context.productFolders.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.TargetFolderId && f.product.storeId == storeId, ct))
+                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+
+            if (p.FileIds?.Count > 0)
+            {
+                var files = await _context.files
+                    .Where(f => p.FileIds.Contains(f.Id) && f.product.storeId == storeId)
+                    .ToListAsync(ct);
+                foreach (var f in files) f.folderId = p.TargetFolderId;
+                movedFiles = files.Count;
+            }
+            if (p.FolderIds?.Count > 0)
+            {
+                var folders = await _context.productFolders
+                    .Where(f => p.FolderIds.Contains(f.Id) && f.product.storeId == storeId)
+                    .ToListAsync(ct);
+                foreach (var f in folders)
+                {
+                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    f.parentFolderId = p.TargetFolderId;
+                }
+                movedFolders = folders.Count;
+            }
+        }
+        else
+        {
+            if (p.TargetFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.TargetFolderId && f.storeId == storeId, ct))
+                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+
+            if (p.FileIds?.Count > 0)
+            {
+                var files = await _context.storeFiles
+                    .Where(f => p.FileIds.Contains(f.Id) && f.storeId == storeId)
+                    .ToListAsync(ct);
+                foreach (var f in files) f.folderId = p.TargetFolderId;
+                movedFiles = files.Count;
+            }
+            if (p.FolderIds?.Count > 0)
+            {
+                var folders = await _context.storeFolders
+                    .Where(f => p.FolderIds.Contains(f.Id) && f.storeId == storeId)
+                    .ToListAsync(ct);
+                foreach (var f in folders)
+                {
+                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    // Prevent moving into own descendant
+                    var currentId = p.TargetFolderId;
+                    while (currentId.HasValue)
+                    {
+                        if (currentId.Value == f.Id) return (new { error = "Нельзя переместить папку в своего потомка" }, "Ошибка");
+                        currentId = await _context.storeFolders.AsNoTracking()
+                            .Where(x => x.Id == currentId.Value).Select(x => x.parentFolderId).FirstOrDefaultAsync(ct);
+                    }
+                    f.parentFolderId = p.TargetFolderId;
+                }
+                movedFolders = folders.Count;
+            }
+        }
+        await _context.SaveChangesAsync(ct);
+        return (new { movedFiles, movedFolders }, $"Перемещено: {movedFiles} файлов, {movedFolders} папок");
+    }
+
+    private async Task<(object, string)> DeleteFilesAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<DeleteFilesInput>(json);
+        if (p.FileIds.Count == 0) return (new { error = "Не указаны fileIds" }, "Нет файлов");
+
+        if (p.Scope == "product")
+        {
+            var files = await _context.files
+                .Where(f => p.FileIds.Contains(f.Id) && f.product.storeId == storeId)
+                .ToListAsync(ct);
+            var ids = files.Select(f => f.Id).ToList();
+            if (ids.Count > 0)
+            {
+                await _context.tags.Where(t => ids.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+                await _context.fileShareTokens.Where(t => ids.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+            }
+            foreach (var f in files)
+            {
+                await _thumbnailService.DeleteThumbnailsAsync(f.filePath);
+                await _storageService.DeleteAsync(f.filePath);
+                _context.files.Remove(f);
+            }
+            await _context.SaveChangesAsync(ct);
+            await _operationService.RecordAsync(storeId, userId, "delete_files",
+                $"Удалено {files.Count} файлов товаров", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+        }
+        else
+        {
+            var files = await _context.storeFiles
+                .Where(f => p.FileIds.Contains(f.Id) && f.storeId == storeId)
+                .ToListAsync(ct);
+            var ids = files.Select(f => f.Id).ToList();
+            if (ids.Count > 0)
+            {
+                await _context.storeFileTags.Where(t => ids.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+                await _context.storeFileShareTokens.Where(t => ids.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+            }
+            foreach (var f in files)
+            {
+                await _thumbnailService.DeleteThumbnailsAsync(f.filePath);
+                await _storageService.DeleteAsync(f.filePath);
+                _context.storeFiles.Remove(f);
+            }
+            await _context.SaveChangesAsync(ct);
+            await _operationService.RecordAsync(storeId, userId, "delete_files",
+                $"Удалено {files.Count} файлов магазина", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+        }
+    }
+
+    private async Task<(object, string)> DeleteFolderAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<DeleteFolderInput>(json);
+        var recursive = p.Recursive ?? false;
+
+        if (p.Scope == "product")
+        {
+            var folder = await _context.productFolders.AsNoTracking()
+                .Include(f => f.files).Include(f => f.childFolders)
+                .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
+            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
+                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+
+            var folderIds = new List<int> { folder.Id };
+            if (recursive)
+                await CollectProductSubfolderIdsAsync(folder.Id, folderIds, ct);
+
+            var files = await _context.files
+                .Where(f => f.folderId.HasValue && folderIds.Contains(f.folderId.Value))
+                .ToListAsync(ct);
+            var fileIds = files.Select(f => f.Id).ToList();
+            if (fileIds.Count > 0)
+            {
+                await _context.tags.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+                await _context.fileShareTokens.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+            }
+            await _context.folderShareTokens
+                .Where(t => t.folderId.HasValue && folderIds.Contains(t.folderId.Value)).ExecuteDeleteAsync(ct);
+            foreach (var f in files)
+            {
+                await _thumbnailService.DeleteThumbnailsAsync(f.filePath);
+                await _storageService.DeleteAsync(f.filePath);
+                _context.files.Remove(f);
+            }
+            await _context.SaveChangesAsync(ct);
+            folderIds.Reverse();
+            foreach (var fid in folderIds)
+                await _context.productFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
+
+            await _operationService.RecordAsync(storeId, userId, "delete_folder",
+                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+        }
+        else
+        {
+            var folder = await _context.storeFolders.AsNoTracking()
+                .Include(f => f.files).Include(f => f.childFolders)
+                .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
+            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
+                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+
+            var folderIds = new List<int> { folder.Id };
+            if (recursive)
+                await CollectStoreSubfolderIdsAsync(folder.Id, storeId, folderIds, ct);
+
+            var files = await _context.storeFiles
+                .Where(f => f.folderId.HasValue && folderIds.Contains(f.folderId.Value))
+                .ToListAsync(ct);
+            var fileIds = files.Select(f => f.Id).ToList();
+            if (fileIds.Count > 0)
+            {
+                await _context.storeFileTags.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+                await _context.storeFileShareTokens.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
+            }
+            await _context.storeFolderShareTokens
+                .Where(t => t.folderId.HasValue && folderIds.Contains(t.folderId.Value)).ExecuteDeleteAsync(ct);
+            foreach (var f in files)
+            {
+                await _thumbnailService.DeleteThumbnailsAsync(f.filePath);
+                await _storageService.DeleteAsync(f.filePath);
+                _context.storeFiles.Remove(f);
+            }
+            await _context.SaveChangesAsync(ct);
+            folderIds.Reverse();
+            foreach (var fid in folderIds)
+                await _context.storeFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
+
+            await _operationService.RecordAsync(storeId, userId, "delete_folder",
+                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+        }
+    }
+
+    private async Task CollectProductSubfolderIdsAsync(int folderId, List<int> acc, CancellationToken ct)
+    {
+        var children = await _context.productFolders.AsNoTracking()
+            .Where(f => f.parentFolderId == folderId).Select(f => f.Id).ToListAsync(ct);
+        foreach (var c in children)
+        {
+            acc.Add(c);
+            await CollectProductSubfolderIdsAsync(c, acc, ct);
+        }
+    }
+
+    private async Task CollectStoreSubfolderIdsAsync(int folderId, int storeId, List<int> acc, CancellationToken ct)
+    {
+        var children = await _context.storeFolders.AsNoTracking()
+            .Where(f => f.parentFolderId == folderId && f.storeId == storeId).Select(f => f.Id).ToListAsync(ct);
+        foreach (var c in children)
+        {
+            acc.Add(c);
+            await CollectStoreSubfolderIdsAsync(c, storeId, acc, ct);
+        }
+    }
+
+    private async Task<(object, string)> ShareFileAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<ShareFileInput>(json);
+        var ttl = p.TtlHours ?? 168;
+        if (ttl is not (1 or 24 or 168 or 720))
+            return (new { error = "Допустимые ttlHours: 1, 24, 168 (неделя), 720 (месяц)" }, "Неверный TTL");
+        if (!p.FileId.HasValue && !p.FolderId.HasValue)
+            return (new { error = "Укажите fileId или folderId" }, "Нет объекта");
+
+        var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
+        var expiresAt = DateTime.UtcNow.AddHours(ttl);
+        string url;
+
+        if (p.Scope == "product")
+        {
+            if (p.FileId.HasValue)
+            {
+                var file = await _context.files.AsNoTracking()
+                    .FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
+                if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+                _context.fileShareTokens.Add(new FileShareToken
+                {
+                    fileId = file.Id, token = token, expiresAt = expiresAt, createdByUserId = userId,
+                });
+                url = $"/api/shared/{token}";
+            }
+            else
+            {
+                var folder = await _context.productFolders.AsNoTracking()
+                    .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
+                if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+                _context.folderShareTokens.Add(new FolderShareToken
+                {
+                    productId = folder.productId, folderId = folder.Id, token = token,
+                    expiresAt = expiresAt, createdByUserId = userId,
+                });
+                url = $"/api/shared/folder/{token}";
+            }
+        }
+        else
+        {
+            if (p.FileId.HasValue)
+            {
+                var exists = await _context.storeFiles.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
+                if (!exists) return (new { error = "Файл не найден" }, "Не найден");
+                _context.storeFileShareTokens.Add(new StoreFileShareToken
+                {
+                    fileId = p.FileId.Value, token = token, expiresAt = expiresAt, createdByUserId = userId,
+                });
+                url = $"/api/shared/store-file/{token}";
+            }
+            else
+            {
+                var exists = await _context.storeFolders.AsNoTracking()
+                    .AnyAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
+                if (!exists) return (new { error = "Папка не найдена" }, "Не найдена");
+                _context.storeFolderShareTokens.Add(new StoreFolderShareToken
+                {
+                    storeId = storeId, folderId = p.FolderId, token = token,
+                    expiresAt = expiresAt, createdByUserId = userId,
+                });
+                url = $"/api/shared/store-folder/{token}";
+            }
+        }
+        await _context.SaveChangesAsync(ct);
+        return (new { url, expiresAt }, $"Ссылка создана, действует до {expiresAt:yyyy-MM-dd HH:mm} UTC");
     }
 
     private async Task<(object, string)> CreateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1164,6 +2549,39 @@ public class AiChatService
             _context.productGroupMembers.Add(new ProductGroupMember { groupId = p.GroupId, productId = pid });
         await _context.SaveChangesAsync(ct);
         return (new { added = toAdd.Count }, $"Добавлено {toAdd.Count} товаров в группу");
+    }
+
+    // ---- Barcodes ----
+
+    private async Task<(object, string)> GenerateBarcodesAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        var p = ParseInput<GenerateBarcodesInput>(json);
+        var q = _context.products.Where(x => x.storeId == storeId && (x.barcode == null || x.barcode == ""));
+        if (p.ProductIds?.Count > 0) q = q.Where(x => p.ProductIds.Contains(x.Id));
+        var products = await q.ToListAsync(ct);
+        if (products.Count == 0) return (new { generated = 0 }, "Нет товаров без баркода");
+
+        // Uniqueness within the store: seed with all existing barcodes
+        var existing = (await _context.products.AsNoTracking()
+            .Where(x => x.storeId == storeId && x.barcode != null && x.barcode != "")
+            .Select(x => x.barcode!).ToListAsync(ct)).ToHashSet();
+
+        var snapshots = new List<BarcodeSnapshot>();
+        foreach (var product in products)
+        {
+            string bc;
+            do { bc = Controllers.ProductController.GenerateEan13(); } while (!existing.Add(bc));
+            snapshots.Add(new BarcodeSnapshot { Id = product.Id, OldBarcode = product.barcode });
+            product.barcode = bc;
+        }
+        await _context.SaveChangesAsync(ct);
+
+        await _operationService.RecordAsync(storeId, userId, "generate_barcodes",
+            $"Сгенерированы EAN-13 баркоды для {products.Count} товаров",
+            new BarcodeRollbackData { Products = snapshots }, canRollback: true, ct);
+
+        return (new { generated = products.Count },
+            $"Сгенерированы баркоды для {products.Count} товаров");
     }
 
     // ---- Analytics ----
@@ -1273,6 +2691,11 @@ public class AiChatService
 
     // ---- Rollback ----
 
+    // RecordAsync historically wrote rollback JSON in PascalCase (no naming policy) while this
+    // file deserialized expecting camelCase — every rollback silently no-op'ed. Case-insensitive
+    // matching reads both old and new rows.
+    private static readonly JsonSerializerOptions _rollbackJson = new() { PropertyNameCaseInsensitive = true };
+
     private async Task<(object, string)> RollbackOperationAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<OptionalIdInput>(json);
@@ -1286,89 +2709,202 @@ public class AiChatService
         if (!op.canRollback || op.status == AiOperationStatus.RolledBack)
             return (new { error = "Эту операцию нельзя отменить" }, "Нельзя отменить");
 
-        await ApplyRollbackAsync(op, ct);
+        // Stale guard: without an explicit operationId, don't silently undo something old —
+        // it may belong to a long-finished task the user no longer has in mind
+        if (!p.Id.HasValue && op.createdAt < DateTime.UtcNow.AddMinutes(-30))
+        {
+            var age = DateTime.UtcNow - op.createdAt;
+            var ageText = age.TotalHours >= 1 ? $"{(int)age.TotalHours} ч назад" : $"{(int)age.TotalMinutes} мин назад";
+            return (new
+            {
+                requiresConfirmation = true,
+                operationId = op.Id,
+                description = op.description,
+                createdAt = op.createdAt,
+            }, $"Последняя операция выполнена {ageText}: «{op.description}». " +
+               $"Это давняя операция — уточни у пользователя, что откатить нужно именно её, " +
+               $"и повтори вызов с operationId={op.Id}");
+        }
+
+        var applied = await ApplyRollbackAsync(op, ct);
+        if (!applied)
+        {
+            _logger.LogWarning("Rollback of operation {OpId} ({Type}) did not change any data", op.Id, op.operationType);
+            return (new { error = "Откат не удался — данные не были изменены" },
+                $"Откат операции «{op.description}» не удался: данные не изменены");
+        }
+
         await _operationService.MarkRolledBackAsync(op.Id, ct);
         return (new { success = true, operationId = op.Id, description = op.description },
             $"Отменено: {op.description}");
     }
 
-    private async Task ApplyRollbackAsync(AiOperation op, CancellationToken ct)
+    // Returns true only when the rollback actually changed data.
+    private async Task<bool> ApplyRollbackAsync(AiOperation op, CancellationToken ct)
     {
         switch (op.operationType)
         {
             case "update_prices":
             {
-                var data = JsonSerializer.Deserialize<PriceRollbackData>(op.rollbackDataJson, _jsonOpts);
-                if (data != null)
+                var data = JsonSerializer.Deserialize<PriceRollbackData>(op.rollbackDataJson, _rollbackJson);
+                if (data == null || data.Products.Count == 0) return false;
+                var ids = data.Products.Select(p => p.Id).ToList();
+                var products = await _context.products.Where(p => ids.Contains(p.Id)).ToListAsync(ct);
+                foreach (var pr in products)
                 {
-                    var ids = data.Products.Select(p => p.Id).ToList();
-                    var products = await _context.products.Where(p => ids.Contains(p.Id)).ToListAsync(ct);
-                    foreach (var pr in products)
-                    {
-                        var snap = data.Products.FirstOrDefault(p => p.Id == pr.Id);
-                        if (snap != null) pr.price = snap.OldPrice;
-                    }
-                    await _context.SaveChangesAsync(ct);
+                    var snap = data.Products.FirstOrDefault(p => p.Id == pr.Id);
+                    if (snap != null) pr.price = snap.OldPrice;
                 }
-                break;
+                return await _context.SaveChangesAsync(ct) > 0 || products.Count > 0;
             }
             case "add_category_field":
             {
-                var data = JsonSerializer.Deserialize<FieldRollbackData>(op.rollbackDataJson, _jsonOpts);
-                if (data != null)
-                {
-                    await _context.categoryAttributes.Where(a => a.Id == data.FieldId)
-                        .ExecuteDeleteAsync(ct);
-                }
-                break;
+                var data = JsonSerializer.Deserialize<FieldRollbackData>(op.rollbackDataJson, _rollbackJson);
+                if (data == null || data.FieldId == 0) return false;
+                var deleted = await _context.categoryAttributes.Where(a => a.Id == data.FieldId)
+                    .ExecuteDeleteAsync(ct);
+                return deleted > 0;
             }
             case "connect_field":
             case "set_static_value":
             case "add_modifier":
             case "disconnect_field":
             case "generate_mapping":
+            case "merge_fields":
+            case "unmerge_fields":
             {
-                var data = JsonSerializer.Deserialize<GraphRollbackData>(op.rollbackDataJson, _jsonOpts);
-                if (data != null)
+                var data = JsonSerializer.Deserialize<GraphRollbackData>(op.rollbackDataJson, _rollbackJson);
+                if (data == null || data.MappingId == 0) return false;
+                var updated = await _context.categoryMappings.Where(m => m.Id == data.MappingId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.graphJson, data.PreviousGraphJson), ct);
+                return updated > 0;
+            }
+            case "generate_barcodes":
+            {
+                var data = JsonSerializer.Deserialize<BarcodeRollbackData>(op.rollbackDataJson, _rollbackJson);
+                if (data == null || data.Products.Count == 0) return false;
+                var ids = data.Products.Select(x => x.Id).ToList();
+                var products = await _context.products.Where(x => ids.Contains(x.Id)).ToListAsync(ct);
+                foreach (var pr in products)
                 {
-                    await _context.categoryMappings.Where(m => m.Id == data.MappingId)
-                        .ExecuteUpdateAsync(s => s.SetProperty(m => m.graphJson, data.PreviousGraphJson), ct);
+                    var snap = data.Products.FirstOrDefault(x => x.Id == pr.Id);
+                    if (snap != null) pr.barcode = snap.OldBarcode;
                 }
-                break;
+                await _context.SaveChangesAsync(ct);
+                return products.Count > 0;
             }
             case "update_attribute":
             {
-                var data = JsonSerializer.Deserialize<ProductAttributeRollbackData>(op.rollbackDataJson, _jsonOpts);
-                if (data != null)
+                var data = JsonSerializer.Deserialize<ProductAttributeRollbackData>(op.rollbackDataJson, _rollbackJson);
+                if (data == null || data.Products.Count == 0) return false;
+                foreach (var snap in data.Products)
                 {
-                    foreach (var snap in data.Products)
+                    var val = await _context.productAttributeValues
+                        .FirstOrDefaultAsync(v => v.productId == snap.ProductId && v.attributeId == snap.AttributeId, ct);
+                    if (val != null)
                     {
-                        var val = await _context.productAttributeValues
-                            .FirstOrDefaultAsync(v => v.productId == snap.ProductId && v.attributeId == snap.AttributeId, ct);
-                        if (val != null)
-                        {
-                            val.value = snap.OldValue;
-                        }
-                        else if (snap.OldValue != null)
-                        {
-                            _context.productAttributeValues.Add(new ProductAttributeValue
-                            { productId = snap.ProductId, attributeId = snap.AttributeId, value = snap.OldValue });
-                        }
+                        val.value = snap.OldValue;
                     }
-                    await _context.SaveChangesAsync(ct);
+                    else if (snap.OldValue != null)
+                    {
+                        _context.productAttributeValues.Add(new ProductAttributeValue
+                        { productId = snap.ProductId, attributeId = snap.AttributeId, value = snap.OldValue });
+                    }
                 }
-                break;
+                await _context.SaveChangesAsync(ct);
+                return true;
             }
+            default:
+                return false;
         }
     }
 
     // ---- Tool Definitions ----
 
-    private static List<AiTool> BuildToolDefinitions() => [
+    private static readonly HashSet<string> _productPageTools = new()
+    {
+        "propose_plan", "rollback_last_operation", "navigate_to",
+        "list_products", "get_products_count", "get_product", "create_product", "create_products",
+        "update_product", "update_product_sku", "update_product_prices", "update_product_attribute",
+        "update_product_attributes", "delete_products", "restore_products", "list_trash", "generate_barcodes",
+        "list_categories", "get_category", "list_category_fields",
+        "list_store_attributes",
+        "list_files", "create_folder", "rename_file", "rename_folder", "move_files",
+        "delete_files", "delete_folder", "share_file",
+        "list_groups", "get_group", "create_group", "update_group", "delete_group",
+        "add_products_to_group", "remove_products_from_group",
+        "export_products_batch", "export_prices", "export_stocks", "get_batch_status", "list_product_links",
+        "get_store_stats", "find_products_without_images", "find_products_without_barcode",
+        "find_products_missing_field", "find_products_with_sync_errors", "get_image_download_status",
+        "list_mappings", "list_connections",
+    };
+
+    private static readonly HashSet<string> _mappingPageTools = new()
+    {
+        "propose_plan", "rollback_last_operation", "navigate_to",
+        "list_mappings", "get_mapping", "create_mapping", "update_mapping_name", "delete_mapping",
+        "duplicate_mapping", "list_external_categories", "get_external_fields", "search_field_options",
+        "get_available_sources", "get_mapping_coverage", "preview_mapping_for_product",
+        "generate_mapping_suggestions", "connect_field", "set_field_static_value", "add_field_modifier",
+        "remove_field_connection", "merge_adapter_fields", "unmerge_adapter_fields",
+        "connect_fields", "set_fields_static_value",
+        "list_products", "get_product",
+        "list_categories", "get_category", "list_category_fields",
+        "list_connections", "get_connection", "get_adapter_info",
+        "analyze_mapping_quality", "find_products_with_sync_errors",
+    };
+
+    private static readonly HashSet<string> _connectionPageTools = new()
+    {
+        "propose_plan", "rollback_last_operation", "navigate_to",
+        "list_connections", "get_connection", "test_connection", "get_connection_limits", "get_adapter_info",
+        "list_mappings", "get_mapping", "create_mapping", "update_mapping_name", "delete_mapping",
+        "duplicate_mapping", "list_external_categories", "get_external_fields", "search_field_options",
+        "get_available_sources", "get_mapping_coverage", "preview_mapping_for_product",
+        "generate_mapping_suggestions", "connect_field", "set_field_static_value", "add_field_modifier",
+        "remove_field_connection", "merge_adapter_fields", "unmerge_adapter_fields",
+        "connect_fields", "set_fields_static_value", "analyze_mapping_quality",
+        "export_products_batch", "export_prices", "export_stocks", "get_batch_status", "list_product_links",
+        "preview_marketplace_products", "import_products", "import_prices", "import_stocks",
+        "archive_product_on_marketplace",
+        "list_products", "get_products_count", "get_product",
+        "list_categories", "get_category", "list_category_fields",
+        "get_store_stats", "find_products_with_sync_errors",
+    };
+
+    private static List<AiTool> BuildToolDefinitions(AiPageContext? pageContext)
+    {
+        var all = BuildAllToolDefinitions();
+        var filter = pageContext?.Page switch
+        {
+            "product"      => _productPageTools,
+            "fieldMapping" => _mappingPageTools,
+            "connection"   => _connectionPageTools,
+            _              => null,
+        };
+        return filter == null ? all : all.Where(t => filter.Contains(t.name)).ToList();
+    }
+
+    private static List<AiTool> BuildAllToolDefinitions() => [
         Prop("propose_plan", "ALWAYS call first before any mutating operation. Shows user a plan and waits for confirmation.",
             Req(["summary", "steps"]),
             ("summary", Str("Brief summary of what will be done")),
-            ("steps", new AiToolProperty { type = "array", description = "List of steps", items = new AiToolProperty { type = "object" } }),
+            ("steps", new AiToolProperty
+            {
+                type = "array",
+                description = "List of action steps",
+                items = new AiToolProperty
+                {
+                    type = "object",
+                    properties = new Dictionary<string, AiToolProperty>
+                    {
+                        ["tool"] = new AiToolProperty { type = "string", description = "Tool name that will be called" },
+                        ["description"] = new AiToolProperty { type = "string", description = "Human-readable description of this step in Russian" },
+                        ["args"] = new AiToolProperty { type = "object", description = "EXACT tool arguments as a JSON object — the same IDs/keys/values you already gathered. After user confirmation the system executes each step with these args automatically." }
+                    },
+                    required = ["tool", "description", "args"]
+                }
+            }),
             ("affectedCount", Int("Number of affected items")),
             ("isDestructive", Bool("Whether this is a destructive operation"))
         ),
@@ -1378,156 +2914,406 @@ public class AiChatService
         ),
 
         // Products
-        Prop("list_products", "List products with optional filters",
+        Prop("list_products", "List products with optional filters and sorting",
             Req([]),
             ("search", Str("Search in name or SKU")),
-            ("categoryId", Int("Filter by category")),
+            ("categoryId", Int("Filter by category ID")),
             ("priceMin", Num("Min price filter")),
             ("priceMax", Num("Max price filter")),
-            ("hasImages", Bool("Filter by has/no images")),
-            ("missingField", Str("Filter by missing attribute name")),
-            ("startIndex", Int("Pagination offset")),
-            ("pageSize", Int("Page size (max 200)"))
+            ("hasImages", Bool("true = only with images, false = only without")),
+            ("missingField", Str("Filter products missing this attribute key")),
+            ("startIndex", Int("Pagination offset (default 0)")),
+            ("pageSize", Int("Page size (default 50, max 200)")),
+            ("quantityMin", Int("Min stock quantity filter")),
+            ("quantityMax", Int("Max stock quantity filter — use 0 to find out-of-stock products")),
+            ("sortBy", Enum("id", "price", "name", "quantity")),
+            ("sortDir", Enum("asc", "desc"))
         ),
         Prop("get_products_count", "Count products matching filters", Req([]),
             ("search", Str()), ("categoryId", Int()), ("priceMin", Num()), ("priceMax", Num())
         ),
-        Prop("get_product", "Get full product details", Req(["id"]), ("id", Int("Product ID"))),
-        Prop("create_product", "Create a new product", Req(["name", "categoryId"]),
-            ("name", Str("Product name")), ("categoryId", Int("Category ID")),
-            ("sku", Str("SKU")), ("price", Num("Price")), ("barcode", Str("Barcode")),
-            ("description", Str("Description")), ("quantity", Int("Stock quantity"))
+        Prop("get_product", "Get full product details including attributes", Req(["id"]),
+            ("id", Int("Product ID"))
         ),
-        Prop("update_product", "Update product fields", Req(["id"]),
-            ("id", Int("Product ID")), ("name", Str()), ("price", Num()),
-            ("description", Str()), ("barcode", Str()), ("quantity", Int()), ("categoryId", Int())
+        Prop("create_product", "Create a new product. DB requires: name, sku, description. Always provide all three.", Req(["name", "sku", "description", "categoryId"]),
+            ("name", Str("Product name — required")),
+            ("sku", Str("Unique stock-keeping unit, e.g. 'SHOE-RED-42' — required")),
+            ("description", Str("Product description — required, use empty string '' if none")),
+            ("categoryId", Int("Category ID — required")),
+            ("price", Num("Price in store currency (default 0)")),
+            ("barcode", Str("Barcode / EAN / UPC (optional)")),
+            ("quantity", Int("Stock quantity (default 0)"))
         ),
-        Prop("update_product_sku", "Update product SKU", Req(["productId", "newSku"]),
-            ("productId", Int()), ("newSku", Str())
+        Prop("create_products", "Create multiple products in one call. Prefer this over calling create_product in a loop.", Req(["products"]),
+            ("products", new AiToolProperty
+            {
+                type = "array",
+                description = "List of products to create",
+                items = new AiToolProperty
+                {
+                    type = "object",
+                    required = new List<string> { "name", "sku", "description", "categoryId" },
+                    properties = new Dictionary<string, AiToolProperty>
+                    {
+                        ["name"] = Str("Product name — required"),
+                        ["sku"] = Str("Unique stock-keeping unit — required"),
+                        ["description"] = Str("Product description — required, use '' if none"),
+                        ["categoryId"] = Int("Category ID — required"),
+                        ["price"] = Num("Price"),
+                        ["barcode"] = Str("Barcode"),
+                        ["quantity"] = Int("Stock quantity"),
+                    }
+                }
+            })
         ),
-        Prop("update_product_prices", "Bulk update product prices", Req(["amount", "mode"]),
-            ("productIds", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } }),
-            ("categoryId", Int("Update all products in category")),
-            ("amount", Num("Amount to change")),
+        Prop("update_product", "Update one or more fields of a product (only provided fields are changed)", Req(["id"]),
+            ("id", Int("Product ID — required")),
+            ("name", Str("New name")), ("price", Num("New price")),
+            ("description", Str("New description")), ("barcode", Str("New barcode")),
+            ("quantity", Int("New stock quantity")), ("categoryId", Int("Move to category ID"))
+        ),
+        Prop("update_product_sku", "Change product SKU (cascades to marketplace links)", Req(["productId", "newSku"]),
+            ("productId", Int("Product ID")), ("newSku", Str("New unique SKU"))
+        ),
+        Prop("update_product_prices", "Bulk change prices. For a SINGLE product use update_product(id,price) instead. WARNING: without productIds or categoryId affects ALL store products.", Req(["amount", "mode"]),
+            ("productIds", IntArray("Array of integer product IDs to update (omit to use categoryId or affect all)")),
+            ("categoryId", Int("Update all products in this category (ignored if productIds provided)")),
+            ("amount", Num("Amount for the operation")),
             ("mode", Enum("add", "subtract", "set", "multiply"))
         ),
-        Prop("update_product_attribute", "Set attribute value on products", Req(["attributeKey", "value"]),
-            ("attributeKey", Str("Attribute key")), ("value", Str("New value")),
-            ("productIds", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } })
+        Prop("update_product_attribute", "Set a category attribute value on products. attributeKey is the field's 'key' property (not name). Without productIds, updates all products in the attribute's category.", Req(["attributeKey", "value"]),
+            ("attributeKey", Str("Attribute 'key' field (e.g. 'color', 'size') — get it from list_category_fields")),
+            ("value", Str("New value to set")),
+            ("productIds", IntArray("Array of integer product IDs (omit to update all in attribute's category)"))
         ),
-        Prop("delete_products", "Soft-delete products", Req(["ids"]),
-            ("ids", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } })
+        Prop("update_product_attributes", "Set multiple category attribute values on products in one call. Prefer this over calling update_product_attribute in a loop.", Req(["attributes"]),
+            ("productIds", IntArray("Array of product IDs (omit to update all in each attribute's category)")),
+            ("attributes", new AiToolProperty
+            {
+                type = "array",
+                description = "List of {attributeKey, value} pairs to set",
+                items = new AiToolProperty
+                {
+                    type = "object",
+                    required = new List<string> { "attributeKey", "value" },
+                    properties = new Dictionary<string, AiToolProperty>
+                    {
+                        ["attributeKey"] = Str("Attribute key from list_category_fields"),
+                        ["value"] = Str("Value to set"),
+                    }
+                }
+            })
         ),
-        Prop("restore_products", "Restore soft-deleted products", Req(["ids"]),
-            ("ids", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } })
+        Prop("delete_products", "Soft-delete products (recoverable from trash)", Req(["ids"]),
+            ("ids", IntArray("Array of integer product IDs to delete"))
         ),
-        Prop("list_trash", "List soft-deleted products", Req([]), ("search", Str())),
+        Prop("restore_products", "Restore soft-deleted products from trash", Req(["ids"]),
+            ("ids", IntArray("Array of integer product IDs to restore"))
+        ),
+        Prop("list_trash", "List soft-deleted products", Req([]), ("search", Str("Search in name"))),
 
         // Categories
-        Prop("list_categories", "List all store categories", Req([])),
-        Prop("get_category", "Get category with attributes", Req(["id"]), ("id", Int())),
-        Prop("create_category", "Create a category", Req(["name"]),
-            ("name", Str()), ("description", Str())
+        Prop("list_categories", "List all store categories with attribute counts", Req([])),
+        Prop("get_category", "Get category details with all attributes", Req(["id"]), ("id", Int("Category ID"))),
+        Prop("create_category", "Create a category (description is optional)", Req(["name"]),
+            ("name", Str("Category name")), ("description", Str("Description (optional)"))
         ),
-        Prop("update_category", "Update a category", Req(["id"]),
-            ("id", Int()), ("name", Str()), ("description", Str())
+        Prop("update_category", "Update category name or description (only provided fields change)", Req(["id"]),
+            ("id", Int("Category ID")), ("name", Str("New name")), ("description", Str("New description"))
         ),
-        Prop("delete_category", "Delete a category", Req(["id"]), ("id", Int())),
-        Prop("list_category_fields", "List category attributes", Req(["id"]), ("id", Int("Category ID"))),
-        Prop("add_category_field", "Add attribute to category", Req(["categoryId", "name", "type"]),
-            ("categoryId", Int()), ("name", Str()), ("key", Str("Optional key (auto-generated if omitted)")),
+        Prop("delete_category", "Permanently delete a category", Req(["id"]), ("id", Int("Category ID"))),
+        Prop("list_category_fields", "List all attributes of a category", Req(["id"]), ("id", Int("Category ID"))),
+        Prop("add_category_field", "Add a new attribute field to a category. Use list_category_fields first to avoid duplicates.", Req(["categoryId", "name", "type"]),
+            ("categoryId", Int("Category ID")),
+            ("name", Str("Display name of the attribute")),
+            ("key", Str("Machine key, auto-generated from name if omitted (e.g. 'color')")),
             ("type", Enum("Text", "Number", "Boolean", "Select", "MultiSelect", "Barcode")),
-            ("isRequired", Bool()), ("group", Str("Field group name"))
+            ("isRequired", Bool("Whether this field is required (default false)")),
+            ("group", Str("Field group label for UI grouping (optional)"))
         ),
-        Prop("update_category_field", "Update a category attribute", Req(["fieldId"]),
-            ("fieldId", Int()), ("name", Str()), ("isRequired", Bool())
+        Prop("update_category_field", "Update attribute field name or required status", Req(["fieldId"]),
+            ("fieldId", Int("Attribute field ID from list_category_fields")),
+            ("name", Str("New display name")), ("isRequired", Bool("New required status"))
         ),
-        Prop("delete_category_field", "Delete a category attribute", Req(["fieldId"]), ("fieldId", Int())),
-        Prop("find_categories_with_field", "Find categories having a field matching name", Req(["search"]),
-            ("search", Str("Partial field name to search for"))
+        Prop("delete_category_field", "Delete an attribute field from a category", Req(["fieldId"]),
+            ("fieldId", Int("Attribute field ID"))
+        ),
+        Prop("find_categories_with_field", "Find categories that have an attribute matching a name pattern", Req(["search"]),
+            ("search", Str("Partial field name to search for (case-insensitive)"))
         ),
 
         // Store attributes
-        Prop("list_store_attributes", "List store-level attributes", Req([])),
+        Prop("list_store_attributes", "List store-level shared attributes", Req([])),
 
         // Connections
-        Prop("list_connections", "List marketplace connections", Req([])),
-        Prop("get_connection", "Get connection details", Req(["id"]), ("id", Int())),
-        Prop("test_connection", "Test marketplace connection", Req(["id"]), ("id", Int())),
-        Prop("get_connection_limits", "Get rate limits for a connection", Req(["id"]), ("id", Int())),
+        Prop("list_connections", "List all marketplace connections with status", Req([])),
+        Prop("get_connection", "Get connection details", Req(["id"]), ("id", Int("Connection ID"))),
+        Prop("test_connection", "Test if marketplace connection is working", Req(["id"]), ("id", Int("Connection ID"))),
+        Prop("get_connection_limits", "Get API rate limits and quotas for a connection", Req(["id"]), ("id", Int("Connection ID"))),
+        Prop("get_adapter_info", "Get marketplace adapter info: display name, description, supported capabilities (import/export/archive/groups etc.). NOTE: Response includes 'grouping' field — every mapping has ONE grouping field (isGroupingField=true). Products whose mapping evaluates it to the same value are merged into one marketplace card. Default source: groupName (local group name). The mapping only computes the grouping value; it never creates/modifies local groups.", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID"))
+        ),
+        Prop("preview_marketplace_products", "List products that exist ON the marketplace (paginated), marks which are already imported locally", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID")),
+            ("pageSize", Int("Page size (default 50, max 200)")),
+            ("cursor", Str("Pagination cursor from previous page's nextCursor")),
+            ("search", Str("Filter by SKU / offer id"))
+        ),
+        Prop("import_products", "Queue import of marketplace products into the local catalog. Returns batchId for get_batch_status.", Req(["connectionId", "externalProductIds"]),
+            ("connectionId", Int("Connection ID")),
+            ("externalProductIds", StrArray("External product IDs from preview_marketplace_products")),
+            ("targetCategoryId", Int("Local category for imported products (optional — resolved from mapping if omitted)"))
+        ),
+        Prop("import_prices", "Import current prices FROM the marketplace into local products (updates local prices)", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID"))
+        ),
+        Prop("import_stocks", "Import stock quantities FROM the marketplace into local products (sums across warehouses)", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID"))
+        ),
+        Prop("archive_product_on_marketplace", "Archive (hide) a product on the marketplace. Use list_product_links(connectionId) first to confirm the product has a sync link — then pass the local productId. Local product is not affected.", Req(["connectionId", "productId"]),
+            ("connectionId", Int("Connection ID")),
+            ("productId", Int("Local product ID (must be linked to this connection — verify with list_product_links first)"))
+        ),
 
         // Mappings
-        Prop("list_mappings", "List category mappings", Req([]), ("connectionId", Int("Filter by connection"))),
-        Prop("get_mapping", "Get mapping details and coverage stats", Req(["id"]), ("id", Int())),
-        Prop("create_mapping", "Create a category mapping (AI auto-maps fields)", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
-            ("connectionId", Int()), ("localCategoryId", Int()), ("externalCategoryId", Str()),
-            ("externalCategoryName", Str()), ("name", Str())
+        Prop("list_mappings", "List category mappings (optionally for one connection)", Req([]),
+            ("connectionId", Int("Filter by connection ID"))
         ),
-        Prop("update_mapping_name", "Rename a mapping", Req(["id", "name"]), ("id", Int()), ("name", Str())),
-        Prop("delete_mapping", "Delete a mapping", Req(["id"]), ("id", Int())),
-        Prop("duplicate_mapping", "Duplicate a mapping", Req(["id"]), ("id", Int())),
-        Prop("list_external_categories", "Get categories from marketplace adapter", Req(["connectionId"]),
-            ("connectionId", Int()), ("parentId", Str()), ("search", Str())
+        Prop("get_mapping", "Get mapping details and field coverage stats. Fields with sourceType='static' are static values; sourceType=null are unconnected. Do NOT say 'I cannot see static values' — this response includes the full field configuration.", Req(["id"]), ("id", Int("Mapping ID"))),
+        Prop("create_mapping", "Create a category mapping — AI auto-maps fields immediately after creation", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
+            ("connectionId", Int("Connection ID")),
+            ("localCategoryId", Int("Local category ID")),
+            ("externalCategoryId", Str("External marketplace category ID (from list_external_categories)")),
+            ("externalCategoryName", Str("External category display name (recommended for UI)")),
+            ("name", Str("Custom mapping name (optional)"))
         ),
-        Prop("get_external_fields", "Get fields from marketplace category", Req(["connectionId", "externalCategoryId"]),
-            ("connectionId", Int()), ("externalCategoryId", Str())
+        Prop("update_mapping_name", "Rename a mapping", Req(["id", "name"]),
+            ("id", Int("Mapping ID")), ("name", Str("New name"))
         ),
-        Prop("get_available_sources", "Get available source fields for a mapping", Req(["id"]), ("id", Int("Mapping ID"))),
-        Prop("get_mapping_coverage", "Analyze mapped vs unmapped fields", Req(["id"]), ("id", Int("Mapping ID"))),
-        Prop("preview_mapping_for_product", "Preview mapping output for a product", Req(["mappingId", "productId"]),
-            ("mappingId", Int()), ("productId", Int())
+        Prop("delete_mapping", "Delete a mapping permanently", Req(["id"]), ("id", Int("Mapping ID"))),
+        Prop("duplicate_mapping", "Copy a mapping with all field connections", Req(["id"]), ("id", Int("Mapping ID"))),
+        Prop("list_external_categories", "Browse marketplace categories from adapter", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID")),
+            ("parentId", Str("Parent category ID for tree navigation (omit for root)")),
+            ("search", Str("Search query to filter categories"))
         ),
-        Prop("generate_mapping_suggestions", "Run AI auto-mapping for existing mapping", Req(["id"]), ("id", Int("Mapping ID"))),
-        Prop("connect_field", "Connect a source to an adapter field", Req(["mappingId", "adapterFieldKey", "sourceType"]),
-            ("mappingId", Int()), ("adapterFieldKey", Str()),
+        Prop("get_external_fields", "Get marketplace adapter fields with keys, labels, constraints and Select options (first 15 per field — use search_field_options for more). Pass mappingId (easiest) OR connectionId+externalCategoryId.", Req([]),
+            ("mappingId", Int("Mapping ID — resolves connection and category automatically (preferred)")),
+            ("connectionId", Int("Connection ID (only if mappingId not known)")),
+            ("externalCategoryId", Str("External category ID from list_external_categories (only if mappingId not known)"))
+        ),
+        Prop("search_field_options", "Search the allowed option values of a Select/MultiSelect adapter field (server-side, works for dictionaries with thousands of values). Use before set_field_static_value on option-backed fields.", Req(["adapterFieldKey"]),
+            ("adapterFieldKey", Str("Adapter field key")),
+            ("query", Str("Search text — matched against option labels and values (empty = first options)")),
+            ("mappingId", Int("Mapping ID (preferred)")),
+            ("connectionId", Int("Connection ID (only if mappingId not known)")),
+            ("externalCategoryId", Str("External category ID (only if mappingId not known)")),
+            ("limit", Int("Max results (default 20, max 50)"))
+        ),
+        Prop("get_available_sources", "Get all available source fields for a mapping (product fields + category attributes + store attributes)", Req(["id"]),
+            ("id", Int("Mapping ID"))
+        ),
+        Prop("get_mapping_coverage", "Show how many adapter fields are connected vs total", Req(["id"]),
+            ("id", Int("Mapping ID"))
+        ),
+        Prop("preview_mapping_for_product", "Preview mapping result for a specific product", Req(["mappingId", "productId"]),
+            ("mappingId", Int("Mapping ID")), ("productId", Int("Product ID"))
+        ),
+        Prop("generate_mapping_suggestions", "Re-run AI auto-mapping on an existing mapping (overwrites unconnected fields). FILL STRATEGY: Before filling, scan for SEMANTIC DUPLICATES ('Название' vs 'Название товара') — propose merge_adapter_fields first. Steps: 1) get_mapping → see unconnected fields; 2) get_available_sources → see sources; 3) call this tool; 4) if 0 fields connected: call get_external_fields → manually match unconnected fields → connect_field for each match (confidence ≥ 0.6). Never ask user 'which source type?' — determine from get_available_sources.", Req(["id"]),
+            ("id", Int("Mapping ID"))
+        ),
+        Prop("connect_field", "Connect a source to an adapter field. For sourceType 'productField' → provide sourceField. For 'attribute' or 'storeAttribute' → provide sourceAttributeId.", Req(["mappingId", "adapterFieldKey", "sourceType"]),
+            ("mappingId", Int("Mapping ID")),
+            ("adapterFieldKey", Str("Adapter field key from get_external_fields")),
             ("sourceType", Enum("productField", "attribute", "storeAttribute")),
-            ("sourceField", Str("e.g. sku, name, price")), ("sourceAttributeId", Int())
+            ("sourceField", Str("Required when sourceType='productField'. Values: sku, name, price, barcode, description, storageQuantity")),
+            ("sourceAttributeId", Int("Required when sourceType='attribute' or 'storeAttribute'. Attribute ID from get_available_sources"))
         ),
-        Prop("set_field_static_value", "Set a constant value for an adapter field", Req(["mappingId", "adapterFieldKey", "value"]),
-            ("mappingId", Int()), ("adapterFieldKey", Str()), ("value", Str())
+        Prop("set_field_static_value", "Set a hardcoded constant value for an adapter field", Req(["mappingId", "adapterFieldKey", "value"]),
+            ("mappingId", Int("Mapping ID")),
+            ("adapterFieldKey", Str("Adapter field key")),
+            ("value", Str("Static value to always use"))
         ),
-        Prop("add_field_modifier", "Add a transformation modifier to a field", Req(["mappingId", "adapterFieldKey", "modifierType"]),
-            ("mappingId", Int()), ("adapterFieldKey", Str()),
-            ("modifierType", Enum("truncate", "round", "multiply", "toText", "toNumber", "uppercase", "lowercase", "append", "prepend", "replace"))
+        Prop("set_fields_static_value", "Set static values for multiple adapter fields in one call. Prefer this when filling several fields at once.", Req(["mappingId", "fields"]),
+            ("mappingId", Int("Mapping ID")),
+            ("fields", new AiToolProperty
+            {
+                type = "array",
+                description = "List of {adapterFieldKey, value} pairs",
+                items = new AiToolProperty
+                {
+                    type = "object",
+                    required = new List<string> { "adapterFieldKey", "value" },
+                    properties = new Dictionary<string, AiToolProperty>
+                    {
+                        ["adapterFieldKey"] = Str("Adapter field key from get_external_fields"),
+                        ["value"] = Str("Static value to set"),
+                    }
+                }
+            })
         ),
-        Prop("remove_field_connection", "Remove source from an adapter field", Req(["mappingId", "fieldKey"]),
-            ("mappingId", Int()), ("fieldKey", Str())
+        Prop("connect_fields", "Connect multiple sources to adapter fields in one call. Prefer this over calling connect_field in a loop.", Req(["mappingId", "connections"]),
+            ("mappingId", Int("Mapping ID")),
+            ("connections", new AiToolProperty
+            {
+                type = "array",
+                description = "List of field connections",
+                items = new AiToolProperty
+                {
+                    type = "object",
+                    required = new List<string> { "adapterFieldKey", "sourceType" },
+                    properties = new Dictionary<string, AiToolProperty>
+                    {
+                        ["adapterFieldKey"] = Str("Adapter field key from get_external_fields"),
+                        ["sourceType"] = Str("productField | attribute | storeAttribute"),
+                        ["sourceField"] = Str("Required for productField: sku, name, price, barcode, description, storageQuantity"),
+                        ["sourceAttributeId"] = Int("Required for attribute/storeAttribute: attribute ID from get_available_sources"),
+                    }
+                }
+            })
+        ),
+        Prop("add_field_modifier", "Add a data transformation step to a field. Use to DERIVE values: e.g. 'old price = current price × 1.35' → connect price field then add multiply(factor=1.35). Math: multiply, divide, add (negative=subtract), round, floor, ceiling, clamp. Text: template(with {{value}}), append, prepend, truncate, replace. This is fully supported — never claim it's impossible.", Req(["mappingId", "adapterFieldKey", "modifierType"]),
+            ("mappingId", Int("Mapping ID")),
+            ("adapterFieldKey", Str("Adapter field key")),
+            ("modifierType", Enum(
+                "truncate", "replace", "append", "prepend", "trim", "uppercase", "lowercase", "template", "split",
+                "multiply", "divide", "add", "round", "floor", "ceiling", "clamp",
+                "valueMap", "optionMap", "defaultValue", "toText", "forceType",
+                "limit", "join", "takeFirst", "skip", "reverse", "sort", "addItems", "removeItems")),
+            ("params", new AiToolProperty { type = "object", description = "Modifier parameters: truncate→{maxLength:int}, multiply→{factor:number}, divide→{divisor:number}, add→{addend:number}, round→{decimals:int}, clamp→{min,max}, append→{suffix}, prepend→{prefix}, replace→{search,replacement}, template→{template:'...{{value}}...'}, valueMap→{mappings:[{from,to}],default}, join→{delimiter}, limit→{count}" })
+        ),
+        Prop("merge_adapter_fields", "Merge duplicate adapter fields: aliases receive the primary's exported value under their own key; import reverses only the primary. Use for semantically identical fields (e.g. 'Название' and 'Название товара').", Req(["mappingId", "primaryFieldKey", "aliasFieldKeys"]),
+            ("mappingId", Int("Mapping ID")),
+            ("primaryFieldKey", Str("Field that stays connected and drives the value")),
+            ("aliasFieldKeys", StrArray("Duplicate field keys to merge into the primary"))
+        ),
+        Prop("unmerge_adapter_fields", "Undo merge_adapter_fields for the given alias fields", Req(["mappingId", "fieldKeys"]),
+            ("mappingId", Int("Mapping ID")),
+            ("fieldKeys", StrArray("Alias field keys to detach from their primary"))
+        ),
+        Prop("remove_field_connection", "Disconnect source from an adapter field", Req(["mappingId", "fieldKey"]),
+            ("mappingId", Int("Mapping ID")), ("fieldKey", Str("Adapter field key to disconnect"))
         ),
 
         // Export/Import
-        Prop("export_products_batch", "Queue products for export", Req(["connectionId"]),
-            ("connectionId", Int()),
-            ("productIds", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } }),
-            ("categoryId", Int("Export all products in category"))
+        Prop("export_products_batch", "Queue products for export. Returns batchId — use get_batch_status(batchId) to track progress. Without productIds or categoryId — exports ALL store products.", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID — required")),
+            ("productIds", IntArray("Array of integer product IDs (omit to use categoryId or export all)")),
+            ("categoryId", Int("Export all products in this category (ignored if productIds provided)"))
         ),
-        Prop("export_prices", "Export prices to marketplace", Req(["connectionId"]), ("connectionId", Int())),
-        Prop("export_stocks", "Export stock quantities to marketplace", Req(["connectionId"]), ("connectionId", Int())),
-        Prop("get_batch_status", "Check export/import batch status", Req(["batchId"]), ("batchId", Str())),
-        Prop("list_product_links", "List product-marketplace sync links", Req([]), ("connectionId", Int())),
+        Prop("export_prices", "Export product prices to marketplace", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID — required"))
+        ),
+        Prop("export_stocks", "Export stock quantities to marketplace", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID — required"))
+        ),
+        Prop("get_batch_status", "Check export batch progress (done/failed/pending counts)", Req(["batchId"]),
+            ("batchId", Str("Batch ID returned by export_products_batch"))
+        ),
+        Prop("list_product_links", "List product-to-marketplace sync links", Req([]),
+            ("connectionId", Int("Filter by connection ID"))
+        ),
 
         // Groups
-        Prop("list_groups", "List product groups", Req([])),
-        Prop("create_group", "Create a product group", Req(["name"]),
-            ("name", Str()),
-            ("productIds", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } })
+        Prop("list_groups", "List product groups with optional filters", Req([]),
+            ("search", Str("Filter groups by name substring")),
+            ("productId", Int("Only groups containing this product"))
         ),
-        Prop("add_products_to_group", "Add products to a group", Req(["groupId", "productIds"]),
-            ("groupId", Int()),
-            ("productIds", new AiToolProperty { type = "array", items = new AiToolProperty { type = "string" } })
+        Prop("get_group", "Get group details with full member list (id, name, sku, price, quantity)", Req(["id"]),
+            ("id", Int("Group ID"))
+        ),
+        Prop("create_group", "Create a product group, optionally with initial products", Req(["name"]),
+            ("name", Str("Group name")),
+            ("productIds", IntArray("Initial product IDs to add to the group (optional)"))
+        ),
+        Prop("update_group", "Rename a group or change its description", Req(["id"]),
+            ("id", Int("Group ID")),
+            ("name", Str("New group name")),
+            ("description", Str("New description"))
+        ),
+        Prop("delete_group", "Delete a group. Products stay in the store, only the grouping is removed.", Req(["id"]),
+            ("id", Int("Group ID"))
+        ),
+        Prop("add_products_to_group", "Add products to an existing group (skips already-members)", Req(["groupId", "productIds"]),
+            ("groupId", Int("Group ID")),
+            ("productIds", IntArray("Array of integer product IDs to add"))
+        ),
+        Prop("remove_products_from_group", "Remove products from a group (products themselves are not deleted)", Req(["groupId", "productIds"]),
+            ("groupId", Int("Group ID")),
+            ("productIds", IntArray("Array of integer product IDs to remove"))
+        ),
+
+        // Files (scope: "product" = files of one product, "store" = store-level storage)
+        Prop("list_files", "List files and folders. scope=product needs productId; scope=store lists store storage.", Req(["scope"]),
+            ("scope", Enum("product", "store")),
+            ("productId", Int("Product ID (required for scope=product)")),
+            ("folderId", Int("Only files in this folder (omit = root)")),
+            ("search", Str("Filter files by name substring (ignores folderId)"))
+        ),
+        Prop("create_folder", "Create a folder for files", Req(["scope", "name"]),
+            ("scope", Enum("product", "store")),
+            ("name", Str("Folder name")),
+            ("productId", Int("Product ID (required for scope=product)")),
+            ("parentFolderId", Int("Parent folder (omit = root)"))
+        ),
+        Prop("rename_file", "Rename a file (display name)", Req(["scope", "fileId", "newName"]),
+            ("scope", Enum("product", "store")),
+            ("fileId", Int("File ID")),
+            ("newName", Str("New display name"))
+        ),
+        Prop("rename_folder", "Rename a folder", Req(["scope", "folderId", "newName"]),
+            ("scope", Enum("product", "store")),
+            ("folderId", Int("Folder ID")),
+            ("newName", Str("New folder name"))
+        ),
+        Prop("move_files", "Move files and/or folders into another folder (targetFolderId omitted = move to root)", Req(["scope"]),
+            ("scope", Enum("product", "store")),
+            ("targetFolderId", Int("Destination folder ID (omit = root)")),
+            ("fileIds", IntArray("File IDs to move")),
+            ("folderIds", IntArray("Folder IDs to move"))
+        ),
+        Prop("delete_files", "Permanently delete files (removes from storage too). Cannot be undone.", Req(["scope", "fileIds"]),
+            ("scope", Enum("product", "store")),
+            ("fileIds", IntArray("File IDs to delete"))
+        ),
+        Prop("delete_folder", "Delete a folder. Empty folders delete directly; use recursive=true to delete with contents. Cannot be undone.", Req(["scope", "folderId"]),
+            ("scope", Enum("product", "store")),
+            ("folderId", Int("Folder ID")),
+            ("recursive", Bool("Delete folder together with all files and subfolders"))
+        ),
+        Prop("share_file", "Create a public share link for a file or folder", Req(["scope"]),
+            ("scope", Enum("product", "store")),
+            ("fileId", Int("File ID to share (either this or folderId)")),
+            ("folderId", Int("Folder ID to share")),
+            ("ttlHours", Int("Link lifetime in hours: 1, 24, 168 (week) or 720 (month). Default 168."))
+        ),
+
+        // Barcodes
+        Prop("generate_barcodes", "Generate valid EAN-13 barcodes for products that have no barcode. Unique within the store. Can be rolled back.", Req([]),
+            ("productIds", IntArray("Limit to these products (omit = all products without barcode)"))
         ),
 
         // Analytics
-        Prop("get_store_stats", "Get overall store statistics", Req([])),
-        Prop("find_products_without_images", "Find products with no images", Req([])),
-        Prop("find_products_without_barcode", "Find products with no barcode", Req([])),
-        Prop("find_products_missing_field", "Find products missing an attribute value", Req(["search"]),
-            ("search", Str("Attribute name to check"))
+        Prop("get_store_stats", "Get overall store statistics (product/category/connection/mapping counts)", Req([])),
+        Prop("find_products_without_images", "Find up to 100 products that have no images", Req([])),
+        Prop("find_products_without_barcode", "Find up to 100 products with empty barcode", Req([])),
+        Prop("find_products_missing_field", "Find products missing a value for an attribute (search by attribute name)", Req(["search"]),
+            ("search", Str("Attribute name to check (partial match)"))
         ),
         Prop("find_products_with_sync_errors", "Find products with marketplace sync errors", Req([]),
-            ("connectionId", Int())
+            ("connectionId", Int("Filter by connection ID (optional)"))
         ),
-        Prop("analyze_mapping_quality", "Analyze all mappings coverage", Req([]), ("connectionId", Int())),
+        Prop("analyze_mapping_quality", "Analyze field coverage across all mappings", Req([]),
+            ("connectionId", Int("Filter by connection ID (optional)"))
+        ),
         Prop("get_image_download_status", "Check image download queue status", Req([])),
+
+        // Navigation
+        Prop("navigate_to", "Show a clickable navigation button in the chat that takes the user to a specific page. The button appears in the chat UI — the user clicks it to navigate. Do NOT say you 'redirected' the user; instead say something like 'Вот кнопка для перехода на страницу товара'. The panel stays open during navigation.",
+            Req(["url", "label"]),
+            ("url", Str("App-relative path using the REAL numeric ID from the tool result, e.g. /products/1762/edit — NEVER invent or guess an ID")),
+            ("label", Str("Short destination description shown on the button, e.g. 'Носки шерстяные (150₽)'"))
+        ),
     ];
 
     // ---- Tool definition builder helpers ----
@@ -1548,6 +3334,8 @@ public class AiChatService
     private static AiToolProperty Num(string? desc = null) => new() { type = "number", description = desc };
     private static AiToolProperty Bool(string? desc = null) => new() { type = "boolean", description = desc };
     private static AiToolProperty Enum(params string[] values) => new() { type = "string", @enum = values.ToList() };
+    private static AiToolProperty IntArray(string? desc = null) => new() { type = "array", description = desc, items = new AiToolProperty { type = "number" } };
+    private static AiToolProperty StrArray(string? desc = null) => new() { type = "array", description = desc, items = new AiToolProperty { type = "string" } };
 
     // ---- SSE helpers ----
 
@@ -1571,8 +3359,23 @@ public class AiChatService
 
     // ---- Input DTOs ----
 
-    private class ListProductsInput { public int? CategoryId { get; set; } public string? Search { get; set; } public decimal? PriceMin { get; set; } public decimal? PriceMax { get; set; } public bool? HasImages { get; set; } public string? MissingField { get; set; } public int? StartIndex { get; set; } public int? PageSize { get; set; } }
+    private class ListProductsInput { public int? CategoryId { get; set; } public string? Search { get; set; } public decimal? PriceMin { get; set; } public decimal? PriceMax { get; set; } public int? QuantityMin { get; set; } public int? QuantityMax { get; set; } public bool? HasImages { get; set; } public string? MissingField { get; set; } public int? StartIndex { get; set; } public int? PageSize { get; set; } public string? SortBy { get; set; } public string? SortDir { get; set; } }
     private class IdInput { public int Id { get; set; } }
+    private class ListGroupsInput { public string? Search { get; set; } public int? ProductId { get; set; } }
+    private class UpdateGroupInput { public int Id { get; set; } public string? Name { get; set; } public string? Description { get; set; } }
+    private class ConnectionIdRequiredInput { public int ConnectionId { get; set; } }
+    private class PreviewMarketplaceInput { public int ConnectionId { get; set; } public int? PageSize { get; set; } public string? Cursor { get; set; } public string? Search { get; set; } }
+    private class ImportProductsInput { public int ConnectionId { get; set; } public List<string> ExternalProductIds { get; set; } = []; public int? TargetCategoryId { get; set; } }
+    private class ArchiveProductInput { public int ConnectionId { get; set; } public int ProductId { get; set; } }
+    private class ListFilesInput { public string Scope { get; set; } = "store"; public int? ProductId { get; set; } public int? FolderId { get; set; } public string? Search { get; set; } }
+    private class CreateFolderInput { public string Scope { get; set; } = "store"; public string Name { get; set; } = ""; public int? ProductId { get; set; } public int? ParentFolderId { get; set; } }
+    private class RenameFileInput { public string Scope { get; set; } = "store"; public int FileId { get; set; } public string NewName { get; set; } = ""; }
+    private class RenameFolderInput { public string Scope { get; set; } = "store"; public int FolderId { get; set; } public string NewName { get; set; } = ""; }
+    private class MoveFilesInput { public string Scope { get; set; } = "store"; public int? TargetFolderId { get; set; } public List<int>? FileIds { get; set; } public List<int>? FolderIds { get; set; } }
+    private class DeleteFilesInput { public string Scope { get; set; } = "store"; public List<int> FileIds { get; set; } = []; }
+    private class DeleteFolderInput { public string Scope { get; set; } = "store"; public int FolderId { get; set; } public bool? Recursive { get; set; } }
+    private class ShareFileInput { public string Scope { get; set; } = "store"; public int? FileId { get; set; } public int? FolderId { get; set; } public int? TtlHours { get; set; } }
+    private class GenerateBarcodesInput { public List<int>? ProductIds { get; set; } }
     private class OptionalIdInput { public int? Id { get; set; } }
     private class IdsInput { public List<int> Ids { get; set; } = []; }
     private class SearchInput { public string? Search { get; set; } }
@@ -1591,11 +3394,19 @@ public class AiChatService
     private class CreateMappingInput { public int ConnectionId { get; set; } public int LocalCategoryId { get; set; } public string ExternalCategoryId { get; set; } = ""; public string? ExternalCategoryName { get; set; } public string? Name { get; set; } }
     private class UpdateNameInput { public int Id { get; set; } public string Name { get; set; } = ""; }
     private class ExternalCategoriesInput { public int ConnectionId { get; set; } public string? ParentId { get; set; } public string? Search { get; set; } }
-    private class ExternalFieldsInput { public int ConnectionId { get; set; } public string ExternalCategoryId { get; set; } = ""; }
+    private class ExternalFieldsInput { public int? ConnectionId { get; set; } public string? ExternalCategoryId { get; set; } public int? MappingId { get; set; } }
+    private class SearchFieldOptionsInput { public string AdapterFieldKey { get; set; } = ""; public string? Query { get; set; } public int? MappingId { get; set; } public int? ConnectionId { get; set; } public string? ExternalCategoryId { get; set; } public int? Limit { get; set; } }
+    private class MergeFieldsInput { public int MappingId { get; set; } public string PrimaryFieldKey { get; set; } = ""; public List<string> AliasFieldKeys { get; set; } = []; }
+    private class UnmergeFieldsInput { public int MappingId { get; set; } public List<string> FieldKeys { get; set; } = []; }
     private class PreviewMappingInput { public int MappingId { get; set; } public int ProductId { get; set; } }
     private class ConnectFieldInput { public int MappingId { get; set; } public string AdapterFieldKey { get; set; } = ""; public string SourceType { get; set; } = ""; public string? SourceField { get; set; } public int? SourceAttributeId { get; set; } }
+    private class ConnectFieldsBulkInput { public int MappingId { get; set; } public List<ConnectFieldInput> Connections { get; set; } = []; }
     private class SetStaticInput { public int MappingId { get; set; } public string AdapterFieldKey { get; set; } = ""; public string Value { get; set; } = ""; }
+    private class SetFieldsStaticBulkInput { public int MappingId { get; set; } public List<SetStaticInput> Fields { get; set; } = []; }
     private class AddModifierInput { public int MappingId { get; set; } public string AdapterFieldKey { get; set; } = ""; public string ModifierType { get; set; } = ""; public Dictionary<string, object>? Params { get; set; } }
+    private class CreateProductsBulkInput { public List<CreateProductInput> Products { get; set; } = []; }
+    private class AttributeKeyValuePair { public string AttributeKey { get; set; } = ""; public string Value { get; set; } = ""; }
+    private class UpdateAttributesBulkInput { public List<int>? ProductIds { get; set; } public List<AttributeKeyValuePair> Attributes { get; set; } = []; }
     private class FieldKeyInput { public int MappingId { get; set; } public string FieldKey { get; set; } = ""; }
     private class ExportBatchInput { public int ConnectionId { get; set; } public List<int>? ProductIds { get; set; } public int? CategoryId { get; set; } }
     private class CreateGroupInput { public string Name { get; set; } = ""; public List<int>? ProductIds { get; set; } }

@@ -30,6 +30,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION } from "@/router";
 
 export default {
@@ -58,6 +59,7 @@ export default {
     CardTitle,
     RadioGroup,
     RadioGroupItem,
+    EmptyState,
     Separator,
     SearchableSelect,
   },
@@ -367,9 +369,16 @@ export default {
             <div v-if="isLoadingCategories" class="flex justify-center py-8">
               <Loader2 class="size-6 animate-spin text-muted-foreground" />
             </div>
-            <div v-else-if="externalCategories.length === 0" class="text-center py-8 text-muted-foreground text-sm">
-              Категории не найдены
-            </div>
+            <EmptyState
+              v-else-if="externalCategories.length === 0"
+              size="sm"
+              title="Категории не найдены"
+              description="Измените поисковый запрос или поднимитесь на уровень выше."
+            >
+              <template #icon>
+                <Search />
+              </template>
+            </EmptyState>
             <div
               v-else
               v-for="cat in externalCategories"

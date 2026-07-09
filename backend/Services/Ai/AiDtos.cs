@@ -12,6 +12,7 @@ public class AiRequest
     public List<AiMessage> messages { get; set; } = new();
     public List<AiTool>? tools { get; set; }
     public bool stream { get; set; }
+    public string? user { get; set; } // session/conversation id — breaks KV-cache between sessions
 }
 
 public class AiMessage
@@ -44,6 +45,12 @@ public class AiToolProperty
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public AiToolProperty? items { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, AiToolProperty>? properties { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? required { get; set; }
 }
 
 // ---- Response DTOs ----
@@ -74,6 +81,7 @@ public class AiStreamEvent
     public AiStreamDelta? delta { get; set; }
     public AiContentBlock? content_block { get; set; }
     public int? index { get; set; }
+    public string? error { get; set; }
 }
 
 public class AiStreamDelta
@@ -94,7 +102,18 @@ public class ChatRequest
 public class ChatMessage
 {
     public string role { get; set; } = null!;
-    public string content { get; set; } = null!;
+    // Accepts both plain string and content-block arrays (tool_use / tool_result)
+    public System.Text.Json.JsonElement content { get; set; }
+}
+
+// ---- Plan execution ----
+
+/// <summary>One confirmed plan step, executed deterministically by the backend.</summary>
+public class PlanStepInput
+{
+    public string Tool { get; set; } = "";
+    public string? Description { get; set; }
+    public System.Text.Json.JsonElement? Args { get; set; }
 }
 
 // ---- SSE event types ----

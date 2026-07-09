@@ -3,7 +3,6 @@ import { RouterView, useRoute } from "vue-router";
 import { Toaster } from "vue-sonner";
 import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
-import OperationsTriggerButton from "@/components/operations/OperationsTriggerButton.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -12,13 +11,13 @@ import { computed, ref } from "vue";
 import Button from "@/components/ui/button/Button.vue";
 import { Monitor } from "lucide-vue-next";
 import AiChatPanel from "@/components/ai/AiChatPanel.vue";
+import FabGroup from "@/components/FabGroup.vue";
 
 export default {
   components: {
     RouterView,
     Toaster,
     OperationsPanel,
-    OperationsTriggerButton,
     LoadingBar,
     AppSidebar,
     SidebarInset,
@@ -27,6 +26,7 @@ export default {
     Button,
     Monitor,
     AiChatPanel,
+    FabGroup,
   },
   setup() {
     const route = useRoute();
@@ -51,6 +51,9 @@ export default {
     },
     isSwitchingStore() {
       return this.$store.state.isSwitchingStore;
+    },
+    isAiPanelOpen() {
+      return this.$store.state.aiChat.isOpen;
     },
     hasActiveUploads() {
       return this.$store.getters["operations/hasLocalActiveUploads"];
@@ -85,17 +88,17 @@ export default {
   </RouterView>
   <SidebarProvider v-else>
     <AppSidebar />
-    <SidebarInset>
+    <SidebarInset :class="{ 'ai-panel-open': isAiPanelOpen }">
       <RouterView v-slot="{ Component, route }">
         <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
       </RouterView>
     </SidebarInset>
+    <AiChatPanel :key="appKey" />
   </SidebarProvider>
   <Toaster />
   <template v-if="!isPublicPage">
     <OperationsPanel />
-    <OperationsTriggerButton />
-    <AiChatPanel />
+    <FabGroup />
   </template>
 
   <!-- Mobile device warning -->

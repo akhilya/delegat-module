@@ -24,11 +24,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Button from "@/components/ui/button/Button.vue";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { useDark, useToggle } from "@vueuse/core";
 import {
+  Activity,
   AlertTriangle,
   Boxes,
   FolderOpen,
@@ -42,6 +48,7 @@ import {
   Plug,
   Settings2,
   ShoppingBag,
+  Sparkles,
   Store,
   Sun,
   Trash2,
@@ -92,6 +99,10 @@ export default {
     SelectTrigger,
     SelectValue,
     Button,
+    AlertDialog, AlertDialogAction, AlertDialogCancel,
+    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+    AlertDialogHeader, AlertDialogTitle,
+    Activity,
     AlertTriangle,
     Boxes,
     FolderOpen,
@@ -105,6 +116,7 @@ export default {
     Plug,
     Settings2,
     ShoppingBag,
+    Sparkles,
     Store,
     Sun,
     Trash2,
@@ -128,6 +140,7 @@ export default {
       memberships: [],
       platformVersion: null,
       appVersion: import.meta.env.VITE_APP_VERSION || null,
+      confirmDialog: { open: false, title: "", message: "", resolve: null },
     };
   },
   computed: {
@@ -168,7 +181,7 @@ export default {
         { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
         { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
         { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-        { label: "AI Модели", to: PAGE_ADMIN_AI, icon: Wand2 },
+        { label: "ИИ", to: PAGE_ADMIN_AI, icon: Wand2 },
       ];
     },
   },
@@ -179,6 +192,9 @@ export default {
       "postLogOut",
       "postSelectStore",
     ]),
+    showConfirm(title, message) {
+      return new Promise((r) => { this.confirmDialog = { open: true, title, message, resolve: r }; });
+    },
     isActive(to) {
       const [path, query] = to.split("?");
       if (query) return this.$route.path === path && this.$route.fullPath.includes(query);
@@ -215,7 +231,8 @@ export default {
     async selectStore(storeId) {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
       if (hasUploads) {
-        const confirmed = window.confirm(
+        const confirmed = await this.showConfirm(
+          "Переключить магазин",
           "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
         );
         if (!confirmed) return;
@@ -302,6 +319,26 @@ export default {
       </SidebarGroup>
 
       <SidebarGroup>
+        <SidebarGroupLabel>Утилиты</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton @click="$store.commit('aiChat/toggle')">
+                <Sparkles />
+                <span>AI Ассистент</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton @click="$store.dispatch('operations/togglePanel')">
+                <Activity />
+                <span>Фоновые процессы</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
         <SidebarGroupLabel>Пользователь</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
@@ -369,6 +406,22 @@ export default {
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
+
+    <AlertDialog
+      :open="confirmDialog.open"
+      @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Продолжить</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <SidebarFooter>
       <Button variant="ghost" class="justify-start gap-2" @click="toggleDark()">

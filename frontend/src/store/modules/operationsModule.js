@@ -151,9 +151,14 @@ const actions = {
         transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         withCredentials: true,
       })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .withAutomaticReconnect([1000, 3000, 5000, 10000, 30000])
       .configureLogging(LogLevel.Warning)
       .build();
+
+    // Refresh JWT before each reconnect so the new cookie is in place for the negotiate request
+    connection.onreconnecting(() => {
+      fetch("/auth/refresh", { method: "POST", credentials: "include", headers: { "X-CSRF": "1" } }).catch(() => {});
+    });
 
     connection.on("OperationStarted", (data) => {
       const op = {

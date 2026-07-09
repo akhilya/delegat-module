@@ -458,11 +458,13 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, onSuccess, onError }) {
+    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, force = false, onSuccess, onError }) {
       try {
-        const url = reassignToMappingId
-          ? `/marketplace/connections/${connectionId}/mappings/${mappingId}?reassignToMappingId=${encodeURIComponent(reassignToMappingId)}`
-          : `/marketplace/connections/${connectionId}/mappings/${mappingId}`;
+        const params = new URLSearchParams();
+        if (reassignToMappingId) params.set("reassignToMappingId", reassignToMappingId);
+        if (force) params.set("force", "true");
+        const query = params.toString();
+        const url = `/marketplace/connections/${connectionId}/mappings/${mappingId}${query ? `?${query}` : ""}`;
         const response = await http.delete(url);
         onSuccess({ data: response.data });
       } catch (error) {

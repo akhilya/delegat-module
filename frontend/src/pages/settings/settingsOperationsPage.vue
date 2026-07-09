@@ -19,6 +19,12 @@ import {
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Activity, Loader2, RefreshCw, Trash2 } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const breadcrumbs = [
   { label: "Настройки", to: "/settings" },
@@ -29,6 +35,11 @@ const summary = ref(null);
 const operations = ref([]);
 const isLoading = ref(false);
 const clearingKey = ref(null);
+const confirmDialog = ref({ open: false, title: "", message: "", resolve: null });
+
+function showConfirm(title, message) {
+  return new Promise((r) => { confirmDialog.value = { open: true, title, message, resolve: r }; });
+}
 
 const queues = computed(() => summary.value?.queues || []);
 
@@ -80,7 +91,8 @@ async function fetchData() {
 
 async function clearTarget(target, status = "inactive") {
   const destructiveAll = status === "all";
-  const confirmed = window.confirm(
+  const confirmed = await showConfirm(
+    "Очистить очередь",
     destructiveAll
       ? "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?"
       : "Очистить завершённые, ошибочные и отменённые записи?"
@@ -241,13 +253,37 @@ onMounted(fetchData);
               </TableCell>
             </TableRow>
             <TableRow v-if="operations.length === 0">
-              <TableCell colspan="5" class="h-32 text-center text-sm text-muted-foreground">
-                История процессов пуста
+              <TableCell colspan="5">
+                <EmptyState
+                  size="sm"
+                  title="История пуста"
+                  description="Здесь появятся завершённые операции: экспорт, импорт и AI-задачи."
+                >
+                  <template #icon>
+                    <Activity />
+                  </template>
+                </EmptyState>
               </TableCell>
             </TableRow>
           </TableBody>
         </Table>
       </div>
     </PageSection>
+
+    <AlertDialog
+      :open="confirmDialog.open"
+      @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Очистить</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </Page>
 </template>

@@ -290,7 +290,7 @@ export default {
               description='Для подключения к адаптерам необходимо установить соответствующие плагины. Перейдите в раздел "Плагины" для установки.'
             >
               <template #icon>
-                <Package class="size-12 mb-4 text-muted-foreground" />
+                <Package />
               </template>
               <Button variant="outline" class="mt-4" @click="openPlugins">
                 Перейти к плагинам

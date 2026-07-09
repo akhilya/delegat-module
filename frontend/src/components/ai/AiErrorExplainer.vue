@@ -1,30 +1,8 @@
-<template>
-  <div class="ai-error-explainer">
-    <button
-      v-if="!explanation && !isLoading"
-      class="ai-error-explainer__btn"
-      @click="explain"
-    >
-      ✦ Объяснить ошибку
-    </button>
-
-    <div v-if="isLoading" class="ai-error-explainer__loading">
-      AI анализирует...
-    </div>
-
-    <div v-if="explanation" class="ai-error-explainer__result">
-      <div class="ai-error-explainer__result-header">
-        <span>✦ AI: объяснение ошибки</span>
-        <button class="ai-error-explainer__close" @click="explanation = null">✕</button>
-      </div>
-      <p class="ai-error-explainer__text">{{ explanation }}</p>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { ref } from "vue";
 import { http } from "@/main";
+import { Loader2, Sparkles, X } from "lucide-vue-next";
+import Button from "@/components/ui/button/Button.vue";
 
 const props = defineProps({
   errorMessage: { type: String, required: true },
@@ -40,7 +18,7 @@ async function explain() {
   if (isLoading.value) return;
   isLoading.value = true;
   try {
-    const r = await http.post("/api/ai/explain-error", {
+    const r = await http.post("/ai/explain-error", {
       errorMessage: props.errorMessage,
       context: props.context,
       productId: props.productId,
@@ -55,43 +33,35 @@ async function explain() {
 }
 </script>
 
-<style scoped>
-.ai-error-explainer { display: inline-block; }
+<template>
+  <div class="inline-flex flex-col gap-1.5">
+    <Button
+      v-if="!explanation && !isLoading"
+      variant="ghost"
+      size="sm"
+      class="h-6 text-xs gap-1.5 px-2 self-start"
+      @click="explain"
+    >
+      <Sparkles class="size-3" />
+      Объяснить ошибку
+    </Button>
 
-.ai-error-explainer__btn {
-  font-size: 11px;
-  color: var(--color-primary, #5b6ee1);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-.ai-error-explainer__btn:hover { opacity: 0.7; }
+    <div v-if="isLoading" class="flex items-center gap-1.5 text-xs text-muted-foreground italic">
+      <Loader2 class="size-3 animate-spin" />
+      AI анализирует...
+    </div>
 
-.ai-error-explainer__loading {
-  font-size: 11px;
-  color: var(--color-text-secondary, #64748b);
-  font-style: italic;
-}
-
-.ai-error-explainer__result {
-  margin-top: 6px;
-  background: #f0f4ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 8px;
-  padding: 10px 12px;
-  max-width: 400px;
-}
-.ai-error-explainer__result-header {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; font-weight: 600; color: #4338ca; margin-bottom: 6px;
-}
-.ai-error-explainer__close {
-  border: none; background: none; cursor: pointer; font-size: 12px; color: #6366f1;
-}
-.ai-error-explainer__text {
-  font-size: 12px; line-height: 1.5; color: #1e293b; margin: 0;
-  white-space: pre-wrap;
-}
-</style>
+    <div v-if="explanation" class="rounded-lg border bg-muted/50 p-2.5 max-w-sm text-xs">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="flex items-center gap-1 font-semibold text-primary text-[11px]">
+          <Sparkles class="size-3" />
+          AI: объяснение ошибки
+        </span>
+        <Button variant="ghost" size="icon" class="h-5 w-5" @click="explanation = null">
+          <X class="size-3" />
+        </Button>
+      </div>
+      <p class="text-muted-foreground leading-relaxed whitespace-pre-wrap">{{ explanation }}</p>
+    </div>
+  </div>
+</template>

@@ -552,7 +552,7 @@ export default {
             description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
           >
             <template #icon>
-              <Settings2 class="size-12 mb-4 text-muted-foreground" />
+              <Settings2 />
             </template>
           </EmptyState>
 

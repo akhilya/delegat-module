@@ -18,6 +18,11 @@ const props = defineProps({
 
 const fields = computed(() => props.data.fields || []);
 const analysis = computed(() => props.data.analysis || {});
+
+function aliasPrimaryLabel(f) {
+  const primary = fields.value.find((x) => x.fieldKey === f.aliasOf);
+  return primary?.label || f.aliasOf;
+}
 const avail = computed(() => props.data.availableSources || {});
 const productFields = computed(() => avail.value.productFields || []);
 const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
@@ -49,8 +54,9 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 <template>
   <div :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']">
     <template v-for="(f, i) in fields" :key="f.fieldKey">
+      <!-- Alias fields (merged duplicates) take the primary's value — no input pin -->
       <Handle
-        v-if="!f.source"
+        v-if="!f.source && !f.aliasOf"
         :id="`f:${f.fieldKey}`"
         type="target"
         :position="Position.Left"
@@ -70,6 +76,21 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           {{ f.label || f.fieldKey }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
 
+        <!-- Merged duplicate: exports the primary's value under its own key -->
+        <TooltipProvider v-if="f.aliasOf" :delay-duration="400">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <span class="vf-adapter__pill vf-adapter__pill--alias" @click.stop="data.openField?.(f.fieldKey)">
+                = {{ aliasPrimaryLabel(f) }}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" class="max-w-56 text-xs">
+              Объединено с «{{ aliasPrimaryLabel(f) }}»: при экспорте получает его значение,
+              при импорте игнорируется
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         <!-- Direction indicator for pill-bound fields only (wire fields show direction on the canvas edge) -->
         <component
           v-if="f.source"
@@ -83,12 +104,13 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             <TooltipTrigger as-child>
               <AlertTriangle class="size-2.5 shrink-0 cursor-help text-amber-500" />
             </TooltipTrigger>
-            <TooltipContent side="top" class="max-w-52 text-xs">
+            <TooltipContent side="top" class="max-w-56 text-xs">
               {{
                 f.source
-                  ? "Этот источник уже используется другим полем — возможен конфликт данных"
-                  : "Импорт отключён: этот источник уже используется несколькими полями адаптера"
+                  ? "Этот источник уже используется другим полем — возможен конфликт данных."
+                  : "Импорт отключён: этот источник уже используется несколькими полями адаптера."
               }}
+              Если поля дублируют друг друга — объедините их в настройках поля («Объединить с полем»).
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

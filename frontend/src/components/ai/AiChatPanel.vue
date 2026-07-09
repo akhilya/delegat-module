@@ -1,130 +1,336 @@
-<template>
-  <div>
-    <!-- Toggle button -->
-    <button
-      class="ai-fab"
-      :class="{ 'ai-fab--loading': isLoading }"
-      @click="toggle"
-      title="AI Ассистент"
-    >
-      <svg v-if="!isLoading" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-        <path d="M2 17l10 5 10-5"/>
-        <path d="M2 12l10 5 10-5"/>
-      </svg>
-      <span v-else class="ai-spinner" />
-    </button>
-
-    <!-- Chat panel -->
-    <Transition name="ai-panel">
-      <div v-if="isOpen" class="ai-panel">
-        <div class="ai-panel__header">
-          <span class="ai-panel__title">AI Ассистент</span>
-          <div class="ai-panel__header-actions">
-            <button class="ai-panel__btn" @click="clearMessages" title="Очистить историю">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                <path d="M10 11v6"/><path d="M14 11v6"/>
-              </svg>
-            </button>
-            <button class="ai-panel__btn" @click="toggle" title="Свернуть">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div ref="messagesEl" class="ai-panel__messages">
-          <div v-if="messages.length === 0" class="ai-panel__empty">
-            <p>Привет! Я могу помочь управлять товарами, категориями, маппингами и экспортом.</p>
-            <p class="ai-panel__hints">Примеры: «покажи статистику магазина», «увеличь цену всем товарам на 100»</p>
-          </div>
-
-          <div
-            v-for="msg in messages"
-            :key="msg.id"
-            class="ai-message"
-            :class="`ai-message--${msg.role}`"
-          >
-            <!-- Plan card -->
-            <template v-if="msg.role === 'assistant' && msg.plan">
-              <AiPlanCard
-                :plan="msg.plan"
-                :confirmed="msg.planConfirmed"
-                :cancelled="msg.planCancelled"
-                @confirm="confirmPlan"
-                @cancel="cancelPlan"
-              />
-              <div v-if="msg.content" class="ai-message__text" v-html="renderMarkdown(msg.content)" />
-            </template>
-
-            <!-- Regular assistant message -->
-            <template v-else-if="msg.role === 'assistant'">
-              <div v-if="msg.toolCalls?.length" class="ai-tool-calls">
-                <div v-for="tc in msg.toolCalls" :key="tc.name" class="ai-tool-call" :class="`ai-tool-call--${tc.status}`">
-                  <span class="ai-tool-call__icon">{{ tc.status === 'running' ? '⏳' : '✓' }}</span>
-                  <span class="ai-tool-call__name">{{ tc.name }}</span>
-                  <span v-if="tc.summary" class="ai-tool-call__summary">{{ tc.summary }}</span>
-                </div>
-              </div>
-              <div v-if="msg.content" class="ai-message__text" v-html="renderMarkdown(msg.content)" />
-              <span v-if="!msg.done && isLoading && msg === lastAssistant" class="ai-cursor" />
-            </template>
-
-            <!-- User message -->
-            <div v-else class="ai-message__text">{{ msg.content }}</div>
-          </div>
-        </div>
-
-        <div class="ai-panel__input">
-          <textarea
-            ref="inputEl"
-            v-model="inputText"
-            class="ai-panel__textarea"
-            placeholder="Введите запрос..."
-            rows="1"
-            :disabled="isLoading"
-            @keydown.enter.exact.prevent="submit"
-            @input="autoResize"
-          />
-          <button
-            class="ai-panel__send"
-            :disabled="isLoading || !inputText.trim()"
-            @click="submit"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </Transition>
-  </div>
-</template>
-
 <script setup>
-import { ref, computed, nextTick, watch } from "vue";
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from "vue";
 import { useStore } from "vuex";
+import {
+  X, ArrowUp, Bot, CheckCircle2, ExternalLink, Loader2, Square, Copy, Check,
+  ThumbsUp, ThumbsDown, Plus, Pencil, Trash2,
+  ChevronLeft, History, Wrench, MessageSquare, ChevronDown,
+  Boxes, FolderOpen, GitBranch, Plug, Upload, Download, Layers,
+  HardDrive, BarChart2, Globe, Sparkles,
+} from "lucide-vue-next";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import AiPlanCard from "./AiPlanCard.vue";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const store = useStore();
 const messagesEl = ref(null);
 const inputEl = ref(null);
 const inputText = ref("");
+const isResizing = ref(false);
+const isAtBottom = ref(true);
+
+// View switching: 'chat' | 'history' | 'tools'
+const activeView = ref("chat");
+
+// Conversation list
+const conversations = ref([]);
+const convListLoading = ref(false);
+
+// Inline title editing
+const isEditingTitle = ref(false);
+const editingTitleValue = ref("");
+const titleInputEl = ref(null);
+
+// Delete conversation confirmation
+const confirmDeleteDialog = ref({ open: false, sessionId: null, resolve: null });
+
+// Tools panel: which categories are expanded
+const expandedCategories = ref(new Set(["Товары", "Маппинги", "Аналитика"]));
 
 const isOpen = computed(() => store.state.aiChat.isOpen);
 const isLoading = computed(() => store.state.aiChat.isLoading);
 const messages = computed(() => store.state.aiChat.messages);
+const panelWidth = computed(() => store.state.aiChat.panelWidth);
+const conversationTitle = computed(() => store.state.aiChat.conversationTitle);
+const sessionId = computed(() => store.state.aiChat.sessionId);
 const lastAssistant = computed(() =>
   [...messages.value].reverse().find((m) => m.role === "assistant")
 );
+const hasRunningTool = computed(() =>
+  lastAssistant.value?.toolCalls?.some((tc) => tc.status === "running") ?? false
+);
+const lastModelName = computed(() =>
+  [...messages.value].reverse().find((m) => m.modelName)?.modelName ?? null
+);
 
-function toggle() { store.commit("aiChat/toggle"); }
-function clearMessages() { store.commit("aiChat/clearMessages"); }
+const allModels = computed(() => store.state.aiModels?.models ?? []);
+const enabledModels = computed(() => allModels.value.filter((m) => m.isEnabled));
+const selectedModelId = computed(() => store.state.aiChat.selectedModelId);
+const defaultModel = computed(() => allModels.value.find((m) => m.isDefault) ?? null);
+// The effective model shown in the picker: explicit selection or fallback to the default model
+const effectiveModelId = computed(() =>
+  selectedModelId.value ? String(selectedModelId.value) : String(defaultModel.value?.id ?? "")
+);
+
+// Group conversations by relative date for history view
+const groupedConversations = computed(() => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+
+  const groups = [
+    { label: "Сегодня", items: [] },
+    { label: "Вчера", items: [] },
+    { label: "Эта неделя", items: [] },
+    { label: "Ранее", items: [] },
+  ];
+  for (const c of conversations.value) {
+    const d = new Date(c.lastMessageAt);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (day >= today) groups[0].items.push(c);
+    else if (day >= yesterday) groups[1].items.push(c);
+    else if (day >= weekAgo) groups[2].items.push(c);
+    else groups[3].items.push(c);
+  }
+  return groups.filter((g) => g.items.length > 0);
+});
+
+const toolCategories = [
+  { name: "Товары", icon: Boxes, tools: [
+    { name: "list_products", desc: "Список и поиск товаров" },
+    { name: "get_products_count", desc: "Количество по фильтру" },
+    { name: "get_product", desc: "Полные данные товара" },
+    { name: "create_product", desc: "Создать товар" },
+    { name: "create_products", desc: "Создать товары пачкой" },
+    { name: "update_product", desc: "Обновить поля" },
+    { name: "update_product_sku", desc: "Изменить SKU" },
+    { name: "update_product_prices", desc: "Массовое изменение цен" },
+    { name: "update_product_attribute", desc: "Атрибут для нескольких товаров" },
+    { name: "update_product_attributes", desc: "Несколько атрибутов пачкой" },
+    { name: "delete_products", desc: "Мягкое удаление" },
+    { name: "restore_products", desc: "Восстановить из корзины" },
+    { name: "list_trash", desc: "Корзина товаров" },
+    { name: "generate_barcodes", desc: "Сгенерировать EAN-13 штрихкоды" },
+  ]},
+  { name: "Категории", icon: FolderOpen, tools: [
+    { name: "list_categories", desc: "Список категорий" },
+    { name: "get_category", desc: "Категория с атрибутами" },
+    { name: "create_category", desc: "Создать категорию" },
+    { name: "update_category", desc: "Переименовать" },
+    { name: "delete_category", desc: "Удалить" },
+    { name: "list_category_fields", desc: "Атрибуты категории" },
+    { name: "add_category_field", desc: "Добавить атрибут" },
+    { name: "update_category_field", desc: "Изменить атрибут" },
+    { name: "delete_category_field", desc: "Удалить атрибут" },
+    { name: "find_categories_with_field", desc: "Найти категории с атрибутом" },
+  ]},
+  { name: "Маппинги", icon: GitBranch, tools: [
+    { name: "list_mappings", desc: "Список маппингов" },
+    { name: "get_mapping", desc: "Детали + покрытие" },
+    { name: "create_mapping", desc: "Создать маппинг" },
+    { name: "update_mapping_name", desc: "Переименовать" },
+    { name: "delete_mapping", desc: "Удалить" },
+    { name: "duplicate_mapping", desc: "Скопировать" },
+    { name: "list_external_categories", desc: "Категории маркетплейса" },
+    { name: "get_external_fields", desc: "Поля адаптера" },
+    { name: "search_field_options", desc: "Поиск в опциях поля" },
+    { name: "get_available_sources", desc: "Доступные источники" },
+    { name: "get_mapping_coverage", desc: "Анализ покрытия" },
+    { name: "generate_mapping_suggestions", desc: "AI автозаполнение" },
+    { name: "connect_field", desc: "Подключить поле" },
+    { name: "connect_fields", desc: "Подключить несколько полей" },
+    { name: "set_field_static_value", desc: "Задать статическое значение" },
+    { name: "set_fields_static_value", desc: "Статические значения пачкой" },
+    { name: "add_field_modifier", desc: "Добавить трансформацию" },
+    { name: "remove_field_connection", desc: "Отключить поле" },
+    { name: "merge_adapter_fields", desc: "Объединить дубли полей" },
+    { name: "unmerge_adapter_fields", desc: "Разъединить поля" },
+    { name: "preview_mapping_for_product", desc: "Превью маппинга" },
+  ]},
+  { name: "Подключения", icon: Plug, tools: [
+    { name: "list_connections", desc: "Список подключений" },
+    { name: "get_connection", desc: "Детали подключения" },
+    { name: "test_connection", desc: "Проверить связь" },
+    { name: "get_connection_limits", desc: "Лимиты API" },
+    { name: "get_adapter_info", desc: "Мета-данные адаптера" },
+  ]},
+  { name: "Экспорт", icon: Upload, tools: [
+    { name: "export_products_batch", desc: "Экспорт товаров (batch)" },
+    { name: "export_prices", desc: "Экспорт цен" },
+    { name: "export_stocks", desc: "Экспорт остатков" },
+    { name: "get_batch_status", desc: "Статус задачи" },
+    { name: "list_product_links", desc: "Sync-ссылки товаров" },
+  ]},
+  { name: "Импорт", icon: Download, tools: [
+    { name: "preview_marketplace_products", desc: "Товары на маркетплейсе" },
+    { name: "import_products", desc: "Импортировать товары" },
+    { name: "import_prices", desc: "Импортировать цены" },
+    { name: "import_stocks", desc: "Импортировать остатки" },
+    { name: "archive_product_on_marketplace", desc: "Архивировать на площадке" },
+  ]},
+  { name: "Группы", icon: Layers, tools: [
+    { name: "list_groups", desc: "Группы товаров" },
+    { name: "get_group", desc: "Детали группы" },
+    { name: "create_group", desc: "Создать группу" },
+    { name: "update_group", desc: "Переименовать" },
+    { name: "delete_group", desc: "Удалить группу" },
+    { name: "add_products_to_group", desc: "Добавить товары" },
+    { name: "remove_products_from_group", desc: "Убрать товары" },
+  ]},
+  { name: "Файлы", icon: HardDrive, tools: [
+    { name: "list_files", desc: "Список файлов" },
+    { name: "create_folder", desc: "Создать папку" },
+    { name: "rename_file", desc: "Переименовать файл" },
+    { name: "rename_folder", desc: "Переименовать папку" },
+    { name: "move_files", desc: "Переместить файлы" },
+    { name: "delete_files", desc: "Удалить файлы" },
+    { name: "delete_folder", desc: "Удалить папку" },
+    { name: "share_file", desc: "Создать публичную ссылку" },
+  ]},
+  { name: "Аналитика", icon: BarChart2, tools: [
+    { name: "get_store_stats", desc: "Статистика магазина" },
+    { name: "find_products_without_images", desc: "Без изображений" },
+    { name: "find_products_without_barcode", desc: "Без штрихкода" },
+    { name: "find_products_missing_field", desc: "С пустым атрибутом" },
+    { name: "find_products_with_sync_errors", desc: "С ошибками синхронизации" },
+    { name: "analyze_mapping_quality", desc: "Качество маппингов" },
+    { name: "get_image_download_status", desc: "Статус загрузки изображений" },
+  ]},
+  { name: "Магазин", icon: Globe, tools: [
+    { name: "list_store_attributes", desc: "Глобальные атрибуты магазина" },
+  ]},
+  { name: "Служебные", icon: Sparkles, tools: [
+    { name: "propose_plan", desc: "Показать план перед выполнением" },
+    { name: "rollback_last_operation", desc: "Отменить последнее действие" },
+    { name: "navigate_to", desc: "Кнопка перехода на страницу" },
+  ]},
+];
+
+const totalToolCount = toolCategories.reduce((s, c) => s + c.tools.length, 0);
+
+function toggleCategory(name) {
+  const s = new Set(expandedCategories.value);
+  if (s.has(name)) s.delete(name);
+  else s.add(name);
+  expandedCategories.value = s;
+}
+
+function close() { store.commit("aiChat/toggle"); }
+function stopGeneration() { store.dispatch("aiChat/stopGeneration"); }
 function confirmPlan() { store.dispatch("aiChat/confirmPlan"); }
 function cancelPlan() { store.dispatch("aiChat/cancelPlan"); }
+
+const copiedId = ref(null);
+async function copyText(id, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    copiedId.value = id;
+    setTimeout(() => { if (copiedId.value === id) copiedId.value = null; }, 1500);
+  } catch {}
+}
+function messageClipboard(msg) {
+  const parts = [];
+  if (msg.toolCalls?.length) {
+    parts.push(msg.toolCalls.map((tc) =>
+      `[${tc.name}${tc.input ? `(${tc.input})` : ""}${tc.summary ? ` → ${tc.summary}` : ""}]`
+    ).join("\n"));
+  }
+  if (msg.content) parts.push(msg.content);
+  return parts.join("\n");
+}
+function sendFeedback(msg, rating) {
+  if (msg.feedbackRating === rating) return;
+  store.dispatch("aiChat/sendFeedback", { dbId: msg.dbId, rating });
+}
+
+async function loadConversations() {
+  convListLoading.value = true;
+  try {
+    const { http } = await import("@/main");
+    const res = await http.get("/ai/conversations");
+    conversations.value = res.data || [];
+  } catch {
+    conversations.value = [];
+  } finally {
+    convListLoading.value = false;
+  }
+}
+
+async function openHistory() {
+  activeView.value = "history";
+  await loadConversations();
+}
+
+function openTools() {
+  activeView.value = "tools";
+}
+
+function backToChat() {
+  activeView.value = "chat";
+}
+
+async function switchConversation(sid) {
+  if (sid === sessionId.value) { backToChat(); return; }
+  await store.dispatch("aiChat/loadConversation", sid);
+  backToChat();
+}
+
+function openConfirmDelete(e, sid) {
+  e.stopPropagation();
+  confirmDeleteDialog.value = { open: true, sessionId: sid };
+}
+
+async function confirmDeleteConversation() {
+  const sid = confirmDeleteDialog.value.sessionId;
+  confirmDeleteDialog.value = { open: false, sessionId: null };
+  const prev = conversations.value;
+  conversations.value = conversations.value.filter((c) => c.sessionId !== sid);
+  try {
+    await store.dispatch("aiChat/deleteConversation", sid);
+  } catch {
+    conversations.value = prev;
+  }
+}
+
+function newConversation() {
+  backToChat();
+  store.dispatch("aiChat/startNewConversation");
+}
+
+function startEditTitle() {
+  if (isLoading.value) return;
+  editingTitleValue.value = conversationTitle.value || "";
+  isEditingTitle.value = true;
+  nextTick(() => {
+    titleInputEl.value?.focus();
+    titleInputEl.value?.select();
+  });
+}
+
+async function saveTitle() {
+  isEditingTitle.value = false;
+  const t = editingTitleValue.value.trim();
+  if (t && t !== conversationTitle.value) {
+    await store.dispatch("aiChat/renameConversation", t);
+  }
+}
+
+function cancelEditTitle() {
+  isEditingTitle.value = false;
+}
+
+function formatRelativeDate(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return "Сегодня";
+  if (diffDays === 1) return "Вчера";
+  if (diffDays < 7) return `${diffDays} дн. назад`;
+  return d.toLocaleDateString("ru", { day: "numeric", month: "short" });
+}
 
 async function submit() {
   const text = inputText.value.trim();
@@ -141,174 +347,637 @@ function autoResize() {
   inputEl.value.style.height = Math.min(inputEl.value.scrollHeight, 120) + "px";
 }
 
-// Scroll to bottom when messages update
-watch(messages, async () => {
+watch(() => messages.value.length, async () => {
   await nextTick();
   if (messagesEl.value) {
+    messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
+    isAtBottom.value = true;
+  }
+});
+
+watch(messages, async () => {
+  await nextTick();
+  if (isAtBottom.value && messagesEl.value) {
     messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
   }
 }, { deep: true });
 
+function onScroll() {
+  const el = messagesEl.value;
+  if (!el) return;
+  isAtBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+}
+
+function handleKeydown(e) {
+  if (e.key === "Escape" && isOpen.value) {
+    if (activeView.value !== "chat") backToChat();
+    else close();
+  }
+}
+onMounted(() => {
+  window.addEventListener("keydown", handleKeydown);
+  store.dispatch("aiChat/loadLastConversation");
+  if (!allModels.value.length) {
+    store.dispatch("aiModels/getAiModels", { onSuccess: () => {}, onError: () => {} });
+  }
+});
+onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
+
+function startResize(e) {
+  e.preventDefault();
+  isResizing.value = true;
+  const startX = e.clientX;
+  const startWidth = panelWidth.value;
+
+  function onMove(ev) {
+    const w = Math.min(1000, Math.max(300, startWidth + (startX - ev.clientX)));
+    store.commit("aiChat/setPanelWidth", w);
+  }
+  function onUp() {
+    isResizing.value = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    localStorage.setItem("ai-panel-width", String(panelWidth.value));
+  }
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
 function renderMarkdown(text) {
   if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/\n/g, "<br>");
+  return DOMPurify.sanitize(marked.parse(text));
 }
 </script>
 
+<template>
+  <!-- Resizable right panel — part of the flex layout, no teleport, no backdrop -->
+  <div
+    class="flex-none sticky top-0 h-screen bg-background border-l flex flex-col overflow-hidden"
+    :class="{ 'transition-[width] duration-200 ease-in-out': !isResizing }"
+    :style="{ width: isOpen ? panelWidth + 'px' : '0px' }"
+  >
+    <!-- Resize handle -->
+    <div
+      class="absolute left-0 top-0 bottom-0 w-1 z-10 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 transition-colors"
+      @mousedown="startResize"
+    />
+
+    <!-- Content (min-width prevents content reflow during collapse) -->
+    <div class="flex flex-col h-full" :style="{ minWidth: panelWidth + 'px' }">
+
+      <!-- ── Header: Chat view ── -->
+      <div
+        v-if="activeView === 'chat'"
+        class="relative flex items-center h-11 px-2 shrink-0 border-b border-border/40"
+      >
+        <!-- Left: history + new + tools -->
+        <div class="flex items-center gap-0.5 z-10">
+          <button
+            type="button"
+            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="История диалогов"
+            @click="openHistory"
+          >
+            <History class="size-3.5" />
+          </button>
+          <button
+            type="button"
+            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Новый диалог"
+            @click="newConversation"
+          >
+            <Plus class="size-3.5" />
+          </button>
+          <button
+            type="button"
+            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Инструменты ассистента"
+            @click="openTools"
+          >
+            <Wrench class="size-3.5" />
+          </button>
+        </div>
+
+        <!-- Center: title -->
+        <div class="absolute inset-x-0 flex items-center justify-center px-24 pointer-events-none">
+          <template v-if="isEditingTitle">
+            <input
+              ref="titleInputEl"
+              v-model="editingTitleValue"
+              class="pointer-events-auto text-sm font-medium text-center bg-transparent border-b border-primary/60 outline-none w-full max-w-[180px] leading-tight py-px"
+              placeholder="Название диалога"
+              maxlength="100"
+              @blur="saveTitle"
+              @keydown.enter.prevent="saveTitle"
+              @keydown.escape.prevent="cancelEditTitle"
+            />
+          </template>
+          <template v-else>
+            <button
+              v-if="messages.length > 0"
+              type="button"
+              class="pointer-events-auto group/title flex items-center gap-1 max-w-[180px]"
+              :title="conversationTitle ? 'Переименовать' : undefined"
+              @click="conversationTitle ? startEditTitle() : undefined"
+            >
+              <span class="text-sm font-medium truncate text-foreground/80 group-hover/title:text-foreground transition-colors">
+                {{ conversationTitle || "Новый диалог" }}
+              </span>
+              <Pencil v-if="conversationTitle" class="size-3 opacity-0 group-hover/title:opacity-40 transition-opacity shrink-0" />
+            </button>
+          </template>
+        </div>
+
+        <!-- Right: close -->
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-auto z-10"
+          title="Закрыть"
+          @click="close"
+        >
+          <X class="size-4" />
+        </button>
+      </div>
+
+      <!-- ── Header: History view ── -->
+      <div
+        v-else-if="activeView === 'history'"
+        class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
+      >
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Назад к чату"
+          @click="backToChat"
+        >
+          <ChevronLeft class="size-4" />
+        </button>
+        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">История диалогов</span>
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Новый диалог"
+          @click="newConversation"
+        >
+          <Plus class="size-3.5" />
+        </button>
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Закрыть"
+          @click="close"
+        >
+          <X class="size-4" />
+        </button>
+      </div>
+
+      <!-- ── Header: Tools view ── -->
+      <div
+        v-else
+        class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
+      >
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Назад к чату"
+          @click="backToChat"
+        >
+          <ChevronLeft class="size-4" />
+        </button>
+        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">Инструменты</span>
+        <button
+          type="button"
+          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Закрыть"
+          @click="close"
+        >
+          <X class="size-4" />
+        </button>
+      </div>
+
+      <!-- ── Content: History view ── -->
+      <div v-if="activeView === 'history'" class="flex-1 overflow-y-auto">
+        <!-- Loading -->
+        <div v-if="convListLoading" class="flex items-center justify-center py-10">
+          <Loader2 class="size-4 animate-spin text-muted-foreground" />
+        </div>
+
+        <!-- Empty state -->
+        <div v-else-if="!conversations.length" class="flex flex-col items-center justify-center py-10 gap-2 text-center px-6">
+          <MessageSquare class="size-8 text-muted-foreground/30" />
+          <p class="text-sm text-muted-foreground">Нет сохранённых диалогов</p>
+          <button
+            type="button"
+            class="mt-1 flex items-center gap-1.5 text-xs text-primary hover:underline"
+            @click="newConversation"
+          >
+            <Plus class="size-3.5" /> Начать новый
+          </button>
+        </div>
+
+        <!-- Conversation groups -->
+        <template v-else>
+          <div v-for="group in groupedConversations" :key="group.label">
+            <div class="px-3 py-1.5 text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider sticky top-0 bg-background/95 backdrop-blur-sm">
+              {{ group.label }}
+            </div>
+            <div
+              v-for="c in group.items"
+              :key="c.sessionId"
+              class="group flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors cursor-pointer"
+              :class="{ 'bg-accent': c.sessionId === sessionId }"
+              @click="switchConversation(c.sessionId)"
+            >
+              <MessageSquare class="size-3.5 shrink-0 text-muted-foreground/50" />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm truncate leading-snug">{{ c.title || "Без названия" }}</p>
+                <p class="text-[10px] text-muted-foreground mt-0.5">
+                  {{ formatRelativeDate(c.lastMessageAt) }} · {{ c.messageCount }} сообщ.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                title="Удалить диалог"
+                @click="openConfirmDelete($event, c.sessionId)"
+              >
+                <Trash2 class="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Content: Tools view ── -->
+      <div v-else-if="activeView === 'tools'" class="flex-1 overflow-y-auto">
+        <div class="px-3 pt-3 pb-1">
+          <p class="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+            {{ totalToolCount }} инструментов · {{ toolCategories.length }} категорий
+          </p>
+        </div>
+        <div class="px-2 pb-3 space-y-0.5">
+          <div v-for="cat in toolCategories" :key="cat.name" class="rounded-md overflow-hidden">
+            <!-- Category header -->
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-accent transition-colors rounded-md"
+              @click="toggleCategory(cat.name)"
+            >
+              <component :is="cat.icon" class="size-3.5 shrink-0 text-muted-foreground" />
+              <span class="text-xs font-medium flex-1">{{ cat.name }}</span>
+              <span class="text-[10px] text-muted-foreground tabular-nums">{{ cat.tools.length }}</span>
+              <ChevronDown
+                class="size-3 text-muted-foreground/60 transition-transform duration-150"
+                :class="{ 'rotate-180': expandedCategories.has(cat.name) }"
+              />
+            </button>
+            <!-- Tool rows -->
+            <div
+              v-show="expandedCategories.has(cat.name)"
+              class="px-2 pb-2 pt-0.5 flex flex-col gap-px"
+            >
+              <TooltipProvider
+                v-for="tool in cat.tools"
+                :key="tool.name"
+                :delay-duration="300"
+              >
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <div
+                      class="flex items-center gap-1.5 text-xs text-muted-foreground font-mono
+                             py-0.5 px-1 rounded hover:bg-accent/50 hover:text-foreground
+                             transition-colors w-full select-none cursor-default"
+                    >
+                      <Wrench class="size-3 shrink-0 opacity-40" />
+                      <span>{{ tool.name }}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" class="max-w-[200px]">
+                    {{ tool.desc }}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Content: Chat view ── -->
+      <div
+        v-else
+        ref="messagesEl"
+        class="flex-1 overflow-y-auto p-4 flex flex-col gap-3"
+        @scroll="onScroll"
+      >
+        <!-- Welcome state -->
+        <div
+          v-if="messages.length === 0"
+          class="flex h-full flex-col items-center justify-center gap-3 text-center"
+        >
+          <div class="grid size-12 place-items-center rounded-full border bg-muted/40">
+            <Bot class="size-6 text-muted-foreground" />
+          </div>
+          <div>
+            <p class="text-sm font-medium">Привет!</p>
+            <p class="mx-auto mt-1 max-w-[260px] text-xs text-muted-foreground">
+              Управляю товарами, категориями, маппингами и экспортом.
+            </p>
+          </div>
+          <div class="flex max-w-[280px] flex-wrap justify-center gap-1.5">
+            <button
+              v-for="example in [
+                'Покажи статистику магазина',
+                'Заполни незаполненные поля маппинга',
+                'Найди товары без цены',
+              ]"
+              :key="example"
+              type="button"
+              class="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              @click="inputText = example; submit()"
+            >
+              {{ example }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Message list -->
+        <template v-for="msg in messages" :key="msg.id">
+          <!-- User message: right-aligned bubble -->
+          <div v-if="msg.role === 'user'" class="group flex flex-col items-end gap-0.5">
+            <div class="bg-muted text-foreground rounded-2xl rounded-br-none px-4 py-2.5 text-sm max-w-[80%] break-words">
+              {{ msg.content }}
+            </div>
+            <button
+              type="button"
+              class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
+              @click="copyText(msg.id, msg.content)"
+            >
+              <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
+              <Copy v-else class="size-3.5" />
+            </button>
+          </div>
+
+          <!-- Assistant message: full width -->
+          <div v-else class="group flex flex-col gap-2 w-full">
+            <!-- Tool calls -->
+            <div v-if="msg.toolCalls?.length" class="flex flex-col gap-px">
+              <template v-for="tc in msg.toolCalls" :key="tc.id || tc.name">
+                <details>
+                  <summary class="list-none cursor-pointer">
+                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground font-mono py-0.5 hover:text-foreground transition-colors w-fit select-none">
+                      <Loader2 v-if="tc.status === 'running'" class="size-3 shrink-0 animate-spin" />
+                      <CheckCircle2 v-else class="size-3 shrink-0 text-green-500/80" />
+                      <span>{{ tc.name }}</span>
+                      <span v-if="tc.summary" class="opacity-50 truncate max-w-[200px]">→ {{ tc.summary }}</span>
+                    </div>
+                  </summary>
+                  <div v-if="tc.input || tc.summary" class="ml-5 mt-0.5 mb-0.5 pl-2 border-l border-border/40 text-xs font-mono text-muted-foreground/60 space-y-0.5">
+                    <div v-if="tc.input" class="break-all">{{ tc.input.length > 300 ? tc.input.slice(0, 300) + '…' : tc.input }}</div>
+                  </div>
+                </details>
+                <RouterLink
+                  v-if="tc.name === 'navigate_to' && tc.result?.navigate"
+                  :to="tc.result.url"
+                  class="ml-5 mt-1 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium w-fit"
+                >
+                  <ExternalLink class="size-3 shrink-0" />
+                  {{ tc.result.label || tc.result.url }}
+                </RouterLink>
+              </template>
+            </div>
+
+            <!-- Plan card -->
+            <AiPlanCard
+              v-if="msg.plan"
+              :plan="msg.plan"
+              :confirmed="msg.planConfirmed"
+              :cancelled="msg.planCancelled"
+              @confirm="confirmPlan"
+              @cancel="cancelPlan"
+            />
+
+            <!-- Text -->
+            <div
+              v-if="msg.content"
+              class="ai-message text-sm leading-relaxed break-words"
+              v-html="renderMarkdown(msg.content)"
+            />
+
+            <!-- Thinking indicator -->
+            <div
+              v-if="!msg.done && isLoading && msg === lastAssistant && !hasRunningTool && !msg.plan"
+              class="flex items-center gap-1 h-5 mt-0.5"
+            >
+              <span class="ai-dot" /><span class="ai-dot" style="animation-delay:.2s" /><span class="ai-dot" style="animation-delay:.4s" />
+            </div>
+
+            <!-- Action row -->
+            <div
+              v-if="msg.done && (msg.content || msg.toolCalls?.length)"
+              class="flex items-center gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground transition-colors"
+                :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
+                @click="copyText(msg.id, messageClipboard(msg))"
+              >
+                <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
+                <Copy v-else class="size-3.5" />
+              </button>
+              <button
+                type="button"
+                :class="['transition-colors', msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600']"
+                title="Хороший ответ"
+                @click="sendFeedback(msg, 1)"
+              >
+                <ThumbsUp class="size-3.5" />
+              </button>
+              <button
+                type="button"
+                :class="['transition-colors', msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500']"
+                title="Плохой ответ"
+                @click="sendFeedback(msg, -1)"
+              >
+                <ThumbsDown class="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Input area — only in chat view ── -->
+      <div v-if="activeView === 'chat'" class="px-3 pb-3 pt-1.5 shrink-0">
+        <div class="rounded-2xl border border-border/60 bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring/40 transition-shadow overflow-hidden">
+          <textarea
+            ref="inputEl"
+            v-model="inputText"
+            class="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-50 font-[inherit] leading-relaxed"
+            style="min-height: 44px; max-height: 120px;"
+            placeholder="Введите запрос..."
+            rows="1"
+            :disabled="isLoading"
+            @keydown.enter.exact.prevent="submit"
+            @input="autoResize"
+          />
+          <div class="flex items-center justify-between px-3 pb-2.5 pt-0.5">
+            <Select
+              v-if="enabledModels.length"
+              :model-value="effectiveModelId"
+              @update:model-value="(v) => store.commit('aiChat/setSelectedModel', v || null)"
+            >
+              <SelectTrigger
+                class="h-auto border-0 shadow-none p-0 gap-1 text-[10px] font-mono
+                       text-muted-foreground/50 hover:text-muted-foreground focus:ring-0
+                       w-auto bg-transparent [&>svg]:size-2.5 [&>svg]:opacity-50"
+              >
+                <SelectValue :placeholder="lastModelName ?? 'модель'" />
+              </SelectTrigger>
+              <SelectContent align="start" side="top" class="min-w-[160px]">
+                <SelectItem
+                  v-for="m in enabledModels"
+                  :key="m.id"
+                  :value="String(m.id)"
+                  class="text-xs"
+                >
+                  {{ m.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <span v-else class="text-[10px] text-muted-foreground/40 font-mono select-none leading-none">
+              {{ lastModelName ?? '' }}
+            </span>
+            <button
+              v-if="isLoading"
+              type="button"
+              class="size-7 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-foreground/80 transition-colors shrink-0"
+              title="Остановить генерацию"
+              @click="stopGeneration"
+            >
+              <Square class="size-3" />
+            </button>
+            <button
+              v-else
+              type="button"
+              class="size-7 rounded-full flex items-center justify-center transition-colors shrink-0 disabled:pointer-events-none"
+              :class="inputText.trim()
+                ? 'bg-foreground text-background hover:bg-foreground/80'
+                : 'bg-muted text-muted-foreground'"
+              :disabled="!inputText.trim()"
+              title="Отправить"
+              @click="submit"
+            >
+              <ArrowUp class="size-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Delete conversation confirmation -->
+    <AlertDialog
+      :open="confirmDeleteDialog.open"
+      @update:open="(v) => { if (!v) confirmDeleteDialog.open = false; }"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Удалить диалог?</AlertDialogTitle>
+          <AlertDialogDescription>Это действие необратимо — история сообщений будет удалена.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="confirmDeleteDialog.open = false">Отмена</AlertDialogCancel>
+          <AlertDialogAction
+            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            @click="confirmDeleteConversation"
+          >Удалить</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </div>
+</template>
+
 <style scoped>
-.ai-fab {
-  position: fixed;
-  bottom: 84px;
-  right: 24px;
-  width: 48px;
-  height: 48px;
+.ai-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--color-primary, #5b6ee1);
-  color: white;
+  background: currentColor;
+  opacity: 0.4;
+  animation: ai-bounce 1s ease-in-out infinite;
+}
+@keyframes ai-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Markdown content styling */
+.ai-message :deep(h1),
+.ai-message :deep(h2),
+.ai-message :deep(h3),
+.ai-message :deep(h4) {
+  font-weight: 600;
+  margin-top: 0.6em;
+  margin-bottom: 0.25em;
+  line-height: 1.3;
+}
+.ai-message :deep(h1) { font-size: 1.05em; }
+.ai-message :deep(h2) { font-size: 1em; }
+.ai-message :deep(h3) { font-size: 0.95em; }
+.ai-message :deep(p) { margin: 0.3em 0; }
+.ai-message :deep(p:first-child) { margin-top: 0; }
+.ai-message :deep(p:last-child) { margin-bottom: 0; }
+.ai-message :deep(ul),
+.ai-message :deep(ol) {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+.ai-message :deep(li) { margin: 0.1em 0; }
+.ai-message :deep(strong) { font-weight: 600; }
+.ai-message :deep(em) { font-style: italic; }
+.ai-message :deep(code) {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+.ai-message :deep(pre) {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 0.6em 0.8em;
+  margin: 0.4em 0;
+  overflow-x: auto;
+  font-size: 0.82em;
+}
+.ai-message :deep(pre code) {
+  background: none;
   border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  z-index: 1000;
-  transition: background 0.2s, transform 0.1s;
+  padding: 0;
+  font-size: 1em;
 }
-.ai-fab:hover { background: var(--color-primary-hover, #4a5cc5); transform: scale(1.05); }
-.ai-fab--loading { opacity: 0.8; }
-
-.ai-spinner {
-  width: 20px; height: 20px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  display: block;
+.ai-message :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.9em;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.ai-panel {
-  position: fixed;
-  bottom: 144px;
-  right: 24px;
-  width: 380px;
-  height: 520px;
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-  z-index: 999;
-  overflow: hidden;
+.ai-message :deep(th),
+.ai-message :deep(td) {
+  border: 1px solid hsl(var(--border));
+  padding: 0.25em 0.5em;
+  text-align: left;
 }
-
-.ai-panel-enter-active, .ai-panel-leave-active { transition: opacity 0.2s, transform 0.2s; }
-.ai-panel-enter-from, .ai-panel-leave-to { opacity: 0; transform: translateY(16px) scale(0.97); }
-
-.ai-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
-  background: var(--color-surface-raised, #f8fafc);
+.ai-message :deep(th) { font-weight: 600; background: hsl(var(--background)); }
+.ai-message :deep(hr) { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.5em 0; }
+.ai-message :deep(blockquote) {
+  border-left: 3px solid hsl(var(--border));
+  margin: 0.3em 0;
+  padding-left: 0.7em;
+  color: hsl(var(--muted-foreground));
 }
-.ai-panel__title { font-weight: 600; font-size: 14px; }
-.ai-panel__header-actions { display: flex; gap: 4px; }
-.ai-panel__btn {
-  width: 28px; height: 28px;
-  border: none; background: transparent; cursor: pointer;
-  border-radius: 6px; display: flex; align-items: center; justify-content: center;
-  color: var(--color-text-secondary, #64748b);
-}
-.ai-panel__btn:hover { background: var(--color-hover, #f1f5f9); }
-
-.ai-panel__messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ai-panel__empty { color: var(--color-text-secondary, #64748b); font-size: 13px; text-align: center; padding: 20px 0; }
-.ai-panel__hints { font-size: 11px; margin-top: 8px; opacity: 0.7; }
-
-.ai-message { display: flex; flex-direction: column; max-width: 90%; }
-.ai-message--user { align-self: flex-end; }
-.ai-message--assistant { align-self: flex-start; }
-
-.ai-message__text {
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  word-break: break-word;
-}
-.ai-message--user .ai-message__text {
-  background: var(--color-primary, #5b6ee1);
-  color: white;
-  border-bottom-right-radius: 2px;
-}
-.ai-message--assistant .ai-message__text {
-  background: var(--color-surface-raised, #f1f5f9);
-  color: var(--color-text, #1e293b);
-  border-bottom-left-radius: 2px;
-}
-
-.ai-tool-calls { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
-.ai-tool-call {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--color-text-secondary, #64748b);
-  padding: 3px 8px; border-radius: 6px;
-  background: var(--color-surface-raised, #f8fafc);
-}
-.ai-tool-call--done { opacity: 0.7; }
-.ai-tool-call__name { font-family: monospace; }
-.ai-tool-call__summary { opacity: 0.8; }
-
-.ai-cursor {
-  display: inline-block; width: 2px; height: 14px;
-  background: currentColor; margin-left: 2px;
-  animation: blink 1s step-end infinite;
-}
-@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-
-.ai-panel__input {
-  display: flex; align-items: flex-end; gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-border, #e2e8f0);
-}
-.ai-panel__textarea {
-  flex: 1;
-  resize: none;
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  background: var(--color-surface, #fff);
-  color: var(--color-text, #1e293b);
-  max-height: 120px;
-  min-height: 36px;
-}
-.ai-panel__textarea:focus { border-color: var(--color-primary, #5b6ee1); }
-.ai-panel__send {
-  width: 36px; height: 36px;
-  border-radius: 8px;
-  background: var(--color-primary, #5b6ee1);
-  color: white; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  transition: opacity 0.15s;
-}
-.ai-panel__send:disabled { opacity: 0.4; cursor: not-allowed; }
-.ai-panel__send:not(:disabled):hover { opacity: 0.85; }
 </style>
