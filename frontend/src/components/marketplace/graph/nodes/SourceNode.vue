@@ -52,34 +52,22 @@ const info = computed(() => {
   return META[props.type] || META.static;
 });
 const outType = computed(() => props.data.valueType || "any");
-const collapsed = computed(() => !!props.data.collapsed);
 </script>
 
 <template>
-  <div
-    :class="[
-      'vf-card',
-      'vf-card--source',
-      selected && 'vf-card--selected',
-      collapsed && 'vf-card--collapsed',
-    ]"
-  >
+  <div :class="['vf-card', 'vf-card--source', selected && 'vf-card--selected']">
     <div class="vf-card__head">
       <component :is="info.icon" class="size-3.5 text-muted-foreground" />
-      <span class="vf-card__kind" :title="data.label">{{
-        collapsed ? data.label || info.kind : info.kind
-      }}</span>
+      <span class="vf-card__kind">{{ info.kind }}</span>
     </div>
-    <template v-if="!collapsed">
-      <div class="vf-card__title" :title="data.label">
-        {{ data.label || "—" }}
-      </div>
-      <div class="vf-card__pin vf-card__pin--right">
-        <span class="vf-pin-label">{{ pinTypeLabel(outType) }}</span>
-        <span class="vf-dot" :style="{ background: pinColor(outType) }" />
-      </div>
-      <NodePreview :value="data.previewValue" />
-    </template>
+    <div class="vf-card__title" :title="data.label">
+      {{ data.label || "—" }}
+    </div>
+    <div class="vf-card__pin vf-card__pin--right">
+      <span class="vf-pin-label">{{ pinTypeLabel(outType) }}</span>
+      <span class="vf-dot" :style="{ background: pinColor(outType) }" />
+    </div>
+    <NodePreview :value="data.previewValue" />
     <Handle
       id="out"
       type="source"

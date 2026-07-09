@@ -1,27 +1,14 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Button from "@/components/ui/button/Button.vue";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import ValueMapEditor from "../ValueMapEditor.vue";
 import OptionMapEditor from "../OptionMapEditor.vue";
-import { Trash2, X, ChevronDown } from "lucide-vue-next";
+import { Trash2, X } from "lucide-vue-next";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
-
-// reka-ui SelectItem can't hold an empty-string value; this sentinel is the re-selectable
-// "default/none" option (mapped back to "" in the handlers).
-const NONE = "__none__";
 
 const props = defineProps({
   node: { type: Object, default: null },
@@ -45,7 +32,6 @@ const isProductFilesByExt = computed(
 );
 const fileId = (f) => f.Id ?? f.id;
 const pickStoreFile = (id) => {
-  if (id === NONE) id = "";
   const f = props.storeFileOptions.find(
     (x) => String(fileId(x)) === String(id),
   );
@@ -54,9 +40,6 @@ const pickStoreFile = (id) => {
     label: f?.fileName || "Файл магазина",
   });
 };
-const storeFileValue = computed(() =>
-  data.value.storeFileId != null ? String(data.value.storeFileId) : undefined,
-);
 
 const modifierCatalog = computed(
   () => MODIFIER_CATALOG[data.value.modifierType],
@@ -118,48 +101,6 @@ const requiredCount = computed(
   () => (data.value.fields || []).filter((f) => f.isRequired).length,
 );
 
-// Adapter sink: per-field source binding lives here (in settings), not as dropdowns inside the block.
-const adapterFields = computed(() => data.value.fields || []);
-const adapterAvail = computed(() => data.value.availableSources || {});
-const adapterSourceValue = (f) => {
-  const s = f.source;
-  if (!s) return "";
-  if (s.type === "groupName") return "g";
-  if (s.type === "productField") return `p:${s.field}`;
-  if (s.type === "attribute") return `a:${s.attributeId}`;
-  if (s.type === "storeAttribute") return `s:${s.attributeId}`;
-  return "";
-};
-const setAdapterSource = (fieldKey, value) =>
-  data.value.setFieldSource?.(fieldKey, value === NONE ? "" : value);
-
-// Render at most one real <Select> at a time (a category can have dozens of fields — mounting a
-// Select per field freezes the UI). Resting rows are cheap buttons; clicking one opens its editor.
-const editingField = ref(null);
-const currentSourceLabel = (f) => {
-  const s = f.source;
-  if (!s) return "по проводу";
-  if (s.type === "groupName") return "Название группы";
-  if (s.type === "productField")
-    return (
-      adapterAvail.value.productFields?.find((x) => x.key === s.field)
-        ?.displayName ||
-      s.field ||
-      "Поле товара"
-    );
-  if (s.type === "attribute")
-    return (
-      adapterAvail.value.categoryAttributes?.find((x) => x.id === s.attributeId)
-        ?.name || `атрибут #${s.attributeId}`
-    );
-  if (s.type === "storeAttribute")
-    return (
-      adapterAvail.value.storeAttributes?.find((x) => x.id === s.attributeId)
-        ?.name || `атрибут #${s.attributeId}`
-    );
-  return "по проводу";
-};
-
 const setData = (patch) => emit("update", patch);
 const setParam = (key, value) =>
   emit("update", { params: { ...(data.value.params || {}), [key]: value } });
@@ -203,24 +144,20 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
       <template v-if="isStoreFile">
         <div class="space-y-1.5">
           <Label>Файл из хранилища магазина</Label>
-          <Select
-            :model-value="storeFileValue"
-            @update:model-value="pickStoreFile($event)"
+          <select
+            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            :value="data.storeFileId ?? ''"
+            @change="pickStoreFile($event.target.value)"
           >
-            <SelectTrigger class="h-9 w-full">
-              <SelectValue placeholder="Выберите файл" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="NONE">Не выбран</SelectItem>
-              <SelectItem
-                v-for="f in storeFileOptions"
-                :key="fileId(f)"
-                :value="String(fileId(f))"
-              >
-                {{ f.fileName }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+            <option value="">— выберите файл —</option>
+            <option
+              v-for="f in storeFileOptions"
+              :key="fileId(f)"
+              :value="fileId(f)"
+            >
+              {{ f.fileName }}
+            </option>
+          </select>
           <p class="text-xs text-muted-foreground">
             {{
               type === "storeFileUrl"
@@ -359,89 +296,15 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
 
       <!-- Adapter fields (read-only summary) -->
       <template v-else-if="type === 'adapterFields'">
-        <div class="space-y-2">
-          <div
-            class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground"
-          >
-            Полей: <b class="text-foreground">{{ fieldsCount }}</b> ·
-            обязательных: <b class="text-foreground">{{ requiredCount }}</b>
+        <div class="space-y-1">
+          <div class="rounded-md border bg-muted/40 px-2.5 py-2 text-sm">
+            Полей: <b>{{ fieldsCount }}</b> · обязательных:
+            <b>{{ requiredCount }}</b>
           </div>
           <p class="text-xs text-muted-foreground">
-            Для каждого поля выберите стандартный источник напрямую (тогда пин
-            на блоке исчезает) или оставьте «по проводу» и подключите узел.
+            Подключите выход к нужному полю. Тип отправки берётся из адаптера,
+            либо из модификатора «Принудительный тип».
           </p>
-
-          <div class="space-y-2">
-            <div v-for="f in adapterFields" :key="f.fieldKey" class="space-y-1">
-              <Label class="text-xs">
-                {{ f.label || f.fieldKey
-                }}<span v-if="f.isRequired" class="text-destructive"> *</span>
-              </Label>
-              <!-- Resting: a cheap button. Only the row being edited mounts a real <Select>. -->
-              <button
-                v-if="editingField !== f.fieldKey"
-                type="button"
-                class="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm hover:bg-accent"
-                @click="editingField = f.fieldKey"
-              >
-                <span
-                  class="truncate"
-                  :class="!f.source && 'text-muted-foreground'"
-                >
-                  {{ currentSourceLabel(f) }}
-                </span>
-                <ChevronDown class="size-4 shrink-0 opacity-50" />
-              </button>
-              <Select
-                v-else
-                :default-open="true"
-                :model-value="adapterSourceValue(f) || undefined"
-                @update:model-value="
-                  setAdapterSource(f.fieldKey, $event);
-                  editingField = null;
-                "
-                @update:open="(o) => !o && (editingField = null)"
-              >
-                <SelectTrigger class="h-9 w-full">
-                  <SelectValue placeholder="по проводу" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="NONE">По проводу</SelectItem>
-                  <SelectGroup v-if="adapterAvail.productFields?.length">
-                    <SelectLabel>Поле товара</SelectLabel>
-                    <SelectItem
-                      v-for="pf in adapterAvail.productFields"
-                      :key="pf.key"
-                      :value="`p:${pf.key}`"
-                    >
-                      {{ pf.displayName || pf.key }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.categoryAttributes?.length">
-                    <SelectLabel>Атрибут категории</SelectLabel>
-                    <SelectItem
-                      v-for="a in adapterAvail.categoryAttributes"
-                      :key="a.id"
-                      :value="`a:${a.id}`"
-                    >
-                      {{ a.name }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.storeAttributes?.length">
-                    <SelectLabel>Атрибут магазина</SelectLabel>
-                    <SelectItem
-                      v-for="a in adapterAvail.storeAttributes"
-                      :key="a.id"
-                      :value="`s:${a.id}`"
-                    >
-                      {{ a.name }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectItem value="g">Название группы</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
         </div>
       </template>
 
@@ -475,16 +338,7 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
           :key="p.key"
           class="space-y-1.5"
         >
-          <Label class="flex items-center gap-1.5">
-            {{ p.label }}
-            <span
-              v-if="p.type === 'number' || p.type === 'text'"
-              class="text-[10px] font-normal text-muted-foreground"
-              title="Значение ниже — по умолчанию; его можно переопределить, подав провод в пин слева."
-            >
-              · пин-переопределение
-            </span>
-          </Label>
+          <Label>{{ p.label }}</Label>
 
           <Input
             v-if="p.type === 'number'"
@@ -493,24 +347,16 @@ const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
             @update:model-value="setParam(p.key, numberOrUndefined($event))"
           />
 
-          <Select
+          <select
             v-else-if="p.type === 'select'"
-            :model-value="data.params?.[p.key] ?? p.default"
-            @update:model-value="setParam(p.key, $event)"
+            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            :value="data.params?.[p.key] ?? p.default"
+            @change="setParam(p.key, $event.target.value)"
           >
-            <SelectTrigger class="h-9 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="o in p.options"
-                :key="o.value"
-                :value="o.value"
-              >
-                {{ o.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+            <option v-for="o in p.options" :key="o.value" :value="o.value">
+              {{ o.label }}
+            </option>
+          </select>
 
           <div
             v-else-if="p.type === 'checkbox'"
