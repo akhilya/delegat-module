@@ -234,6 +234,9 @@ public class CategoryImportService
             })
             .ToList();
 
+        // Every mapping carries a grouping field (synthetic for endpoint-based adapters)
+        GraphGenerator.EnsureGroupingField(specs, adapter);
+
         var existingKeys = MappingService.SchemaFields(categoryMapping.graphJson)
             .Select(f => f.fieldKey)
             .Where(k => !string.IsNullOrEmpty(k))

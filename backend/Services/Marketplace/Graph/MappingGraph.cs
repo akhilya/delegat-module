@@ -44,6 +44,11 @@ public class GraphNodeData
     public string? staticValue { get; set; }
     /// <summary>Frontend-only display label for source nodes (ignored by the evaluator).</summary>
     public string? label { get; set; }
+    /// <summary>Marks a static node as a "Стандартное значение" block — its value is one of the
+    /// adapter field's predefined options (frontend renders a select instead of free text).</summary>
+    public bool? isAdapterValue { get; set; }
+    /// <summary>Predefined options for "isAdapterValue" static nodes (copied from the adapter field).</summary>
+    public List<GraphNodeOption>? options { get; set; }
     /// <summary>Store shared-storage file id for "storeFileUrl" / "storeFileContent" sources.</summary>
     public int? storeFileId { get; set; }
     /// <summary>Product file name for "productFileByName" / "productFileContentByName" sources.</summary>
@@ -80,6 +85,13 @@ public class GraphNodeData
     public List<AdapterField>? fields { get; set; }
 }
 
+/// <summary>Option entry for "isAdapterValue" static nodes — same shape the frontend editor uses.</summary>
+public class GraphNodeOption
+{
+    public string? value { get; set; }
+    public string? label { get; set; }
+}
+
 /// <summary>
 /// One marketplace field exposed as an input pin on the single "adapterFields" sink node.
 /// Edges feed it via the handle id "f:&lt;fieldKey&gt;".
@@ -93,6 +105,10 @@ public class AdapterField
     /// <summary>Optional direct source binding (set via the adapter dropdown) — when present the field
     /// has no input pin and its value is resolved straight from this source instead of an edge.</summary>
     public AdapterFieldSource? source { get; set; }
+    /// <summary>Merged-duplicate marker: this field is an alias of another field (by fieldKey).
+    /// Export copies the primary's evaluated value into this key; import reverses only the primary.
+    /// Alias fields have no input pin and own connections are ignored.</summary>
+    public string? aliasOf { get; set; }
 }
 
 /// <summary>A standard source bound directly to an adapter field (no node/wire).</summary>

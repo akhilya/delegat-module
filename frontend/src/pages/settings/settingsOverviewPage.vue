@@ -15,6 +15,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   AlertTriangle,
   ArrowRight,
   Key,
@@ -26,6 +31,7 @@ import {
   UserCog,
 } from "lucide-vue-next";
 import {
+  PAGE_ADMIN_AI,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_PLUGINS,
   PAGE_ADMIN_STORES,
@@ -39,6 +45,11 @@ const summary = ref(null);
 const settingDrafts = ref({});
 const isSavingSettings = ref(false);
 const clearingKey = ref(null);
+const confirmDialog = ref({ open: false, title: "", message: "", resolve: null });
+
+function showConfirm(title, message) {
+  return new Promise((r) => { confirmDialog.value = { open: true, title, message, resolve: r }; });
+}
 
 const queues = computed(() => summary.value?.queues || []);
 
@@ -82,6 +93,12 @@ const adminSections = [
     description: "Сохранённые серверные ошибки с деталями для диагностики.",
     to: PAGE_ADMIN_ERROR_LOGS,
     icon: AlertTriangle,
+  },
+  {
+    title: "AI Модели",
+    description: "Подключение AI-моделей по API (Anthropic, OpenAI-compatible) для AI-ассистента.",
+    to: PAGE_ADMIN_AI,
+    icon: Plug,
   },
 ];
 
@@ -149,7 +166,8 @@ async function saveAllSettings() {
 }
 
 async function clearTarget(target, status = "inactive") {
-  const confirmed = window.confirm(
+  const confirmed = await showConfirm(
+    "Очистить очередь",
     status === "all"
       ? "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?"
       : "Очистить завершённые, ошибочные и отменённые записи?"
@@ -351,5 +369,21 @@ onMounted(fetchSummary);
           </div>
       </section>
     </PageSection>
+
+    <AlertDialog
+      :open="confirmDialog.open"
+      @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Очистить</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </Page>
 </template>

@@ -288,9 +288,16 @@ public static class GraphEvaluator
                             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
                             .GroupBy(f => f.fieldKey!)
                             .ToDictionary(g => g.Key, g => g.First());
+                        // Alias fields (merged duplicates) never evaluate on their own — their value
+                        // is copied from the primary field after evaluation.
+                        var aliases = adapterFields.Values
+                            .Where(f => !string.IsNullOrEmpty(f.aliasOf))
+                            .ToList();
+                        var aliasKeys = new HashSet<string>(aliases.Select(f => f.fieldKey!));
                         // Fields with a direct source binding have no input pin — skip their edges.
                         var bound = new HashSet<string>(
-                            adapterFields.Where(kv => kv.Value.source?.type != null).Select(kv => kv.Key));
+                            adapterFields.Where(kv => kv.Value.source?.type != null && !aliasKeys.Contains(kv.Key))
+                                .Select(kv => kv.Key));
 
                         if (incoming.TryGetValue(nodeId, out var inEdges))
                         {
@@ -300,7 +307,7 @@ public static class GraphEvaluator
                                 if (string.IsNullOrEmpty(handle) || !handle.StartsWith("f:"))
                                     continue;
                                 var key = handle.Substring(2);
-                                if (bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
+                                if (aliasKeys.Contains(key) || bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
                                     continue;
 
                                 var declared = adapterFields.TryGetValue(key, out var fld) ? fld.outputType : null;
@@ -328,6 +335,18 @@ public static class GraphEvaluator
                             result.Outputs[key] = ctx.Coerce(value, f.outputType);
                             if (!string.IsNullOrEmpty(f.outputType))
                                 result.FieldTypes[key] = f.outputType!;
+                        }
+
+                        // Merged duplicates: the primary's evaluated value goes out under BOTH keys
+                        // (marketplace may expect each); import later reverses only the primary.
+                        foreach (var alias in aliases)
+                        {
+                            if (alias.aliasOf != null && result.Outputs.TryGetValue(alias.aliasOf, out var primaryValue))
+                            {
+                                result.Outputs[alias.fieldKey!] = ctx.Coerce(primaryValue, alias.outputType);
+                                if (!string.IsNullOrEmpty(alias.outputType))
+                                    result.FieldTypes[alias.fieldKey!] = alias.outputType!;
+                            }
                         }
                         break;
                     }

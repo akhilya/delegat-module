@@ -13,6 +13,9 @@ using Delegat.Models;
 using Delegat.Controllers;
 using Delegat.Services;
 using Delegat.Services.DataMigrations;
+using Delegat.Services.Ai;
+using Delegat.Services.Ai.Tools;
+using Delegat.Services.Ai.Tools.Handlers;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Plugins;
 using System.Text;
@@ -184,6 +187,24 @@ builder.Services.AddScoped<ProductTransferService>();
 // Persisted error logs
 builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
 
+// AI services
+builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<AiModelConfigService>();
+builder.Services.AddScoped<AiChatService>();
+builder.Services.AddScoped<AiMappingService>();
+// AI tool handlers
+builder.Services.AddScoped<ProductToolHandlers>();
+builder.Services.AddScoped<CategoryToolHandlers>();
+builder.Services.AddScoped<MappingToolHandlers>();
+builder.Services.AddScoped<GroupToolHandlers>();
+builder.Services.AddScoped<SyncToolHandlers>();
+builder.Services.AddScoped<FileToolHandlers>();
+builder.Services.AddScoped<AnalyticsToolHandlers>();
+builder.Services.AddScoped<RollbackToolHandlers>();
+builder.Services.AddScoped<ToolDispatcher>();
+builder.Services.AddScoped<GraphMutationService>();
+builder.Services.AddScoped<AiOperationService>();
+
 // Sync services
 builder.Services.AddScoped<MappingService>();
 builder.Services.AddScoped<CategoryImportService>();
@@ -323,6 +344,7 @@ using (var scope = app.Services.CreateScope())
             await Task.Delay(TimeSpan.FromSeconds(3));
         }
     }
+
 }
 
 // Run platform data migrations

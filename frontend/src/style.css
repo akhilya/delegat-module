@@ -65,17 +65,16 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   /* Z-index scale — single source of truth.
-     Reka overlays render in portals that self-order by DOM mount order, so the
-     whole floating layer shares one base level (overlay / popover / modal = 50):
-     a Select opened inside a Dialog paints above it because it mounts later.
+     Portaled overlays (SelectContent, DropdownMenu, Popover etc.) are teleported to <body>
+     and must exceed the dialog z-index (--z-modal) so they render above dialogs and sheets.
      The operations slide-over is persistent chrome on a high band (9996–9998);
-     a blocking confirmation must sit above even that, so --z-alert is the ceiling. */
-  --z-sticky: 20; /* sticky table headers / sub-nav */
-  --z-overlay: 50; /* dialog & sheet backdrops */
-  --z-popover: 50; /* selects, dropdowns, popovers, comboboxes, tooltips, context menus */
-  --z-modal: 50; /* dialog & sheet content */
-  --z-toast: 9999; /* sonner toasts (sonner manages its own; listed here for ordering) */
-  --z-alert: 10000; /* blocking confirmations — above the operations panel and toasts */
+     a blocking confirmation must sit above everything, so --z-alert is the ceiling. */
+  --z-sticky: 20;    /* sticky table headers / sub-nav */
+  --z-overlay: 9997; /* dialog & sheet backdrops — above FABs (9996) */
+  --z-modal: 9998;   /* dialog & sheet content */
+  --z-popover: 9999; /* selects, dropdowns, popovers, comboboxes, tooltips — must exceed --z-modal */
+  --z-toast: 10000;  /* sonner toasts */
+  --z-alert: 10001;  /* blocking confirmations — ceiling */
 }
 
 button {
@@ -107,7 +106,17 @@ button {
 }
 
 .adaptive-padding {
-  @apply px-[8vw] max-[2000px]:px-28 max-2xl:px-16 max-[1281px]:px-10 max-lg:px-5 max-sm:px-3;
+  /* Right side gets extra clearance for fixed FAB buttons (size-12 + 24px gap = 72px) */
+  @apply pl-[8vw] pr-[max(8vw,5rem)]
+    max-[2000px]:px-28
+    max-2xl:pl-16 max-2xl:pr-20
+    max-[1281px]:pl-10 max-[1281px]:pr-20
+    max-lg:pl-5 max-lg:pr-20
+    max-sm:pl-3 max-sm:pr-20;
+}
+
+.ai-panel-open .adaptive-padding {
+  @apply px-3 sm:px-4 lg:px-5;
 }
 
 @theme inline {

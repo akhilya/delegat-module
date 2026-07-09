@@ -24,6 +24,7 @@ import {
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2, Plus, Trash2, GripVertical, Layers } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useDebounceFn } from "@vueuse/core";
 import draggable from "vuedraggable";
 
@@ -31,6 +32,7 @@ export default {
   components: {
     Button,
     Input,
+    EmptyState,
     BarcodeInput,
     Table,
     TableBody,
@@ -206,11 +208,15 @@ export default {
       <Loader2 class="size-8 animate-spin text-muted-foreground" />
     </div>
 
-    <div v-else-if="variants.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-      <Layers class="size-12 mb-4 text-muted-foreground" />
-      <h3 class="font-medium mb-1">Нет размеров</h3>
-      <p class="text-sm text-muted-foreground">Добавьте размеры для этого товара</p>
-    </div>
+    <EmptyState
+      v-else-if="variants.length === 0"
+      title="Нет размеров"
+      description="Добавьте размеры, чтобы управлять ценой, штрихкодом и остатками по каждому из них."
+    >
+      <template #icon>
+        <Layers />
+      </template>
+    </EmptyState>
 
     <Table v-else>
       <TableHeader>

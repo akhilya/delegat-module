@@ -17,6 +17,7 @@
 import { computed } from "vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { AlertTriangle } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps({
   items: { type: Array, required: true },
@@ -163,9 +164,12 @@ function isIrreversible(key) {
         </table>
       </div>
 
-      <div v-if="items.length === 0" class="text-center text-sm text-muted-foreground py-8">
-        Изменений не обнаружено
-      </div>
+      <EmptyState
+        v-if="items.length === 0"
+        size="sm"
+        title="Изменений не обнаружено"
+        description="Данные на адаптере совпадают с локальными."
+      />
     </template>
   </div>
 </template>

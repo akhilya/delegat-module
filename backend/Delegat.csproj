@@ -40,6 +40,10 @@
     <!-- Configuration -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.6" />
 
+    <!-- AI provider SDKs (official) -->
+    <PackageReference Include="Anthropic" Version="*-*" />
+    <PackageReference Include="OpenAI" Version="*" />
+
     <!-- Development tools -->
     <PackageReference Include="Dumpify" Version="0.6.6" />
   </ItemGroup>
@@ -73,7 +77,7 @@
              Targets="Restore;Build"
              Properties="Configuration=$(Configuration)" />
     <ItemGroup>
-      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\*.dll"
+      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.*.dll"
                   Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.SDK.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />

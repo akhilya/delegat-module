@@ -49,6 +49,43 @@ public static class GraphGenerator
         public Dictionary<string, object>? @params { get; set; }
     }
 
+    /// <summary>
+    /// Every mapping must expose a grouping field ("mapping as a translation layer"):
+    /// field-based adapters (Ozon) already have a real one in their schema; endpoint-based
+    /// adapters (WB) get a synthetic spec. Default binding is groupName 1:1 — the user can
+    /// rewire it with modifiers to merge different local groups into one marketplace card.
+    /// </summary>
+    public static void EnsureGroupingField(List<FieldSpec> specs, IMarketplaceAdapter adapter)
+    {
+        var key = ProductSyncService.ResolveGroupingFieldKey(adapter);
+        if (key == null) return;
+
+        var existing = specs.FirstOrDefault(s => s.externalFieldKey == key);
+        if (existing != null)
+        {
+            // Grouping field left unmapped by auto-mapping → default to groupName
+            if (existing.sourceType == FieldMappingSourceType.Static &&
+                existing.sourceAttributeId == null && string.IsNullOrEmpty(existing.staticValue))
+            {
+                existing.sourceType = FieldMappingSourceType.GroupName;
+            }
+            return;
+        }
+
+        if (key != ProductSyncService.SyntheticGroupFieldKey) return; // real field absent from schema — nothing to add
+
+        specs.Add(new FieldSpec
+        {
+            externalFieldKey = key,
+            externalFieldName = "Объединение в карточку (группа)",
+            externalFieldType = "string",
+            isRequired = false,
+            isEnabled = true,
+            sortOrder = specs.Count > 0 ? specs.Max(s => s.sortOrder) + 1 : 0,
+            sourceType = FieldMappingSourceType.GroupName,
+        });
+    }
+
     /// <summary>Build a full graphJson from the field schema (used for a brand-new mapping).</summary>
     public static string BuildGraphJson(IEnumerable<FieldSpec> specs)
     {
@@ -82,6 +119,14 @@ public static class GraphGenerator
                     fields.Add(field);
                     continue;
                 }
+            }
+
+            // Empty-value static fallback: leave the field truly unconnected rather than
+            // wiring a fake static node — so AI mapping and the editor show it needs configuration.
+            if (fm.sourceType == FieldMappingSourceType.Static && string.IsNullOrEmpty(fm.staticValue))
+            {
+                fields.Add(field);
+                continue;
             }
 
             var source = MakeSourceNode(fm, NewId);

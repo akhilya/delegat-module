@@ -122,6 +122,11 @@ public static class ModifierPipeline
         !string.IsNullOrEmpty(type) && _modifiers.ContainsKey(type);
 
     /// <summary>
+    /// All registered modifier type ids — for validation error messages and AI tool schemas.
+    /// </summary>
+    public static IReadOnlyCollection<string> KnownModifierTypes => _modifiers.Keys;
+
+    /// <summary>
     /// Whether a single modifier type is reversible (import direction).
     /// </summary>
     public static bool IsReversible(string? type) =>

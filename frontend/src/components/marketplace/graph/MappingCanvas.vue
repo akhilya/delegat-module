@@ -265,17 +265,27 @@ function parseSourceValue(v) {
 function setFieldSource(fieldKey, value) {
   const adapter = findNode(ADAPTER_NODE_ID);
   if (!adapter) return;
-  const src = parseSourceValue(value);
+  // "m:<primaryKey>" merges this field into a duplicate: it exports the primary's
+  // value under its own key and is skipped on import. Any other selection un-merges.
+  const mergeWith = typeof value === "string" && value.startsWith("m:") ? value.slice(2) : null;
+  if (mergeWith === fieldKey) return;
+  const src = mergeWith ? null : parseSourceValue(value);
   const fields = (adapter.data?.fields || []).map((f) => {
     if (f.fieldKey !== fieldKey) return f;
     const nf = { ...f };
-    if (src) nf.source = src;
-    else delete nf.source;
+    if (mergeWith) {
+      nf.aliasOf = mergeWith;
+      delete nf.source;
+    } else {
+      delete nf.aliasOf;
+      if (src) nf.source = src;
+      else delete nf.source;
+    }
     return nf;
   });
   updateNodeData(ADAPTER_NODE_ID, { fields });
-  if (src) {
-    // Bound directly ⇒ the pin disappears, so drop any wire feeding it.
+  if (src || mergeWith) {
+    // Bound directly / merged ⇒ the pin disappears, so drop any wire feeding it.
     const dead = edges.value.filter(
       (e) => e.target === ADAPTER_NODE_ID && e.targetHandle === `f:${fieldKey}`,
     );
@@ -1518,6 +1528,13 @@ function autoArrange() {
 }
 .vf-adapter__pill:hover {
   opacity: 0.8;
+}
+/* Merged-duplicate (alias) field: dashed neutral pill "= <primary>" */
+.vf-adapter__pill--alias {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  border-style: dashed;
+  color: hsl(var(--muted-foreground));
 }
 .vf-adapter__dir {
   flex-shrink: 0;

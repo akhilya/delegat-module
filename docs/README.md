@@ -3,6 +3,7 @@
 ## Architecture
 
 - [**saas-architecture.md**](architecture/saas-architecture.md) — Per-instance SaaS: provisioning, scaling, quotas, Redis, central portal
+- [**ai-assistant.md**](architecture/ai-assistant.md) — AI assistant: architecture, prompts, tools, rollback, tariff access
 
 ## Platform
 

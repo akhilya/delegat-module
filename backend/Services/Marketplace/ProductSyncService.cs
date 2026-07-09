@@ -174,6 +174,17 @@ public class ProductSyncService
                 }
             }
 
+            // Endpoint grouping: the synthetic field's evaluated value drives grouping —
+            // strip it from the payload, remember for the post-export group sync
+            string? endpointGroupValue = null;
+            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping) &&
+                exportData.TryGetValue(SyntheticGroupFieldKey, out var rawGroupValue))
+            {
+                exportData.Remove(SyntheticGroupFieldKey);
+                endpointGroupValue = rawGroupValue?.ToString()?.Trim();
+                if (endpointGroupValue is { Length: 0 }) endpointGroupValue = null;
+            }
+
             // Inject variants if product has them — join with links for this connection
             var variants = await _context.productVariants
                 .Where(v => v.productId == product.Id)
@@ -365,6 +376,15 @@ public class ProductSyncService
 
             await _context.SaveChangesAsync(ct);
 
+            // Endpoint grouping: join/create the marketplace group for the evaluated value
+            if (endpointGroupValue != null)
+            {
+                await SyncEndpointGroupsByValueAsync(adapter, connection, connectionId,
+                    new Dictionary<int, string> { [productId] = endpointGroupValue },
+                    new List<BulkProductExportItemResult> { new(productId, true) },
+                    ct);
+            }
+
             // Auto-export price after successful product export
             if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) && product.price.HasValue)
             {
@@ -527,6 +547,10 @@ public class ProductSyncService
         var bulkItems = new List<BulkExportItem>();
         var categoryMappingIdByProductId = new Dictionary<int, int>();
         var failedProductIds = new HashSet<int>();
+        // Endpoint-based grouping: the synthetic field's evaluated value drives which
+        // marketplace card each product joins (products with equal values merge)
+        var endpointGrouping = adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping);
+        var groupValueByProductId = new Dictionary<int, string>();
 
         foreach (var productId in productIds)
         {
@@ -576,6 +600,16 @@ public class ProductSyncService
                 {
                     if (groupIdByProductId.TryGetValue(productId, out var groupId) && groupId != null)
                         exportData[fieldGroupingConfig.GroupFieldKey] = groupId;
+                }
+
+                // Endpoint grouping: pull the synthetic field's value out — it's consumed by the
+                // post-export group sync, the adapter must not receive it as a product attribute
+                if (endpointGrouping && exportData.TryGetValue(SyntheticGroupFieldKey, out var rawGroupValue))
+                {
+                    exportData.Remove(SyntheticGroupFieldKey);
+                    var groupValue = rawGroupValue?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(groupValue))
+                        groupValueByProductId[productId] = groupValue;
                 }
 
                 // Inject variants if present
@@ -764,9 +798,10 @@ public class ProductSyncService
         }
 
         // Post-export: sync groups for EndpointBasedGrouping (e.g., WB merge groups)
-        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping))
+        // by the EVALUATED grouping value — not by local group membership
+        if (endpointGrouping && groupValueByProductId.Count > 0)
         {
-            await SyncEndpointGroupsAfterExportAsync(adapter, connection, connectionId, productIds, itemResults, ct);
+            await SyncEndpointGroupsByValueAsync(adapter, connection, connectionId, groupValueByProductId, itemResults, ct);
         }
 
         var successCount = itemResults.Count(r => r.IsSuccess);
@@ -775,197 +810,158 @@ public class ProductSyncService
     }
 
     /// <summary>
-    /// After bulk export, sync endpoint-based groups (e.g., WB merge groups).
-    /// For each product group that has successfully exported members, create or update the group on the marketplace.
+    /// Synthetic mapping field key for endpoint-based grouping adapters (WB-style).
+    /// Its evaluated value is stripped from export data and drives post-export group sync.
     /// </summary>
-    private async Task SyncEndpointGroupsAfterExportAsync(
+    public const string SyntheticGroupFieldKey = "__group__";
+
+    /// <summary>
+    /// The mapping field that controls card grouping for this adapter:
+    /// field-based (Ozon) → the adapter's real field; endpoint-based (WB) → synthetic key; else null.
+    /// </summary>
+    public static string? ResolveGroupingFieldKey(IMarketplaceAdapter adapter)
+        => adapter.GetFieldBasedGroupingConfig()?.GroupFieldKey
+           ?? (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping)
+               ? SyntheticGroupFieldKey
+               : null);
+
+    /// <summary>
+    /// After export, sync endpoint-based groups (e.g., WB merge groups) by the EVALUATED grouping
+    /// value: products whose mapping produced the same value join one marketplace card. The mapping
+    /// acts as a translation layer — local groups are not consulted directly (their names flow in
+    /// via the default groupName binding, optionally transformed by modifiers).
+    /// </summary>
+    private async Task SyncEndpointGroupsByValueAsync(
         IMarketplaceAdapter adapter,
         MarketplaceConnection connection,
         int connectionId,
-        List<int> exportedProductIds,
+        Dictionary<int, string> groupValueByProductId,
         List<BulkProductExportItemResult> itemResults,
         CancellationToken ct)
     {
         try
         {
-            // Only consider successfully exported products
             var successProductIds = itemResults
                 .Where(r => r.IsSuccess)
                 .Select(r => r.ProductId)
                 .ToHashSet();
 
-            if (successProductIds.Count == 0)
+            var byValue = groupValueByProductId
+                .Where(kv => successProductIds.Contains(kv.Key))
+                .GroupBy(kv => kv.Value)
+                .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToList());
+
+            if (byValue.Count == 0)
             {
-                _logger.LogDebug("[GroupSync] No successfully exported products, skipping group sync");
+                _logger.LogDebug("[GroupSync] No exported products with a grouping value, skipping");
                 return;
             }
 
-            // Find all product groups that contain any of the exported products
-            var groupMemberships = await _context.Set<ProductGroupMember>()
-                .Include(gm => gm.group)
-                    .ThenInclude(g => g.members)
-                .Where(gm => exportedProductIds.Contains(gm.productId))
-                .ToListAsync(ct);
-
-            var groupIds = groupMemberships
-                .Select(gm => gm.groupId)
-                .Distinct()
-                .ToList();
-
-            if (groupIds.Count == 0)
-            {
-                _logger.LogDebug("[GroupSync] Exported products do not belong to any groups");
-                return;
-            }
-
-            _logger.LogInformation("[GroupSync] Found {GroupCount} groups to sync for connection {ConnectionId}",
-                groupIds.Count, connectionId);
-
-            // Load existing group marketplace links for this connection
-            var existingGroupLinksRaw = await _context.productGroupMarketplaceLinks
-                .Where(gl => gl.connectionId == connectionId && groupIds.Contains(gl.productGroupId))
-                .ToListAsync(ct);
-            var existingGroupLinks = existingGroupLinksRaw
-                .GroupBy(gl => gl.productGroupId)
-                .ToDictionary(g => g.Key, g => g.First());
-
-            // Load all product marketplace links for members of these groups
-            var allGroupMemberProductIds = groupMemberships
-                .SelectMany(gm => gm.group.members.Select(m => m.productId))
-                .Distinct()
-                .ToList();
-
-            var productLinksRaw = await _context.productMarketplaceLinks
-                .Where(l => l.connectionId == connectionId && allGroupMemberProductIds.Contains(l.productId))
-                .ToListAsync(ct);
-            var productLinks = productLinksRaw
+            var allProductIds = byValue.Values.SelectMany(x => x).Distinct().ToList();
+            var productLinks = (await _context.productMarketplaceLinks
+                    .Where(l => l.connectionId == connectionId && allProductIds.Contains(l.productId))
+                    .ToListAsync(ct))
                 .GroupBy(l => l.productId)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            // Process each group
-            foreach (var groupId in groupIds)
+            var values = byValue.Keys.ToList();
+            var linkByValue = (await _context.groupValueMarketplaceLinks
+                    .Where(l => l.connectionId == connectionId && values.Contains(l.groupValue))
+                    .ToListAsync(ct))
+                .GroupBy(l => l.groupValue)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var (groupValue, productIds) in byValue)
             {
-                var membership = groupMemberships.First(gm => gm.groupId == groupId);
-                var group = membership.group;
+                var externalIds = productIds
+                    .Where(id => productLinks.ContainsKey(id))
+                    .Select(id => productLinks[id].externalProductId)
+                    .Where(id => !string.IsNullOrEmpty(id) && !id.StartsWith("pending:"))
+                    .ToList();
 
-                existingGroupLinks.TryGetValue(groupId, out var groupLink);
+                if (externalIds.Count == 0) continue;
 
-                if (groupLink != null && !string.IsNullOrEmpty(groupLink.externalGroupId))
+                linkByValue.TryGetValue(groupValue, out var link);
+
+                if (link != null && !string.IsNullOrEmpty(link.externalGroupId))
                 {
-                    // Group already exists — only send newly exported members, not all
-                    var newMemberExternalIds = group.members
-                        .Where(m => successProductIds.Contains(m.productId) && productLinks.ContainsKey(m.productId))
-                        .Select(m => productLinks[m.productId].externalProductId)
-                        .Where(id => !string.IsNullOrEmpty(id))
-                        .ToList();
-
-                    if (newMemberExternalIds.Count == 0)
-                    {
-                        _logger.LogDebug(
-                            "[GroupSync] Group {GroupId} '{GroupName}' has no newly exported members, skipping",
-                            groupId, group.name);
-                        continue;
-                    }
-
+                    // Marketplace group already exists for this value — add the exported products
                     _logger.LogInformation(
-                        "[GroupSync] Updating existing group {GroupId} '{GroupName}' (externalGroupId={ExternalGroupId}) with {Count} new members",
-                        groupId, group.name, groupLink.externalGroupId, newMemberExternalIds.Count);
+                        "[GroupSync] Adding {Count} products to group '{Value}' (externalGroupId={ExternalGroupId})",
+                        externalIds.Count, groupValue, link.externalGroupId);
                     try
                     {
                         var addResult = await adapter.AddProductsToGroupAsync(
-                            connection, groupLink.externalGroupId, newMemberExternalIds, ct);
+                            connection, link.externalGroupId, externalIds, ct);
 
                         if (!addResult.Success)
-                        {
                             _logger.LogWarning(
-                                "[GroupSync] AddProductsToGroupAsync failed for group {GroupId} '{GroupName}': {Error} (marketplace may limit total group size, e.g. WB max 30 cards per group)",
-                                groupId, group.name, addResult.ErrorMessage);
-                        }
+                                "[GroupSync] AddProductsToGroupAsync failed for value '{Value}': {Error} (marketplace may limit group size, e.g. WB max 30 cards)",
+                                groupValue, addResult.ErrorMessage);
 
-                        groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
-                        {
-                            status = addResult.Success
-                                ? ProductMarketplaceStatus.Synced
-                                : ProductMarketplaceStatus.SyncError,
-                            lastErrorMessage = addResult.ErrorMessage,
-                            lastSyncAt = DateTime.UtcNow
-                        });
+                        link.status = addResult.Success ? ProductMarketplaceStatus.Synced : ProductMarketplaceStatus.SyncError;
+                        link.lastErrorMessage = addResult.ErrorMessage;
+                        link.lastSyncAt = DateTime.UtcNow;
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex,
-                            "[GroupSync] Exception updating group {GroupId} membership on connection {ConnectionId}",
-                            groupId, connectionId);
+                        _logger.LogWarning(ex, "[GroupSync] Exception adding products to group '{Value}' on connection {ConnectionId}",
+                            groupValue, connectionId);
                     }
                 }
                 else
                 {
-                    // Create new group — include all exported members (not just current batch)
-                    var memberExternalIds = group.members
-                        .OrderBy(m => m.sortOrder)
-                        .Where(m => productLinks.ContainsKey(m.productId))
-                        .Select(m => productLinks[m.productId].externalProductId)
-                        .Where(id => !string.IsNullOrEmpty(id))
-                        .ToList();
-
-                    if (memberExternalIds.Count < 2)
+                    if (externalIds.Count < 2)
                     {
                         _logger.LogDebug(
-                            "[GroupSync] Group {GroupId} '{GroupName}' has only {Count} exported member(s), skipping (need >= 2)",
-                            groupId, group.name, memberExternalIds.Count);
+                            "[GroupSync] Value '{Value}' has only {Count} exported product(s) and no existing group, skipping (need >= 2)",
+                            groupValue, externalIds.Count);
                         continue;
                     }
 
                     _logger.LogInformation(
-                        "[GroupSync] Creating new group {GroupId} '{GroupName}' with {Count} members: [{Members}]",
-                        groupId, group.name, memberExternalIds.Count, string.Join(", ", memberExternalIds));
+                        "[GroupSync] Creating group for value '{Value}' with {Count} members: [{Members}]",
+                        groupValue, externalIds.Count, string.Join(", ", externalIds));
                     try
                     {
-                        var createResult = await adapter.CreateGroupAsync(
-                            connection, memberExternalIds, group.name, ct);
+                        var createResult = await adapter.CreateGroupAsync(connection, externalIds, groupValue, ct);
 
                         if (createResult.Success && !string.IsNullOrEmpty(createResult.ExternalGroupId))
                         {
-                            if (groupLink == null)
+                            if (link == null)
                             {
-                                groupLink = new ProductGroupMarketplaceLink();
-                                groupLink.AddFill(new ProductGroupMarketplaceLink.AddForm
+                                link = new GroupValueMarketplaceLink
                                 {
-                                    productGroupId = groupId,
                                     connectionId = connectionId,
+                                    groupValue = groupValue,
                                     externalGroupId = createResult.ExternalGroupId,
-                                    externalGroupName = group.name,
-                                    status = ProductMarketplaceStatus.Synced
-                                });
-                                _context.productGroupMarketplaceLinks.Add(groupLink);
+                                    status = ProductMarketplaceStatus.Synced,
+                                    lastSyncAt = DateTime.UtcNow,
+                                };
+                                _context.groupValueMarketplaceLinks.Add(link);
                             }
                             else
                             {
-                                groupLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
-                                {
-                                    externalGroupId = createResult.ExternalGroupId,
-                                    externalGroupName = group.name,
-                                    status = ProductMarketplaceStatus.Synced,
-                                    lastSyncAt = DateTime.UtcNow
-                                });
+                                link.externalGroupId = createResult.ExternalGroupId;
+                                link.status = ProductMarketplaceStatus.Synced;
+                                link.lastSyncAt = DateTime.UtcNow;
                             }
 
                             _logger.LogInformation(
-                                "[GroupSync] Created group {GroupId} on connection {ConnectionId}, externalGroupId={ExternalGroupId}",
-                                groupId, connectionId, createResult.ExternalGroupId);
+                                "[GroupSync] Created group for value '{Value}' on connection {ConnectionId}, externalGroupId={ExternalGroupId}",
+                                groupValue, connectionId, createResult.ExternalGroupId);
                         }
                         else
                         {
                             _logger.LogWarning(
-                                "[GroupSync] CreateGroupAsync failed for group {GroupId} '{GroupName}' with {MemberCount} members: {Error} (marketplace may limit total group size, e.g. WB max 30 cards per group)",
-                                groupId, group.name, memberExternalIds.Count, createResult.ErrorMessage);
+                                "[GroupSync] CreateGroupAsync failed for value '{Value}' with {MemberCount} members: {Error}",
+                                groupValue, externalIds.Count, createResult.ErrorMessage);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex,
-                            "[GroupSync] Exception creating group {GroupId} on connection {ConnectionId}",
-                            groupId, connectionId);
+                        _logger.LogWarning(ex, "[GroupSync] Exception creating group for value '{Value}' on connection {ConnectionId}",
+                            groupValue, connectionId);
                     }
                 }
             }

@@ -221,13 +221,15 @@ public class CategoryController : ControllerBase
         if (category == null)
             throw ApiException.NotFound("Категория не найдена");
 
-        // Check if category has products without loading them
-        var hasProducts = await _context.products.AnyAsync(p => p.categoryId == categoryId);
-        if (hasProducts)
-        {
-            var productCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
-            throw ApiException.BadRequest($"Невозможно удалить категорию с {productCount} товарами. Сначала переместите или удалите товары.");
-        }
+        var activeCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
+        if (activeCount > 0)
+            throw ApiException.BadRequest($"Невозможно удалить категорию с {activeCount} товарами. Сначала переместите или удалите товары.");
+
+        // Trashed products are hidden by the global query filter, but their FK rows still
+        // block the DELETE — detach them from the category (they stay in the trash)
+        await _context.products.IgnoreQueryFilters()
+            .Where(p => p.categoryId == categoryId && p.deletedAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.categoryId, (int?)null));
 
         // Delete attributes and category in a single save
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();

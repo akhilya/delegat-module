@@ -56,6 +56,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tag } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps({
   files: { type: Array, required: true },
@@ -1365,11 +1366,16 @@ watch(() => props.productId, () => {
       </div>
 
       <div v-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
-        class="flex min-h-[24rem] flex-col items-center justify-center py-16 text-muted-foreground"
+        class="flex min-h-[24rem] items-center justify-center"
       >
-        <Folder class="size-12 mb-3 opacity-40" />
-        <p>Папка пуста</p>
-        <p class="text-sm">Создайте папку или загрузите файлы</p>
+        <EmptyState
+          title="Папка пуста"
+          description="Перетащите файлы сюда, загрузите их кнопкой или создайте папку."
+        >
+          <template #icon>
+            <Folder />
+          </template>
+        </EmptyState>
       </div>
 
       <table v-if="currentFolderId != null || currentSubfolders.length > 0 || currentFiles.length > 0 || inlineNewFolder || currentPendingUploads.length > 0" class="w-full text-sm">

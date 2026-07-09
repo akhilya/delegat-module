@@ -151,6 +151,11 @@ public class MappingService
             if (string.IsNullOrEmpty(field.fieldKey))
                 continue;
 
+            // Merged duplicates: only the primary field participates in import —
+            // reversing both fields into the same local source would be last-write-wins
+            if (!string.IsNullOrEmpty(field.aliasOf))
+                continue;
+
             // Direct source binding (chosen in the adapter settings).
             if (field.source?.type is string st)
             {

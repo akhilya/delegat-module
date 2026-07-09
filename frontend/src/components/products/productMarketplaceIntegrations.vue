@@ -25,6 +25,7 @@ import {
   Layers,
   Ban,
 } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
@@ -85,6 +86,7 @@ export default {
   components: {
     Button,
     Badge,
+    EmptyState,
     Loader2,
     Upload,
     Download,
@@ -1185,9 +1187,12 @@ export default {
           !readyToExportConnections.length &&
           !connectionsWithoutMapping.length
         "
-        class="text-center py-8 text-muted-foreground"
       >
-        <p>Нет доступных адаптеров для экспорта</p>
+        <EmptyState
+          size="sm"
+          title="Нет доступных адаптеров"
+          description="Подключите адаптер и создайте маппинг для категории товара, чтобы экспортировать его."
+        />
       </div>
     </div>
 

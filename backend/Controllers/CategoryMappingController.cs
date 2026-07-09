@@ -169,7 +169,8 @@ public class CategoryMappingController : ControllerBase
             try
             {
                 var fields = await adapter.GetCategoryFieldsAsync(connection, input.externalCategoryId, ct);
-                fieldsCreated = await CreateFieldMappingsAsync(mapping, input.localCategoryId, fields);
+                fieldsCreated = await CreateFieldMappingsAsync(mapping, input.localCategoryId, fields, adapter,
+                    skipAutoMapping: input.useAiMapping == true);
             }
             catch (Exception ex)
             {
@@ -259,7 +260,7 @@ public class CategoryMappingController : ControllerBase
         if (fields == null || fields.Count == 0)
             fields = await adapter.GetCategoryFieldsAsync(connection, result.ExternalCategoryId, ct);
 
-        var fieldsCreated = await CreateFieldMappingsAsync(mapping, category.Id, fields);
+        var fieldsCreated = await CreateFieldMappingsAsync(mapping, category.Id, fields, adapter);
 
         return Ok(new
         {
@@ -468,6 +469,7 @@ public class CategoryMappingController : ControllerBase
         int connectionId,
         int mappingId,
         [FromQuery] int? reassignToMappingId = null,
+        [FromQuery] bool force = false,
         CancellationToken ct = default)
     {
         await GetConnectionAsync(connectionId);
@@ -484,6 +486,17 @@ public class CategoryMappingController : ControllerBase
             .Where(l => l.connectionId == connectionId && l.categoryMappingId == mappingId)
             .Include(l => l.product)
             .ToListAsync(ct);
+
+        if (linkedProducts.Count > 0 && force)
+        {
+            // Forced delete: detach links — products stay linked to the marketplace
+            // but lose their mapping until the user assigns a new one
+            foreach (var link in linkedProducts)
+                link.categoryMappingId = null;
+            await _context.SaveChangesAsync(ct);
+            await mappingRepo.DeleteAsync(mapping);
+            return Ok(new { success = true, reassignedProducts = 0, detachedProducts = linkedProducts.Count });
+        }
 
         if (linkedProducts.Count > 0)
         {
@@ -652,17 +665,17 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
-        var categoryRepo = _unitOfWork.Repository<Category>();
-        var categories = await categoryRepo.FindAllAsync(
-            c => c.storeId == connection.storeId,
-            query => query.Include(c => c.attributes));
-
-        var result = categories.Select(c => new
-        {
-            id = c.Id,
-            name = c.name,
-            attributesCount = c.attributes?.Count ?? 0
-        }).ToList();
+        // Project directly in SQL — avoids loading LONGTEXT attribute options into memory just to count them
+        var result = await _context.categories
+            .AsNoTracking()
+            .Where(c => c.storeId == connection.storeId)
+            .Select(c => new
+            {
+                id = c.Id,
+                name = c.name,
+                attributesCount = c.attributes.Count()
+            })
+            .ToListAsync();
 
         return Ok(result);
     }
@@ -820,7 +833,9 @@ public class CategoryMappingController : ControllerBase
     private async Task<int> CreateFieldMappingsAsync(
         CategoryMapping mapping,
         int localCategoryId,
-        IReadOnlyCollection<Models.Marketplace.DTOs.ExternalField> fields)
+        IReadOnlyCollection<Models.Marketplace.DTOs.ExternalField> fields,
+        IMarketplaceAdapter adapter,
+        bool skipAutoMapping = false)
     {
         var categoryAttributes = await _unitOfWork.Repository<CategoryAttribute>()
             .FindAllAsync(a => a.categoryId == localCategoryId);
@@ -838,7 +853,9 @@ public class CategoryMappingController : ControllerBase
         var sortOrder = 0;
         var specs = fields.OrderBy(f => f.SortOrder).Select(field =>
         {
-            var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
+            var (sourceType, sourceField, sourceAttributeId) = skipAutoMapping
+                ? (FieldMappingSourceType.Static, (string?)null, (int?)null)
+                : DetermineAutoMapping(field, attributeMap);
             return new FieldSpec
             {
                 externalFieldKey = field.Key,
@@ -852,6 +869,9 @@ public class CategoryMappingController : ControllerBase
                 sourceAttributeId = sourceAttributeId,
             };
         }).ToList();
+
+        // Every mapping carries a grouping field (synthetic for endpoint-based adapters)
+        GraphGenerator.EnsureGroupingField(specs, adapter);
 
         // The graph is the single source of truth — generate it onto the (tracked) mapping entity.
         mapping.graphJson = GraphGenerator.BuildGraphJson(specs);
@@ -1079,6 +1099,7 @@ public class CategoryMappingController : ControllerBase
         public string externalCategoryId { get; set; }
         public string? externalCategoryName { get; set; }
         public string? name { get; set; }
+        public bool? useAiMapping { get; set; }
     }
 
     public struct CreateExternalCategoryInput

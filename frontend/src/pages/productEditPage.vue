@@ -223,6 +223,11 @@ export default {
     const groupSidebarRef = ref(null);
     const mainScrollRef = ref(null);
 
+    watch(
+      () => store.state.aiChat.productRefreshToken,
+      () => fetchProduct()
+    );
+
     watch(productId, (newId) => {
       // Если новый товар — в той же группе, просто обновляем isCurrent на клиенте.
       // Это сохраняет скролл сайдбара и не вызывает перерисовку списка.
@@ -331,6 +336,13 @@ export default {
               storageQuantity: product.storageQuantity,
               price: product.price,
             },
+          });
+
+          store.commit("aiChat/setPageContext", {
+            page: "product",
+            productId: targetProductId,
+            productName: product.name,
+            categoryId: product.category?.id ?? null,
           });
 
           // Mark initial load as complete after a short delay,
@@ -807,7 +819,10 @@ export default {
     }
 
     onMounted(() => window.addEventListener('keydown', handleLightboxKeydown));
-    onUnmounted(() => window.removeEventListener('keydown', handleLightboxKeydown));
+    onUnmounted(() => {
+      window.removeEventListener('keydown', handleLightboxKeydown);
+      store.commit('aiChat/clearPageContext');
+    });
 
     return {
       productSKU,
@@ -1319,7 +1334,7 @@ export default {
           <div class="flex-1 overflow-y-auto">
             <EmptyState v-if="notes.length === 0" title="Нет заметок" description="Заметки помогают фиксировать важную информацию о товаре">
               <template #icon>
-                <NotebookPen class="size-12 mb-4 text-muted-foreground" />
+                <NotebookPen />
               </template>
             </EmptyState>
             <div v-else class="p-4 flex flex-col gap-4">

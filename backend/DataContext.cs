@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
+using Delegat.Models.Ai;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
 
@@ -58,6 +59,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<ProductGroup> productGroups { get; set; }
     public DbSet<ProductGroupMember> productGroupMembers { get; set; }
     public DbSet<ProductGroupMarketplaceLink> productGroupMarketplaceLinks { get; set; }
+    public DbSet<GroupValueMarketplaceLink> groupValueMarketplaceLinks { get; set; }
 
     // Operations history
     public DbSet<Operation> operations { get; set; }
@@ -68,6 +70,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
     // Platform settings editable by administrators
     public DbSet<AppSetting> appSettings { get; set; }
+
+    public DbSet<AiModelConfig> aiModelConfigs { get; set; }
+    public DbSet<AiOperation> aiOperations { get; set; }
+    public DbSet<AiStoreSettings> aiStoreSettings { get; set; }
+    public DbSet<AiConversation> aiConversations { get; set; }
+    public DbSet<AiConversationMessage> aiConversationMessages { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
@@ -121,6 +129,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .WithMany()
             .HasForeignKey(l => l.categoryMappingId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Index for COUNT(*) per categoryMappingId in GetMappings — without this EF does a full table scan per mapping
+        builder.Entity<ProductMarketplaceLink>()
+            .HasIndex(l => l.categoryMappingId);
 
         // CategoryAttribute options - use LONGTEXT for large Ozon dictionaries
         builder.Entity<CategoryAttribute>()
@@ -341,5 +353,32 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .WithMany()
             .HasForeignKey(s => s.updatedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // AiModelConfig indexes
+        builder.Entity<AiModelConfig>()
+            .HasIndex(m => m.isDefault);
+
+        // AiOperation indexes
+        builder.Entity<AiOperation>()
+            .HasIndex(o => new { o.userId, o.storeId, o.createdAt });
+
+        // AiConversation — one session per sessionId
+        builder.Entity<AiConversation>()
+            .HasIndex(c => c.sessionId)
+            .IsUnique();
+        builder.Entity<AiConversation>()
+            .HasIndex(c => new { c.storeId, c.userId });
+        builder.Entity<AiConversationMessage>()
+            .HasIndex(m => new { m.conversationId, m.createdAt });
+
+        // AiStoreSettings — one row per store
+        builder.Entity<AiStoreSettings>()
+            .HasIndex(s => s.StoreId)
+            .IsUnique();
+
+        // One marketplace group per evaluated grouping value per connection
+        builder.Entity<GroupValueMarketplaceLink>()
+            .HasIndex(l => new { l.connectionId, l.groupValue })
+            .IsUnique();
     }
 }

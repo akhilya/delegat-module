@@ -16,6 +16,7 @@ import {
 } from "@/store/sonnerHelper";
 import { setPageTitle } from "@/router";
 import { ArrowLeft, Loader2, Plus } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,7 @@ export default {
     Page,
     PageSection,
     MappingCanvas,
+    EmptyState,
     NavigationBar,
     Breadcrumbs,
     Button,
@@ -204,6 +206,11 @@ export default {
         );
       }
       return [];
+    },
+  },
+  watch: {
+    "$store.state.aiChat.mappingRefreshToken"() {
+      this.fetchData();
     },
   },
   methods: {
@@ -918,6 +925,7 @@ export default {
       reader.readAsText(file);
       event.target.value = "";
     },
+
   },
   mounted() {
     this.connectionId = this.$route.params.connId;
@@ -927,7 +935,35 @@ export default {
       if (qp) {
         this.onPreviewProductChange(qp);
       }
+      this.$store.commit("aiChat/setPageContext", {
+        page: "fieldMapping",
+        mappingId: parseInt(this.mappingId),
+        mappingName: this.mappingInfo?.name || `Маппинг #${this.mappingId}`,
+        connectionId: parseInt(this.connectionId),
+        connectionName: this.mappingInfo?.connectionName || "",
+      });
     });
+
+    // Live-reload the graph when a background AI mapping for THIS mapping finishes
+    // (the operation title carries the mapping id as "(#id)")
+    this.unsubscribeOps = this.$store.subscribe((mutation) => {
+      if (mutation.type !== "operations/FINISH_OPERATION") return;
+      const op = this.$store.state.operations.operations.find(
+        (o) => o.id === mutation.payload.id,
+      );
+      if (op?.type !== "ai-mapping") return;
+      if (!op.title?.includes(`(#${this.mappingId})`)) return;
+      this.fetchData();
+      displaySonnerSuccess(
+        mutation.payload.summary
+          ? `AI-маппинг завершён. ${mutation.payload.summary}`
+          : "AI-маппинг завершён",
+      );
+    });
+  },
+  beforeUnmount() {
+    this.unsubscribeOps?.();
+    this.$store.commit("aiChat/clearPageContext");
   },
 };
 </script>
@@ -943,7 +979,7 @@ export default {
              The preview-product selector lives in the canvas toolbar. -->
         <div
           v-if="connectionId && mappingId"
-          class="mb-4 h-[calc(100vh-150px)] min-h-[480px] w-full"
+          class="relative mb-4 h-[calc(100vh-150px)] min-h-[480px] w-full"
         >
           <MappingCanvas
             :connection-id="connectionId"
@@ -1077,12 +1113,12 @@ export default {
               </div>
             </div>
           </div>
-          <div
+          <EmptyState
             v-if="previewSummary.length === 0"
-            class="text-center text-muted-foreground py-8 text-sm"
-          >
-            Нет активных полей
-          </div>
+            size="sm"
+            title="Нет активных полей"
+            description="Подключите поля адаптера к источникам, чтобы увидеть предпросмотр значений."
+          />
         </div>
       </SheetContent>
     </Sheet>
