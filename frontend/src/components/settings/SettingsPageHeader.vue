@@ -6,9 +6,9 @@ defineProps({
 </script>
 
 <template>
-  <header class="mb-8 border-b border-border/60 pb-6">
+  <header class="mb-8 max-w-2xl">
     <h1 class="text-2xl font-semibold tracking-tight">{{ title }}</h1>
-    <p v-if="description" class="mt-1.5 max-w-2xl text-sm text-muted-foreground">
+    <p v-if="description" class="mt-1.5 text-sm text-muted-foreground">
       {{ description }}
     </p>
     <div v-if="$slots.actions" class="mt-4 flex flex-wrap items-center gap-2">

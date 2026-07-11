@@ -11,7 +11,6 @@ import {
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -56,13 +55,16 @@ watch(
   <SidebarGroup>
     <Collapsible v-model:open="open" class="group/collapsible">
       <CollapsibleTrigger as-child>
-        <SidebarGroupLabel class="cursor-pointer select-none hover:text-sidebar-foreground">
-          <component :is="icon" class="size-4 shrink-0 opacity-70" />
-          <span>{{ label }}</span>
+        <button
+          type="button"
+          class="flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-sm font-medium text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[state=open]/collapsible:bg-sidebar-accent/60"
+        >
+          <component :is="icon" class="size-4 shrink-0" />
+          <span class="truncate">{{ label }}</span>
           <ChevronRight
-            class="ml-auto size-3 opacity-60 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+            class="ml-auto size-3.5 shrink-0 opacity-70 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
           />
-        </SidebarGroupLabel>
+        </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <SidebarGroupContent>

@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from "vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
-import SettingsSection from "@/components/settings/SettingsSection.vue";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import InlineEditableValue from "@/components/settings/InlineEditableValue.vue";
 import { Button } from "@/components/ui/button";
-import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -84,25 +85,35 @@ onMounted(fetchMe);
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsSection
+      <SettingsFormSection
         title="Профиль"
         description="Имя отображается в интерфейсе и используется при входе."
       >
-        <div class="grid max-w-xl gap-4">
-          <div class="grid gap-2">
-            <label class="text-sm font-medium" for="user-name">Имя пользователя</label>
-            <Input
-              id="user-name"
-              v-model="userNameDraft"
-              :disabled="isSavingProfile"
-              placeholder="Имя пользователя"
-            />
-          </div>
-          <div class="grid gap-1 text-sm">
-            <span class="text-muted-foreground">Роль</span>
-            <span class="font-medium">{{ me?.isAdmin ? "Администратор" : "Пользователь" }}</span>
-          </div>
-        </div>
+        <SettingsFormField
+          label="Имя пользователя"
+          :changed="hasProfileChanges"
+        >
+          <InlineEditableValue
+            :model-value="userNameDraft"
+            :disabled="isSavingProfile"
+            placeholder="Имя пользователя"
+            empty-label="Имя не задано"
+            @update:model-value="userNameDraft = $event"
+          />
+          <template #description>
+            Отображаемое имя в интерфейсе и при входе в систему.
+          </template>
+        </SettingsFormField>
+
+        <SettingsFormField label="Роль">
+          <p class="text-sm font-medium">
+            {{ me?.isAdmin ? "Администратор" : "Пользователь" }}
+          </p>
+          <template #description>
+            Глобальная роль учётной записи на платформе.
+          </template>
+        </SettingsFormField>
+
         <template #footer>
           <Button
             :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
@@ -112,34 +123,35 @@ onMounted(fetchMe);
             Сохранить профиль
           </Button>
         </template>
-      </SettingsSection>
+      </SettingsFormSection>
 
-      <SettingsSection
+      <SettingsFormSection
         title="Пароль"
         description="Для смены пароля нужно указать текущий пароль."
       >
-        <div class="grid max-w-xl gap-4">
-          <div class="grid gap-2 sm:grid-cols-2">
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="current-password">Текущий пароль</label>
-              <PasswordInput
-                id="current-password"
-                v-model="currentPassword"
-                autocomplete="current-password"
-                :disabled="isChangingPassword"
-              />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="new-password">Новый пароль</label>
-              <PasswordInput
-                id="new-password"
-                v-model="newPassword"
-                autocomplete="new-password"
-                :disabled="isChangingPassword"
-              />
-            </div>
-          </div>
-        </div>
+        <SettingsFormField label="Текущий пароль" label-for="current-password">
+          <PasswordInput
+            id="current-password"
+            v-model="currentPassword"
+            autocomplete="current-password"
+            :disabled="isChangingPassword"
+            class="max-w-md"
+          />
+        </SettingsFormField>
+
+        <SettingsFormField label="Новый пароль" label-for="new-password">
+          <PasswordInput
+            id="new-password"
+            v-model="newPassword"
+            autocomplete="new-password"
+            :disabled="isChangingPassword"
+            class="max-w-md"
+          />
+          <template #description>
+            Новый пароль вступит в силу после сохранения.
+          </template>
+        </SettingsFormField>
+
         <template #footer>
           <Button
             :disabled="isChangingPassword || !currentPassword || !newPassword"
@@ -149,7 +161,7 @@ onMounted(fetchMe);
             Сменить пароль
           </Button>
         </template>
-      </SettingsSection>
+      </SettingsFormSection>
     </PageSection>
   </div>
 </template>

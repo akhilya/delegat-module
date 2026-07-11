@@ -2,11 +2,11 @@
 import { computed, onMounted, ref } from "vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
-import SettingsSection from "@/components/settings/SettingsSection.vue";
-import SettingsNavCard from "@/components/settings/SettingsNavCard.vue";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import InlineEditableValue from "@/components/settings/InlineEditableValue.vue";
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
-import Input from "@/components/ui/input/Input.vue";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -14,25 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import {
-  AlertTriangle,
-  Key,
-  Loader2,
-  Plug,
-  Save,
-  Sparkles,
-  Store,
-  Trash2,
-  UserCog,
-} from "lucide-vue-next";
-import {
-  PAGE_ADMIN_AI,
-  PAGE_ADMIN_ERROR_LOGS,
-  PAGE_ADMIN_PLUGINS,
-  PAGE_ADMIN_STORES,
-  PAGE_ADMIN_TOKENS,
-  PAGE_ADMIN_USERS,
-} from "@/router";
+import { Loader2, Save, Trash2 } from "lucide-vue-next";
 
 const isLoading = ref(false);
 const summary = ref(null);
@@ -59,44 +41,11 @@ const changedSettings = computed(() =>
 
 const hasSettingChanges = computed(() => changedSettings.value.length > 0);
 
-const adminSections = [
-  {
-    title: "Магазины",
-    description: "Создание магазинов, участники, администраторы магазинов и базовые параметры.",
-    to: PAGE_ADMIN_STORES,
-    icon: Store,
-  },
-  {
-    title: "Пользователи",
-    description: "Редактирование имён, паролей, активности и глобальных ролей.",
-    to: PAGE_ADMIN_USERS,
-    icon: UserCog,
-  },
-  {
-    title: "Токены",
-    description: "Приглашения и служебные токены доступа к платформе.",
-    to: PAGE_ADMIN_TOKENS,
-    icon: Key,
-  },
-  {
-    title: "Плагины",
-    description: "Установка и управление адаптерами платформы.",
-    to: PAGE_ADMIN_PLUGINS,
-    icon: Plug,
-  },
-  {
-    title: "Логи ошибок",
-    description: "Сохранённые серверные ошибки с деталями для диагностики.",
-    to: PAGE_ADMIN_ERROR_LOGS,
-    icon: AlertTriangle,
-  },
-  {
-    title: "ИИ",
-    description: "Подключение AI-моделей по API для AI-ассистента.",
-    to: PAGE_ADMIN_AI,
-    icon: Sparkles,
-  },
-];
+function isLimitChanged(limit) {
+  const draft = settingDrafts.value[limit.key] ?? "";
+  const saved = limit.value ?? "";
+  return limit.isEditable && String(draft) !== String(saved);
+}
 
 function statusCount(item, status) {
   return item.statuses?.find((entry) => entry.status?.toLowerCase() === status)?.count || 0;
@@ -189,46 +138,44 @@ onMounted(fetchSummary);
   <div>
     <SettingsPageHeader
       title="Общие"
-      description="Платформенные параметры, доступ, очереди и диагностика"
+      description="Платформенные параметры, очереди и диагностика"
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsSection
+      <SettingsFormSection
         title="Общие параметры"
         description="Лимиты, rate limit и системные ограничения платформы."
       >
-        <div class="divide-y border-y">
-          <div
-            v-for="limit in summary?.limits || []"
-            :key="limit.key"
-            class="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_260px]"
-          >
-            <div class="min-w-0">
-              <div class="text-sm font-medium">{{ limit.label }}</div>
-              <div class="text-xs text-muted-foreground">{{ limit.key }}</div>
-              <div v-if="limit.description" class="mt-1 text-xs text-muted-foreground">
-                {{ limit.description }}
-              </div>
-            </div>
-            <div class="space-y-1">
-              <Input
-                v-model="settingDrafts[limit.key]"
-                :type="limit.valueType === 'integer' || limit.valueType === 'decimal' ? 'number' : 'text'"
-                :min="limit.valueType === 'decimal' ? '0.1' : '1'"
-                :step="limit.valueType === 'decimal' ? '0.1' : '1'"
-                :placeholder="limit.fallbackValue ? `fallback: ${limit.fallbackValue}` : 'не задано'"
-                :disabled="!limit.isEditable || isSavingSettings"
-              />
-              <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Активно:</span>
-                <Badge variant="secondary">{{ limit.effectiveValue || "не задано" }}</Badge>
-              </div>
-            </div>
-          </div>
-          <div v-if="!summary?.limits?.length" class="py-3 text-sm text-muted-foreground">
-            Общие параметры не найдены.
-          </div>
-        </div>
+        <SettingsFormField
+          v-for="limit in summary?.limits || []"
+          :key="limit.key"
+          :label="limit.label"
+          :changed="isLimitChanged(limit)"
+        >
+          <InlineEditableValue
+            :model-value="settingDrafts[limit.key]"
+            :disabled="!limit.isEditable || isSavingSettings"
+            :type="limit.valueType === 'integer' || limit.valueType === 'decimal' ? 'number' : 'text'"
+            :min="limit.valueType === 'decimal' ? '0.1' : '1'"
+            :step="limit.valueType === 'decimal' ? '0.1' : '1'"
+            :placeholder="limit.fallbackValue ? `fallback: ${limit.fallbackValue}` : 'не задано'"
+            @update:model-value="settingDrafts[limit.key] = $event"
+          />
+          <template #description>
+            <span v-if="limit.description">{{ limit.description }}</span>
+            <span v-if="limit.description && limit.key"> · </span>
+            <span class="font-mono text-xs">{{ limit.key }}</span>
+            <span> · Активно: </span>
+            <Badge variant="secondary" class="align-middle text-xs">
+              {{ limit.effectiveValue || "не задано" }}
+            </Badge>
+          </template>
+        </SettingsFormField>
+
+        <p v-if="!summary?.limits?.length" class="py-4 text-sm text-muted-foreground">
+          Общие параметры не найдены.
+        </p>
+
         <template #footer>
           <span v-if="hasSettingChanges" class="mr-auto text-sm text-muted-foreground">
             Изменено параметров: {{ changedSettings.length }}
@@ -239,111 +186,87 @@ onMounted(fetchSummary);
             Сохранить параметры
           </Button>
         </template>
-      </SettingsSection>
+      </SettingsFormSection>
 
-      <SettingsSection
-        title="Управление платформой"
-        description="Основные административные разделы."
-      >
-        <div class="grid gap-2">
-          <SettingsNavCard
-            v-for="section in adminSections"
-            :key="section.title"
-            :title="section.title"
-            :description="section.description"
-            :to="section.to"
-            :icon="section.icon"
-          />
-        </div>
-      </SettingsSection>
-
-      <SettingsSection
+      <SettingsFormSection
         title="Очереди и процессы"
         description="Текущие очереди экспорта, импорта, изображений и история фоновых операций."
       >
-        <div class="grid gap-3">
-          <div class="rounded-lg border border-border/60 p-4">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-sm font-medium">История фоновых процессов</div>
-                <div class="text-xs text-muted-foreground">Текущие и завершённые операции магазина</div>
-              </div>
-              <Badge variant="secondary">{{ summary?.operations?.total ?? 0 }}</Badge>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <Badge
-                v-for="entry in summary?.operations?.statuses || []"
-                :key="entry.status"
-                variant="secondary"
-              >
-                {{ statusLabel(entry.status) }}: {{ entry.count }}
-              </Badge>
-              <Badge v-if="!summary?.operations?.total" variant="secondary">нет записей</Badge>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                :disabled="clearingKey === 'operations:inactive'"
-                @click="clearTarget('operations', 'inactive')"
-              >
-                <Loader2 v-if="clearingKey === 'operations:inactive'" class="mr-2 size-4 animate-spin" />
-                <Trash2 v-else class="mr-2 size-4" />
-                Очистить завершённые
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                :disabled="clearingKey === 'operations:all'"
-                @click="clearTarget('operations', 'all')"
-              >
-                <Loader2 v-if="clearingKey === 'operations:all'" class="mr-2 size-4 animate-spin" />
-                <Trash2 v-else class="mr-2 size-4" />
-                Очистить всё
-              </Button>
-            </div>
+        <SettingsFormField label="История фоновых процессов">
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{{ summary?.operations?.total ?? 0 }} записей</Badge>
+            <Badge
+              v-for="entry in summary?.operations?.statuses || []"
+              :key="entry.status"
+              variant="secondary"
+            >
+              {{ statusLabel(entry.status) }}: {{ entry.count }}
+            </Badge>
+            <Badge v-if="!summary?.operations?.total" variant="secondary">нет записей</Badge>
           </div>
+          <template #description>
+            Текущие и завершённые операции магазина.
+          </template>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              :disabled="clearingKey === 'operations:inactive'"
+              @click="clearTarget('operations', 'inactive')"
+            >
+              <Loader2 v-if="clearingKey === 'operations:inactive'" class="mr-2 size-4 animate-spin" />
+              <Trash2 v-else class="mr-2 size-4" />
+              Очистить завершённые
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              :disabled="clearingKey === 'operations:all'"
+              @click="clearTarget('operations', 'all')"
+            >
+              <Loader2 v-if="clearingKey === 'operations:all'" class="mr-2 size-4 animate-spin" />
+              <Trash2 v-else class="mr-2 size-4" />
+              Очистить всё
+            </Button>
+          </div>
+        </SettingsFormField>
 
-          <div
-            v-for="queue in queues"
-            :key="queue.key"
-            class="rounded-lg border border-border/60 p-4"
-          >
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-sm font-medium">{{ queue.label }}</div>
-              <Badge variant="secondary">{{ queue.total }}</Badge>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <Badge v-for="entry in queue.statuses" :key="entry.status" variant="secondary">
-                {{ statusLabel(entry.status) }}: {{ entry.count }}
-              </Badge>
-              <Badge v-if="queue.total === 0" variant="secondary">нет записей</Badge>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                :disabled="inactiveCount(queue) === 0 || clearingKey === `${queue.key}:inactive`"
-                @click="clearTarget(queue.key, 'inactive')"
-              >
-                <Loader2 v-if="clearingKey === `${queue.key}:inactive`" class="mr-2 size-4 animate-spin" />
-                <Trash2 v-else class="mr-2 size-4" />
-                Очистить неактивные
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                :disabled="queue.total === 0 || clearingKey === `${queue.key}:all`"
-                @click="clearTarget(queue.key, 'all')"
-              >
-                <Loader2 v-if="clearingKey === `${queue.key}:all`" class="mr-2 size-4 animate-spin" />
-                <Trash2 v-else class="mr-2 size-4" />
-                Очистить всё
-              </Button>
-            </div>
+        <SettingsFormField
+          v-for="queue in queues"
+          :key="queue.key"
+          :label="queue.label"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{{ queue.total }} записей</Badge>
+            <Badge v-for="entry in queue.statuses" :key="entry.status" variant="secondary">
+              {{ statusLabel(entry.status) }}: {{ entry.count }}
+            </Badge>
+            <Badge v-if="queue.total === 0" variant="secondary">нет записей</Badge>
           </div>
-        </div>
-      </SettingsSection>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              :disabled="inactiveCount(queue) === 0 || clearingKey === `${queue.key}:inactive`"
+              @click="clearTarget(queue.key, 'inactive')"
+            >
+              <Loader2 v-if="clearingKey === `${queue.key}:inactive`" class="mr-2 size-4 animate-spin" />
+              <Trash2 v-else class="mr-2 size-4" />
+              Очистить неактивные
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              :disabled="queue.total === 0 || clearingKey === `${queue.key}:all`"
+              @click="clearTarget(queue.key, 'all')"
+            >
+              <Loader2 v-if="clearingKey === `${queue.key}:all`" class="mr-2 size-4 animate-spin" />
+              <Trash2 v-else class="mr-2 size-4" />
+              Очистить всё
+            </Button>
+          </div>
+        </SettingsFormField>
+      </SettingsFormSection>
     </PageSection>
 
     <AlertDialog
