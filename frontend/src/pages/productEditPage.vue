@@ -85,6 +85,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useDebounceFn } from "@vueuse/core";
 import draggable from "vuedraggable";
 import { http, router } from "@/main";
+import { confirm } from "@/composables/useConfirm";
 
 export default {
   components: {
@@ -699,7 +700,14 @@ export default {
       debouncedSaveImages();
     }
 
-    function removeGalleryImage(index) {
+    async function removeGalleryImage(index) {
+      const ok = await confirm({
+        title: "Удалить фото из галереи?",
+        description: "Изображение будет откреплено от товара. Файл останется в хранилище.",
+        confirmLabel: "Удалить",
+      });
+      if (!ok) return;
+
       sortedImages.value.splice(index, 1);
       sortedImages.value.forEach((img, idx) => { img.index = idx; });
       images.value = sortedImages.value.map((img) => ({ ...img }));

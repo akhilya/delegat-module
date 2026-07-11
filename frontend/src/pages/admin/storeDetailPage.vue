@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { confirm } from "@/composables/useConfirm";
 import { UserPlus, UserMinus, Loader2, Users } from "lucide-vue-next";
 import {
   Dialog,
@@ -156,6 +157,15 @@ export default {
     },
 
     async handleRemoveMember(userId) {
+      const member = this.store?.members?.find((m) => m.id === userId);
+      const ok = await confirm({
+        title: "Удалить участника?",
+        description: member
+          ? `Пользователь «${member.userName}» потеряет доступ к магазину.`
+          : "Участник потеряет доступ к магазину.",
+      });
+      if (!ok) return;
+
       this.removingUserId = userId;
       await this.removeMember({
         storeId: this.storeId,

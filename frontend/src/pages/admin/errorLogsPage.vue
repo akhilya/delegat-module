@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { confirm } from "@/composables/useConfirm";
 import {
   AlertTriangle,
   Check,
@@ -86,6 +87,12 @@ export default {
     },
 
     async removeLog(log) {
+      const ok = await confirm({
+        title: "Удалить лог ошибки?",
+        description: "Запись будет удалена безвозвратно.",
+      });
+      if (!ok) return;
+
       this.deletingLogId = log.id;
       await this.deleteErrorLog({
         id: log.id,

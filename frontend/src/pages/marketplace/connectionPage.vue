@@ -13,6 +13,7 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { mapActions } from "vuex";
 import { http } from "@/main";
+import { confirm } from "@/composables/useConfirm";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -1005,25 +1006,19 @@ export default {
 
       if (!target) return;
 
-      if ((target.linkedProductsCount || 0) > 0) {
-        this.deleteMappingTarget = target;
-        const replacements = this.categoryMappings.filter(
-          (m) =>
-            m.id !== target.id &&
-            m.localCategoryId === target.localCategoryId,
-        );
-        this.deleteMappingImpact = {
-          linkedProductsCount: target.linkedProductsCount,
-          replacementMappings: replacements,
-        };
-        // Default to the safe path when it exists; pre-select the first target
-        this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
-        this.deleteMappingReplacementId = replacements[0]?.id?.toString() ?? null;
-        this.showDeleteMappingDialog = true;
-        return;
-      }
-
-      this.confirmDeleteMapping(target.id, null);
+      this.deleteMappingTarget = target;
+      const replacements = this.categoryMappings.filter(
+        (m) =>
+          m.id !== target.id &&
+          m.localCategoryId === target.localCategoryId,
+      );
+      this.deleteMappingImpact = {
+        linkedProductsCount: target.linkedProductsCount || 0,
+        replacementMappings: replacements,
+      };
+      this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
+      this.deleteMappingReplacementId = replacements[0]?.id?.toString() ?? null;
+      this.showDeleteMappingDialog = true;
     },
 
     async confirmDeleteMapping(mappingId = null, reassignToMappingId = null, force = false) {
@@ -1503,6 +1498,13 @@ export default {
 
     async handleUnlinkProduct(product) {
       if (!product.isLinked || !product.linkId || this.unlinkingLinkId) return;
+
+      const ok = await confirm({
+        title: "Отвязать товар?",
+        description: "Товар будет отвязан от адаптера. Связь с маркетплейсом исчезнет.",
+        confirmLabel: "Отвязать",
+      });
+      if (!ok) return;
 
       this.unlinkingLinkId = product.linkId;
       await this.unlinkProduct({

@@ -30,7 +30,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
       >
         <Button
           size="icon"
-          class="relative size-12 rounded-full bg-foreground text-background shadow-lg hover:opacity-80 shrink-0"
+          class="relative size-12 rounded-full shadow-lg shrink-0"
           title="AI Ассистент"
           @click="toggleAi"
         >
@@ -44,7 +44,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
 
         <Button
           size="icon"
-          class="relative size-12 rounded-full bg-foreground text-background shadow-lg hover:opacity-80 shrink-0"
+          class="relative size-12 rounded-full shadow-lg shrink-0"
           title="Фоновые процессы"
           @click="toggleOps"
         >

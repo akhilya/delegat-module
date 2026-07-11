@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Monitor } from "lucide-vue-next";
 import AiChatPanel from "@/components/ai/AiChatPanel.vue";
 import FabGroup from "@/components/FabGroup.vue";
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 
 export default {
   components: {
@@ -27,6 +28,7 @@ export default {
     Monitor,
     AiChatPanel,
     FabGroup,
+    ConfirmDialogHost,
   },
   setup() {
     const route = useRoute();
@@ -96,6 +98,7 @@ export default {
     <AiChatPanel :key="appKey" />
   </SidebarProvider>
   <Toaster />
+  <ConfirmDialogHost />
   <template v-if="!isPublicPage">
     <OperationsPanel />
     <FabGroup />

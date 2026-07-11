@@ -23,6 +23,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -51,6 +52,7 @@ export default {
     AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
+    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
@@ -171,17 +173,7 @@ export default {
       </span>
       <div class="flex items-center gap-4">
         <Loader2 class="size-4 animate-spin" v-show="isUpdating" />
-        <!-- Empty notes: delete immediately without confirmation -->
-        <Button
-          v-if="!noteValue.text?.trim()"
-          size="icon"
-          variant="ghost"
-          class="opacity-0 duration-75 group-hover:opacity-100"
-          @click="deleteThisNote"
-        >
-          <Trash2 class="size-4" />
-        </Button>
-        <AlertDialog v-else>
+        <AlertDialog>
           <AlertDialogTrigger as-child>
             <Button
               size="icon"
@@ -192,14 +184,20 @@ export default {
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
-            <AlertDialogHeader
-              >Заметка будет удалена безвозвратно.</AlertDialogHeader
-            >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Удалить заметку?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Заметка будет удалена безвозвратно.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Назад</AlertDialogCancel>
-              <AlertDialogAction @click="deleteThisNote"
-                >Подтвержить</AlertDialogAction
+              <AlertDialogCancel>Отмена</AlertDialogCancel>
+              <AlertDialogAction
+                class="bg-destructive text-white hover:bg-destructive/90"
+                @click="deleteThisNote"
               >
+                Удалить
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

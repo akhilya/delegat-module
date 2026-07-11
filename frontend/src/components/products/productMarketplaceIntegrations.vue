@@ -8,6 +8,7 @@ import {
   displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
+import { confirm } from "@/composables/useConfirm";
 import {
   Loader2,
   Upload,
@@ -701,6 +702,13 @@ export default {
 
     async handleUnlink(conn) {
       if (!conn.isLinked || !conn.linkId || this.unlinkingLinkId) return;
+
+      const ok = await confirm({
+        title: "Отвязать товар?",
+        description: `Товар будет отвязан от ${conn.adapterName}. Экспорт в этот маркетплейс прекратится.`,
+        confirmLabel: "Отвязать",
+      });
+      if (!ok) return;
 
       this.unlinkingLinkId = conn.linkId;
       try {

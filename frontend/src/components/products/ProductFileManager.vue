@@ -1169,6 +1169,7 @@ function onKeyDown(e) {
 
 const isDeletingSelected = ref(false);
 const showDeleteConfirm = ref(false);
+const pendingDeleteFileId = ref(null);
 
 async function deleteSelected() {
   const items = selectedItems.value;
@@ -1177,6 +1178,11 @@ async function deleteSelected() {
 }
 
 async function confirmDeleteSelected() {
+  if (pendingDeleteFileId.value) {
+    await confirmDeletePendingFile();
+    return;
+  }
+
   isDeletingSelected.value = true;
   const fileIds = selectedItems.value
     .filter(i => i.type === 'file')
@@ -1199,10 +1205,22 @@ async function confirmDeleteSelected() {
 }
 
 // Single file delete (from context menu)
-async function deleteSingleFile(fileId) {
-  const file = props.files.find(f => f.id === fileId);
+function deleteSingleFile(fileId) {
+  pendingDeleteFileId.value = fileId;
+  showDeleteConfirm.value = true;
+}
+
+async function confirmDeletePendingFile() {
+  const fileId = pendingDeleteFileId.value;
+  if (!fileId) return;
+
+  isDeletingSelected.value = true;
+  const file = props.files.find((f) => f.id === fileId);
   const name = file?.displayName || file?.name || `#${fileId}`;
   await deleteFilesWithOperation([fileId], [name]);
+  pendingDeleteFileId.value = null;
+  isDeletingSelected.value = false;
+  showDeleteConfirm.value = false;
 }
 
 // Unified delete: registers operation, calls bulk-delete, logs results
@@ -1329,17 +1347,31 @@ watch(() => props.productId, () => {
     </div>
 
     <!-- Delete confirmation -->
-    <AlertDialog v-model:open="showDeleteConfirm">
+    <AlertDialog
+      v-model:open="showDeleteConfirm"
+      @update:open="(v) => { if (!v) pendingDeleteFileId = null; }"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить выбранные файлы?</AlertDialogTitle>
+          <AlertDialogTitle>
+            {{ pendingDeleteFileId ? 'Удалить файл?' : 'Удалить выбранные файлы?' }}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            {{ selectedItems.filter(i => i.type === 'file').length }} файлов будет удалено. Это действие нельзя отменить.
+            <template v-if="pendingDeleteFileId">
+              Файл будет удалён безвозвратно.
+            </template>
+            <template v-else>
+              {{ selectedItems.filter(i => i.type === 'file').length }} файлов будет удалено. Это действие нельзя отменить.
+            </template>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Отмена</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDeleteSelected" :disabled="isDeletingSelected">
+          <AlertDialogAction
+            class="bg-destructive text-white hover:bg-destructive/90"
+            @click="confirmDeleteSelected"
+            :disabled="isDeletingSelected"
+          >
             Удалить
           </AlertDialogAction>
         </AlertDialogFooter>

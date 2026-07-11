@@ -490,7 +490,7 @@ function renderMarkdown(text) {
             <Input
               ref="titleInputEl"
               v-model="editingTitleValue"
-              class="pointer-events-auto h-auto text-sm font-medium text-center bg-transparent border-0 border-b border-primary/60 rounded-none shadow-none focus-visible:ring-0 w-full max-w-[180px] leading-tight py-px px-0"
+              class="pointer-events-auto h-8 text-sm font-medium text-center bg-background border border-input rounded-md shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 w-full max-w-[200px] leading-tight py-1 px-2"
               placeholder="Название диалога"
               maxlength="100"
               @blur="saveTitle"
@@ -501,7 +501,8 @@ function renderMarkdown(text) {
           <template v-else>
             <Button
               v-if="messages.length > 0"
-                class="pointer-events-auto group/title flex items-center gap-1 max-w-[180px]"
+              variant="ghost"
+              class="pointer-events-auto group/title h-auto flex items-center gap-1 max-w-[180px] px-2 py-1 font-normal hover:bg-accent"
               :title="conversationTitle ? 'Переименовать' : undefined"
               @click="conversationTitle ? startEditTitle() : undefined"
             >
@@ -515,7 +516,9 @@ function renderMarkdown(text) {
 
         <!-- Right: close -->
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-auto z-10"
+          variant="ghost"
+          size="icon"
+          class="size-7 ml-auto z-10 text-muted-foreground"
           title="Закрыть"
           @click="close"
         >
@@ -529,7 +532,9 @@ function renderMarkdown(text) {
         class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
       >
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          variant="ghost"
+          size="icon"
+          class="size-7 text-muted-foreground"
           title="Назад к чату"
           @click="backToChat"
         >
@@ -537,14 +542,18 @@ function renderMarkdown(text) {
         </Button>
         <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">История диалогов</span>
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          variant="ghost"
+          size="icon"
+          class="size-7 text-muted-foreground"
           title="Новый диалог"
           @click="newConversation"
         >
           <Plus class="size-3.5" />
         </Button>
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          variant="ghost"
+          size="icon"
+          class="size-7 text-muted-foreground"
           title="Закрыть"
           @click="close"
         >
@@ -558,7 +567,9 @@ function renderMarkdown(text) {
         class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
       >
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          variant="ghost"
+          size="icon"
+          class="size-7 text-muted-foreground"
           title="Назад к чату"
           @click="backToChat"
         >
@@ -566,7 +577,9 @@ function renderMarkdown(text) {
         </Button>
         <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">Инструменты</span>
         <Button
-          class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          variant="ghost"
+          size="icon"
+          class="size-7 text-muted-foreground"
           title="Закрыть"
           @click="close"
         >
@@ -586,7 +599,8 @@ function renderMarkdown(text) {
           <MessageSquare class="size-8 text-muted-foreground/30" />
           <p class="text-sm text-muted-foreground">Нет сохранённых диалогов</p>
           <Button
-            class="mt-1 flex items-center gap-1.5 text-xs text-primary hover:underline"
+            variant="link"
+            class="mt-1 h-auto p-0 flex items-center gap-1.5 text-xs"
             @click="newConversation"
           >
             <Plus class="size-3.5" /> Начать новый
@@ -614,7 +628,9 @@ function renderMarkdown(text) {
                 </p>
               </div>
               <Button
-                    class="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                variant="ghost"
+                size="icon"
+                class="shrink-0 opacity-0 group-hover:opacity-100 size-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 title="Удалить диалог"
                 @click="openConfirmDelete($event, c.sessionId)"
               >
@@ -636,7 +652,8 @@ function renderMarkdown(text) {
           <div v-for="cat in toolCategories" :key="cat.name" class="rounded-md overflow-hidden">
             <!-- Category header -->
             <Button
-                class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-accent transition-colors rounded-md"
+              variant="ghost"
+              class="w-full h-auto justify-start flex items-center gap-2 px-2 py-1.5 font-normal rounded-md"
               @click="toggleCategory(cat.name)"
             >
               <component :is="cat.icon" class="size-3.5 shrink-0 text-muted-foreground" />
@@ -708,13 +725,16 @@ function renderMarkdown(text) {
             v-if="hasEnabledModels"
             class="flex max-w-[280px] flex-wrap justify-center gap-1.5"
           >
-            <Button v-for="example in [
+            <Button
+              v-for="example in [
                 'Покажи статистику магазина',
                 'Заполни незаполненные поля маппинга',
                 'Найди товары без цены',
               ]"
               :key="example"
-                class="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              variant="outline"
+              size="sm"
+              class="h-auto rounded-full px-2.5 py-1 text-xs text-muted-foreground font-normal"
               @click="inputText = example; submit()"
             >
               {{ example }}
@@ -730,7 +750,9 @@ function renderMarkdown(text) {
               {{ msg.content }}
             </div>
             <Button
-                class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              variant="ghost"
+              size="icon"
+              class="size-7 opacity-0 group-hover:opacity-100 text-muted-foreground"
               :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
               @click="copyText(msg.id, msg.content)"
             >
@@ -799,7 +821,9 @@ function renderMarkdown(text) {
               class="flex items-center gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <Button
-                    class="text-muted-foreground hover:text-foreground transition-colors"
+                variant="ghost"
+                size="icon"
+                class="size-7 text-muted-foreground"
                 :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
                 @click="copyText(msg.id, messageClipboard(msg))"
               >
@@ -807,14 +831,20 @@ function renderMarkdown(text) {
                 <Copy v-else class="size-3.5" />
               </Button>
               <Button
-                    :class="['transition-colors', msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600']"
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                :class="msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600'"
                 title="Хороший ответ"
                 @click="sendFeedback(msg, 1)"
               >
                 <ThumbsUp class="size-3.5" />
               </Button>
               <Button
-                    :class="['transition-colors', msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500']"
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                :class="msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'"
                 title="Плохой ответ"
                 @click="sendFeedback(msg, -1)"
               >
@@ -871,7 +901,9 @@ function renderMarkdown(text) {
             </span>
             <Button
               v-if="isLoading"
-                class="size-7 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-foreground/80 transition-colors shrink-0"
+              variant="secondary"
+              size="icon"
+              class="size-7 rounded-full shrink-0"
               title="Остановить генерацию"
               @click="stopGeneration"
             >
@@ -879,10 +911,9 @@ function renderMarkdown(text) {
             </Button>
             <Button
               v-else
-                class="size-7 rounded-full flex items-center justify-center transition-colors shrink-0 disabled:pointer-events-none"
-              :class="inputText.trim()
-                ? 'bg-foreground text-background hover:bg-foreground/80'
-                : 'bg-muted text-muted-foreground'"
+              size="icon"
+              class="size-7 rounded-full shrink-0"
+              :variant="inputText.trim() ? 'default' : 'secondary'"
               :disabled="!inputText.trim() || !hasEnabledModels"
               :title="hasEnabledModels ? 'Отправить' : 'Нет включённых AI-моделей'"
               @click="submit"
