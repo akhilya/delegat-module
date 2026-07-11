@@ -586,14 +586,15 @@ export default {
               </SelectContent>
             </Select>
             <Input v-else v-model="form.modelId" placeholder="claude-sonnet-4-6" />
-            <button
+            <Button
               v-if="modelOptions.length"
               type="button"
-              class="text-xs text-muted-foreground hover:text-foreground text-left w-fit"
+              variant="link"
+              class="h-auto p-0 text-xs text-muted-foreground w-fit"
               @click="modelOptions = []"
             >
               Ввести вручную
-            </button>
+            </Button>
           </div>
 
         </div>

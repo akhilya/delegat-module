@@ -6,9 +6,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 export default {
-  components: { Popover, PopoverContent, PopoverTrigger },
+  components: { Popover, PopoverContent, PopoverTrigger, Button },
   props: {
     barcode: { type: String, required: true },
   },
@@ -64,14 +65,15 @@ export default {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <button
+      <Button
         type="button"
-        class="flex flex-col items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity"
+        variant="ghost"
+        class="h-auto flex flex-col items-center gap-0.5 p-0 hover:opacity-80"
         title="Нажмите для увеличения"
       >
         <svg ref="smallSvg" class="h-7"></svg>
         <span class="text-[10px] text-muted-foreground font-mono leading-none">{{ barcode }}</span>
-      </button>
+      </Button>
     </PopoverTrigger>
     <PopoverContent class="w-auto p-2" align="center">
       <div class="bg-background rounded p-1">

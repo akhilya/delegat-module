@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import { Button } from "@/components/ui/button";
 import { ChevronUp, ChevronDown, X, Plus, AlertTriangle } from "lucide-vue-next";
 
 export default {
@@ -43,6 +44,7 @@ export default {
     SelectValue,
     Badge,
     Checkbox,
+    Button,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuGroup,
@@ -235,32 +237,38 @@ export default {
           <span class="text-xs leading-none">необратимый</span>
         </span>
         <div v-if="!disabled" class="flex items-center gap-0.5 shrink-0">
-          <button
+          <Button
             type="button"
-            class="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            variant="ghost"
+            size="icon"
+            class="size-6 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             :disabled="index === 0"
             @click="moveModifier(index, -1)"
             title="Переместить вверх"
           >
             <ChevronUp class="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            variant="ghost"
+            size="icon"
+            class="size-6 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             :disabled="index === modifiers.length - 1"
             @click="moveModifier(index, 1)"
             title="Переместить вниз"
           >
             <ChevronDown class="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer ml-1"
+            variant="ghost"
+            size="icon"
+            class="size-6 p-0.5 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             @click="removeModifier(index)"
             title="Удалить модификатор"
           >
             <X class="size-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -317,13 +325,15 @@ export default {
                   placeholder="Введите значение…"
                   class="h-7 text-xs flex-1"
                 />
-                <button
+                <Button
                   type="button"
-                  class="h-7 px-2 rounded-md border text-xs hover:bg-muted cursor-pointer shrink-0"
+                  variant="outline"
+                  size="sm"
+                  class="h-7 px-2 text-xs shrink-0"
                   @click="addTag(index, param.key)"
                 >
                   <Plus class="size-3" />
-                </button>
+                </Button>
               </div>
               <div v-if="(getParamValue(mod, param) || []).length" class="flex flex-wrap gap-1 pt-1">
                 <Badge
@@ -333,13 +343,15 @@ export default {
                   class="text-xs gap-1 pr-1"
                 >
                   {{ tag }}
-                  <button
+                  <Button
                     type="button"
-                    class="hover:text-destructive cursor-pointer"
+                    variant="ghost"
+                    size="icon"
+                    class="size-auto h-auto p-0 hover:text-destructive"
                     @click="removeTag(index, param.key, tagIdx)"
                   >
                     <X class="size-3" />
-                  </button>
+                  </Button>
                 </Badge>
               </div>
             </div>
@@ -440,13 +452,14 @@ export default {
     <!-- Add modifier button -->
     <DropdownMenu v-if="!disabled">
       <DropdownMenuTrigger as-child>
-        <button
+        <Button
           type="button"
-          class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-dashed text-sm text-muted-foreground hover:border-foreground/40 hover:text-foreground cursor-pointer transition-colors"
+          variant="outline"
+          class="w-full h-auto flex items-center justify-center gap-1.5 px-3 py-2 border-dashed text-sm text-muted-foreground hover:border-foreground/40 hover:text-foreground"
         >
           <Plus class="size-4" />
           Добавить модификатор
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-56">
         <template v-for="(group, catKey) in groupedModifiers" :key="catKey">

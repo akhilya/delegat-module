@@ -3825,13 +3825,14 @@ export default {
           aria-label="Что сделать с товарами"
         >
           <!-- Safe path: only rendered when an alternative mapping exists -->
-          <button
+          <Button
             v-if="deleteMappingReplacementOptions.length > 0"
             type="button"
+            variant="outline"
             role="radio"
             :aria-checked="deleteMappingMode === 'reassign'"
             :class="[
-              'w-full rounded-lg border p-3 text-left transition-colors',
+              'w-full h-auto rounded-lg p-3 text-left font-normal justify-start whitespace-normal',
               deleteMappingMode === 'reassign'
                 ? 'border-primary bg-primary/5'
                 : 'border-input hover:bg-accent/50',
@@ -3883,14 +3884,15 @@ export default {
                 </Select>
               </div>
             </div>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            variant="outline"
             role="radio"
             :aria-checked="deleteMappingMode === 'force'"
             :class="[
-              'w-full rounded-lg border p-3 text-left transition-colors',
+              'w-full h-auto rounded-lg p-3 text-left font-normal justify-start whitespace-normal',
               deleteMappingMode === 'force'
                 ? 'border-destructive/60 bg-destructive/5'
                 : 'border-input hover:bg-accent/50',
@@ -3921,7 +3923,7 @@ export default {
                 </p>
               </div>
             </div>
-          </button>
+          </Button>
 
           <div v-if="deleteMappingImpact?.products?.length" class="pt-1">
             <div class="mb-1.5 text-xs font-medium text-muted-foreground">

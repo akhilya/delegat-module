@@ -791,13 +791,14 @@ export default {
             />
             <p class="text-xs text-muted-foreground">
               Группировка атрибутов для удобного отображения на странице товара.
-              <button
+              <Button
                 type="button"
-                class="text-primary hover:underline"
+                variant="link"
+                class="h-auto p-0"
                 @click="customGroupMode = !customGroupMode; if (!customGroupMode) attributeForm.group = ''"
               >
                 {{ customGroupMode ? 'Выбрать из списка' : 'Своя группа' }}
-              </button>
+              </Button>
             </p>
           </div>
 

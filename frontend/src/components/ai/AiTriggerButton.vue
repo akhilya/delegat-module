@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useStore } from "vuex";
 import { Sparkles, Loader2 } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 
 const store = useStore();
 const isLoading = computed(() => store.state.aiChat.isLoading);
@@ -17,10 +18,11 @@ function toggle() {
 
 <template>
   <Teleport to="body">
-    <button
+    <Button
       v-if="!fabsHidden"
       type="button"
-      class="fixed bottom-20 z-[9994] size-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-[right] duration-200 ease-in-out"
+      size="icon"
+      class="fixed bottom-20 z-[9994] size-12 rounded-full shadow-lg transition-[right] duration-200 ease-in-out"
       :style="{ right: fabRight + 'px' }"
       :title="isOpen ? 'Закрыть AI Ассистент' : 'AI Ассистент'"
       @click="toggle"
@@ -30,8 +32,8 @@ function toggle() {
 
       <span
         v-if="isLoading"
-        class="absolute inset-0 rounded-full bg-primary/30 animate-ping"
+        class="absolute inset-0 rounded-full bg-primary/30 animate-ping pointer-events-none"
       />
-    </button>
+    </Button>
   </Teleport>
 </template>

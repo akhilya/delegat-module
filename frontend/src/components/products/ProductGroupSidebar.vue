@@ -149,14 +149,15 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
 
     <!-- Empty state: no group assigned — compact, not a full empty-state splash -->
     <template v-else>
-      <button
+      <Button
         type="button"
-        class="flex-1 flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+        variant="ghost"
+        class="flex-1 h-auto flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 font-normal"
         @click="emit('change-group')"
       >
         <Plus class="size-4" />
         Добавить в группу
-      </button>
+      </Button>
     </template>
   </div>
 </template>

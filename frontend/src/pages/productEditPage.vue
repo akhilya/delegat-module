@@ -916,9 +916,9 @@ export default {
     </div>
     <div v-else class="lg:hidden flex items-center gap-2 mb-3 text-sm">
       <Layers class="size-4 text-muted-foreground/50" />
-      <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" @click="openGroupDialog">
+      <Button type="button" variant="link" class="h-auto p-0 text-muted-foreground" @click="openGroupDialog">
         Выбрать группу
-      </button>
+      </Button>
     </div>
     <PageSection :loading="isProductLoading && !productSKU" class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
       <!-- Left: Product Group sidebar -->
@@ -981,12 +981,15 @@ export default {
                   <div v-if="index === 0" class="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded font-medium">
                     Главное
                   </div>
-                  <button
-                    class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive text-white opacity-0 group-hover:opacity-100 transition-opacity"
                     @click.stop="removeGalleryImage(index)"
                   >
-                    <X class="size-3 text-white" />
-                  </button>
+                    <X class="size-3" />
+                  </Button>
                 </div>
               </template>
               <template #footer>
@@ -1360,13 +1363,13 @@ export default {
         @click.self="closeLightbox"
       >
         <!-- Close button -->
-        <button class="absolute top-4 right-4 text-white/70 hover:text-white" aria-label="Закрыть" @click="closeLightbox">
+        <Button variant="ghost" size="icon" class="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Закрыть" @click="closeLightbox">
           <X class="size-8" />
-        </button>
+        </Button>
         <!-- Prev -->
-        <button v-if="lightboxIndex > 0" class="absolute left-4 text-white/70 hover:text-white" aria-label="Предыдущее фото" @click="prevImage">
+        <Button v-if="lightboxIndex > 0" variant="ghost" size="icon" class="absolute left-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Предыдущее фото" @click="prevImage">
           <ChevronLeft class="size-10" />
-        </button>
+        </Button>
         <!-- Image -->
         <img
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
@@ -1374,9 +1377,9 @@ export default {
           class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
-        <button v-if="lightboxIndex < lightboxImages.length - 1" class="absolute right-4 text-white/70 hover:text-white" aria-label="Следующее фото" @click="nextImage">
+        <Button v-if="lightboxIndex < lightboxImages.length - 1" variant="ghost" size="icon" class="absolute right-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Следующее фото" @click="nextImage">
           <ChevronRight class="size-10" />
-        </button>
+        </Button>
         <!-- Counter -->
         <div class="absolute bottom-4 text-white/60 text-sm">
           {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}

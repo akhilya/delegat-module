@@ -770,33 +770,36 @@ export default {
             </PopoverTrigger>
             <PopoverContent align="end" class="w-56 p-1">
               <div class="max-h-64 overflow-y-auto">
-                <button
-                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between"
+                <Button
+                  variant="ghost"
+                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm"
                   :class="filterCategoryId == null ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = null"
                 >
                   Все категории
                   <Check v-if="filterCategoryId == null" class="size-4 shrink-0" />
-                </button>
-                <button
-                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between"
+                </Button>
+                <Button
+                  variant="ghost"
+                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm"
                   :class="filterCategoryId === -1 ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = -1"
                 >
                   Без категории
                   <Check v-if="filterCategoryId === -1" class="size-4 shrink-0" />
-                </button>
+                </Button>
                 <div class="h-px bg-border my-1" />
-                <button
+                <Button
                   v-for="cat in categories"
                   :key="cat.id"
-                  class="w-full text-left text-sm px-2 py-1.5 rounded-sm hover:bg-accent flex items-center justify-between gap-2"
+                  variant="ghost"
+                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm gap-2"
                   :class="filterCategoryId === cat.id ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = cat.id"
                 >
                   <span class="truncate">{{ cat.name }}</span>
                   <Check v-if="filterCategoryId === cat.id" class="size-4 shrink-0" />
-                </button>
+                </Button>
               </div>
             </PopoverContent>
           </Popover>

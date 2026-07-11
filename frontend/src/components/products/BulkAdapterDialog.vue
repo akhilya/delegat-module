@@ -228,11 +228,12 @@ async function run() {
         <div v-else-if="availableActions.length > 0" class="space-y-1.5">
           <Label>Действие</Label>
           <div class="space-y-1.5">
-            <button
+            <Button
               v-for="action in availableActions"
               :key="action.key"
               type="button"
-              class="w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+              variant="outline"
+              class="w-full h-auto text-left rounded-lg px-3 py-2.5 text-sm font-normal justify-start whitespace-normal transition-colors hover:bg-muted/50"
               :class="selectedAction?.key === action.key
                 ? 'border-primary bg-primary/5'
                 : 'border-border'"
@@ -240,7 +241,7 @@ async function run() {
             >
               <div class="font-medium">{{ action.label }}</div>
               <div class="text-xs text-muted-foreground mt-0.5">{{ action.description }}</div>
-            </button>
+            </Button>
           </div>
         </div>
 

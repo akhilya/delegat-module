@@ -293,28 +293,30 @@ function close() {
         <div class="space-y-2">
           <Label class="text-sm">Режим</Label>
           <div class="grid grid-cols-2 gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
               :class="[
-                'flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-sm transition',
+                'h-auto flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-normal transition',
                 mode === 'clone' ? 'border-primary bg-primary/5 text-foreground' : 'border-input text-muted-foreground hover:border-primary/50'
               ]"
               @click="mode = 'clone'"
             >
               <Copy class="size-4" />
               Клонировать
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
               :class="[
-                'flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-sm transition',
+                'h-auto flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-normal transition',
                 mode === 'move' ? 'border-primary bg-primary/5 text-foreground' : 'border-input text-muted-foreground hover:border-primary/50'
               ]"
               @click="mode = 'move'"
             >
               <ArrowRightLeft class="size-4" />
               Переместить
-            </button>
+            </Button>
           </div>
           <p class="text-xs text-muted-foreground">
             <template v-if="mode === 'clone'">Копия появится в целевом магазине. Оригинал не меняется.</template>

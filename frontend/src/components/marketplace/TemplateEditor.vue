@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 
 const BRACES_OPEN = "{{";
 const BRACES_CLOSE = "}}";
@@ -22,6 +23,7 @@ export default {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    Button,
     Plus,
   },
   props: {
@@ -89,13 +91,14 @@ export default {
     />
     <DropdownMenu>
       <DropdownMenuTrigger as-child>
-        <button
+        <Button
           type="button"
-          class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+          variant="ghost"
+          class="h-auto flex items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
         >
           <Plus class="size-3" />
           Вставить поле
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-72 max-h-[350px] overflow-y-auto">
         <!-- Current value -->

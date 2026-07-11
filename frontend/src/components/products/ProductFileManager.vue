@@ -1307,19 +1307,21 @@ watch(() => props.productId, () => {
       <template v-else>
         <template v-for="(crumb, i) in breadcrumbs" :key="crumb.id">
           <ChevronRight v-if="i > 0" class="size-3.5 shrink-0 text-muted-foreground" />
-          <button
+          <Button
+            type="button"
+            variant="link"
+            class="h-auto p-0 hover:underline truncate font-normal"
+            :class="[
+              i === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted-foreground',
+              dragItems.length > 0 && dropTargetId === crumb.id ? 'bg-accent rounded px-1' : ''
+            ]"
             @click.stop="navigateToFolder(crumb.id)"
             @dragover.prevent="dropTargetId = crumb.id"
             @dragleave="dropTargetId = null"
             @drop="onDrop($event, crumb.id)"
-            :class="[
-              'hover:underline truncate',
-              i === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted-foreground',
-              dragItems.length > 0 && dropTargetId === crumb.id ? 'bg-accent rounded px-1' : ''
-            ]"
           >
             {{ crumb.name }}
-          </button>
+          </Button>
         </template>
         <!-- Spacer to catch click for editing -->
         <span class="flex-1" @click="startPathEdit" />
@@ -1515,7 +1517,7 @@ watch(() => props.productId, () => {
             <td class="px-4" @click.stop>
               <Popover>
                 <PopoverTrigger as-child>
-                  <button type="button" class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 transition-colors">
+                  <Button type="button" variant="ghost" class="h-auto flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50">
                     <template v-if="file.tags?.length > 0">
                       <Badge
                         v-for="t in file.tags"
@@ -1524,7 +1526,7 @@ watch(() => props.productId, () => {
                       >{{ t.name }}</Badge>
                     </template>
                     <Tag v-else class="size-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" class="w-64 p-0">
                   <!-- Existing tags list -->
@@ -1532,9 +1534,11 @@ watch(() => props.productId, () => {
                     <div v-for="tag in storeTags" :key="tag.id">
                       <div class="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm text-sm hover:bg-accent transition-colors">
                         <!-- Color dot — click to edit color -->
-                        <button
+                        <Button
                           type="button"
-                          :class="['size-5 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-shadow', tagBgClass(tag.color)]"
+                          variant="ghost"
+                          size="icon"
+                          :class="['size-5 min-h-0 rounded-full shrink-0 p-0 hover:ring-2 hover:ring-primary/30 transition-shadow', tagBgClass(tag.color)]"
                           :title="'Сменить цвет'"
                           @click.stop="editingTagId = editingTagId === tag.id ? null : tag.id"
                         />
@@ -1550,18 +1554,20 @@ watch(() => props.productId, () => {
                             @click.stop
                           />
                         </template>
-                        <button v-else type="button" class="truncate flex-1 text-left" @click="toggleFileTag(file.id, tag.id)" @dblclick.stop="startRenameTag(tag)">
+                        <Button v-else type="button" variant="ghost" class="h-auto truncate flex-1 justify-start text-left font-normal p-0 hover:bg-transparent" @click="toggleFileTag(file.id, tag.id)" @dblclick.stop="startRenameTag(tag)">
                           {{ tag.name }}
-                        </button>
+                        </Button>
                         <Check v-if="fileHasTag(file.id, tag.id)" class="size-4 text-primary shrink-0" />
                       </div>
                       <!-- Color picker row for this tag -->
                       <div v-if="editingTagId === tag.id" class="flex gap-1.5 px-2 py-1.5 bg-muted/30 rounded-sm mx-1 mb-1">
-                        <button
+                        <Button
                           v-for="c in TAG_COLORS"
                           :key="c.value"
                           type="button"
-                          :class="['size-5 rounded-full shrink-0 cursor-pointer transition-shadow', c.bg, tag.color === c.value ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-2 hover:ring-muted-foreground/30']"
+                          variant="ghost"
+                          size="icon"
+                          :class="['size-5 min-h-0 rounded-full shrink-0 p-0 transition-shadow', c.bg, tag.color === c.value ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-2 hover:ring-muted-foreground/30']"
                           :title="c.label"
                           @click="updateTagColor(tag.id, c.value)"
                         />
@@ -1571,11 +1577,13 @@ watch(() => props.productId, () => {
                   <!-- Create new tag -->
                   <div class="border-t p-2 space-y-2">
                     <div class="flex gap-1.5">
-                      <button
+                      <Button
                         v-for="c in TAG_COLORS"
                         :key="c.value"
                         type="button"
-                        :class="['size-5 rounded-full shrink-0 cursor-pointer transition-shadow', c.bg, newTagColor === c.value ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-2 hover:ring-muted-foreground/30']"
+                        variant="ghost"
+                        size="icon"
+                        :class="['size-5 min-h-0 rounded-full shrink-0 p-0 transition-shadow', c.bg, newTagColor === c.value ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-2 hover:ring-muted-foreground/30']"
                         :title="c.label"
                         @click="newTagColor = c.value"
                       />
@@ -1680,42 +1688,47 @@ watch(() => props.productId, () => {
         >
           <!-- Folder -->
           <template v-if="contextMenu.type === 'folder'">
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="navigateToFolder(contextMenu.item.id); closeContextMenu()"
             >
               <FolderOpen class="size-4 text-muted-foreground" />
               Открыть
-            </button>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            </Button>
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="downloadFolderArchive(contextMenu.item.id); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
               Скачать архив
-            </button>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            </Button>
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="openShareDialog('folder', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
               Поделиться
-            </button>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            </Button>
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="startInlineRename('folder', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
               Переименовать
-            </button>
+            </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none text-destructive hover:bg-destructive/10"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
               @click="openDeleteFolderDialog(contextMenu.item); closeContextMenu()"
             >
               <Trash2 class="size-4" />
               Удалить
-            </button>
+            </Button>
           </template>
 
           <!-- File -->
@@ -1729,54 +1742,60 @@ watch(() => props.productId, () => {
               <ArrowDownToLine class="size-4 text-muted-foreground" />
               Скачать
             </a>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="openShareDialog('file', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
               Поделиться
-            </button>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            </Button>
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="startInlineRename('file', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
               Переименовать
-            </button>
+            </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none text-destructive hover:bg-destructive/10"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
               @click.stop="deleteSingleFile(contextMenu.item.id); closeContextMenu()"
             >
               <Trash2 class="size-4" />
               Удалить
-            </button>
+            </Button>
           </template>
 
           <!-- Empty area -->
           <template v-else>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="startInlineCreate(); closeContextMenu()"
             >
               <Plus class="size-4 text-muted-foreground" />
               Создать папку
-            </button>
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            </Button>
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="openFileDialog(); closeContextMenu()"
             >
               <Upload class="size-4 text-muted-foreground" />
               Загрузить файлы
-            </button>
+            </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
-            <button
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            <Button
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="downloadFolderArchive(currentFolderId); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
               Скачать архив
-            </button>
+            </Button>
           </template>
         </div>
       </div>
@@ -1895,17 +1914,18 @@ watch(() => props.productId, () => {
           </PopoverTrigger>
           <PopoverContent align="end" class="w-56 p-0">
             <div class="p-1 max-h-48 overflow-y-auto">
-              <button
+              <Button
                 v-for="tag in storeTags"
                 :key="tag.id"
                 type="button"
-                class="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm text-sm hover:bg-accent transition-colors"
+                variant="ghost"
+                class="flex h-auto items-center gap-2 w-full justify-start font-normal px-2 py-1.5 rounded-sm text-sm"
                 @click="bulkToggleTag(tag.id)"
               >
                 <span :class="['size-5 rounded-full shrink-0', tagBgClass(tag.color)]" />
                 <span class="truncate flex-1 text-left">{{ tag.name }}</span>
                 <Check v-if="bulkAllHaveTag(tag.id)" class="size-4 text-primary shrink-0" />
-              </button>
+              </Button>
               <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4">Нет тэгов</div>
             </div>
           </PopoverContent>

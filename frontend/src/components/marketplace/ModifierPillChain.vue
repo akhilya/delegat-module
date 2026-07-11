@@ -157,41 +157,48 @@ export default {
     <template v-for="(mod, index) in modifiers" :key="mod.type + '-' + index">
       <div class="flex items-center gap-0">
         <!-- Reorder buttons -->
-        <button
+        <Button
           v-if="index > 0 && !disabled"
           type="button"
-          class="p-0.5 h-6 text-muted-foreground hover:text-foreground cursor-pointer"
+          variant="ghost"
+          size="icon"
+          class="size-6 p-0.5 h-6 text-muted-foreground hover:text-foreground"
           @click="moveModifier(index, -1)"
           title="Переместить влево"
         >
           <ChevronLeft class="size-3" />
-        </button>
+        </Button>
 
         <!-- Pill -->
         <Popover :open="editingIndex === index" @update:open="(v) => { if (!v) closeEditor(); }">
-          <PopoverTrigger as-child>
-            <button
-              type="button"
-              :class="[
-                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border cursor-pointer transition-colors',
-                getCategoryColor(mod.type),
-                disabled ? 'opacity-50 cursor-default' : '',
-              ]"
-              @click="!disabled && hasParams(mod.type) && openEditor(index)"
-              :title="hasParams(mod.type) ? 'Нажмите для редактирования' : ''"
-            >
-              <span>{{ getModifierLabel(mod) }}</span>
-              <button
-                v-if="!disabled"
+          <div class="inline-flex items-center">
+            <PopoverTrigger as-child>
+              <Button
                 type="button"
-                class="ml-0.5 hover:text-destructive cursor-pointer"
-                @click.stop="removeModifier(index)"
-                title="Удалить модификатор"
+                variant="outline"
+                :class="[
+                  'inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-full text-xs transition-colors',
+                  getCategoryColor(mod.type),
+                  disabled ? 'opacity-50 pointer-events-none' : '',
+                ]"
+                @click="!disabled && hasParams(mod.type) && openEditor(index)"
+                :title="hasParams(mod.type) ? 'Нажмите для редактирования' : ''"
               >
-                <X class="size-3" />
-              </button>
-            </button>
-          </PopoverTrigger>
+                <span>{{ getModifierLabel(mod) }}</span>
+              </Button>
+            </PopoverTrigger>
+            <Button
+              v-if="!disabled"
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="size-5 p-0 ml-0.5 hover:text-destructive"
+              @click.stop="removeModifier(index)"
+              title="Удалить модификатор"
+            >
+              <X class="size-3" />
+            </Button>
+          </div>
           <PopoverContent
             v-if="hasParams(mod.type)"
             class="w-auto p-0"
@@ -209,15 +216,17 @@ export default {
         </Popover>
 
         <!-- Reorder right -->
-        <button
+        <Button
           v-if="index < modifiers.length - 1 && !disabled"
           type="button"
-          class="p-0.5 h-6 text-muted-foreground hover:text-foreground cursor-pointer"
+          variant="ghost"
+          size="icon"
+          class="size-6 p-0.5 h-6 text-muted-foreground hover:text-foreground"
           @click="moveModifier(index, 1)"
           title="Переместить вправо"
         >
           <ChevronRight class="size-3" />
-        </button>
+        </Button>
       </div>
 
       <!-- Arrow between pills -->
@@ -230,13 +239,14 @@ export default {
     <!-- Add modifier button -->
     <DropdownMenu v-if="!disabled">
       <DropdownMenuTrigger as-child>
-        <button
+        <Button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground/60 hover:text-foreground cursor-pointer transition-colors"
+          variant="outline"
+          class="inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-full text-xs border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground/60 hover:text-foreground"
         >
           <Plus class="size-3" />
           <span v-if="modifiers.length === 0">Модификатор</span>
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-56">
         <template v-for="(group, catKey) in groupedModifiers" :key="catKey">
