@@ -1,8 +1,5 @@
 <script>
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -45,7 +42,7 @@ import { ref, computed, onMounted } from "vue";
 
 export default {
   components: {
-    Page, PageSection, NavigationBar, Breadcrumbs,
+    PageSection,
     Button, Input, Label, Badge, Textarea, Switch,
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -297,10 +294,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="[{ label: 'Настройки', to: '/settings' }, { label: 'ИИ' }]" />
-
+  <div>
     <PageHeader
       title="ИИ"
       description="Языковые модели и персональные настройки AI-ассистента"
@@ -608,5 +602,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </div>
 </template>

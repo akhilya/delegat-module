@@ -2,142 +2,55 @@
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
+  SidebarRail,
 } from "@/components/ui/sidebar";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import AppSidebarBrand from "@/components/sidebar/AppSidebarBrand.vue";
+import AppSidebarStoreSwitcher from "@/components/sidebar/AppSidebarStoreSwitcher.vue";
+import AppSidebarNavGroup from "@/components/sidebar/AppSidebarNavGroup.vue";
+import AppSidebarNavCollapsible from "@/components/sidebar/AppSidebarNavCollapsible.vue";
+import AppSidebarFooter from "@/components/sidebar/AppSidebarFooter.vue";
+import { buildSidebarGroups } from "@/config/sidebarNav";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { useDark, useToggle } from "@vueuse/core";
-import {
-  Activity,
-  AlertTriangle,
-  Boxes,
-  FolderOpen,
-  Globe,
-  HardDrive,
-  Key,
-  Layers,
-  LogOut,
-  Moon,
-  PackagePlus,
-  Plug,
-  Settings2,
-  ShoppingBag,
-  Sparkles,
-  Store,
-  Sun,
-  Trash2,
-  UserCog,
-  Users,
-  Wand2,
-} from "lucide-vue-next";
-import {
-  PAGE_ADMIN_AI,
-  PAGE_ADMIN_ERROR_LOGS,
-  PAGE_ADMIN_PLUGINS,
-  PAGE_ADMIN_STORES,
-  PAGE_ADMIN_TOKENS,
-  PAGE_ADMIN_USERS,
-  PAGE_CATEGORIES,
-  PAGE_MARKETPLACE,
-  PAGE_PRODUCT_CREATION,
-  PAGE_PRODUCT_GROUPS,
-  PAGE_PRODUCTS,
-  PAGE_SETTINGS,
-  PAGE_SETTINGS_STORE,
-  PAGE_SETTINGS_USER,
-  PAGE_STORE_ATTRIBUTES,
-  PAGE_STORE_STORAGE,
-  PAGE_TOOLS,
-} from "@/router";
 
 export default {
   components: {
     Sidebar,
     SidebarContent,
-    SidebarFooter,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarMenuSub,
-    SidebarMenuSubButton,
-    SidebarMenuSubItem,
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
-    Button,
-    AlertDialog, AlertDialogAction, AlertDialogCancel,
-    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogTitle,
-    Activity,
-    AlertTriangle,
-    Boxes,
-    FolderOpen,
-    Globe,
-    HardDrive,
-    Key,
-    Layers,
-    LogOut,
-    Moon,
-    PackagePlus,
-    Plug,
-    Settings2,
-    ShoppingBag,
-    Sparkles,
-    Store,
-    Sun,
-    Trash2,
-    UserCog,
-    Users,
-    Wand2,
+    SidebarRail,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AppSidebarBrand,
+    AppSidebarStoreSwitcher,
+    AppSidebarNavGroup,
+    AppSidebarNavCollapsible,
+    AppSidebarFooter,
   },
   setup() {
     const isDark = useDark();
     const toggleDark = useToggle(isDark);
-    return {
-      isDark,
-      toggleDark,
-      PAGE_SETTINGS,
-      PAGE_SETTINGS_STORE,
-    };
+    return { isDark, toggleDark };
   },
   data() {
     return {
       me: null,
       memberships: [],
+      connections: [],
       platformVersion: null,
       appVersion: import.meta.env.VITE_APP_VERSION || null,
       confirmDialog: { open: false, title: "", message: "", resolve: null },
@@ -150,39 +63,24 @@ export default {
     canManageSelectedStore() {
       return this.me?.isAdmin || this.selectedStoreMembership?.isStoreAdmin;
     },
-    primaryItems() {
-      return [
-        { label: "Товары", to: PAGE_PRODUCTS, icon: Boxes },
-        { label: "Новый товар", to: PAGE_PRODUCT_CREATION, icon: PackagePlus },
-        { label: "Группы товаров", to: PAGE_PRODUCT_GROUPS, icon: Layers },
-        { label: "Хранилище", to: PAGE_STORE_STORAGE, icon: HardDrive },
-        { label: "Корзина товаров", to: `${PAGE_PRODUCTS}?trash=1`, icon: Trash2 },
-      ];
+    sidebarContext() {
+      return {
+        me: this.me,
+        canManageStore: this.canManageSelectedStore,
+        isAdmin: Boolean(this.me?.isAdmin),
+        connections: this.connections,
+      };
     },
-    userSettingsItems() {
-      return [
-        { label: "Мои настройки", to: PAGE_SETTINGS_USER, icon: UserCog },
-      ];
+    navGroups() {
+      return buildSidebarGroups(this.sidebarContext);
     },
-    storeSettingsSubItems() {
-      if (!this.canManageSelectedStore) return [];
-      return [
-        { label: "Адаптеры", to: PAGE_MARKETPLACE, icon: ShoppingBag },
-        { label: "Категории", to: PAGE_CATEGORIES, icon: FolderOpen },
-        { label: "Глобальные атрибуты", to: PAGE_STORE_ATTRIBUTES, icon: Globe },
-        { label: "Инструменты", to: PAGE_TOOLS, icon: Wand2 },
-      ];
+    displayVersion() {
+      return this.appVersion || this.platformVersion || "";
     },
-    adminSettingsSubItems() {
-      if (!this.me?.isAdmin) return [];
-      return [
-        { label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
-        { label: "Пользователи", to: PAGE_ADMIN_USERS, icon: Users },
-        { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
-        { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
-        { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-        { label: "ИИ", to: PAGE_ADMIN_AI, icon: Wand2 },
-      ];
+  },
+  watch: {
+    "$store.state.appKey"() {
+      this.fetchConnections();
     },
   },
   methods: {
@@ -195,10 +93,20 @@ export default {
     showConfirm(title, message) {
       return new Promise((r) => { this.confirmDialog = { open: true, title, message, resolve: r }; });
     },
-    isActive(to) {
-      const [path, query] = to.split("?");
-      if (query) return this.$route.path === path && this.$route.fullPath.includes(query);
-      return this.$route.path === path || this.$route.path.startsWith(`${path}/`);
+    fetchConnections() {
+      if (!this.me?.selectedStoreId) {
+        this.connections = [];
+        return;
+      }
+      this.$store.dispatch("marketplace/getConnections", {
+        onSuccess: (response) => {
+          const data = response.data?.value ?? response.data;
+          this.connections = Array.isArray(data) ? data : [];
+        },
+        onError: () => {
+          this.connections = [];
+        },
+      });
     },
     async loadShellData(autoSelectStore = true) {
       await this.getMe({
@@ -226,7 +134,10 @@ export default {
         !this.memberships.some((store) => store.id === this.me.selectedStoreId)
       )) {
         await this.selectStore(this.memberships[0].id);
+        return;
       }
+
+      this.fetchConnections();
     },
     async selectStore(storeId) {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
@@ -267,145 +178,39 @@ export default {
 
 <template>
   <Sidebar>
-    <SidebarHeader class="border-b">
-      <div class="flex items-center gap-2 px-2 py-1">
-        <div class="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Settings2 class="size-4" />
-        </div>
-        <div class="min-w-0">
-          <div class="truncate text-sm font-semibold">Delegat Dashboard</div>
-          <div class="truncate text-xs text-muted-foreground">{{ me?.userName || "Пользователь" }}</div>
-        </div>
-      </div>
-
-      <Select
-        v-if="memberships.length > 0"
-        :model-value="String(me?.selectedStoreId ?? '')"
-        @update:model-value="selectStore(Number($event))"
-      >
-        <SelectTrigger class="h-9 w-full bg-background">
-          <SelectValue placeholder="Магазин" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectLabel>Магазины</SelectLabel>
-            <SelectItem
-              v-for="store in memberships"
-              :key="store.id"
-              :value="String(store.id)"
-            >
-              {{ store.name }}
-            </SelectItem>
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+    <SidebarHeader class="border-b gap-2 py-2">
+      <AppSidebarBrand :user-name="me?.userName || 'Пользователь'" />
+      <AppSidebarStoreSwitcher
+        :memberships="memberships"
+        :selected-store-id="me?.selectedStoreId"
+        @select-store="selectStore"
+      />
     </SidebarHeader>
 
     <SidebarContent>
-      <SidebarGroup>
-        <SidebarGroupLabel>Магазин</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem v-for="item in primaryItems" :key="item.label">
-              <SidebarMenuButton as-child :is-active="isActive(item.to)">
-                <RouterLink :to="item.to">
-                  <component :is="item.icon" />
-                  <span>{{ item.label }}</span>
-                </RouterLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarGroup>
-        <SidebarGroupLabel>Утилиты</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton @click="$store.commit('aiChat/toggle')">
-                <Sparkles />
-                <span>AI Ассистент</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton @click="$store.dispatch('operations/togglePanel')">
-                <Activity />
-                <span>Фоновые процессы</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarGroup>
-        <SidebarGroupLabel>Пользователь</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem v-for="item in userSettingsItems" :key="item.label">
-              <SidebarMenuButton as-child :is-active="isActive(item.to)">
-                <RouterLink :to="item.to">
-                  <component :is="item.icon" />
-                  <span>{{ item.label }}</span>
-                </RouterLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarGroup v-if="canManageSelectedStore">
-        <SidebarGroupLabel>Настройки магазина</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton as-child :is-active="isActive(PAGE_SETTINGS_STORE)">
-                <RouterLink :to="PAGE_SETTINGS_STORE">
-                  <Store />
-                  <span>Настройки магазина</span>
-                </RouterLink>
-              </SidebarMenuButton>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem v-for="item in storeSettingsSubItems" :key="item.label">
-                  <SidebarMenuSubButton as-child :is-active="isActive(item.to)">
-                    <RouterLink :to="item.to">
-                      <component :is="item.icon" />
-                      {{ item.label }}
-                    </RouterLink>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarGroup v-if="me?.isAdmin">
-        <SidebarGroupLabel>Администрирование</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton as-child :is-active="isActive(PAGE_SETTINGS)">
-                <RouterLink :to="PAGE_SETTINGS">
-                  <Settings2 />
-                  <span>Настройки администратора</span>
-                </RouterLink>
-              </SidebarMenuButton>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem v-for="item in adminSettingsSubItems" :key="item.label">
-                  <SidebarMenuSubButton as-child :is-active="isActive(item.to)">
-                    <RouterLink :to="item.to">
-                      <component :is="item.icon" />
-                      {{ item.label }}
-                    </RouterLink>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      <template v-for="group in navGroups" :key="group.id">
+        <AppSidebarNavCollapsible
+          v-if="group.collapsible"
+          :label="group.label"
+          :items="group.resolvedItems"
+          :default-open="group.defaultOpen"
+        />
+        <AppSidebarNavGroup
+          v-else
+          :label="group.label"
+          :items="group.resolvedItems"
+        />
+      </template>
     </SidebarContent>
+
+    <AppSidebarFooter
+      :is-dark="isDark"
+      :version="displayVersion"
+      @toggle-theme="toggleDark()"
+      @logout="postLogOut"
+    />
+
+    <SidebarRail />
 
     <AlertDialog
       :open="confirmDialog.open"
@@ -422,20 +227,5 @@ export default {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-
-    <SidebarFooter>
-      <Button variant="ghost" class="justify-start gap-2" @click="toggleDark()">
-        <Sun v-if="isDark" class="size-4" />
-        <Moon v-else class="size-4" />
-        {{ isDark ? "Светлая тема" : "Тёмная тема" }}
-      </Button>
-      <Button variant="ghost" class="justify-start gap-2" @click="postLogOut">
-        <LogOut class="size-4" />
-        Выйти
-      </Button>
-      <div v-if="appVersion || platformVersion" class="px-2 text-[10px] text-muted-foreground">
-        v{{ appVersion || platformVersion }}
-      </div>
-    </SidebarFooter>
   </Sidebar>
 </template>

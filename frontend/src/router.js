@@ -12,6 +12,7 @@ const productGroupsPage = () => import("./pages/productGroupsPage.vue");
 const productGroupEditPage = () => import("./pages/productGroupEditPage.vue");
 const storeAttributesPage = () => import("./pages/storeAttributesPage.vue");
 const storeStoragePage = () => import("./pages/storeStoragePage.vue");
+const SettingsShell = () => import("./layouts/SettingsShell.vue");
 const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
 const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
 const SettingsStorePage = () => import("./pages/settings/settingsStorePage.vue");
@@ -77,17 +78,24 @@ export const routes = [
   { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage, meta: { title: "Группа товаров" } },
   { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { title: "Глобальные атрибуты" } },
   { path: PAGE_STORE_STORAGE, component: storeStoragePage, meta: { title: "Хранилище" } },
-  { path: PAGE_SETTINGS, component: SettingsOverviewPage, meta: { title: "Общие настройки" } },
+  {
+    path: PAGE_SETTINGS,
+    component: SettingsShell,
+    children: [
+      { path: "", component: SettingsOverviewPage, meta: { title: "Общие настройки" } },
+      { path: "operations", redirect: "" },
+      { path: "user", component: SettingsUserPage, meta: { title: "Настройки пользователя" } },
+      { path: "store", component: SettingsStorePage, meta: { title: "Настройки магазина" } },
+      { path: "admin/stores", component: AdminStoresPage, meta: { title: "Магазины" } },
+      { path: "admin/stores/:id", component: AdminStoreDetailPage, meta: { title: "Магазин" } },
+      { path: "admin/users", component: AdminUsersPage, meta: { title: "Пользователи" } },
+      { path: "admin/tokens", component: AdminTokensPage, meta: { title: "Токены" } },
+      { path: "admin/error-logs", component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
+      { path: "admin/plugins", component: PluginsPage, meta: { title: "Плагины" } },
+      { path: "admin/ai", component: AiModelsPage, meta: { title: "AI Модели" } },
+    ],
+  },
   { path: PAGE_SETTINGS_OPERATIONS, redirect: PAGE_SETTINGS },
-  { path: PAGE_SETTINGS_USER, component: SettingsUserPage, meta: { title: "Настройки пользователя" } },
-  { path: PAGE_SETTINGS_STORE, component: SettingsStorePage, meta: { title: "Настройки магазина" } },
-  { path: PAGE_ADMIN_STORES, component: AdminStoresPage, meta: { title: "Магазины" } },
-  { path: PAGE_ADMIN_STORE_DETAIL, component: AdminStoreDetailPage, meta: { title: "Магазин" } },
-  { path: PAGE_ADMIN_USERS, component: AdminUsersPage, meta: { title: "Пользователи" } },
-  { path: PAGE_ADMIN_TOKENS, component: AdminTokensPage, meta: { title: "Токены" } },
-  { path: PAGE_ADMIN_ERROR_LOGS, component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
-  { path: PAGE_ADMIN_PLUGINS, component: PluginsPage, meta: { title: "Плагины" } },
-  { path: PAGE_ADMIN_AI, component: AiModelsPage, meta: { title: "AI Модели" } },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
   { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
   { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },

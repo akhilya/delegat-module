@@ -1,22 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
+import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
+import SettingsSection from "@/components/settings/SettingsSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2 } from "lucide-vue-next";
 
-
-const breadcrumbs = [
-  { label: "Настройки", to: "/settings" },
-  { label: "Пользователь" },
-];
 const me = ref(null);
 const isLoading = ref(false);
 const isSavingProfile = ref(false);
@@ -26,7 +19,7 @@ const currentPassword = ref("");
 const newPassword = ref("");
 
 const hasProfileChanges = computed(() =>
-  userNameDraft.value.trim() !== (me.value?.userName || "")
+  userNameDraft.value.trim() !== (me.value?.userName || ""),
 );
 
 async function fetchMe() {
@@ -84,24 +77,17 @@ onMounted(fetchMe);
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      title="Настройки пользователя"
+  <div>
+    <SettingsPageHeader
+      title="Пользователь"
       description="Персональные параметры текущей учётной записи"
     />
 
-    <PageSection :loading="isLoading" class="space-y-8">
-      <section class="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div>
-          <h2 class="text-sm font-semibold">Профиль</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Имя отображается в интерфейсе и используется при входе.
-          </p>
-        </div>
-
+    <PageSection :loading="isLoading" class="!min-h-0">
+      <SettingsSection
+        title="Профиль"
+        description="Имя отображается в интерфейсе и используется при входе."
+      >
         <div class="grid max-w-xl gap-4">
           <div class="grid gap-2">
             <label class="text-sm font-medium" for="user-name">Имя пользователя</label>
@@ -112,32 +98,26 @@ onMounted(fetchMe);
               placeholder="Имя пользователя"
             />
           </div>
-
           <div class="grid gap-1 text-sm">
             <span class="text-muted-foreground">Роль</span>
             <span class="font-medium">{{ me?.isAdmin ? "Администратор" : "Пользователь" }}</span>
           </div>
-
-          <div>
-            <Button
-              :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
-              @click="saveProfile"
-            >
-              <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
-              Сохранить профиль
-            </Button>
-          </div>
         </div>
-      </section>
+        <template #footer>
+          <Button
+            :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
+            @click="saveProfile"
+          >
+            <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
+            Сохранить профиль
+          </Button>
+        </template>
+      </SettingsSection>
 
-      <section class="grid gap-4 border-t pt-8 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div>
-          <h2 class="text-sm font-semibold">Пароль</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Для смены пароля нужно указать текущий пароль.
-          </p>
-        </div>
-
+      <SettingsSection
+        title="Пароль"
+        description="Для смены пароля нужно указать текущий пароль."
+      >
         <div class="grid max-w-xl gap-4">
           <div class="grid gap-2 sm:grid-cols-2">
             <div class="grid gap-2">
@@ -159,18 +139,17 @@ onMounted(fetchMe);
               />
             </div>
           </div>
-
-          <div>
-            <Button
-              :disabled="isChangingPassword || !currentPassword || !newPassword"
-              @click="changePassword"
-            >
-              <Loader2 v-if="isChangingPassword" class="mr-2 size-4 animate-spin" />
-              Сменить пароль
-            </Button>
-          </div>
         </div>
-      </section>
+        <template #footer>
+          <Button
+            :disabled="isChangingPassword || !currentPassword || !newPassword"
+            @click="changePassword"
+          >
+            <Loader2 v-if="isChangingPassword" class="mr-2 size-4 animate-spin" />
+            Сменить пароль
+          </Button>
+        </template>
+      </SettingsSection>
     </PageSection>
-  </Page>
+  </div>
 </template>

@@ -1,9 +1,6 @@
 <script>
 
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { Button } from "@/components/ui/button";
@@ -34,10 +31,7 @@ import { KeyRound, Loader2, Pencil, Save, Users } from "lucide-vue-next";
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Label,
@@ -75,7 +69,7 @@ export default {
         isActive: true,
       },
       isEditDialogOpen: false,
-      breadcrumbs: [{ label: "Пользователи" }],
+
       isLoading: false,
       savingUserId: null,
     };
@@ -242,11 +236,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-
+  <div>
     <PageHeader
       title="Пользователи"
       :description="`Активных пользователей: ${activeUsersCount}`"
@@ -399,5 +389,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </div>
 </template>

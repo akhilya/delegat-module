@@ -1,9 +1,6 @@
 <script>
 
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { PageHeader } from "@/components/ui/page-header";
@@ -47,10 +44,7 @@ import {
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     PageHeader,
     Button,
     Input,
@@ -93,10 +87,6 @@ export default {
   data() {
     return {
       plugins: [],
-      breadcrumbs: [
-        { label: "Адаптеры", to: "/adapter" },
-        { label: "Плагины" },
-      ],
       isLoading: false,
       isUploading: false,
       isDeleting: false,
@@ -234,11 +224,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-
+  <div>
     <PageHeader
       title="Плагины"
       description="Управление DLL-плагинами для интеграции с адаптерами"
@@ -416,5 +402,5 @@ export default {
         </ul>
       </div>
     </PageSection>
-  </Page>
+  </div>
 </template>

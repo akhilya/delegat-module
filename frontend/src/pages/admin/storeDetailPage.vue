@@ -1,8 +1,5 @@
 <script>
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { mapActions } from "vuex";
@@ -37,14 +34,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PAGE_ADMIN_STORES, setPageTitle } from "@/router";
+import { setPageTitle } from "@/router";
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     PageHeader,
     UserPlus,
@@ -94,15 +88,7 @@ export default {
       const memberIds = this.store.members.map(m => m.id);
       return this.allUsers.filter(u => !memberIds.includes(u.id));
     },
-    breadcrumbs() {
-      const items = [
-        { label: "Магазины", to: PAGE_ADMIN_STORES },
-      ];
-      if (this.store) {
-        items.push({ label: this.store.name });
-      }
-      return items;
-    },
+
   },
   methods: {
     ...mapActions(["getStoreDetail", "getAllUsers", "addMember", "removeMember"]),
@@ -189,10 +175,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
+  <div>
     <PageHeader
       :title="store?.name || 'Магазин'"
       :description="store ? `Участников: ${store.members.length}` : 'Настройки участников магазина'"
@@ -290,5 +273,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </div>
 </template>

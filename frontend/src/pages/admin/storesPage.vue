@@ -1,9 +1,6 @@
 <script>
 
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { Button } from "@/components/ui/button";
@@ -34,10 +31,7 @@ import { PageHeader } from "@/components/ui/page-header";
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Checkbox,
@@ -74,7 +68,6 @@ export default {
         memberIds: [],
         storeAdminIds: [],
       },
-      breadcrumbs: [{ label: "Магазины" }],
       isLoading: false,
       isCreating: false,
       isSaving: false,
@@ -237,11 +230,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-
+  <div>
     <PageHeader title="Магазины" description="Управление магазинами системы">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
@@ -407,5 +396,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </div>
 </template>

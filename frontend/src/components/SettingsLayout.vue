@@ -1,9 +1,14 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { useRoute } from "vue-router";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ShieldCheck, ChevronRight } from "lucide-vue-next";
 import { http } from "@/main";
-import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -16,149 +21,137 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import {
-  PAGE_SETTINGS,
-  PAGE_SETTINGS_USER,
-  PAGE_SETTINGS_STORE,
-  PAGE_ADMIN_STORES,
-  PAGE_ADMIN_USERS,
-  PAGE_ADMIN_TOKENS,
-  PAGE_ADMIN_PLUGINS,
-  PAGE_ADMIN_ERROR_LOGS,
-} from "@/router";
-import {
-  Settings2,
-  User,
-  Store,
-  Users,
-  Key,
-  Plug,
-  AlertTriangle,
-  ShieldCheck,
-  ChevronRight,
-} from "lucide-vue-next";
+  getPersonalSettingsItems,
+  getAdminSettingsItems,
+  resolveSettingsBreadcrumb,
+} from "@/config/settingsNav";
+import { PAGE_SETTINGS, PAGE_SETTINGS_USER, PAGE_SETTINGS_STORE } from "@/router";
+import { isActiveRoute } from "@/lib/isActiveRoute";
 
 const route = useRoute();
+const router = useRouter();
 const me = ref(null);
-const isAdmin = computed(() => me.value?.isAdmin ?? false);
+const memberships = ref([]);
 const adminOpen = ref(true);
 
-const ROUTE_LABELS = {
-  [PAGE_SETTINGS]: "Общие",
-  [PAGE_SETTINGS_USER]: "Пользователь",
-  [PAGE_SETTINGS_STORE]: "Магазин",
-  [PAGE_ADMIN_STORES]: "Магазины",
-  [PAGE_ADMIN_USERS]: "Пользователи",
-  [PAGE_ADMIN_TOKENS]: "Токены",
-  [PAGE_ADMIN_PLUGINS]: "Плагины",
-  [PAGE_ADMIN_ERROR_LOGS]: "Логи ошибок",
-};
+const selectedStore = computed(() =>
+  memberships.value.find((store) => store.id === me.value?.selectedStoreId),
+);
+const canManageStore = computed(() => me.value?.isAdmin || selectedStore.value?.isStoreAdmin);
+const isAdmin = computed(() => me.value?.isAdmin ?? false);
+
+const navContext = computed(() => ({
+  me: me.value,
+  canManageStore: canManageStore.value,
+  isAdmin: isAdmin.value,
+}));
+
+const personalItems = computed(() => getPersonalSettingsItems(navContext.value));
+const adminItems = computed(() => getAdminSettingsItems(navContext.value));
 
 const breadcrumbs = computed(() => {
   const path = route.path;
-  const label = ROUTE_LABELS[path];
+  const label = resolveSettingsBreadcrumb(path);
   if (!label || path === PAGE_SETTINGS) return [{ label: "Настройки" }];
-  return [{ label: "Настройки", to: PAGE_SETTINGS }, { label }];
+  const settingsRoot = isAdmin.value ? PAGE_SETTINGS : PAGE_SETTINGS_USER;
+  return [{ label: "Настройки", to: settingsRoot }, { label }];
 });
 
-const personalItems = [
-  { label: "Пользователь", to: PAGE_SETTINGS_USER, icon: User },
-  { label: "Магазин", to: PAGE_SETTINGS_STORE, icon: Store },
-];
+watch(
+  () => route.path,
+  (path) => {
+    if (adminItems.value.some((item) => isActiveRoute(path, item.to))) {
+      adminOpen.value = true;
+    }
+  },
+  { immediate: true },
+);
 
-const adminItems = [
-  { label: "Общие", to: PAGE_SETTINGS, icon: Settings2 },
-  { label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
-  { label: "Пользователи", to: PAGE_ADMIN_USERS, icon: Users },
-  { label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
-  { label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
-  { label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-];
-
-function isActive(path) {
-  return route.path === path;
-}
+watch(
+  [() => route.path, isAdmin, canManageStore, () => me.value],
+  () => {
+    if (me.value === null) return;
+    if (route.path === PAGE_SETTINGS && !isAdmin.value) {
+      router.replace(PAGE_SETTINGS_USER);
+      return;
+    }
+    if (route.path === PAGE_SETTINGS_STORE && !canManageStore.value) {
+      router.replace(PAGE_SETTINGS_USER);
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   try {
-    const res = await http.get("/auth/me", { cache: false });
-    me.value = res.data?.value ?? res.data;
+    const [meResponse, membershipsResponse] = await Promise.all([
+      http.get("/auth/me", { cache: false }),
+      http.get("/users/me/memberships", { cache: false }),
+    ]);
+    me.value = meResponse.data?.value ?? meResponse.data;
+    memberships.value = membershipsResponse.data?.value ?? membershipsResponse.data ?? [];
   } catch {}
 });
 </script>
 
 <template>
-  <div class="bg-background min-h-screen">
-    <NavigationBar />
+  <div class="adaptive-padding flex min-h-0 flex-1 flex-col">
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="adaptive-padding">
-      <div class="flex gap-8 pb-6 min-h-[calc(100vh-7rem)]">
-
-        <!-- Sidebar -->
-        <aside class="w-44 shrink-0">
-          <nav class="sticky top-20 space-y-1">
-
-            <!-- Личные настройки -->
-            <SidebarGroup class="p-0">
-              <SidebarGroupLabel class="px-2">Настройки</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem v-for="item in personalItems" :key="item.to">
-                    <SidebarMenuButton
-                      as="a"
-                      :href="item.to"
-                      :is-active="isActive(item.to)"
-                      @click.prevent="$router.push(item.to)"
-                    >
+    <div class="flex min-h-0 flex-1 gap-8 pb-6">
+      <div class="w-52 shrink-0">
+        <div class="sticky top-4 space-y-1">
+          <SidebarGroup class="p-0">
+            <SidebarGroupLabel class="px-2">Настройки</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem v-for="item in personalItems" :key="item.id">
+                  <SidebarMenuButton as-child :is-active="isActiveRoute(route, item.to)">
+                    <RouterLink :to="item.to">
                       <component :is="item.icon" />
-                      {{ item.label }}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+                      <span>{{ item.label }}</span>
+                    </RouterLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-            <!-- Администрирование (collapsible) -->
-            <SidebarGroup v-if="isAdmin" class="p-0">
-              <SidebarGroupLabel
-                class="px-2 cursor-pointer select-none hover:text-foreground transition-colors"
-                @click="adminOpen = !adminOpen"
-              >
-                <ShieldCheck class="size-3 mr-1.5 opacity-60" />
-                Администрирование
-                <ChevronRight
-                  class="ml-auto size-3 opacity-50 transition-transform duration-200"
-                  :class="{ 'rotate-90': adminOpen }"
-                />
-              </SidebarGroupLabel>
-              <SidebarGroupContent v-show="adminOpen">
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuSub>
-                      <SidebarMenuSubItem v-for="item in adminItems" :key="item.to">
-                        <SidebarMenuSubButton
-                          as="a"
-                          :href="item.to"
-                          :is-active="isActive(item.to)"
-                          @click.prevent="$router.push(item.to)"
-                        >
-                          <component :is="item.icon" />
-                          {{ item.label }}
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    </SidebarMenuSub>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-          </nav>
-        </aside>
-
-        <!-- Page content -->
-        <div class="flex-1 min-w-0">
-          <slot />
+          <SidebarGroup v-if="adminItems.length" class="p-0">
+            <Collapsible v-model:open="adminOpen" class="group/collapsible">
+              <CollapsibleTrigger as-child>
+                <SidebarGroupLabel class="cursor-pointer select-none px-2 hover:text-sidebar-foreground">
+                  <ShieldCheck class="mr-1.5 size-3 opacity-60" />
+                  Администрирование
+                  <ChevronRight
+                    class="ml-auto size-3 opacity-60 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+                  />
+                </SidebarGroupLabel>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem v-for="item in adminItems" :key="item.id">
+                          <SidebarMenuSubButton as-child :is-active="isActiveRoute(route, item.to)">
+                            <RouterLink :to="item.to">
+                              <component :is="item.icon" />
+                              <span>{{ item.label }}</span>
+                            </RouterLink>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </SidebarGroup>
         </div>
+      </div>
 
+      <div class="min-w-0 flex-1">
+        <slot />
       </div>
     </div>
   </div>

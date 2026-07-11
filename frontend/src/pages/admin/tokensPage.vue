@@ -1,9 +1,6 @@
 <script>
 
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { Button } from "@/components/ui/button";
@@ -23,10 +20,7 @@ import { PageHeader } from "@/components/ui/page-header";
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Plus,
     Key,
@@ -46,7 +40,7 @@ export default {
   data() {
     return {
       tokens: [],
-      breadcrumbs: [{ label: "Токены приглашения" }],
+
       isLoading: false,
       isCreating: false,
       lastCreatedToken: null,
@@ -116,11 +110,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-
+  <div>
     <PageHeader title="Токены приглашения" description="Управление токенами для регистрации пользователей">
       <Button @click="handleCreateToken" :disabled="isCreating">
         <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
@@ -221,5 +211,5 @@ export default {
       </div>
       </div>
     </PageSection>
-  </Page>
+  </div>
 </template>

@@ -1,9 +1,6 @@
 <script>
 
-import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { Button } from "@/components/ui/button";
@@ -33,10 +30,7 @@ import {
 
 export default {
   components: {
-    Page,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Badge,
     PageHeader,
@@ -59,7 +53,7 @@ export default {
     return {
       logs: [],
       expandedLogId: null,
-      breadcrumbs: [{ label: "Логи ошибок" }],
+
       isLoading: false,
       deletingLogId: null,
       copiedLogId: null,
@@ -165,11 +159,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-
+  <div>
     <PageHeader
       title="Логи ошибок"
       description="Последние сохранённые серверные ошибки"
@@ -284,5 +274,5 @@ export default {
       </div>
       </div>
     </PageSection>
-  </Page>
+  </div>
 </template>
