@@ -5,25 +5,27 @@ import {
   FieldDescription,
   FieldGroup,
 } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
-defineProps({
-  title: { type: String, required: true },
+const props = defineProps({
+  title: { type: String, default: "" },
   description: { type: String, default: "" },
+  class: { type: null, default: undefined },
 });
 </script>
 
 <template>
-  <FieldSet class="m-0 min-w-0 max-w-2xl border-0 p-0 [&+&]:mt-14">
-    <FieldLegend variant="legend" class="mb-0.5 w-full text-base font-semibold">
+  <FieldSet :class="cn('m-0 min-w-0 max-w-2xl border-0 p-0 [&+&]:mt-8', props.class)">
+    <FieldLegend v-if="title" variant="label" class="mb-1 w-full">
       {{ title }}
     </FieldLegend>
-    <FieldDescription v-if="description" class="mb-6 max-w-lg">
+    <FieldDescription v-if="description" class="mb-4">
       {{ description }}
     </FieldDescription>
-    <FieldGroup class="gap-8">
+    <FieldGroup class="gap-5">
       <slot />
     </FieldGroup>
-    <div v-if="$slots.footer" class="mt-6 flex flex-wrap items-center gap-3">
+    <div v-if="$slots.footer" class="mt-4 flex flex-wrap items-center gap-3">
       <slot name="footer" />
     </div>
   </FieldSet>

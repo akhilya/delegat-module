@@ -3,9 +3,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { http } from "@/main";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
-import {
-  resolveSettingsBreadcrumb,
-} from "@/config/settingsNav";
+import { resolveSettingsBreadcrumb } from "@/config/settingsNav";
 import { PAGE_SETTINGS, PAGE_SETTINGS_USER, PAGE_SETTINGS_STORE } from "@/router";
 
 const route = useRoute();
@@ -55,10 +53,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="adaptive-padding flex min-h-0 flex-1 flex-col">
+  <div class="flex min-h-0 flex-1 flex-col">
     <Breadcrumbs :items="breadcrumbs" />
-    <div class="min-w-0 flex-1 pb-6">
-      <slot />
-    </div>
+    <slot />
   </div>
 </template>

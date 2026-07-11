@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import PageSection from "@/components/pageSection.vue";
-import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import InlineEditableValue from "@/components/settings/InlineEditableValue.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import Input from "@/components/ui/input/Input.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -40,12 +40,6 @@ const changedSettings = computed(() =>
 );
 
 const hasSettingChanges = computed(() => changedSettings.value.length > 0);
-
-function isLimitChanged(limit) {
-  const draft = settingDrafts.value[limit.key] ?? "";
-  const saved = limit.value ?? "";
-  return limit.isEditable && String(draft) !== String(saved);
-}
 
 function statusCount(item, status) {
   return item.statuses?.find((entry) => entry.status?.toLowerCase() === status)?.count || 0;
@@ -135,8 +129,8 @@ onMounted(fetchSummary);
 </script>
 
 <template>
-  <div>
-    <SettingsPageHeader
+  <div class="flex flex-col">
+    <PageHeader
       title="Общие"
       description="Платформенные параметры, очереди и диагностика"
     />
@@ -150,16 +144,15 @@ onMounted(fetchSummary);
           v-for="limit in summary?.limits || []"
           :key="limit.key"
           :label="limit.label"
-          :changed="isLimitChanged(limit)"
         >
-          <InlineEditableValue
-            :model-value="settingDrafts[limit.key]"
-            :disabled="!limit.isEditable || isSavingSettings"
+          <Input
+            v-model="settingDrafts[limit.key]"
+            class="max-w-md"
             :type="limit.valueType === 'integer' || limit.valueType === 'decimal' ? 'number' : 'text'"
             :min="limit.valueType === 'decimal' ? '0.1' : '1'"
             :step="limit.valueType === 'decimal' ? '0.1' : '1'"
             :placeholder="limit.fallbackValue ? `fallback: ${limit.fallbackValue}` : 'не задано'"
-            @update:model-value="settingDrafts[limit.key] = $event"
+            :disabled="!limit.isEditable || isSavingSettings"
           />
           <template #description>
             <span v-if="limit.description">{{ limit.description }}</span>

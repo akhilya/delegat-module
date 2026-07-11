@@ -1,12 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import PageSection from "@/components/pageSection.vue";
-import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import InlineEditableValue from "@/components/settings/InlineEditableValue.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2 } from "lucide-vue-next";
@@ -78,52 +79,33 @@ onMounted(fetchMe);
 </script>
 
 <template>
-  <div>
-    <SettingsPageHeader
+  <div class="flex flex-col">
+    <PageHeader
       title="Пользователь"
       description="Персональные параметры текущей учётной записи"
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsFormSection title="Профиль">
-        <SettingsFormField
-          label="Имя пользователя"
-          :changed="hasProfileChanges"
-        >
-          <InlineEditableValue
-            :model-value="userNameDraft"
+      <FieldGroup class="max-w-xl gap-5">
+        <SettingsFormField label="Имя пользователя" label-for="user-name">
+          <Input
+            id="user-name"
+            v-model="userNameDraft"
             :disabled="isSavingProfile"
             placeholder="Имя пользователя"
-            empty-label="Имя не задано"
-            @update:model-value="userNameDraft = $event"
           />
-          <template #description>
-            Отображаемое имя в интерфейсе и при входе в систему.
-          </template>
         </SettingsFormField>
+        <Button
+          :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
+          @click="saveProfile"
+        >
+          <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
+          Сохранить профиль
+        </Button>
+      </FieldGroup>
 
-        <SettingsFormField label="Роль">
-          <p class="text-sm font-medium">
-            {{ me?.isAdmin ? "Администратор" : "Пользователь" }}
-          </p>
-          <template #description>
-            Глобальная роль учётной записи на платформе.
-          </template>
-        </SettingsFormField>
-
-        <template #footer>
-          <Button
-            :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
-            @click="saveProfile"
-          >
-            <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
-            Сохранить профиль
-          </Button>
-        </template>
-      </SettingsFormSection>
-
-      <SettingsFormSection title="Пароль">
-        <div class="grid max-w-2xl gap-8 sm:grid-cols-2">
+      <SettingsFormSection title="Пароль" class="mt-8">
+        <div class="grid gap-5 sm:max-w-2xl sm:grid-cols-2">
           <SettingsFormField label="Текущий пароль" label-for="current-password">
             <PasswordInput
               id="current-password"
@@ -140,9 +122,6 @@ onMounted(fetchMe);
               autocomplete="new-password"
               :disabled="isChangingPassword"
             />
-            <template #description>
-              Вступит в силу после сохранения.
-            </template>
           </SettingsFormField>
         </div>
 

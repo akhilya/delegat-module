@@ -1,12 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import PageSection from "@/components/pageSection.vue";
-import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
-import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import InlineEditableValue from "@/components/settings/InlineEditableValue.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import Badge from "@/components/ui/badge/Badge.vue";
+import Input from "@/components/ui/input/Input.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2, Save } from "lucide-vue-next";
@@ -70,50 +69,31 @@ onMounted(fetchData);
 </script>
 
 <template>
-  <div>
-    <SettingsPageHeader
+  <div class="flex flex-col">
+    <PageHeader
       title="Магазин"
-      description="Параметры текущего магазина, выбранного в сайдбаре"
+      description="Название магазина, выбранного в сайдбаре"
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsFormSection
-        title="Текущий магазин"
-        description="Базовая конфигурация выбранного магазина."
-      >
-        <SettingsFormField
-          label="Название"
-          :changed="hasStoreChanges"
-        >
-          <InlineEditableValue
-            :model-value="storeNameDraft"
+      <FieldGroup class="max-w-xl gap-5">
+        <SettingsFormField label="Название" label-for="store-name">
+          <Input
+            id="store-name"
+            v-model="storeNameDraft"
             :disabled="!selectedStore || !canManageSelectedStore || isSaving"
             placeholder="Магазин не выбран"
-            empty-label="Магазин не выбран"
-            @update:model-value="storeNameDraft = $event"
           />
-          <template #description>
-            <span v-if="selectedStore && !canManageSelectedStore">
-              Для изменения нужен администратор магазина.
-            </span>
-            <span v-else-if="!selectedStore">
-              Выберите магазин в сайдбаре.
-            </span>
-            <span v-else>
-              Отображается в интерфейсе и в списке магазинов.
-            </span>
+          <template v-if="selectedStore && !canManageSelectedStore" #description>
+            Для изменения нужен администратор магазина.
+          </template>
+          <template v-else-if="!selectedStore" #description>
+            Выберите магазин в сайдбаре.
           </template>
         </SettingsFormField>
 
-        <SettingsFormField label="ID магазина">
-          <Badge variant="secondary">{{ selectedStore?.id || "—" }}</Badge>
-          <template #description>
-            Служебный идентификатор магазина в системе.
-          </template>
-        </SettingsFormField>
-
-        <template #footer>
-          <span v-if="hasStoreChanges" class="mr-auto text-sm text-muted-foreground">
+        <div class="flex flex-wrap items-center gap-3">
+          <span v-if="hasStoreChanges" class="text-sm text-muted-foreground">
             Есть несохранённые изменения
           </span>
           <Button
@@ -124,8 +104,8 @@ onMounted(fetchData);
             <Save v-else class="mr-2 size-4" />
             Сохранить
           </Button>
-        </template>
-      </SettingsFormSection>
+        </div>
+      </FieldGroup>
     </PageSection>
   </div>
 </template>
