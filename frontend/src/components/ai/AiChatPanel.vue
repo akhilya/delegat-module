@@ -157,7 +157,6 @@ const toolCategories = [
     { name: "search_field_options", desc: "Поиск в опциях поля" },
     { name: "get_available_sources", desc: "Доступные источники" },
     { name: "get_mapping_coverage", desc: "Анализ покрытия" },
-    { name: "generate_mapping_suggestions", desc: "AI автозаполнение" },
     { name: "connect_field", desc: "Подключить поле" },
     { name: "connect_fields", desc: "Подключить несколько полей" },
     { name: "set_field_static_value", desc: "Задать статическое значение" },

@@ -185,8 +185,7 @@ public static class AiPrompts
           For large dictionaries use search_field_options before set_field_static_value.
         - set_field_static_value on a Select/MultiSelect field: pass the option LABEL or VALUE — system validates.
         - connect_field / set_field_static_value add the field to the graph automatically if not present.
-        - merge_adapter_fields: combine semantic duplicates in the CARD block before generate_mapping_suggestions.
-        - generate_mapping_suggestions fills BOTH card and price blocks when price API is supported.
+        - merge_adapter_fields: combine semantic duplicates in the CARD block when the adapter exposes duplicate keys.
         - CROSS-MARKETPLACE: User often imports category from marketplace A (e.g. Ozon), then maps to B (e.g. WB).
           get_mapping returns schemaContext.schemaSource — local attribute option KEYS are from A, target allowedValues use B keys.
           Call get_option_alignment_hints(mappingId) for precomputed optionMap (Серый→Серый with different keys).
@@ -195,16 +194,7 @@ public static class AiPrompts
           Static «Стандартное значение» ONLY when truly constant for ALL products.
           preview productId is optional sanity-check only — never build optionMap from a single product value.
         - Do NOT call list_external_categories when working with field connections — only for browsing category trees.
-
-        === NEW COMPATIBILITY-FIRST MAPPING FLOW (MANDATORY) ===
-        For creating or filling mappings use this exact order (do not skip):
-        1. create_mapping (just creates empty mapping — no auto fill)
-        2. get_mapping(id) — to see current state, schemaContext, etc.
-        3. analyze_mapping_compatibility(id, productId?) — returns CompatibilityReport + list of questions (source_pick, unit_confirm, dictionary_confirm, semantic_confirm, skip_field etc.)
-        4. If questions exist (usually 0-5), ask the user ONE clarifying question per turn using the exact question text and candidates from the report.
-        5. After user answers, call generate_mapping_suggestions(id, answers with the object of decisions from user)
-        Never call generate_mapping_suggestions without prior analyze (unless user explicitly says "use old aggressive mode").
-        Report results using highConfidenceConnected, intentionallySkipped, compatibilityScore — never praise raw coverage.
+        - To fill a mapping: create_mapping → get_mapping → connect fields one by one via connect_field / set_field_static_value / add_field_modifier.
 
         === SEARCH: RETRY WITH SPELLING VARIANTS ===
         Product names in the catalog mix Cyrillic and Latin. When a text search returns 0 results,
@@ -250,7 +240,7 @@ public static class AiPrompts
           duplicate_mapping, list_external_categories, get_external_fields, get_price_fields,
           get_option_alignment_hints, search_field_options, get_available_sources, get_mapping_coverage,
           preview_mapping_for_product,
-          generate_mapping_suggestions, connect_field, connect_fields, set_field_static_value,
+          connect_field, connect_fields, set_field_static_value,
           set_fields_static_value, add_field_modifier, remove_field_connection,
           merge_adapter_fields, unmerge_adapter_fields,
           find_products_without_mapping, get_product_mapping_summary, assign_product_mappings
@@ -285,108 +275,6 @@ public static class AiPrompts
         $"Ошибка при {context}: \"{errorMessage}\"\n\n" +
         "Объясни причину и предложи решение на русском.";
 
-    /// <summary>
-    /// System prompt for AI auto-mapping (AiMappingService).
-    /// Claude receives this as the system message, then a structured user prompt with field data.
-    /// </summary>
-    public const string MappingSystem =
-        "You are an expert at mapping product catalog fields to marketplace API fields with maximum semantic compatibility. " +
-        "Your primary goal is to create only correct, meaningful connections between local data and the marketplace. " +
-        "Prefer leaving a field unconnected over making a plausible-but-wrong connection. " +
-        "Only suggest a mapping when the source and target share clear business meaning, compatible types, and reversible or acceptable transforms. " +
-        "Respond ONLY with a valid JSON array — no markdown, no explanation, no preamble.";
-
-    /// <summary>
-    /// Mapping rules injected into every mapping prompt.
-    /// </summary>
-    public const string MappingRules = """
-        TASK: Suggest mappings with maximum semantic compatibility. 
-        One local attribute → one primary adapter field (except aliases via merge).
-        Better to leave a field empty (sourceType=null) than to connect it incorrectly.
-        Only connect when there is clear business meaning match + type/unit/dictionary compatibility.
-
-        If USER SEMANTIC DECISIONS section is present below, it contains explicit answers from the user.
-        These decisions OVERRIDE other heuristics. Respect them strictly.
-
-        PRICE-API FIELDS (sink "price"):
-        - price → ONLY productField:price (never a category attribute)
-        - oldPrice → ONLY attribute with key/name «старая цена» / old_price (NEVER min_price, NEVER generic «цена»)
-        - minPrice → ONLY attribute with key/name «минимальная цена» / min_price (NEVER old_price / «старая цена»)
-        - netPrice → ONLY «себестоимость» / net_price attribute
-        - discount → discount attribute or static "0"
-        - NEVER map discountedPrice to product.price
-        - If the exact semantic attribute does not exist — return sourceType: null (do NOT substitute a similar price field)
-
-        CROSS-MARKETPLACE DICTIONARIES: If CATEGORY SCHEMA ORIGIN section is present, local attribute values use
-        keys from marketplace A. Target allowedValues use marketplace B keys. 
-        For Select/MultiSelect: add optionMap covering the chosen pair (only when the pair is semantically correct).
-        Match by human LABEL. Use PRECOMPUTED VALUE MAP HINTS when provided.
-        For «Стандартное значение» (static on option-backed field): value MUST be exact allowedValue.
-
-        === MATCHING (strict) ===
-        1. Match only by real semantic meaning, not just similar names.
-        2. Prefer a dedicated attribute over generic productField when more precise.
-        3. Static values only for genuinely obvious constants (brand of the store, country of origin for category).
-           Do NOT invent statics "just in case".
-
-        === DERIVED / STATIC VALUES — CONSERVATIVE ===
-        Derived values (oldPrice from price, short description, etc.) are allowed ONLY for well-known safe patterns
-        AND only when the user has approved the strategy or the context is obvious at category level.
-        When in doubt — leave the field without source (sourceType: null).
-
-        === SKIP DECISION TREE (use this) ===
-        Return sourceType: null when:
-        - No local attribute or productField shares clear business meaning
-        - Type mismatch without safe reversible modifier (text → number is risky)
-        - Unit mismatch that would require lossy or complex conversion without user confirmation
-        - Dictionary overlap too low for reliable optionMap (especially cross-marketplace)
-        - The only "match" is name coincidence but different meaning (e.g. "Модель" = SKU vs product line name)
-        - Required field has no good source — still skip rather than force bad connection
-
-        === ONE SOURCE — ONE PRIMARY TARGET ===
-        A single local attribute should be the main source for at most one adapter field (aliases via merge_adapter_fields are separate).
-
-        === UNITS OF MEASUREMENT ===
-        4. If field declares unit, check local source. Add multiply ONLY when units differ and conversion is clean.
-           When attribute name already contains the unit ("Вес, г"), do not add multiplier.
-
-        === TYPE / BIDIRECTIONAL SAFETY ===
-        5. number + numeric source → direct + round if needed.
-        6. boolean → boolean attr or static.
-        7. Critical import fields (sku, barcode, price, quantity): avoid lossy modifiers (truncate, toText).
-        8. maxLength → add truncate, but never on critical import fields.
-
-        === SELECT / MULTISELECT ===
-        9. Mapped value must be exact allowed option.
-           - Direct if local options match.
-           - optionMap for cross-marketplace (only for semantically correct pair).
-           - Static only if truly constant.
-        10. isAspect fields are important — map only to proper variation attributes.
-
-        === IMPORT / EXPORT CONSISTENCY ===
-        11. Prefer reversible modifiers (optionMap, multiply, valueMap) for two-way sync.
-            Truncate is export-only acceptable for descriptive fields.
-
-        === MODIFIER REFERENCE (same as before) ===
-        Text: truncate, replace, append, prepend, trim, uppercase, lowercase, template
-        Number: multiply, divide, add, round, floor, ceiling, clamp
-        Select: optionMap (preferred), valueMap
-        Other: defaultValue, forceType, limit, join, etc.
-
-        Use ONLY listed modifier types.
-
-        === CONFIDENCE (new) ===
-        12. confidence 0.0–1.0. 
-            Auto-apply only suggestions with confidence ≥ 0.65.
-            0.50–0.64 only when backed by explicit user answer.
-            Required fields without good source: leave empty (sourceType null) rather than low-confidence guess.
-            Set sourceType=null when no good semantic pair exists.
-        """;
-
-    /// <summary>
-    /// JSON schema description appended to every mapping user prompt.
-    /// Describes the expected output format.
-    /// </summary>
     private static string BuildSettingsBlock(AiStoreSettings s)
     {
         var style = s.CommunicationStyle switch
@@ -438,23 +326,4 @@ public static class AiPrompts
             $"When user says 'this connection' or 'its mappings' — use connectionId={ctx.ConnectionId}.",
         _ => $"=== CURRENT PAGE ===\nPage: {ctx.Page}"
     };
-
-    public const string MappingResponseSchema = """
-        Respond with ONLY a JSON array (no markdown, no text before or after):
-        [{
-          "adapterFieldKey": "field_key",
-          "sourceType": "productField" | "attribute" | "storeAttribute" | "static" | null,
-          "sourceField": "sku" | "name" | "price" | "barcode" | "description" | "storageQuantity" | null,
-          "sourceAttributeId": 123 | null,
-          "staticValue": "..." | null,
-          "modifiers": [
-            {"type": "truncate", "params": {"maxLength": 255}},
-            {"type": "multiply", "params": {"factor": 10}},
-            {"type": "round", "params": {"decimals": 0}},
-            {"type": "optionMap", "params": {"mappings": [{"from": "локальное", "to": "marketplace_value"}], "default": null}}
-          ] | null,
-          "confidence": 0.85,
-          "reason": "one-line explanation including modifiers used and why"
-        }]
-        """;
 }

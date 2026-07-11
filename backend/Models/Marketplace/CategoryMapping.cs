@@ -69,13 +69,6 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     /// </summary>
     public string? graphJson { get; set; }
 
-    /// <summary>
-    /// Stores answers from compatibility analysis questions (for the new semantic flow).
-    /// Structure: { "version": "1", "answers": { "fieldKey": "user choice or source" }, "reportSummary": {...} }
-    /// Used to skip re-asking questions on re-generate and to provide context.
-    /// </summary>
-    public string? compatibilityContextJson { get; set; }
-
     #region IAddable / IUpdateable
 
     public bool AddFill(AddForm form)
@@ -96,8 +89,6 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             externalCategoryName = form.externalCategoryName;
         if (form.name != null)
             name = form.name;
-        if (form.compatibilityContextJson != null)
-            compatibilityContextJson = form.compatibilityContextJson;
         return true;
     }
 
@@ -118,8 +109,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             name = name,
             fieldMappingsCount = CountGraphFields(graphJson),
             hasGraph = !string.IsNullOrEmpty(graphJson),
-            createdAt = createdAt,
-            compatibilityContextJson = compatibilityContextJson
+            createdAt = createdAt
         };
     }
 
@@ -250,11 +240,6 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// </summary>
         [StringLength(NAME_MAX_LENGTH)]
         public string? name { get; set; }
-
-        /// <summary>
-        /// Compatibility context (answers from wizard).
-        /// </summary>
-        public string? compatibilityContextJson { get; set; }
     }
 
     /// <summary>
@@ -312,11 +297,6 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// Timestamp when the mapping was created.
         /// </summary>
         public DateTime createdAt { get; set; }
-
-        /// <summary>
-        /// Compatibility analysis context and user answers (new flow).
-        /// </summary>
-        public string? compatibilityContextJson { get; set; }
     }
 
     #endregion

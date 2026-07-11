@@ -191,7 +191,6 @@ builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
 builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<AiModelConfigService>();
 builder.Services.AddScoped<AiChatService>();
-builder.Services.AddScoped<AiMappingService>();
 // AI tool handlers
 builder.Services.AddScoped<ProductToolHandlers>();
 builder.Services.AddScoped<CategoryToolHandlers>();
@@ -204,7 +203,6 @@ builder.Services.AddScoped<RollbackToolHandlers>();
 builder.Services.AddScoped<ToolDispatcher>();
 builder.Services.AddScoped<GraphMutationService>();
 builder.Services.AddScoped<MappingIntelligenceService>();
-builder.Services.AddScoped<MappingCompatibilityService>();
 builder.Services.AddScoped<AiOperationService>();
 
 // Sync services

@@ -39,14 +39,12 @@ public class AiChatService
 
     private readonly AiModelConfigService _modelService;
     private readonly AiApiClient _apiClient;
-    private readonly AiMappingService _mappingService;
     private readonly GraphMutationService _graphMutation;
     private readonly AiOperationService _operationService;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly PriceSyncService _priceSyncService;
     private readonly IStorageService _storageService;
     private readonly ThumbnailService _thumbnailService;
-    private readonly MappingCompatibilityService _compatibilityService;
     private readonly DataContext _context;
     private readonly ILogger<AiChatService> _logger;
     private readonly Delegat.Services.Ai.Tools.ToolDispatcher _toolDispatcher;
@@ -67,7 +65,6 @@ public class AiChatService
         ["set_field_static_value"]       = ["mapping"],
         ["set_fields_static_value"]      = ["mapping"],
         ["add_field_modifier"]           = ["mapping"],
-        ["generate_mapping_suggestions"] = ["mapping"],
         ["update_product"]               = ["product"],
         ["create_product"]               = ["product"],
         ["create_products"]              = ["product"],
@@ -88,28 +85,24 @@ public class AiChatService
     public AiChatService(
         AiModelConfigService modelService,
         AiApiClient apiClient,
-        AiMappingService mappingService,
         GraphMutationService graphMutation,
         AiOperationService operationService,
         IMarketplaceAdapterRegistry adapterRegistry,
         PriceSyncService priceSyncService,
         IStorageService storageService,
         ThumbnailService thumbnailService,
-        MappingCompatibilityService compatibilityService,
         DataContext context,
         Delegat.Services.Ai.Tools.ToolDispatcher toolDispatcher,
         ILogger<AiChatService> logger)
     {
         _modelService = modelService;
         _apiClient = apiClient;
-        _mappingService = mappingService;
         _graphMutation = graphMutation;
         _operationService = operationService;
         _adapterRegistry = adapterRegistry;
         _priceSyncService = priceSyncService;
         _storageService = storageService;
         _thumbnailService = thumbnailService;
-        _compatibilityService = compatibilityService;
         _context = context;
         _toolDispatcher = toolDispatcher;
         _logger = logger;
@@ -535,8 +528,6 @@ public class AiChatService
                 "get_available_sources" => await GetAvailableSourcesAsync(inputJson, storeId, ct),
                 "get_mapping_coverage" => await GetMappingCoverageAsync(inputJson, storeId, ct),
                 "preview_mapping_for_product" => await PreviewMappingAsync(inputJson, storeId, ct),
-                "analyze_mapping_compatibility" => await AnalyzeMappingCompatibilityAsync(inputJson, storeId, ct),
-                "generate_mapping_suggestions" => await GenerateMappingSuggestionsAsync(inputJson, storeId, userId, ct),
                 "connect_field" => await ConnectFieldAsync(inputJson, storeId, userId, ct),
                 "connect_fields" => await ConnectFieldsBulkAsync(inputJson, storeId, userId, ct),
                 "set_field_static_value" => await SetFieldStaticAsync(inputJson, storeId, userId, ct),
@@ -1424,13 +1415,7 @@ public class AiChatService
         _context.categoryMappings.Add(mapping);
         await _context.SaveChangesAsync(ct);
 
-        // PR3: Do NOT auto-generate. The new flow requires:
-        // 1. create_mapping (this)
-        // 2. get_mapping
-        // 3. analyze_mapping_compatibility (to get report + questions)
-        // 4. (ask user if questions exist)
-        // 5. generate_mapping_suggestions (optionally with answers)
-        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Теперь вызови get_mapping, затем analyze_mapping_compatibility, чтобы получить отчёт о совместимости и вопросы пользователю.");
+        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Вызови get_mapping и подключи поля через connect_field / set_field_static_value.");
     }
 
     private async Task<(object, string)> UpdateMappingNameAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1648,101 +1633,6 @@ public class AiChatService
         // Preview is complex - return basic info
         return (new { mappingId = p.MappingId, productId = p.ProductId, note = "Используйте UI редактора для предпросмотра" },
             "Предпросмотр доступен в редакторе маппинга");
-    }
-
-    private async Task<(object, string)> AnalyzeMappingCompatibilityAsync(string json, int storeId, CancellationToken ct)
-    {
-        var p = ParseInput<IdInput>(json);
-        var mapping = await _context.categoryMappings.AsNoTracking()
-            .Include(m => m.connection)
-            .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
-
-        try
-        {
-            var result = await _compatibilityService.AnalyzeAsync(p.Id, null, ct);
-            var r = result.Report;
-            var summary = $"Анализ совместимости (фаза 1): {r.Summary.ClearMatches} чётких совпадений, {r.Summary.Ambiguous} неоднозначных, score={r.CompatibilityScore:P0}. Вопросов: {result.Questions.Count}";
-
-            return (new
-            {
-                mappingId = result.MappingId,
-                report = r,
-                questions = result.Questions,
-                summary = new
-                {
-                    clearMatches = r.Summary.ClearMatches,
-                    ambiguous = r.Summary.Ambiguous,
-                    requiredGaps = r.Summary.RequiredGaps,
-                    intentionallyEmpty = r.Summary.IntentionallyLeftEmpty,
-                    compatibilityScore = r.CompatibilityScore
-                }
-            }, summary);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "AnalyzeMappingCompatibility (chat) failed for {Id}", p.Id);
-            return (new { error = ex.Message }, $"Ошибка: {ex.Message}");
-        }
-    }
-
-    private async Task<(object, string)> GenerateMappingSuggestionsAsync(string json, int storeId, int userId, CancellationToken ct)
-    {
-        int mappingId = 0;
-        Dictionary<string, string>? answers = null;
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            mappingId = doc.RootElement.GetProperty("id").GetInt32();
-            if (doc.RootElement.TryGetProperty("answers", out var ansEl) && ansEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                answers = new();
-                foreach (var prop in ansEl.EnumerateObject())
-                    answers[prop.Name] = prop.Value.ToString() ?? "";
-            }
-        }
-        catch
-        {
-            var p = ParseInput<IdInput>(json);
-            mappingId = p.Id;
-        }
-
-        var mapping = await _context.categoryMappings
-            .Include(m => m.connection)
-            .FirstOrDefaultAsync(m => m.Id == mappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
-
-        var localCat = await _context.categories.Include(c => c.attributes)
-            .FirstOrDefaultAsync(c => c.Id == mapping.localCategoryId, ct);
-        if (localCat == null) return (new { error = "Категория не найдена" }, "Не найдена");
-
-        var adapter = _adapterRegistry.GetByKey(mapping.connection.adapterKey)!;
-        var adapterFields = await adapter.GetCategoryFieldsAsync(mapping.connection, mapping.externalCategoryId, ct);
-
-        // Save previous graph for rollback
-        var prevGraph = mapping.graphJson ?? "";
-        var result = await _mappingService.GenerateSuggestionsAsync(
-            mapping, localCat, adapterFields, 
-            compatibilityReport: null, userAnswers: answers, ct: ct);
-
-        await _operationService.RecordAsync(storeId, userId, "generate_mapping",
-            $"AI-маппинг для маппинга {mappingId}: подключено {result.Connected} полей",
-            AiOperationService.BuildGraphRollback(mappingId, prevGraph), ct: ct);
-
-        return (new
-        {
-            connected = result.Connected,
-            proposed = result.Proposed,
-            unconnectedRemaining = result.Skipped,
-            alreadyConnectedBefore = result.AlreadyConnected,
-            unknownKeys = result.UnknownKeys,
-            noSourceFound = result.NoSource,
-            invalidModifiersDropped = result.InvalidModifiers,
-        }, $"AI подключил {result.Connected} новых полей (предложено {result.Proposed}, " +
-           $"уже было подключено {result.AlreadyConnected}, осталось незаполненных {result.Skipped}" +
-           (result.InvalidModifiers.Count > 0
-               ? $"; отброшены несуществующие модификаторы: {string.Join(", ", result.InvalidModifiers.Distinct())})"
-               : ")"));
     }
 
     // Fetches adapter field definitions for a mapping (mapping must have connection loaded).
@@ -2890,7 +2780,7 @@ public class AiChatService
         "duplicate_mapping", "list_external_categories", "get_external_fields", "get_price_fields",
         "get_option_alignment_hints", "search_field_options", "get_available_sources", "get_mapping_coverage",
         "preview_mapping_for_product",
-        "analyze_mapping_compatibility", "generate_mapping_suggestions", "connect_field", "set_field_static_value", "add_field_modifier",
+        "connect_field", "set_field_static_value", "add_field_modifier",
         "remove_field_connection", "merge_adapter_fields", "unmerge_adapter_fields",
         "connect_fields", "set_fields_static_value",
         "list_products", "get_product",
@@ -2908,7 +2798,7 @@ public class AiChatService
         "duplicate_mapping", "list_external_categories", "get_external_fields", "get_price_fields",
         "get_option_alignment_hints", "search_field_options", "get_available_sources", "get_mapping_coverage",
         "preview_mapping_for_product",
-        "analyze_mapping_compatibility", "generate_mapping_suggestions", "connect_field", "set_field_static_value", "add_field_modifier",
+        "connect_field", "set_field_static_value", "add_field_modifier",
         "remove_field_connection", "merge_adapter_fields", "unmerge_adapter_fields",
         "connect_fields", "set_fields_static_value", "analyze_mapping_quality",
         "export_products_batch", "export_prices", "export_stocks", "get_batch_status", "list_product_links",
@@ -3127,13 +3017,13 @@ public class AiChatService
         Prop("list_mappings", "List category mappings (optionally for one connection)", Req([]),
             ("connectionId", Int("Filter by connection ID"))
         ),
-        Prop("get_mapping", "Get mapping details, coverage, schemaContext, productSample and optionAlignmentHints. In new flow: call this after create_mapping, then analyze_mapping_compatibility. Required before generate_mapping_suggestions.", Req(["id"]),
+        Prop("get_mapping", "Get mapping details, coverage, schemaContext, productSample and optionAlignmentHints.", Req(["id"]),
             ("id", Int("Mapping ID")),
             ("productId", Int("Preview product ID — validates optionMap against real attribute values"))),
         Prop("get_option_alignment_hints", "Precomputed optionMap hints: local attribute option values (from import source) → target adapter allowedValues. Essential when mapping Ozon-imported category to WB/Ozon/other.", Req(["id"]),
             ("id", Int("Mapping ID")),
             ("productId", Int("Optional preview product ID"))),
-        Prop("create_mapping", "Create a new category mapping (empty). Does NOT auto-generate fields. After creation: get_mapping → analyze_mapping_compatibility → (ask user questions if any) → generate_mapping_suggestions with answers if needed.", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
+        Prop("create_mapping", "Create a new category mapping (empty). Does NOT auto-generate fields. After creation call get_mapping and connect fields via connect_field / set_field_static_value.", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
             ("connectionId", Int("Connection ID")),
             ("localCategoryId", Int("Local category ID")),
             ("externalCategoryId", Str("External marketplace category ID (from list_external_categories)")),
@@ -3176,15 +3066,6 @@ public class AiChatService
         ),
         Prop("preview_mapping_for_product", "Preview mapping result for a specific product", Req(["mappingId", "productId"]),
             ("mappingId", Int("Mapping ID")), ("productId", Int("Product ID"))
-        ),
-        Prop("generate_mapping_suggestions", "Phase 3 of compatibility flow. After analyze_mapping_compatibility and user answers. Pass answers as object { \"adapterFieldKey\": \"chosen answer or source id\" }. Higher confidence threshold. Steps: get_mapping → analyze_mapping_compatibility → (ask user if questions) → this tool with answers.", Req(["id"]),
-            ("id", Int("Mapping ID")),
-            ("productId", Int("Preview product ID (recommended)")),
-            ("answers", new AiToolProperty { type = "object", description = "User answers from compatibility questions. Keys are adapter field keys, values are the chosen meaning or source." })
-        ),
-        Prop("analyze_mapping_compatibility", "Phase 1 of new compatibility-first flow. Returns CompatibilityReport (clearMatches, ambiguousPairs, requiredGaps, adapterOnly...) + 0-5 clarifying questions about data meaning (source_pick, dictionary_confirm, unit_confirm, semantic_confirm). Call BEFORE generate_mapping_suggestions. Never generates connections itself.", Req(["id"]),
-            ("id", Int("Mapping ID")),
-            ("productId", Int("Optional preview product ID for samples"))
         ),
         Prop("connect_field", "Connect a source to an adapter field. sink='card' (default) or 'price'. For price fields use get_price_fields keys + sink='price'.", Req(["mappingId", "adapterFieldKey", "sourceType"]),
             ("mappingId", Int("Mapping ID")),

@@ -650,9 +650,6 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("compatibilityContextJson")
-                        .HasColumnType("longtext");
-
                     b.Property<int>("connectionId")
                         .HasColumnType("int");
 

@@ -412,7 +412,7 @@ public class GraphMutationService
         return states;
     }
 
-    // Apply a list of AI suggestions to the graph (used by AiMappingService)
+    // Apply a list of suggestions to the graph
     public async Task<SuggestionApplyResult> ApplySuggestionsAsync(int mappingId,
         IReadOnlyList<AiFieldSuggestion> suggestions,
         string? sink = null,

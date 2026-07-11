@@ -12,29 +12,23 @@ public class MappingToolHandlers : ToolHandlerBase
 {
     private readonly DataContext _context;
     private readonly AiOperationService _operationService;
-    private readonly AiMappingService _mappingService;
     private readonly GraphMutationService _graphMutation;
     private readonly MappingIntelligenceService _intelligence;
-    private readonly MappingCompatibilityService _compatibility;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly ILogger<MappingToolHandlers> _logger;
 
     public MappingToolHandlers(
         DataContext context,
         AiOperationService operationService,
-        AiMappingService mappingService,
         GraphMutationService graphMutation,
         MappingIntelligenceService intelligence,
-        MappingCompatibilityService compatibility,
         IMarketplaceAdapterRegistry adapterRegistry,
         ILogger<MappingToolHandlers> logger)
     {
         _context = context;
         _operationService = operationService;
-        _mappingService = mappingService;
         _graphMutation = graphMutation;
         _intelligence = intelligence;
-        _compatibility = compatibility;
         _adapterRegistry = adapterRegistry;
         _logger = logger;
     }
@@ -99,7 +93,6 @@ public class MappingToolHandlers : ToolHandlerBase
             schemaContext,
             productSample,
             optionAlignmentHints = alignmentHints,
-            compatibilityContextJson = mapping.compatibilityContextJson,
         }, $"Маппинг {mapping.name ?? mapping.externalCategoryName}: карточка {card.Connected}/{card.Total}" +
            (price != null ? $", цены {price.Connected}/{price.Total}" : "") +
            $" (обяз. карточка {card.RequiredConnected}/{card.RequiredTotal})");
@@ -123,9 +116,7 @@ public class MappingToolHandlers : ToolHandlerBase
         _context.categoryMappings.Add(mapping);
         await _context.SaveChangesAsync(ct);
 
-        // PR3: No auto-generate. New compatibility flow:
-        // create → get_mapping → analyze_mapping_compatibility → (questions to user) → generate_mapping_suggestions(answers)
-        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Для заполнения: get_mapping → analyze_mapping_compatibility (получить вопросы) → generate_mapping_suggestions с ответами.");
+        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Для заполнения вызови get_mapping и подключи поля через connect_field / set_field_static_value.");
     }
 
     internal async Task<(object, string)> UpdateMappingNameAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -470,143 +461,6 @@ public class MappingToolHandlers : ToolHandlerBase
         return (new { schemaContext, productSample, hints },
             $"{hints.Count} подсказок optionMap" +
             (schemaContext.SchemaSource != null ? $" (схема с {schemaContext.SchemaSource.ConnectionName})" : ""));
-    }
-
-    /// <summary>
-    /// PR1: analyze_mapping_compatibility tool.
-    /// Returns structured CompatibilityReport + list of clarifying questions (max 5).
-    /// This is a read-only analysis step — no mutations.
-    /// </summary>
-    internal async Task<(object, string)> AnalyzeMappingCompatibilityAsync(string json, int storeId, int userId, CancellationToken ct)
-    {
-        var p = ParseInput<MappingQueryInput>(json);
-        var mapping = await _context.categoryMappings.AsNoTracking()
-            .Include(m => m.connection)
-            .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
-
-        try
-        {
-            var result = await _compatibility.AnalyzeAsync(p.Id, p.ProductId, ct);
-
-            // Summary for the assistant message (concise)
-            var r = result.Report;
-            var summary = $"Анализ совместимости: {r.Summary.ClearMatches} высокоточных совпадений, " +
-                          $"{r.Summary.Ambiguous} неоднозначностей, {r.Summary.IntentionallyLeftEmpty} оставлено пустыми намеренно. " +
-                          $"Score: {r.CompatibilityScore:P0}";
-
-            return (new
-            {
-                mappingId = result.MappingId,
-                report = r,
-                questions = result.Questions,
-                schemaContextHint = result.SchemaContextHint,
-                summary = new
-                {
-                    clearMatches = r.Summary.ClearMatches,
-                    ambiguous = r.Summary.Ambiguous,
-                    requiredGaps = r.Summary.RequiredGaps,
-                    intentionallyEmpty = r.Summary.IntentionallyLeftEmpty,
-                    compatibilityScore = r.CompatibilityScore
-                }
-            }, summary);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "AnalyzeMappingCompatibility failed for {MappingId}", p.Id);
-            return (new { error = ex.Message }, $"Ошибка анализа совместимости: {ex.Message}");
-        }
-    }
-
-    internal async Task<(object, string)> GenerateMappingSuggestionsAsync(string json, int storeId, int userId, CancellationToken ct)
-    {
-        var p = ParseInput<MappingQueryInput>(json);
-        var mapping = await _context.categoryMappings
-            .Include(m => m.connection)
-            .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
-
-        var localCat = await _context.categories.Include(c => c.attributes)
-            .FirstOrDefaultAsync(c => c.Id == mapping.localCategoryId, ct);
-        if (localCat == null) return (new { error = "Категория не найдена" }, "Не найдена");
-
-        var adapter = _adapterRegistry.GetByKey(mapping.connection.adapterKey)!;
-        var adapterFields = await adapter.GetCategoryFieldsAsync(mapping.connection, mapping.externalCategoryId, ct);
-
-        // Save previous graph for rollback
-        var prevGraph = mapping.graphJson ?? "";
-        var result = await _mappingService.GenerateSuggestionsAsync(
-            mapping, localCat, adapterFields, 
-            previewProductId: p.ProductId, 
-            compatibilityReport: null,   // filled in PR3 when analyze was called before
-            userAnswers: p.Answers,
-            ct: ct);
-
-        // Price-API fields (Ozon/WB) — deterministic pass then AI for remainder
-        var priceResult = new AiMappingResult();
-        DeterministicPriceMapResult? priceDeterministic = null;
-        string? priceError = null;
-        IReadOnlyList<ExternalField> priceFields = Array.Empty<ExternalField>();
-        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
-        {
-            try
-            {
-                priceFields = await adapter.GetPriceFieldsAsync(
-                    mapping.connection, mapping.externalCategoryId, ct);
-                if (priceFields.Count > 0)
-                {
-                    priceDeterministic = await _graphMutation.ApplyDeterministicPriceMappingsAsync(
-                        p.Id, priceFields, ct);
-                    priceResult = await _mappingService.GenerateSuggestionsAsync(
-                        mapping, localCat, priceFields, sink: "price",
-                        previewProductId: p.ProductId, ct: ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                priceError = ex.Message;
-                _logger.LogWarning(ex, "AI price-field mapping failed for mapping {Id}", p.Id);
-            }
-        }
-
-        await _operationService.RecordAsync(storeId, userId, "generate_mapping",
-            $"AI-маппинг для маппинга {p.Id}: подключено {result.Connected} полей",
-            AiOperationService.BuildGraphRollback(p.Id, prevGraph), ct: ct);
-
-        return (new
-        {
-            card = new
-            {
-                connected = result.Connected,
-                proposed = result.Proposed,
-                unconnectedRemaining = result.Skipped,
-                alreadyConnectedBefore = result.AlreadyConnected,
-            },
-            price = priceFields.Count > 0 || priceError != null ? new
-            {
-                deterministic = priceDeterministic == null ? null : new
-                {
-                    connected = priceDeterministic.Connected,
-                    alreadyConnected = priceDeterministic.AlreadyConnected,
-                    skipped = priceDeterministic.Skipped,
-                },
-                ai = priceResult.Connected > 0 || priceResult.Proposed > 0 ? new
-                {
-                    connected = priceResult.Connected,
-                    proposed = priceResult.Proposed,
-                    unconnectedRemaining = priceResult.Skipped,
-                } : null,
-                error = priceError,
-            } : null,
-            unknownKeys = result.UnknownKeys.Concat(priceResult.UnknownKeys).Distinct().ToList(),
-            noSourceFound = result.NoSource + priceResult.NoSource,
-            invalidModifiersDropped = result.InvalidModifiers.Concat(priceResult.InvalidModifiers).Distinct().ToList(),
-        }, $"AI подключил {result.Connected} полей карточки" +
-           (priceDeterministic?.Connected > 0 ? $", цены (авто) {priceDeterministic.Connected}" : "") +
-           (priceResult.Connected > 0 ? $", цены (AI) {priceResult.Connected}" : "") +
-           (priceError != null ? $". Ошибка цен: {priceError}" : "") +
-           $" (осталось карточка {result.Skipped}" +
-           (priceResult.Skipped > 0 ? $", цены {priceResult.Skipped}" : "") + ")");
     }
 
     internal async Task<(object, string)> ConnectFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1156,8 +1010,6 @@ internal class MappingQueryInput
 { 
     public int Id { get; set; } 
     public int? ProductId { get; set; } 
-    // PR2: optional user answers from compatibility questions (key = adapterFieldKey)
-    public Dictionary<string, string>? Answers { get; set; } 
 }
 internal class PreviewMappingInput { public int MappingId { get; set; } public int ProductId { get; set; } }
 internal class ConnectFieldInput { public int MappingId { get; set; } public string AdapterFieldKey { get; set; } = ""; public string SourceType { get; set; } = ""; public string? SourceField { get; set; } public int? SourceAttributeId { get; set; } public string? Sink { get; set; } }

@@ -114,8 +114,6 @@ public class ToolDispatcher
                 "get_available_sources"      => await _mappingHandlers.GetAvailableSourcesAsync(inputJson, storeId, userId, ct),
                 "get_mapping_coverage"       => await _mappingHandlers.GetMappingCoverageAsync(inputJson, storeId, userId, ct),
                 "preview_mapping_for_product" => await _mappingHandlers.PreviewMappingAsync(inputJson, storeId, userId, ct),
-                "analyze_mapping_compatibility" => await _mappingHandlers.AnalyzeMappingCompatibilityAsync(inputJson, storeId, userId, ct),
-                "generate_mapping_suggestions" => await _mappingHandlers.GenerateMappingSuggestionsAsync(inputJson, storeId, userId, ct),
                 "connect_field"              => await _mappingHandlers.ConnectFieldAsync(inputJson, storeId, userId, ct),
                 "connect_fields"             => await _mappingHandlers.ConnectFieldsBulkAsync(inputJson, storeId, userId, ct),
                 "set_field_static_value"     => await _mappingHandlers.SetFieldStaticAsync(inputJson, storeId, userId, ct),

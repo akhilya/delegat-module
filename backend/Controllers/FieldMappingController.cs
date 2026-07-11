@@ -22,7 +22,6 @@ public class FieldMappingController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly MappingService _mappingService;
-    private readonly DataContext _context;
     private readonly ILogger<FieldMappingController> _logger;
 
     public FieldMappingController(
@@ -31,7 +30,6 @@ public class FieldMappingController : ControllerBase
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
         MappingService mappingService,
-        DataContext context,
         ILogger<FieldMappingController> logger)
     {
         _currentUserService = currentUserService;
@@ -39,7 +37,6 @@ public class FieldMappingController : ControllerBase
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
         _mappingService = mappingService;
-        _context = context;
         _logger = logger;
     }
 
@@ -151,46 +148,6 @@ public class FieldMappingController : ControllerBase
             localCategoryName = mapping.localCategory?.name,
             externalCategoryId = mapping.externalCategoryId,
             externalCategoryName = mapping.externalCategoryName,
-            compatibilityContextJson = mapping.compatibilityContextJson,
-        });
-    }
-
-    /// <summary>
-    /// Read-only compatibility survey state (never re-runs analysis).
-    /// </summary>
-    [HttpGet]
-    [Route("/marketplace/mappings/{mappingId}/compatibility-context")]
-    public async Task<IActionResult> GetCompatibilityContext(int mappingId, CancellationToken ct)
-    {
-        var mapping = await GetMappingAsync(mappingId);
-        var ctx = Delegat.Services.Ai.CompatibilityContextHelper.Parse(mapping.compatibilityContextJson);
-
-        var runningAnalyze = await _context.operations.AnyAsync(
-            o => o.storeId == mapping.connection!.storeId
-                 && o.type == "ai-compatibility"
-                 && o.status == "running"
-                 && o.title.Contains($"(#{mappingId})"), ct);
-        var runningMapping = await _context.operations.AnyAsync(
-            o => o.storeId == mapping.connection!.storeId
-                 && o.type == "ai-mapping"
-                 && o.status == "running"
-                 && o.title.Contains($"(#{mappingId})"), ct);
-
-        var status = runningAnalyze ? "analyzing"
-            : runningMapping ? "generating"
-            : Delegat.Services.Ai.CompatibilityContextHelper.SurveyStatus(ctx);
-
-        return Ok(new
-        {
-            status,
-            analyzedAt = ctx?.AnalyzedAt,
-            questions = ctx != null
-                ? Delegat.Services.Ai.CompatibilityContextHelper.PendingQuestions(ctx).ToList()
-                : new List<Delegat.Services.Ai.MappingCompatibilityService.CompatibilityQuestion>(),
-            report = ctx?.Report,
-            answers = ctx?.Answers ?? new Dictionary<string, string>(),
-            surveyCompletedAt = ctx?.SurveyCompletedAt,
-            compatibilityScore = ctx?.Report?.CompatibilityScore,
         });
     }
 

@@ -23,7 +23,7 @@ import {
   Activity,
   Download,
   Upload,
-  ClipboardList,
+
   RefreshCw,
 } from "lucide-vue-next";
 import {
@@ -86,13 +86,11 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   previewProductId: { type: [Number, String], default: null },
   previewProducts: { type: Array, default: () => [] },
-  showCompleteSurveyButton: { type: Boolean, default: false },
 });
 const emit = defineEmits([
   "preview-result",
   "clear-preview",
   "select-preview",
-  "complete-survey",
   "fields-synced",
 ]);
 
@@ -1562,17 +1560,6 @@ async function importMappingFile(event) {
         <Button size="sm" variant="ghost" title="Импорт маппинга из JSON" @click="triggerImportFile">
           <Upload class="mr-1.5 size-4" />
           Импорт
-        </Button>
-        <span v-if="showCompleteSurveyButton" class="mx-0.5 h-5 w-px bg-border" />
-        <Button
-          v-if="showCompleteSurveyButton"
-          size="sm"
-          variant="default"
-          title="Ответить на вопросы совместимости"
-          @click="emit('complete-survey')"
-        >
-          <ClipboardList class="mr-1.5 size-4" />
-          Завершить опрос
         </Button>
         <input
           ref="importFileInput"

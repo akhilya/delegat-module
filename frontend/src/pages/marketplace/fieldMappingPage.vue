@@ -9,7 +9,6 @@ import Label from "@/components/ui/label/Label.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MappingCanvas from "@/components/marketplace/graph/MappingCanvas.vue";
 import { mapActions } from "vuex";
-import MappingCompatibilityWizard from "@/components/marketplace/MappingCompatibilityWizard.vue";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -47,7 +46,6 @@ export default {
     Page,
     PageSection,
     MappingCanvas,
-    MappingCompatibilityWizard,
     EmptyState,
     NavigationBar,
     Breadcrumbs,
@@ -124,11 +122,6 @@ export default {
       attributeOptionsLoading: {},
       // Для добавления нового поля
       showAddField: false,
-      // PR4 compatibility wizard
-      showCompatibilityWizard: false,
-      wizardMappingId: null,
-      showCompleteSurveyButton: false,
-      compatibilityPollTimer: null,
       newField: {
         externalFieldKey: "",
         externalFieldName: "",
@@ -289,16 +282,6 @@ export default {
             externalCategoryId: data.externalCategoryId,
             externalCategoryName: data.externalCategoryName,
           };
-
-          this.updateSurveyStateFromContext(data.compatibilityContextJson);
-          if (
-            !this.showCompleteSurveyButton &&
-            this.hasRunningCompatibilityAnalyze()
-          ) {
-            this.startCompatibilityPoll();
-          } else {
-            this.stopCompatibilityPoll();
-          }
 
           setPageTitle(data.externalCategoryName || data.localCategoryName);
         },
@@ -742,86 +725,6 @@ export default {
       });
     },
 
-    updateSurveyStateFromContext(compatibilityContextJson) {
-      if (!compatibilityContextJson) {
-        this.showCompleteSurveyButton = false;
-        return;
-      }
-      try {
-        const ctx = JSON.parse(compatibilityContextJson);
-        const qs = ctx.questions || [];
-        const ans = ctx.answers || {};
-        const unanswered = qs.filter((q) => {
-          const key = q.adapterFieldKey || q.AdapterFieldKey;
-          return key && ans[key] === undefined;
-        });
-        this.showCompleteSurveyButton = unanswered.length > 0;
-      } catch {
-        this.showCompleteSurveyButton = false;
-      }
-    },
-
-    handleCompatibilityAnalyzeFinished(op) {
-      const summary = op.summary || "";
-      if (!summary.includes("вопросов совместимости")) return;
-
-      const countMatch = summary.match(/(\d+) вопросов/);
-      const count = countMatch ? countMatch[1] : "";
-      displaySonnerSuccess(
-        count
-          ? `Анализ завершён. ${count} вопросов о смысле данных.`
-          : "Анализ завершён. Есть вопросы о смысле данных.",
-        {
-          label: "Ответить",
-          onClick: () => this.openCompatibilityWizard(),
-        },
-      );
-    },
-
-    hasRunningCompatibilityAnalyze() {
-      return this.$store.state.operations.operations.some(
-        (o) =>
-          o.type === "ai-compatibility" &&
-          o.status === "running" &&
-          o.title?.includes(`(#${this.mappingId})`),
-      );
-    },
-
-    startCompatibilityPoll() {
-      if (this.compatibilityPollTimer) return;
-      this.compatibilityPollTimer = setInterval(() => {
-        if (this.showCompleteSurveyButton) {
-          this.stopCompatibilityPoll();
-          return;
-        }
-        if (!this.hasRunningCompatibilityAnalyze()) {
-          this.stopCompatibilityPoll();
-        }
-        this.refreshCompatibilityContext();
-      }, 2000);
-    },
-
-    stopCompatibilityPoll() {
-      if (!this.compatibilityPollTimer) return;
-      clearInterval(this.compatibilityPollTimer);
-      this.compatibilityPollTimer = null;
-    },
-
-    async refreshCompatibilityContext() {
-      if (!this.mappingId) return;
-      try {
-        const { http } = await import("@/main");
-        const res = await http.get(
-          `/marketplace/mappings/${this.mappingId}/compatibility-context`,
-        );
-        const data = res.data || res;
-        this.showCompleteSurveyButton = data.status === "pending_survey";
-      } catch {
-        /* ignore transient poll errors */
-      }
-    },
-
-    // PR4: Re-triggerable compatibility wizard (for accidental close or page refresh)
     async onFieldsSynced() {
       await Promise.all([
         this.fetchFieldMappings(),
@@ -829,17 +732,6 @@ export default {
         this.fetchPriceFieldDescriptions(),
       ]);
       await this.$refs.mappingCanvas?.reloadAfterFieldSync?.();
-    },
-
-    openCompatibilityWizard() {
-      if (!this.mappingId) return;
-      this.wizardMappingId = parseInt(this.mappingId);
-      this.showCompatibilityWizard = true;
-    },
-
-    onCompatibilityAnswered() {
-      this.showCompleteSurveyButton = false;
-      this.refreshCompatibilityContext();
     },
 
     onPreviewProductChange(productId) {
@@ -1100,49 +992,9 @@ export default {
         this.onPreviewProductChange(qp);
       }
       this.updateAiPageContext();
-      if (this.hasRunningCompatibilityAnalyze()) {
-        this.startCompatibilityPoll();
-      }
-    });
-
-    // Live-reload when background AI tasks for THIS mapping finish
-    this.unsubscribeOps = this.$store.subscribe((mutation) => {
-      if (mutation.type === "operations/ADD_OPERATION") {
-        const op = mutation.payload;
-        if (
-          op?.type === "ai-compatibility" &&
-          op.title?.includes(`(#${this.mappingId})`)
-        ) {
-          this.startCompatibilityPoll();
-        }
-        return;
-      }
-
-      if (mutation.type !== "operations/FINISH_OPERATION") return;
-      const op = this.$store.state.operations.operations.find(
-        (o) => o.id === mutation.payload.id,
-      );
-      if (!op?.title?.includes(`(#${this.mappingId})`)) return;
-
-      if (op.type === "ai-compatibility") {
-        this.stopCompatibilityPoll();
-        this.refreshCompatibilityContext();
-        this.handleCompatibilityAnalyzeFinished(op);
-        return;
-      }
-
-      if (op.type !== "ai-mapping") return;
-      this.fetchData();
-      displaySonnerSuccess(
-        mutation.payload.summary
-          ? `AI-маппинг завершён. ${mutation.payload.summary}`
-          : "AI-маппинг завершён",
-      );
     });
   },
   beforeUnmount() {
-    this.stopCompatibilityPoll();
-    this.unsubscribeOps?.();
     this.$store.commit("aiChat/clearPageContext");
   },
 };
@@ -1172,11 +1024,9 @@ export default {
             :available-sources="{ ...availableSources, storeFiles }"
             :preview-product-id="previewProductId"
             :preview-products="previewProducts"
-            :show-complete-survey-button="showCompleteSurveyButton"
             @preview-result="onGraphPreview"
             @select-preview="onPreviewProductChange"
             @clear-preview="onPreviewProductChange(null)"
-            @complete-survey="openCompatibilityWizard"
             @fields-synced="onFieldsSynced"
           />
         </div>
@@ -1308,13 +1158,6 @@ export default {
         </div>
       </SheetContent>
     </Sheet>
-
-    <!-- PR4 Compatibility Wizard (re-openable here) -->
-    <MappingCompatibilityWizard
-      v-model="showCompatibilityWizard"
-      :mapping-id="wizardMappingId"
-      @completed="onCompatibilityAnswered"
-    />
 
     <!-- Диалог добавления нового поля -->
     <!-- Mapping Settings Dialog -->

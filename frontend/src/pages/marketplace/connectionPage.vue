@@ -1,6 +1,5 @@
 <script>
 import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
-import MappingCompatibilityWizard from "@/components/marketplace/MappingCompatibilityWizard.vue";
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
@@ -248,14 +247,7 @@ export default {
         externalCategoryId: "",
         externalCategoryName: "",
         name: "",
-        useAiMapping: true,
       },
-      // PR4 compatibility wizard state
-      showCompatibilityWizard: false,
-      wizardMappingId: null,
-      wizardQuestions: [],
-      wizardAnswers: {},
-      wizardReport: null,
       externalCategorySearch: "",
       credentialValues: {},
       PAGE_MARKETPLACE,
@@ -882,9 +874,7 @@ export default {
         externalCategoryId: "",
         externalCategoryName: "",
         name: "",
-        useAiMapping: true,
       };
-      // Do not clear wizard state here — it may be used right after create for the new flow
     },
 
     parseCredentials() {
@@ -954,133 +944,21 @@ export default {
         return;
       }
 
-      const useAi = this.newMapping.useAiMapping;
       this.isCreatingMapping = true;
       await this.createCategoryMapping({
         connectionId: this.connectionId,
         data: this.newMapping,
-        onSuccess: (response) => {
-          // useAxios resolves to a VueUse state object where .data is a ShallowRef — use .value to unbox
-          const newMappingId = response?.data?.value?.id ?? response?.data?.id;
+        onSuccess: () => {
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
           this.fetchMappings();
-
-          if (useAi && newMappingId) {
-            this.runAndSaveCompatibilityAnalysis(newMappingId);
-          } else {
-            displaySonnerSuccess("Маппинг создан");
-          }
+          displaySonnerSuccess("Маппинг создан");
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isCreatingMapping = false;
-    },
-
-    async runAndSaveCompatibilityAnalysis(mappingId) {
-      const { http } = await import("@/main");
-      const operationId = crypto.randomUUID().replace(/-/g, "");
-      try {
-        await http.post(`/ai/mapping-analyze/${mappingId}`, { operationId });
-        displaySonnerSuccess("Маппинг создан. Анализ совместимости запущен…", {
-          label: "Открыть прогресс",
-          onClick: () => this.$store.dispatch("operations/openPanel"),
-        });
-      } catch (error) {
-        displaySonnerError(error);
-      }
-    },
-
-    handleCompatibilityAnalyzeFinished(op) {
-      const match = op.title?.match(/#(\d+)\)/);
-      const mappingId = match ? parseInt(match[1], 10) : null;
-      if (!mappingId) return;
-
-      const summary = op.summary || "";
-      if (summary.includes("вопросов совместимости")) {
-        const countMatch = summary.match(/(\d+) вопросов/);
-        const count = countMatch ? countMatch[1] : "";
-        displaySonnerSuccess(
-          count
-            ? `Анализ завершён. ${count} вопросов о смысле данных.`
-            : "Анализ завершён. Есть вопросы о смысле данных.",
-          {
-            label: "Ответить",
-            onClick: () => this.openCompatibilityWizard(mappingId),
-          },
-        );
-        return;
-      }
-
-      if (summary.includes("вопросов нет")) {
-        this.startAiGeneration(mappingId);
-      }
-    },
-
-    openCompatibilityWizard(mappingId) {
-      this.wizardMappingId = mappingId;
-      this.showCompatibilityWizard = true;
-    },
-
-    // Starts the actual AI generation (with or without answers) and shows the background progress toast
-    async startAiGeneration(mappingId, answers = null) {
-      const { http } = await import("@/main");
-      const operationId = crypto.randomUUID().replace(/-/g, "");
-
-      try {
-        const payload = { operationId };
-        if (answers && Object.keys(answers).length > 0) {
-          payload.answers = answers;
-        }
-
-        await http.post(`/ai/mapping-suggest/${mappingId}`, payload);
-
-        const msg = answers 
-          ? "Анализ совместимости завершён. AI генерирует осмысленные связи…"
-          : "AI генерирует маппинг…";
-
-        displaySonnerSuccess(msg, {
-          label: "Открыть прогресс",
-          onClick: () => this.$store.dispatch("operations/openPanel"),
-        });
-      } catch (error) {
-        displaySonnerError(error);
-      }
-    },
-
-    // Wizard handlers (PR4)
-    async submitCompatibilityWizard() {
-      if (!this.wizardMappingId) return;
-      const { http } = await import("@/main");
-      const answers = { ...this.wizardAnswers };
-      const operationId = crypto.randomUUID().replace(/-/g, "");
-      try {
-        await http.post(`/ai/mapping-suggest/${this.wizardMappingId}`, { operationId, answers });
-        this.showCompatibilityWizard = false;
-        this.wizardMappingId = null;
-        this.wizardQuestions = [];
-        this.wizardAnswers = {};
-        displaySonnerSuccess("Ответы отправлены. AI генерирует маппинг с учётом совместимости…", {
-          label: "Открыть прогресс",
-          onClick: () => this.$store.dispatch("operations/openPanel"),
-        });
-        this.fetchMappings();
-      } catch (error) {
-        displaySonnerError(error);
-      }
-    },
-
-    onWizardCompleted(payload) {
-      this.showCompatibilityWizard = false;
-      this.wizardMappingId = null;
-      this.fetchMappings();
-    },
-
-    onWizardCancel() {
-      this.showCompatibilityWizard = false;
-      this.wizardMappingId = null;
     },
 
     async handleCreateExternalCategoryMapping() {
@@ -2413,15 +2291,6 @@ export default {
   mounted() {
     this.fetchData();
 
-    this.unsubscribeOps = this.$store.subscribe((mutation) => {
-      if (mutation.type !== "operations/FINISH_OPERATION") return;
-      const op = this.$store.state.operations.operations.find(
-        (o) => o.id === mutation.payload.id,
-      );
-      if (op?.type !== "ai-compatibility") return;
-      this.handleCompatibilityAnalyzeFinished(op);
-    });
-
     // Handle query params
     const {
       tab,
@@ -2474,7 +2343,6 @@ export default {
     }
   },
   beforeUnmount() {
-    this.unsubscribeOps?.();
     this.stopLimitsAutoRefresh();
     this.$store.commit("aiChat/clearPageContext");
   },
@@ -2925,14 +2793,6 @@ export default {
                       </div>
                     </div>
 
-                    <!-- AI-чекбокс -->
-                    <div class="flex items-center gap-2 pt-1">
-                      <Checkbox id="useAiMapping" v-model="newMapping.useAiMapping" />
-                      <Label for="useAiMapping" class="cursor-pointer font-normal text-sm">
-                        Использовать умный AI-маппинг с анализом совместимости (рекомендуется)
-                      </Label>
-                    </div>
-
                     <DialogFooter>
                       <DialogClose as-child>
                         <Button variant="outline">Отмена</Button>
@@ -2960,14 +2820,6 @@ export default {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-
-                <!-- PR4: Reusable Compatibility Wizard -->
-                <MappingCompatibilityWizard
-                  v-model="showCompatibilityWizard"
-                  :mapping-id="wizardMappingId"
-                  @completed="onWizardCompleted"
-                  @cancel="onWizardCancel"
-                />
 
                 <Button
                   @click="
