@@ -87,15 +87,20 @@ publish/
 *.zip
 
 # ======================
-# AI Tools
+# AI Tools & Local Assistants
 # ======================
 .claude/
-.agents/
 .codex/
+.agents/
 .superpowers/
 .impeccable/
 .impeccable.md
 **/.impeccable/
+.grok/
+.cursor/
+mcps/
+terminals/
+.playwright-mcp/
 
 # ======================
 # Misc
