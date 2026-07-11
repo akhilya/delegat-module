@@ -13,13 +13,17 @@ defineProps({
 </script>
 
 <template>
-  <FieldSet class="max-w-2xl border-t border-border/40 pt-8 first:border-t-0 first:pt-0">
-    <FieldLegend variant="legend">{{ title }}</FieldLegend>
-    <FieldDescription v-if="description">{{ description }}</FieldDescription>
-    <FieldGroup class="gap-0">
+  <FieldSet class="m-0 min-w-0 max-w-2xl border-0 p-0 [&+&]:mt-14">
+    <FieldLegend variant="legend" class="mb-0.5 w-full text-base font-semibold">
+      {{ title }}
+    </FieldLegend>
+    <FieldDescription v-if="description" class="mb-6 max-w-lg">
+      {{ description }}
+    </FieldDescription>
+    <FieldGroup class="gap-8">
       <slot />
     </FieldGroup>
-    <div v-if="$slots.footer" class="mt-6 flex flex-wrap items-center gap-3 border-t border-border/40 pt-4">
+    <div v-if="$slots.footer" class="mt-6 flex flex-wrap items-center gap-3">
       <slot name="footer" />
     </div>
   </FieldSet>

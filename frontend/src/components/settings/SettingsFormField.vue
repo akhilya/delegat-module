@@ -13,13 +13,13 @@ defineProps({
 <template>
   <Field
     :class="cn(
-      'border-t border-border/40 py-6 first:border-t-0 first:pt-0',
-      changed && 'rounded-md bg-muted/30 px-3 -mx-3',
+      'gap-1.5',
+      changed && 'rounded-lg bg-muted/40 px-3 py-3 -mx-3',
     )"
   >
-    <FieldLabel :for="labelFor">{{ label }}</FieldLabel>
+    <FieldLabel :for="labelFor" class="text-sm font-medium">{{ label }}</FieldLabel>
     <slot />
-    <FieldDescription v-if="description || $slots.description">
+    <FieldDescription v-if="description || $slots.description" class="text-xs">
       <slot name="description">{{ description }}</slot>
     </FieldDescription>
   </Field>

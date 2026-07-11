@@ -66,7 +66,7 @@ watch(
       :min="min"
       :step="step"
       :placeholder="placeholder"
-      class="h-9"
+      class="h-9 max-w-md"
       @blur="commitEdit"
       @keydown.enter.prevent="commitEdit"
       @keydown.escape.prevent="cancelEdit"
@@ -74,17 +74,20 @@ watch(
     <Button
       v-else
       type="button"
-      variant="outline"
+      variant="ghost"
       :disabled="disabled"
-      class="group/value h-9 w-full justify-between px-3 font-normal"
+      class="group/value -ml-2 h-auto max-w-md justify-start gap-2 px-2 py-1 font-normal hover:bg-accent/60"
       @click="startEdit"
     >
-      <span :class="displayValue() === emptyLabel ? 'text-muted-foreground' : 'text-foreground'">
+      <span
+        class="text-sm"
+        :class="displayValue() === emptyLabel ? 'text-muted-foreground' : 'font-medium text-foreground'"
+      >
         {{ displayValue() }}
       </span>
       <Pencil
         v-if="!disabled"
-        class="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/value:opacity-100"
+        class="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/value:opacity-100"
       />
     </Button>
   </div>

@@ -85,10 +85,7 @@ onMounted(fetchMe);
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsFormSection
-        title="Профиль"
-        description="Имя отображается в интерфейсе и используется при входе."
-      >
+      <SettingsFormSection title="Профиль">
         <SettingsFormField
           label="Имя пользователя"
           :changed="hasProfileChanges"
@@ -125,32 +122,29 @@ onMounted(fetchMe);
         </template>
       </SettingsFormSection>
 
-      <SettingsFormSection
-        title="Пароль"
-        description="Для смены пароля нужно указать текущий пароль."
-      >
-        <SettingsFormField label="Текущий пароль" label-for="current-password">
-          <PasswordInput
-            id="current-password"
-            v-model="currentPassword"
-            autocomplete="current-password"
-            :disabled="isChangingPassword"
-            class="max-w-md"
-          />
-        </SettingsFormField>
+      <SettingsFormSection title="Пароль">
+        <div class="grid max-w-2xl gap-8 sm:grid-cols-2">
+          <SettingsFormField label="Текущий пароль" label-for="current-password">
+            <PasswordInput
+              id="current-password"
+              v-model="currentPassword"
+              autocomplete="current-password"
+              :disabled="isChangingPassword"
+            />
+          </SettingsFormField>
 
-        <SettingsFormField label="Новый пароль" label-for="new-password">
-          <PasswordInput
-            id="new-password"
-            v-model="newPassword"
-            autocomplete="new-password"
-            :disabled="isChangingPassword"
-            class="max-w-md"
-          />
-          <template #description>
-            Новый пароль вступит в силу после сохранения.
-          </template>
-        </SettingsFormField>
+          <SettingsFormField label="Новый пароль" label-for="new-password">
+            <PasswordInput
+              id="new-password"
+              v-model="newPassword"
+              autocomplete="new-password"
+              :disabled="isChangingPassword"
+            />
+            <template #description>
+              Вступит в силу после сохранения.
+            </template>
+          </SettingsFormField>
+        </div>
 
         <template #footer>
           <Button
