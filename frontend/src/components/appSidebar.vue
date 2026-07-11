@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import AppSidebarBrand from "@/components/sidebar/AppSidebarBrand.vue";
 import AppSidebarStoreSwitcher from "@/components/sidebar/AppSidebarStoreSwitcher.vue";
-import AppSidebarNavGroup from "@/components/sidebar/AppSidebarNavGroup.vue";
 import AppSidebarNavCollapsible from "@/components/sidebar/AppSidebarNavCollapsible.vue";
 import AppSidebarFooter from "@/components/sidebar/AppSidebarFooter.vue";
 import { buildSidebarGroups } from "@/config/sidebarNav";
@@ -37,7 +36,6 @@ export default {
     AlertDialogTitle,
     AppSidebarBrand,
     AppSidebarStoreSwitcher,
-    AppSidebarNavGroup,
     AppSidebarNavCollapsible,
     AppSidebarFooter,
   },
@@ -188,19 +186,14 @@ export default {
     </SidebarHeader>
 
     <SidebarContent>
-      <template v-for="group in navGroups" :key="group.id">
-        <AppSidebarNavCollapsible
-          v-if="group.collapsible"
-          :label="group.label"
-          :items="group.resolvedItems"
-          :default-open="group.defaultOpen"
-        />
-        <AppSidebarNavGroup
-          v-else
-          :label="group.label"
-          :items="group.resolvedItems"
-        />
-      </template>
+      <AppSidebarNavCollapsible
+        v-for="group in navGroups"
+        :key="group.id"
+        :label="group.label"
+        :icon="group.icon"
+        :items="group.resolvedItems"
+        :default-open="group.defaultOpen"
+      />
     </SidebarContent>
 
     <AppSidebarFooter

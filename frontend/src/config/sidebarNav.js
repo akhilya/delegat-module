@@ -7,7 +7,6 @@ import {
   PAGE_MARKETPLACE,
   PAGE_STORE_ATTRIBUTES,
   PAGE_TOOLS,
-  PAGE_SETTINGS,
 } from "@/router";
 import {
   Boxes,
@@ -23,14 +22,13 @@ import {
   Wand2,
   Globe,
   Settings2,
-  ChevronRight,
 } from "lucide-vue-next";
 import { getSettingsSidebarSubItems } from "./settingsNav";
 
 /**
  * @typedef {'link'|'action'} NavItemType
  * @typedef {{ id: string, label: string, type: NavItemType, to?: string, icon?: import('vue').Component, action?: string, visible?: (ctx: SidebarContext) => boolean }} NavItem
- * @typedef {{ id: string, label: string, collapsible?: boolean, defaultOpen?: boolean, items: NavItem[]|((ctx: SidebarContext) => NavItem[]), visible?: (ctx: SidebarContext) => boolean }} NavGroup
+ * @typedef {{ id: string, label: string, icon: import('vue').Component, defaultOpen?: boolean, items: NavItem[]|((ctx: SidebarContext) => NavItem[]), visible?: (ctx: SidebarContext) => boolean }} NavGroup
  * @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean, connections: object[] }} SidebarContext
  */
 
@@ -39,6 +37,8 @@ const SIDEBAR_GROUPS = [
   {
     id: "products",
     label: "Товары",
+    icon: Boxes,
+    defaultOpen: true,
     items: [
       { id: "products", label: "Товары", type: "link", to: PAGE_PRODUCTS, icon: Boxes },
       { id: "new-product", label: "Новый товар", type: "link", to: PAGE_PRODUCT_CREATION, icon: PackagePlus },
@@ -57,6 +57,8 @@ const SIDEBAR_GROUPS = [
   {
     id: "storage",
     label: "Хранилище",
+    icon: HardDrive,
+    defaultOpen: false,
     items: [
       { id: "storage", label: "Хранилище", type: "link", to: PAGE_STORE_STORAGE, icon: HardDrive },
     ],
@@ -64,7 +66,7 @@ const SIDEBAR_GROUPS = [
   {
     id: "integrations",
     label: "Интеграции",
-    collapsible: true,
+    icon: ShoppingBag,
     defaultOpen: true,
     items: (ctx) => {
       const base = [
@@ -86,6 +88,8 @@ const SIDEBAR_GROUPS = [
   {
     id: "utilities",
     label: "Утилиты",
+    icon: Wand2,
+    defaultOpen: false,
     items: [
       { id: "ai", label: "ИИ ассистент", type: "action", action: "toggleAi", icon: Sparkles },
       { id: "ops", label: "Фоновые процессы", type: "action", action: "toggleOps", icon: Activity },
@@ -96,21 +100,16 @@ const SIDEBAR_GROUPS = [
   {
     id: "settings",
     label: "Настройки",
-    collapsible: true,
-    defaultOpen: true,
-    items: (ctx) => {
-      const subs = getSettingsSidebarSubItems(ctx);
-      return [
-        { id: "settings-hub", label: "Настройки", type: "link", to: PAGE_SETTINGS, icon: Settings2 },
-        ...subs.map((s) => ({
-          id: s.id,
-          label: s.label,
-          type: "link",
-          to: s.to,
-          icon: s.icon,
-        })),
-      ];
-    },
+    icon: Settings2,
+    defaultOpen: false,
+    items: (ctx) =>
+      getSettingsSidebarSubItems(ctx).map((s) => ({
+        id: s.id,
+        label: s.label,
+        type: "link",
+        to: s.to,
+        icon: s.icon,
+      })),
   },
 ];
 
@@ -123,7 +122,5 @@ export function buildSidebarGroups(ctx) {
     const rawItems = typeof group.items === "function" ? group.items(ctx) : group.items;
     const resolvedItems = rawItems.filter((item) => !item.visible || item.visible(ctx));
     return { ...group, resolvedItems };
-  }).filter((group) => !group.visible || group.visible(group));
+  }).filter((group) => !group.visible || group.visible(ctx));
 }
-
-export { ChevronRight };
