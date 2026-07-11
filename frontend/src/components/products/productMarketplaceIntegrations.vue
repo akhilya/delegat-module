@@ -80,7 +80,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
+import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 export default {
@@ -160,6 +160,7 @@ export default {
       exportingConnectionId: null,
       importingLinkId: null,
       unlinkingLinkId: null,
+      PAGE_MARKETPLACE,
       PAGE_MARKETPLACE_CONNECTION,
       PAGE_MARKETPLACE_FIELD_MAPPING,
       // Recreate dialog
@@ -861,28 +862,30 @@ export default {
     </div>
 
     <!-- No category warning -->
-    <div
+    <EmptyState
       v-else-if="connections && !connections.categoryId"
-      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-warning-muted"
+      title="Товар не привязан к категории"
+      description="Укажите категорию товара для экспорта на адаптеры"
     >
-      <AlertTriangle class="size-12 mb-4 text-warning" />
-      <h3 class="font-medium mb-1">Товар не привязан к категории</h3>
-      <p class="text-sm text-muted-foreground">
-        Укажите категорию товара для экспорта на адаптеры
-      </p>
-    </div>
+      <template #icon>
+        <AlertTriangle />
+      </template>
+    </EmptyState>
 
     <!-- No connections -->
-    <div
+    <EmptyState
       v-else-if="!connections?.allConnections?.length"
-      class="flex flex-col items-center justify-center py-12 text-center border rounded-lg"
+      title="Нет подключений к адаптерам"
+      description="Создайте подключение к адаптеру, чтобы экспортировать и синхронизировать товары"
     >
-      <Link2 class="size-12 mb-4 text-muted-foreground" />
-      <h3 class="font-medium mb-1">Нет подключений к адаптерам</h3>
-      <p class="text-sm text-muted-foreground">
-        Создайте подключение к адаптеру в настройках магазина
-      </p>
-    </div>
+      <template #icon>
+        <Link2 />
+      </template>
+      <Button variant="outline" class="mt-2" @click="$router.push(PAGE_MARKETPLACE)">
+        <Settings class="mr-2 size-4" />
+        Перейти к адаптерам
+      </Button>
+    </EmptyState>
 
     <!-- Connection cards -->
     <div v-else class="space-y-4">
@@ -1200,7 +1203,11 @@ export default {
           size="sm"
           title="Нет доступных адаптеров"
           description="Подключите адаптер и создайте маппинг для категории товара, чтобы экспортировать его."
-        />
+        >
+          <template #icon>
+            <Link2 />
+          </template>
+        </EmptyState>
       </div>
     </div>
 

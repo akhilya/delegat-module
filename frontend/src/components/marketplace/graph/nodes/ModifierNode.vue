@@ -11,12 +11,7 @@ import {
   pinColor,
 } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 
 const props = defineProps({
   id: String,
@@ -98,16 +93,11 @@ const paramPinRowOffset = computed(
     <div class="vf-card__head">
       <Wand2 class="size-3.5 text-muted-foreground" />
       <span class="vf-card__kind">{{ title }}</span>
-      <TooltipProvider v-if="irreversible" :delay-duration="200">
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <AlertTriangle class="vf-card__warn cursor-help" />
-          </TooltipTrigger>
-          <TooltipContent side="top" class="max-w-52 text-xs">
-            Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <AlertTriangle
+        v-if="irreversible"
+        class="vf-card__warn cursor-help"
+        title="Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть."
+      />
     </div>
 
     <div v-if="hasPins" class="vf-mod__pins">

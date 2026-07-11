@@ -1,5 +1,8 @@
 <script>
 import PageSection from "@/components/pageSection.vue";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -43,6 +46,9 @@ import { ref, computed, onMounted } from "vue";
 export default {
   components: {
     PageSection,
+    SettingsFormSection,
+    SettingsFormField,
+    EmptyState,
     Button, Input, Label, Badge, Textarea, Switch,
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -294,7 +300,7 @@ export default {
 </script>
 
 <template>
-  <div>
+  <div class="flex flex-col">
     <PageHeader
       title="ИИ"
       description="Языковые модели и персональные настройки AI-ассистента"
@@ -305,185 +311,182 @@ export default {
       </Button>
     </PageHeader>
 
-    <div class="px-6 pt-2 pb-1 space-y-1">
-      <h3 class="text-sm font-semibold">Языковые модели</h3>
-      <p class="text-xs text-muted-foreground">
-        Можно отключить любую модель, включая основную. Если все модели выключены, ассистент сообщит об отсутствии включённых моделей.
-      </p>
-    </div>
+    <PageSection :loading="isLoading" class="!min-h-0">
+      <SettingsFormSection
+        title="Языковые модели"
+        description="Можно отключить любую модель, включая основную. Если все модели выключены, ассистент сообщит об отсутствии включённых моделей."
+        class="max-w-none"
+      >
+        <EmptyState
+          v-if="models.length === 0"
+          title="Нет AI-моделей"
+          description="Добавьте языковую модель, чтобы включить AI-ассистента"
+        >
+          <template #icon>
+            <Bot />
+          </template>
+          <Button class="mt-2" @click="openCreate">
+            <Plus class="mr-2 size-4" />
+            Добавить модель
+          </Button>
+        </EmptyState>
 
-    <PageSection
-      :loading="isLoading"
-      :empty="models.length === 0"
-      :empty-icon="Bot"
-      empty-title="Нет AI-моделей"
-      empty-description="Добавьте языковую модель чтобы включить AI-ассистента"
-      class="min-h-0 grow-0"
-    >
-      <div class="rounded-lg border overflow-hidden">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-28">Статус</TableHead>
-                <TableHead>Название</TableHead>
-                <TableHead>Провайдер</TableHead>
-                <TableHead>Model ID</TableHead>
-                <TableHead>API URL</TableHead>
-                <TableHead class="w-36"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="model in models" :key="model.id">
-                <TableCell>
-                  <Switch
-                    :model-value="model.isEnabled"
-                    class="scale-[0.8]"
-                    @update:model-value="(v) => setModelEnabled(model, v)"
-                  />
-                </TableCell>
-                <TableCell class="font-medium">{{ model.name }}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {{ isAnthropic(model.provider) ? "Anthropic" : "OpenAI-compatible" }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <code class="rounded bg-muted px-1.5 py-0.5 text-xs">{{ model.modelId }}</code>
-                </TableCell>
-                <TableCell class="max-w-48 text-muted-foreground text-sm">
-                  <div class="flex items-center gap-1.5 truncate">
-                    <span class="truncate">{{ model.apiUrl }}</span>
-                    <Network
-                      v-if="model.proxyUrl"
-                      class="size-3 shrink-0 text-primary/70"
-                      :title="`Прокси: ${model.proxyUrl}`"
+        <div v-else class="rounded-lg border overflow-hidden">
+          <div class="overflow-x-auto">
+            <Table class="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead class="w-28">Статус</TableHead>
+                  <TableHead class="w-[18%]">Название</TableHead>
+                  <TableHead class="w-36">Провайдер</TableHead>
+                  <TableHead class="w-[18%]">Model ID</TableHead>
+                  <TableHead>API URL</TableHead>
+                  <TableHead class="w-36"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="model in models" :key="model.id">
+                  <TableCell>
+                    <Switch
+                      :model-value="model.isEnabled"
+                      class="scale-[0.8]"
+                      @update:model-value="(v) => setModelEnabled(model, v)"
                     />
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div class="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      :disabled="testingId === model.id"
-                      @click="testModel(model)"
-                    >
-                      <Loader2 v-if="testingId === model.id" class="mr-1 size-3 animate-spin" />
-                      <Zap v-else class="mr-1 size-3" />
-                      Тест
-                    </Button>
-                    <Button variant="ghost" size="icon" @click="openEdit(model)">
-                      <Pencil class="size-4" />
-                      <span class="sr-only">Изменить</span>
-                    </Button>
-                    <Button variant="ghost" size="icon" class="text-destructive hover:text-destructive" @click="deleteModel(model)">
-                      <Trash2 class="size-4" />
-                      <span class="sr-only">Удалить</span>
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                  </TableCell>
+                  <TableCell class="max-w-0">
+                    <div class="truncate font-medium" :title="model.name">{{ model.name }}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">
+                      {{ isAnthropic(model.provider) ? "Anthropic" : "OpenAI-compatible" }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="max-w-0">
+                    <code class="block truncate rounded bg-muted px-1.5 py-0.5 text-xs" :title="model.modelId">
+                      {{ model.modelId }}
+                    </code>
+                  </TableCell>
+                  <TableCell class="max-w-0 text-muted-foreground text-sm">
+                    <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                      <span class="truncate" :title="model.apiUrl">{{ model.apiUrl }}</span>
+                      <Network
+                        v-if="model.proxyUrl"
+                        class="size-3 shrink-0 text-primary/70"
+                        :title="`Прокси: ${model.proxyUrl}`"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        :disabled="testingId === model.id"
+                        @click="testModel(model)"
+                      >
+                        <Loader2 v-if="testingId === model.id" class="mr-1 size-3 animate-spin" />
+                        <Zap v-else class="mr-1 size-3" />
+                        Тест
+                      </Button>
+                      <Button variant="ghost" size="icon" @click="openEdit(model)">
+                        <Pencil class="size-4" />
+                        <span class="sr-only">Изменить</span>
+                      </Button>
+                      <Button variant="ghost" size="icon" class="text-destructive hover:text-destructive" @click="deleteModel(model)">
+                        <Trash2 class="size-4" />
+                        <span class="sr-only">Удалить</span>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
-    </PageSection>
+      </SettingsFormSection>
 
-    <!-- Personal AI settings -->
-    <div class="px-6 py-6 border-t">
-      <div class="max-w-2xl">
-        <h3 class="text-sm font-semibold mb-1">Персональные настройки</h3>
-        <p class="text-xs text-muted-foreground mb-5">
-          Влияют на стиль общения ИИ-ассистента в вашем магазине.
-        </p>
+      <SettingsFormSection
+        title="Персональные настройки"
+        description="Влияют на стиль общения ИИ-ассистента в вашем магазине."
+      >
+        <SettingsFormField label="Основная модель">
+          <Select :model-value="defaultModelId" @update:model-value="onDefaultModelChange">
+            <SelectTrigger class="w-full max-w-md">
+              <SelectValue placeholder="Выберите модель" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="m in models" :key="m.id" :value="String(m.id)" :text-value="m.name">
+                {{ m.name }}
+                <span class="ml-2 text-xs text-muted-foreground/60 font-mono">{{ m.modelId }}</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <template #description>
+            Используется для всех AI-операций по умолчанию.
+          </template>
+        </SettingsFormField>
 
-        <div class="grid gap-5">
-          <!-- Default model -->
-          <div class="grid gap-2">
-            <Label>Основная модель</Label>
-            <Select :model-value="defaultModelId" @update:model-value="onDefaultModelChange">
+        <SettingsFormField label="Описание магазина">
+          <Textarea
+            v-model="settingsForm.storeDescription"
+            placeholder="Кратко опишите ваш магазин, ассортимент, целевую аудиторию..."
+            class="min-h-[80px] resize-none"
+          />
+          <template #description>
+            Передаётся ИИ как контекст при каждом запросе.
+          </template>
+        </SettingsFormField>
+
+        <div class="grid gap-5 sm:grid-cols-3">
+          <SettingsFormField label="Стиль общения">
+            <Select v-model="settingsForm.communicationStyle">
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Выберите модель" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="m in models" :key="m.id" :value="String(m.id)" :text-value="m.name">
-                  {{ m.name }}
-                  <span class="ml-2 text-xs text-muted-foreground/60 font-mono">{{ m.modelId }}</span>
-                </SelectItem>
+                <SelectItem value="professional">Деловой</SelectItem>
+                <SelectItem value="friendly">Дружелюбный</SelectItem>
+                <SelectItem value="expert">Экспертный</SelectItem>
               </SelectContent>
             </Select>
-            <p class="text-xs text-muted-foreground">Используется для всех AI-операций по умолчанию.</p>
-          </div>
+          </SettingsFormField>
 
-          <!-- Store description — full width -->
-          <div class="grid gap-2">
-            <Label>Описание магазина</Label>
-            <Textarea
-              v-model="settingsForm.storeDescription"
-              placeholder="Кратко опишите ваш магазин, ассортимент, целевую аудиторию..."
-              class="min-h-[80px] resize-none"
-            />
-            <p class="text-xs text-muted-foreground">
-              Передаётся ИИ как контекст при каждом запросе.
-            </p>
-          </div>
+          <SettingsFormField label="Краткость">
+            <Select v-model="settingsForm.responseBrevity">
+              <SelectTrigger class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="brief">Кратко</SelectItem>
+                <SelectItem value="balanced">Сбалансированно</SelectItem>
+                <SelectItem value="detailed">Подробно</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsFormField>
 
-          <!-- Three behaviour selects — equal-width columns -->
-          <div class="grid grid-cols-3 gap-3">
-            <div class="grid gap-2">
-              <Label class="text-xs text-muted-foreground">Стиль общения</Label>
-              <Select v-model="settingsForm.communicationStyle">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="professional">Деловой</SelectItem>
-                  <SelectItem value="friendly">Дружелюбный</SelectItem>
-                  <SelectItem value="expert">Экспертный</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="grid gap-2">
-              <Label class="text-xs text-muted-foreground">Краткость</Label>
-              <Select v-model="settingsForm.responseBrevity">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="brief">Кратко</SelectItem>
-                  <SelectItem value="balanced">Сбалансированно</SelectItem>
-                  <SelectItem value="detailed">Подробно</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="grid gap-2">
-              <Label class="text-xs text-muted-foreground">Эмодзи</Label>
-              <Select v-model="settingsForm.emojiUsage">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Не использовать</SelectItem>
-                  <SelectItem value="minimal">Минимально</SelectItem>
-                  <SelectItem value="standard">Стандартно</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div>
-            <Button :disabled="isSettingsSaving" @click="saveSettings">
-              <Loader2 v-if="isSettingsSaving" class="mr-2 size-4 animate-spin" />
-              <Save v-else class="mr-2 size-4" />
-              {{ isSettingsSaving ? "Сохранение..." : "Сохранить" }}
-            </Button>
-          </div>
+          <SettingsFormField label="Эмодзи">
+            <Select v-model="settingsForm.emojiUsage">
+              <SelectTrigger class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Не использовать</SelectItem>
+                <SelectItem value="minimal">Минимально</SelectItem>
+                <SelectItem value="standard">Стандартно</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsFormField>
         </div>
-      </div>
-    </div>
+
+        <template #footer>
+          <Button :disabled="isSettingsSaving" @click="saveSettings">
+            <Loader2 v-if="isSettingsSaving" class="mr-2 size-4 animate-spin" />
+            <Save v-else class="mr-2 size-4" />
+            {{ isSettingsSaving ? "Сохранение..." : "Сохранить" }}
+          </Button>
+        </template>
+      </SettingsFormSection>
+    </PageSection>
 
     <AlertDialog
       :open="confirmDialog.open"

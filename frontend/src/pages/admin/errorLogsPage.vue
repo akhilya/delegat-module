@@ -180,14 +180,14 @@ export default {
     >
       <div class="rounded-lg border overflow-hidden">
       <div class="overflow-x-auto">
-        <Table>
+        <Table class="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead class="w-10"></TableHead>
               <TableHead class="w-44">Время</TableHead>
               <TableHead class="w-24">Статус</TableHead>
               <TableHead class="w-28">Метод</TableHead>
-              <TableHead>Ошибка</TableHead>
+              <TableHead class="w-[40%] max-w-0">Ошибка</TableHead>
               <TableHead class="w-44">Пользователь</TableHead>
               <TableHead class="w-24"></TableHead>
             </TableRow>
@@ -211,10 +211,10 @@ export default {
                 <TableCell>
                   <code class="text-xs">{{ log.method }}</code>
                 </TableCell>
-                <TableCell>
-                  <div class="min-w-0">
-                    <div class="truncate font-medium">{{ log.message }}</div>
-                    <div class="truncate text-xs text-muted-foreground">
+                <TableCell class="max-w-0">
+                  <div class="min-w-0 overflow-hidden">
+                    <div class="truncate font-medium" :title="log.message">{{ log.message }}</div>
+                    <div class="truncate text-xs text-muted-foreground" :title="log.exceptionType">
                       {{ log.exceptionType }}
                     </div>
                   </div>

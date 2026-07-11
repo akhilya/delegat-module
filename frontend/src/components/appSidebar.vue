@@ -3,7 +3,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -16,7 +15,7 @@ import AppSidebarNavCollapsible from "@/components/sidebar/AppSidebarNavCollapsi
 import AppSidebarFooter from "@/components/sidebar/AppSidebarFooter.vue";
 import { buildSidebarGroups } from "@/config/sidebarNav";
 import { mapActions } from "vuex";
-import { displaySonnerError } from "@/store/sonnerHelper";
+import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { useDark, useToggle } from "@vueuse/core";
 
@@ -25,7 +24,6 @@ export default {
     Sidebar,
     SidebarContent,
     SidebarHeader,
-    SidebarRail,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -49,6 +47,7 @@ export default {
       me: null,
       memberships: [],
       connections: [],
+      adapters: [],
       platformVersion: null,
       appVersion: import.meta.env.VITE_APP_VERSION || null,
       confirmDialog: { open: false, title: "", message: "", resolve: null },
@@ -67,6 +66,7 @@ export default {
         canManageStore: this.canManageSelectedStore,
         isAdmin: Boolean(this.me?.isAdmin),
         connections: this.connections,
+        adapters: this.adapters,
       };
     },
     navGroups() {
@@ -79,30 +79,48 @@ export default {
   watch: {
     "$store.state.appKey"() {
       this.fetchConnections();
+      this.fetchAdapters();
+    },
+    "$route.path"(path) {
+      if (path.startsWith("/adapter")) {
+        this.fetchConnections();
+        this.fetchAdapters();
+      }
     },
   },
   methods: {
     ...mapActions([
       "getMe",
       "getMyMemberships",
+      "getConnections",
+      "getAvailableAdapters",
       "postLogOut",
       "postSelectStore",
     ]),
     showConfirm(title, message) {
       return new Promise((r) => { this.confirmDialog = { open: true, title, message, resolve: r }; });
     },
-    fetchConnections() {
+    async fetchConnections() {
       if (!this.me?.selectedStoreId) {
         this.connections = [];
         return;
       }
-      this.$store.dispatch("marketplace/getConnections", {
+      await this.getConnections({
         onSuccess: (response) => {
-          const data = response.data?.value ?? response.data;
-          this.connections = Array.isArray(data) ? data : [];
+          this.connections = extractResponseData(response, []);
         },
         onError: () => {
           this.connections = [];
+        },
+      });
+    },
+    async fetchAdapters() {
+      await this.getAvailableAdapters({
+        onSuccess: (response) => {
+          this.adapters = extractResponseData(response, []);
+        },
+        onError: () => {
+          this.adapters = [];
         },
       });
     },
@@ -136,6 +154,7 @@ export default {
       }
 
       this.fetchConnections();
+      this.fetchAdapters();
     },
     async selectStore(storeId) {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
@@ -175,7 +194,7 @@ export default {
 </script>
 
 <template>
-  <Sidebar>
+  <Sidebar collapsible="icon">
     <SidebarHeader class="border-b gap-2 py-2">
       <AppSidebarBrand :user-name="me?.userName || 'Пользователь'" />
       <AppSidebarStoreSwitcher
@@ -185,7 +204,7 @@ export default {
       />
     </SidebarHeader>
 
-    <SidebarContent>
+    <SidebarContent class="gap-0.5">
       <AppSidebarNavCollapsible
         v-for="group in navGroups"
         :key="group.id"
@@ -202,23 +221,21 @@ export default {
       @toggle-theme="toggleDark()"
       @logout="postLogOut"
     />
-
-    <SidebarRail />
-
-    <AlertDialog
-      :open="confirmDialog.open"
-      @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
-          <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Продолжить</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   </Sidebar>
+
+  <AlertDialog
+    :open="confirmDialog.open"
+    @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+  >
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
+        <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
+        <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Продолжить</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

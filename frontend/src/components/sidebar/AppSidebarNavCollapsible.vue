@@ -12,10 +12,11 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
+  SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
-  SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { isActiveRoute } from "@/lib/isActiveRoute";
 
@@ -52,49 +53,44 @@ watch(
 </script>
 
 <template>
-  <SidebarGroup>
-    <Collapsible v-model:open="open" class="group/collapsible">
-      <CollapsibleTrigger as-child>
-        <button
-          type="button"
-          class="flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-sm font-medium text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[state=open]/collapsible:bg-sidebar-accent/60"
-        >
-          <component :is="icon" class="size-4 shrink-0" />
-          <span class="truncate">{{ label }}</span>
-          <ChevronRight
-            class="ml-auto size-3.5 shrink-0 opacity-70 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem v-for="item in items" :key="item.id">
-                  <SidebarMenuSubButton
-                    v-if="item.type === 'action'"
-                    @click="handleAction(item.action)"
-                  >
+  <SidebarGroup class="p-1">
+    <SidebarMenu>
+      <Collapsible v-model:open="open" as-child class="group/collapsible">
+        <SidebarMenuItem>
+          <CollapsibleTrigger as-child>
+            <SidebarMenuButton :tooltip="label">
+              <component :is="icon" />
+              <span>{{ label }}</span>
+              <ChevronRight
+                class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+              />
+            </SidebarMenuButton>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <SidebarMenuSub>
+              <SidebarMenuSubItem v-for="item in items" :key="item.id">
+                <SidebarMenuSubButton
+                  v-if="item.type === 'action'"
+                  @click="handleAction(item.action)"
+                >
+                  <component :is="item.icon" />
+                  <span>{{ item.label }}</span>
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton
+                  v-else
+                  as-child
+                  :is-active="isItemActive(item)"
+                >
+                  <RouterLink :to="item.to">
                     <component :is="item.icon" />
                     <span>{{ item.label }}</span>
-                  </SidebarMenuSubButton>
-                  <SidebarMenuSubButton
-                    v-else
-                    as-child
-                    :is-active="isItemActive(item)"
-                  >
-                    <RouterLink :to="item.to">
-                      <component :is="item.icon" />
-                      <span>{{ item.label }}</span>
-                    </RouterLink>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </CollapsibleContent>
-    </Collapsible>
+                  </RouterLink>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            </SidebarMenuSub>
+          </CollapsibleContent>
+        </SidebarMenuItem>
+      </Collapsible>
+    </SidebarMenu>
   </SidebarGroup>
 </template>

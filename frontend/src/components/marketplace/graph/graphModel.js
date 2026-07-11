@@ -331,6 +331,81 @@ export const ADAPTER_NODE_ID = "adapter-fields";
 /** Fixed id of the dedicated price-API sink node. */
 export const ADAPTER_PRICE_NODE_ID = "adapter-price-fields";
 
+/** Vue Flow isNode() — used to filter payloads before setNodes (sparse arrays crash createGraphNodes). */
+export function isVueFlowNode(element) {
+  return (
+    element &&
+    typeof element === "object" &&
+    "id" in element &&
+    "position" in element &&
+    !("source" in element && "target" in element)
+  );
+}
+
+/**
+ * Normalize nodes for Vue Flow setNodes/addNodes.
+ * Drops invalid entries (edges in nodes[], missing id/position) — Vue Flow leaves
+ * holes in its internal array and then throws on parentNode when iterating.
+ */
+export function sanitizeGraphNodes(rawNodes) {
+  const nodes = [];
+  const rejected = [];
+  for (let i = 0; i < (rawNodes || []).length; i++) {
+    const n = rawNodes[i];
+    if (!n || typeof n !== "object") {
+      rejected.push({ index: i, reason: "not-object", value: n });
+      continue;
+    }
+    if ("source" in n && "target" in n) {
+      rejected.push({ index: i, reason: "edge-in-nodes", id: n.id });
+      continue;
+    }
+    if (n.id == null || n.id === "") {
+      rejected.push({ index: i, reason: "missing-id", type: n.type });
+      continue;
+    }
+    const pos = n.position;
+    nodes.push({
+      ...n,
+      id: String(n.id),
+      type: n.type ?? "default",
+      position:
+        pos && typeof pos === "object"
+          ? { x: Number(pos.x) || 0, y: Number(pos.y) || 0 }
+          : { x: 0, y: 0 },
+    });
+  }
+  return { nodes, rejected };
+}
+
+/** Drop edges whose endpoints are missing after node sanitization. */
+export function sanitizeGraphEdges(rawEdges, nodeIds) {
+  const ids = nodeIds instanceof Set ? nodeIds : new Set(nodeIds);
+  const edges = [];
+  const rejected = [];
+  for (const e of rawEdges || []) {
+    if (!e?.id || !e?.source || !e?.target) {
+      rejected.push({ reason: "incomplete", id: e?.id });
+      continue;
+    }
+    const source = String(e.source);
+    const target = String(e.target);
+    if (!ids.has(source) || !ids.has(target)) {
+      rejected.push({ reason: "dangling", id: e.id, source, target });
+      continue;
+    }
+    edges.push({
+      ...e,
+      id: String(e.id),
+      source,
+      target,
+      sourceHandle: e.sourceHandle ?? null,
+      targetHandle: e.targetHandle ?? null,
+    });
+  }
+  return { edges, rejected };
+}
+
 const MIGRATABLE_PRICE_KEYS = new Set([
   "price",
   "oldPrice",

@@ -96,6 +96,7 @@ onMounted(fetchMe);
           />
         </SettingsFormField>
         <Button
+          class="w-fit"
           :disabled="isSavingProfile || !userNameDraft.trim() || !hasProfileChanges"
           @click="saveProfile"
         >

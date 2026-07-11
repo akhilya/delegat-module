@@ -1,30 +1,47 @@
 <script setup>
-import { Primitive } from "reka-ui";
-import { cn } from "@/lib/utils";
+import { reactiveOmit } from "@vueuse/core";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import SidebarMenuButtonChild from "./SidebarMenuButtonChild.vue";
+import { useSidebar } from "./utils";
+
+defineOptions({
+  inheritAttrs: false,
+});
 
 const props = defineProps({
-  asChild: { type: Boolean, required: false },
   as: { type: null, default: "button" },
-  isActive: { type: Boolean, default: false },
+  asChild: { type: Boolean, required: false },
+  variant: { type: String, default: "default" },
   size: { type: String, default: "default" },
+  isActive: { type: Boolean, default: false },
+  tooltip: { type: [String, Object], default: undefined },
   class: { type: null, required: false },
 });
+
+const { isMobile, state } = useSidebar();
+const delegatedProps = reactiveOmit(props, "tooltip");
 </script>
 
 <template>
-  <Primitive
-    data-slot="sidebar-menu-button"
-    :as="as"
-    :as-child="asChild"
-    :data-active="isActive"
-    :class="
-      cn(
-        'flex w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:pointer-events-none disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
-        size === 'lg' ? 'h-11' : 'h-8',
-        props.class,
-      )
-    "
-  >
+  <SidebarMenuButtonChild v-if="!tooltip" v-bind="{ ...delegatedProps, ...$attrs }">
     <slot />
-  </Primitive>
+  </SidebarMenuButtonChild>
+
+  <Tooltip v-else>
+    <TooltipTrigger as-child>
+      <SidebarMenuButtonChild v-bind="{ ...delegatedProps, ...$attrs }">
+        <slot />
+      </SidebarMenuButtonChild>
+    </TooltipTrigger>
+    <TooltipContent
+      side="right"
+      align="center"
+      :hidden="state !== 'collapsed' || isMobile"
+    >
+      <template v-if="typeof tooltip === 'string'">
+        {{ tooltip }}
+      </template>
+      <component :is="tooltip" v-else />
+    </TooltipContent>
+  </Tooltip>
 </template>

@@ -1,14 +1,26 @@
 <script setup>
-import { Button } from "@/components/ui/button";
 import { PanelLeft } from "lucide-vue-next";
-import { useSidebar } from "./sidebar";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useSidebar } from "./utils";
+
+const props = defineProps({
+  class: { type: null, required: false },
+});
 
 const { toggleSidebar } = useSidebar();
 </script>
 
 <template>
-  <Button variant="ghost" size="icon" @click="toggleSidebar">
-    <PanelLeft class="size-4" />
-    <span class="sr-only">Переключить меню</span>
+  <Button
+    data-sidebar="trigger"
+    data-slot="sidebar-trigger"
+    variant="ghost"
+    size="icon"
+    :class="cn('size-7', props.class)"
+    @click="toggleSidebar"
+  >
+    <PanelLeft />
+    <span class="sr-only">Переключить сайдбар</span>
   </Button>
 </template>

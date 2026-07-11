@@ -3,12 +3,6 @@ import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
 import { Banknote, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
 import { pinColor } from "../graphModel.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const props = defineProps({
   id: String,
@@ -23,6 +17,7 @@ function aliasPrimaryLabel(f) {
   const primary = fields.value.find((x) => x.fieldKey === f.aliasOf);
   return primary?.label || f.aliasOf;
 }
+
 const avail = computed(() => props.data.availableSources || {});
 const productFields = computed(() => avail.value.productFields || []);
 const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
@@ -53,15 +48,20 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
 <template>
   <div :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']">
-    <template v-for="(f, i) in fields" :key="f.fieldKey">
-      <Handle
-        v-if="!f.source && !f.aliasOf"
-        :id="`f:${f.fieldKey}`"
-        type="target"
-        :position="Position.Left"
-        :style="{ top: topFor(i), background: pinColor(f.outputType) }"
-      />
-    </template>
+    <Handle
+      v-for="(f, i) in fields"
+      :key="f.fieldKey"
+      :id="`f:${f.fieldKey}`"
+      type="target"
+      :position="Position.Left"
+      :connectable="!f.source && !f.aliasOf"
+      :style="{
+        top: topFor(i),
+        background: pinColor(f.outputType),
+        opacity: f.source || f.aliasOf ? 0 : 1,
+        pointerEvents: f.source || f.aliasOf ? 'none' : 'auto',
+      }"
+    />
 
     <div class="vf-adapter__head">
       <Banknote class="size-3.5 text-primary" />
@@ -70,23 +70,24 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
     </div>
 
     <div class="vf-adapter__list">
-      <div v-for="f in fields" :key="f.fieldKey" class="vf-adapter__row cursor-pointer" @click.stop="data.openField?.(f.fieldKey)">
+      <div
+        v-for="f in fields"
+        :key="f.fieldKey"
+        class="vf-adapter__row cursor-pointer"
+        @click.stop="data.openField?.(f.fieldKey)"
+      >
         <span class="vf-adapter__label" :title="f.fieldKey">
           {{ f.label || f.fieldKey }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
 
-        <TooltipProvider v-if="f.aliasOf" :delay-duration="400">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <span class="vf-adapter__pill vf-adapter__pill--alias" @click.stop="data.openField?.(f.fieldKey)">
-                = {{ aliasPrimaryLabel(f) }}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" class="max-w-56 text-xs">
-              Объединено с «{{ aliasPrimaryLabel(f) }}»
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <span
+          v-if="f.aliasOf"
+          class="vf-adapter__pill vf-adapter__pill--alias"
+          :title="`Объединено с «${aliasPrimaryLabel(f)}»`"
+          @click.stop="data.openField?.(f.fieldKey)"
+        >
+          = {{ aliasPrimaryLabel(f) }}
+        </span>
 
         <component
           v-if="f.source"
@@ -94,32 +95,19 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
         />
 
-        <TooltipProvider v-if="analysis[f.fieldKey]?.fanOut" :delay-duration="200">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <AlertTriangle class="size-2.5 shrink-0 cursor-help text-amber-500" />
-            </TooltipTrigger>
-            <TooltipContent side="top" class="max-w-56 text-xs">
-              Источник уже используется другим полем цен.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <AlertTriangle
+          v-if="analysis[f.fieldKey]?.fanOut"
+          class="size-2.5 shrink-0 cursor-help text-amber-500"
+          title="Источник уже используется другим полем цен."
+        />
 
-        <TooltipProvider v-if="f.source" :delay-duration="400">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <span
-                class="vf-adapter__pill"
-                :style="pillStyle(f.outputType)"
-                @click.stop="data.openField?.(f.fieldKey)"
-              >{{ boundLabel(f) }}</span>
-            </TooltipTrigger>
-            <TooltipContent side="top" class="text-xs">
-              <div class="font-medium">{{ boundLabel(f) }}</div>
-              <div class="text-muted-foreground">Нажмите для настройки</div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <span
+          v-if="f.source"
+          class="vf-adapter__pill"
+          :style="pillStyle(f.outputType)"
+          :title="`${boundLabel(f)} — нажмите для настройки`"
+          @click.stop="data.openField?.(f.fieldKey)"
+        >{{ boundLabel(f) }}</span>
       </div>
     </div>
   </div>

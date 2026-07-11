@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref, onMounted, nextTick } from "vue";
 import { getBezierPath } from "@vue-flow/core";
 
 const SPEED_PX_PER_S = 65;
@@ -44,6 +44,9 @@ const wireLength = computed(() =>
 );
 const dur      = computed(() => Math.max(0.8, wireLength.value / SPEED_PX_PER_S));
 const fwdCount = computed(() => Math.max(1, Math.round(wireLength.value / SPACING_PX)));
+
+const pathReady = ref(false);
+onMounted(() => nextTick(() => { pathReady.value = true; }));
 </script>
 
 <template>
@@ -54,7 +57,7 @@ const fwdCount = computed(() => Math.max(1, Math.round(wireLength.value / SPACIN
     <path :d="pathD" fill="none" :stroke="wire" stroke-width="2.5" :opacity="baseOp" />
     <!-- rightward chevron arrows, count scales with wire length -->
     <path
-      v-if="animate"
+      v-if="animate && pathReady"
       v-for="i in fwdCount"
       :key="i"
       d="M-4,-3 L3,0 L-4,3"

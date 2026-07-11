@@ -88,14 +88,21 @@ export default {
   <RouterView v-if="isPublicPage" v-slot="{ Component, route }">
     <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
   </RouterView>
-  <SidebarProvider v-else>
+  <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
     <AppSidebar />
-    <SidebarInset :class="{ 'ai-panel-open': isAiPanelOpen }">
-      <RouterView v-slot="{ Component, route }">
-        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
-      </RouterView>
-    </SidebarInset>
-    <AiChatPanel :key="appKey" />
+    <div class="flex min-h-0 min-w-0 flex-1">
+      <SidebarInset
+        :class="[
+          'min-h-0 flex-1 overflow-y-auto',
+          { 'ai-panel-open': isAiPanelOpen },
+        ]"
+      >
+        <RouterView v-slot="{ Component, route }">
+          <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+        </RouterView>
+      </SidebarInset>
+      <AiChatPanel :key="appKey" />
+    </div>
   </SidebarProvider>
   <Toaster />
   <ConfirmDialogHost />

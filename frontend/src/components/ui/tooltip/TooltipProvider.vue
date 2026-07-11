@@ -8,6 +8,7 @@ const props = defineProps({
   disableClosingTrigger: { type: Boolean, required: false },
   disabled: { type: Boolean, required: false },
   ignoreNonKeyboardFocus: { type: Boolean, required: false },
+  content: { type: Object, required: false },
 });
 </script>
 

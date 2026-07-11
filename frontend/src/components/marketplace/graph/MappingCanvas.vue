@@ -67,6 +67,8 @@ import {
   firstInputHandle,
   ADAPTER_NODE_ID,
   ADAPTER_PRICE_NODE_ID,
+  sanitizeGraphNodes,
+  sanitizeGraphEdges,
 } from "./graphModel.js";
 import { layoutGraph } from "./graphLayout.js";
 
@@ -124,6 +126,11 @@ const {
 } = vf;
 
 const flowWrap = ref(null);
+const flowPaneReady = ref(false);
+let pendingLoadOptions = null;
+let loadGeneration = 0;
+let previewGeneration = 0;
+
 const loading = ref(true);
 const saving = ref(false);
 const syncingFields = ref(false);
@@ -218,9 +225,34 @@ const errorCount = computed(
 const warningCount = computed(
   () => issues.value.filter((i) => i.level === "warning").length,
 );
+function waitForPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+async function loadStep(_phase, fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    displaySonnerError(e);
+    throw e;
+  }
+}
+
+function requestLoad(options = {}) {
+  if (!props.connectionId || !props.mappingId) return;
+  if (!flowPaneReady.value) {
+    pendingLoadOptions = options;
+    return;
+  }
+  load(options);
+}
+
 // Per-field import analysis + the data the adapter sink needs for its inline source dropdown.
-// Also marks edges feeding export-only fields as `animated` (dashed) vs. solid (importable).
-function refreshAnalysis() {
+// Lane typing (setEdges) is split out so load/preview can defer it until the canvas has painted.
+function refreshAnalysis(options = {}) {
+  const { updateLanes = true } = options;
   const { analysisBySink } = analyzeFields(nodes.value, edges.value);
   const fieldOptionsMap = {};
   for (const [key, def] of Object.entries(props.externalFieldDefs)) {
@@ -262,8 +294,31 @@ function refreshAnalysis() {
     });
   }
 
-  // Mark edges by lane type: importable (bidirectional) vs export-only (one-way).
-  // BFS backward from each connected adapter field to tag all edges in its lane.
+  if (updateLanes) applyEdgeLaneTypes(analysisBySink);
+}
+
+// Mark edges by lane type: importable (bidirectional) vs export-only (one-way).
+function pruneSourceBoundEdges() {
+  const toRemove = [];
+  for (const sinkId of [ADAPTER_NODE_ID, ADAPTER_PRICE_NODE_ID]) {
+    const sink = findNode(sinkId);
+    if (!sink) continue;
+    const boundHandles = new Set(
+      (sink.data?.fields || [])
+        .filter((f) => f.source || f.aliasOf)
+        .map((f) => `f:${f.fieldKey}`),
+    );
+    for (const e of edges.value) {
+      if (e.target === sinkId && boundHandles.has(e.targetHandle)) {
+        toRemove.push(e.id);
+      }
+    }
+  }
+  if (toRemove.length) removeEdges(toRemove);
+}
+
+function applyEdgeLaneTypes(analysisBySink = null) {
+  const sinkAnalysis = analysisBySink ?? analyzeFields(nodes.value, edges.value).analysisBySink;
   const importableIds = new Set();
   const exportOnlyIds = new Set();
   const adapterIncoming = edges.value.filter(
@@ -271,7 +326,7 @@ function refreshAnalysis() {
   );
   for (const e of adapterIncoming) {
     const key = e.targetHandle?.slice(2);
-    const a = analysisBySink[e.target]?.[key];
+    const a = sinkAnalysis[e.target]?.[key];
     if (!a?.connected) continue;
     const target = a.importable ? importableIds : exportOnlyIds;
     target.add(e.id);
@@ -702,7 +757,9 @@ onConnect((conn) => {
 // From an input pin  ⇒ offer blocks that PRODUCE its expected type and wire out of them.
 onConnectStart((params) => {
   const p = params || {};
+  if (!p.nodeId) return;
   const node = findNode(p.nodeId);
+  if (!node) return;
   const dir = p.handleType === "target" ? "target" : "source";
   pendingConnect.value = {
     nodeId: p.nodeId,
@@ -756,6 +813,15 @@ function onBeforeUnload(e) {
   e.returnValue = "";
 }
 
+vf.onPaneReady(() => {
+  flowPaneReady.value = true;
+  if (pendingLoadOptions !== null) {
+    const opts = pendingLoadOptions;
+    pendingLoadOptions = null;
+    load(opts);
+  }
+});
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("beforeunload", onBeforeUnload);
@@ -764,8 +830,11 @@ onMounted(() => {
   document.addEventListener("pointermove", onPointerMove, true);
   // Capture + non-passive so we can preventDefault for trackpad horizontal pan.
   flowWrap.value?.addEventListener("wheel", onWheelGesture, { capture: true, passive: false });
+  if (vf.viewport?.value?.viewportInitialized) {
+    flowPaneReady.value = true;
+  }
   loadPickerModels();
-  load();
+  requestLoad();
 });
 
 watch(
@@ -781,7 +850,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("pointermove", onPointerMove, true);
   flowWrap.value?.removeEventListener("wheel", onWheelGesture, { capture: true });
 });
-watch(() => props.mappingId, load);
+watch(() => props.mappingId, () => requestLoad());
 watch(
   () => props.previewProductId,
   (id) => (id ? schedulePreview() : clearNodePreview()),
@@ -790,6 +859,7 @@ watch(
 watch(
   () => props.availableSources,
   () => {
+    if (loading.value) return;
     refreshAnalysis();
     preloadMapModifierOptions();
   },
@@ -901,14 +971,25 @@ onNodeDoubleClick(({ node }) => {
 });
 
 async function load(options = {}) {
+  const gen = ++loadGeneration;
   const preserveLayout = options?.preserveLayout === true;
-  if (!props.connectionId || !props.mappingId) return; // ids arrive after parent mounted()
+  const stepCtx = { gen, preserveLayout };
+  if (!props.connectionId || !props.mappingId) return;
+  if (!flowPaneReady.value) {
+    pendingLoadOptions = options;
+    return;
+  }
+  if (previewTimer) clearTimeout(previewTimer);
   loading.value = true;
   try {
-    const data = await store.dispatch("getMappingGraph", {
-      connectionId: props.connectionId,
-      mappingId: props.mappingId,
-    });
+    const data = await loadStep("load:api:getMappingGraph", () =>
+      store.dispatch("getMappingGraph", {
+        connectionId: props.connectionId,
+        mappingId: props.mappingId,
+      }),
+    stepCtx,
+    );
+
     let graph;
     let migrated = false;
     if (
@@ -922,54 +1003,93 @@ async function load(options = {}) {
       graph = autoMigrate(props.fieldMappings, props.availableSources);
       migrated = true;
     }
-    const ensured = ensurePriceNode(
-      graph.nodes,
-      graph.edges,
-      props.priceFieldMappings,
-    );
-    graph.nodes = syncAdapterFields(
-      syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
-      props.fieldMappings,
-    );
-    graph.edges = ensured.edges;
-    graph.nodes = syncAdapterPriceFields(graph.nodes, props.priceFieldMappings);
-    ensureModifierParamDefaults(graph.nodes);
-    // Saved graphs keep the user's layout. Full auto-layout only for fresh migrations or graphs
-    // where *no* node has a position (legacy backend-generated graphs). A single new node
-    // without coordinates must not reset the whole canvas.
-    const allNodes = graph.nodes || [];
+
+    await loadStep("load:prepareGraph", async () => {
+      const ensured = ensurePriceNode(
+        graph.nodes,
+        graph.edges,
+        props.priceFieldMappings,
+      );
+      graph.nodes = syncAdapterFields(
+        syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
+        props.fieldMappings,
+      );
+      graph.edges = ensured.edges;
+      graph.nodes = syncAdapterPriceFields(graph.nodes, props.priceFieldMappings);
+      ensureModifierParamDefaults(graph.nodes);
+    }, { ...stepCtx, migrated });
+
+    const { nodes: safeNodes } = sanitizeGraphNodes(graph.nodes);
+
+    const rawNodeList = graph.nodes || [];
     const noneHavePosition =
-      allNodes.length > 0 && allNodes.every((n) => !n.position);
+      rawNodeList.length > 0 && rawNodeList.every((n) => !n?.position);
     const needsLayout = !preserveLayout && (migrated || noneHavePosition);
-    setNodes(
-      needsLayout ? layoutGraph(graph.nodes, graph.edges) : graph.nodes || [],
-    );
-    setEdges(graph.edges || []);
-    await nextTick();
+    const nodeIds = new Set(safeNodes.map((n) => n.id));
+    const { edges: safeEdges } = sanitizeGraphEdges(graph.edges, nodeIds);
+
+    const nodesToSet = needsLayout
+      ? layoutGraph(safeNodes, safeEdges)
+      : safeNodes;
+
+    await loadStep("load:setNodes", async () => {
+      setNodes(nodesToSet);
+      await nextTick();
+    }, { ...stepCtx, needsLayout, nodeCount: nodesToSet.length });
+
+    await loadStep("load:setEdges", async () => {
+      setEdges(safeEdges);
+      await nextTick();
+    }, { ...stepCtx, edgeCount: safeEdges.length });
+
     if (needsLayout) {
-      const measured = collectMeasuredHeights(nodes.value);
-      if (measured.size > 0) {
-        const obj = toObject();
-        setNodes(layoutGraph(obj.nodes, obj.edges, measured));
-        await nextTick();
-      }
+      await loadStep("load:relayoutMeasured", async () => {
+        const measured = collectMeasuredHeights(nodes.value);
+        if (measured.size > 0) {
+          const obj = toObject();
+          setNodes(layoutGraph(obj.nodes, obj.edges, measured));
+          await nextTick();
+        }
+      }, stepCtx);
     }
-    // Ensure adapter node is never deletable regardless of serialized graph state
-    const adNode = findNode(ADAPTER_NODE_ID);
-    if (adNode) adNode.deletable = false;
-    const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
-    if (priceNode) priceNode.deletable = false;
-    refreshAnalysis();
-    if (!preserveLayout) fitView({ padding: 0.2 });
+
+    await loadStep("load:finalizeNodes", async () => {
+      const adNode = findNode(ADAPTER_NODE_ID);
+      if (adNode) adNode.deletable = false;
+      const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
+      if (priceNode) priceNode.deletable = false;
+      pruneSourceBoundEdges();
+      await nextTick();
+    }, stepCtx);
+
+    await loadStep("load:refreshAnalysis", async () => {
+      refreshAnalysis({ updateLanes: false });
+      await waitForPaint();
+    }, stepCtx);
+
+    await loadStep("load:applyEdgeLaneTypes", async () => {
+      applyEdgeLaneTypes();
+      await nextTick();
+    }, stepCtx);
+
+    if (!preserveLayout && flowWrap.value?.clientHeight > 0) {
+      await loadStep("load:fitView", async () => {
+        fitView({ padding: 0.2 });
+        await nextTick();
+      }, stepCtx);
+    }
+
     dirty.value = false;
-    schedulePreview();
-    // Capture initial history state
-    history.value = [makeSnapshot()];
-    histIdx.value = 0;
-  } catch (e) {
-    displaySonnerError(e);
+    await loadStep("load:historySnapshot", async () => {
+      history.value = [makeSnapshot()];
+      histIdx.value = 0;
+    }, stepCtx);
+
+  } catch {
+    // loadStep already reported the error
   } finally {
     loading.value = false;
+    schedulePreview();
   }
 }
 
@@ -996,8 +1116,8 @@ async function syncAdapterFieldSchema() {
 }
 
 defineExpose({
-  reload: load,
-  reloadAfterFieldSync: () => load({ preserveLayout: true }),
+  reload: requestLoad,
+  reloadAfterFieldSync: () => requestLoad({ preserveLayout: true }),
 });
 
 // ---- Context menu (ПКМ / Tab) ----
@@ -1356,25 +1476,45 @@ let previewTimer = null;
 let previewToken = 0;
 function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer);
-  if (!props.previewProductId) return;
+  if (!props.previewProductId || loading.value) return;
   previewTimer = setTimeout(runPreview, 400);
+}
+
+function applyPreviewValues(outputs, nodeValues) {
+  if (findNode(ADAPTER_NODE_ID)) {
+    updateNodeData(ADAPTER_NODE_ID, { preview: outputs });
+  }
+  if (findNode(ADAPTER_PRICE_NODE_ID)) {
+    updateNodeData(ADAPTER_PRICE_NODE_ID, { preview: outputs });
+  }
+  for (const n of nodes.value) {
+    if (n.type === "adapterFields" || n.type === "adapterPriceFields") continue;
+    updateNodeData(n.id, { previewValue: nodeValues[n.id] ?? null });
+  }
 }
 
 // Clearing the preview product also clears the per-node preview values from the blocks.
 function clearNodePreview() {
   if (previewTimer) clearTimeout(previewTimer);
-  nodes.value.forEach((n) => {
-    if (n.type === "adapterFields") updateNodeData(n.id, { preview: {} });
-    else updateNodeData(n.id, { previewValue: null });
-  });
+  if (findNode(ADAPTER_NODE_ID)) {
+    updateNodeData(ADAPTER_NODE_ID, { preview: {} });
+  }
+  if (findNode(ADAPTER_PRICE_NODE_ID)) {
+    updateNodeData(ADAPTER_PRICE_NODE_ID, { preview: {} });
+  }
+  for (const n of nodes.value) {
+    if (n.type === "adapterFields" || n.type === "adapterPriceFields") continue;
+    updateNodeData(n.id, { previewValue: null });
+  }
 }
 
 // Runs automatically (debounced) on graph changes when a preview product is selected.
 async function runPreview() {
   if (!props.previewProductId || !props.connectionId || !props.mappingId)
     return;
-  // Guard: if graph is still loading, defer until load() calls schedulePreview() at the end.
   if (loading.value) return;
+  await nextTick();
+  const gen = ++previewGeneration;
   const token = ++previewToken;
   previewing.value = true;
   try {
@@ -1384,15 +1524,11 @@ async function runPreview() {
       productId: props.previewProductId,
       graph: buildGraph(),
     });
-    // Discard stale responses if a newer preview was requested in the meantime.
-    if (token !== previewToken) return;
+    if (token !== previewToken || loading.value) return;
+    await waitForPaint();
     const outputs = data?.outputs || {};
     const nodeValues = data?.nodeValues || {};
-    nodes.value.forEach((n) => {
-      if (n.type === "adapterFields")
-        updateNodeData(n.id, { preview: outputs });
-      else updateNodeData(n.id, { previewValue: nodeValues[n.id] ?? null });
-    });
+    applyPreviewValues(outputs, nodeValues);
     emit("preview-result", { outputs, fieldTypes: data?.fieldTypes || {} });
   } catch (e) {
     if (token !== previewToken) return;
@@ -1463,14 +1599,20 @@ async function importMappingFile(event) {
       props.fieldMappings,
     );
     importedNodes = syncAdapterPriceFields(importedNodes, props.priceFieldMappings);
-    setNodes(layoutGraph(importedNodes, ensured.edges || []));
-    setEdges(ensured.edges || []);
+    const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
+    const importIds = new Set(importSafeNodes.map((n) => n.id));
+    const { edges: importSafeEdges } = sanitizeGraphEdges(ensured.edges, importIds);
+    setNodes(layoutGraph(importSafeNodes, importSafeEdges));
+    setEdges(importSafeEdges);
     await nextTick();
     const adNode = findNode(ADAPTER_NODE_ID);
     if (adNode) adNode.deletable = false;
     const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
     if (priceNode) priceNode.deletable = false;
-    refreshAnalysis();
+    refreshAnalysis({ updateLanes: false });
+    await waitForPaint();
+    applyEdgeLaneTypes();
+    await nextTick();
     fitView({ padding: 0.2 });
     dirty.value = true;
     schedulePreview();
@@ -1490,11 +1632,11 @@ async function importMappingFile(event) {
     ]"
   >
     <SplitterPanel :min-size="40">
-    <div
-      ref="flowWrap"
-      class="relative min-w-0 h-full w-full"
-      @contextmenu="onContextMenu"
-    >
+      <div
+        ref="flowWrap"
+        class="relative min-w-0 h-full w-full"
+        @contextmenu="onContextMenu"
+      >
       <div
         class="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border bg-card/95 p-1 shadow-sm backdrop-blur"
       >
@@ -1607,10 +1749,9 @@ async function importMappingFile(event) {
         :delete-key-code="['Delete', 'Backspace']"
         :selection-key-code="true"
         :pan-on-drag="[1, 2]"
-        :only-render-visible-elements="true"
+        :only-render-visible-elements="false"
         :elevate-edges-on-select="true"
         :is-valid-connection="isValidConnection"
-        fit-view-on-init
         class="vf-canvas"
       >
         <Background />
@@ -1722,7 +1863,7 @@ async function importMappingFile(event) {
       >
         <Loader2 class="size-6 animate-spin text-muted-foreground" />
       </div>
-    </div>
+      </div>
     </SplitterPanel>
 
     <template v-if="selected">
