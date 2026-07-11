@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Storage;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Storage;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 /// <summary>
 /// One-time startup service that repairs files broken by the old rename behavior.

@@ -23,6 +23,7 @@ import {
   ImageDown,
   ArrowRightLeft,
   Trash2,
+  Sparkles,
 } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
@@ -95,6 +96,8 @@ const typeIcon = computed(() => {
       return Upload;
     case "file-delete":
       return Trash2;
+    case "ai-mapping":
+      return Sparkles;
     default:
       return Upload;
   }

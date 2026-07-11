@@ -1,4 +1,4 @@
-namespace PrintO.Services.Marketplace.Modifiers;
+namespace Delegat.Services.Marketplace.Modifiers;
 
 /// <summary>
 /// Interface for a single field value modifier.

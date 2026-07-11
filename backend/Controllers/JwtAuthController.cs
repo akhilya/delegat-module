@@ -2,13 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using static PrintO.Models.User;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using static Delegat.Models.User;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -291,7 +291,7 @@ public class JwtAuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = isProduction,
-            SameSite = SameSiteMode.Lax,
+            SameSite = SameSiteMode.Strict,
             Path = "/",
             Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
         });
@@ -304,7 +304,7 @@ public class JwtAuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = isProduction,
-            SameSite = SameSiteMode.Lax,
+            SameSite = SameSiteMode.Strict,
             Path = "/",
             Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
         });
@@ -317,7 +317,7 @@ public class JwtAuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = isProduction,
-            SameSite = SameSiteMode.Lax,
+            SameSite = SameSiteMode.Strict,
             Expires = DateTime.UtcNow.AddDays(30)
         });
     }

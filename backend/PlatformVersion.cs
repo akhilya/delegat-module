@@ -1,4 +1,4 @@
-namespace PrintO;
+namespace Delegat;
 
 public static class PlatformVersion
 {

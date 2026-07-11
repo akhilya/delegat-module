@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Security;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Security;
 
-namespace PrintO.Services.DataMigrations;
+namespace Delegat.Services.DataMigrations;
 
 public class Migration_1_4_0_EncryptCredentials : IDataMigration
 {

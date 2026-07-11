@@ -1,13 +1,13 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using PrintO.Infrastructure.Security;
-using PrintO.Marketplace.SDK;
-using PrintO.Marketplace.SDK.DTOs;
-using PrintO.Marketplace.SDK.RateLimit;
-using PrintO.Models.Marketplace;
-using PrintO.Services.Marketplace;
+using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.SDK;
+using Delegat.Marketplace.SDK.DTOs;
+using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Models.Marketplace;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// Wraps an IMarketplacePlugin to implement IMarketplaceAdapter.
@@ -141,13 +141,38 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         )).ToList();
     }
 
+    public async Task<List<Models.Marketplace.DTOs.ExternalField>> GetPriceFieldsAsync(
+        MarketplaceConnection connection,
+        string externalCategoryId,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var fields = await _plugin.GetPriceFieldsAsync(context, externalCategoryId, ct);
+
+        return fields.Select(f => new Models.Marketplace.DTOs.ExternalField(
+            f.Key,
+            f.Name,
+            f.IsRequired,
+            f.Type,
+            f.Options?.Select(o => new Models.Marketplace.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList(),
+            f.Description,
+            f.Unit,
+            f.MaxLength,
+            f.MinValue,
+            f.MaxValue,
+            f.ValidationPattern,
+            f.Group,
+            f.SortOrder
+        )).ToList();
+    }
+
     public async Task<Models.Marketplace.DTOs.CreateCategoryResult> CreateCategoryAsync(
         MarketplaceConnection connection,
         Models.Marketplace.DTOs.CreateCategoryRequest request,
         CancellationToken ct = default)
     {
         var context = CreateContext(connection);
-        var sdkRequest = new PrintO.Marketplace.SDK.DTOs.CreateCategoryRequest
+        var sdkRequest = new Delegat.Marketplace.SDK.DTOs.CreateCategoryRequest
         {
             Name = request.Name,
             Description = request.Description,
@@ -155,7 +180,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             StoreId = request.StoreId,
             LanguageId = request.LanguageId,
             SortOrder = request.SortOrder,
-            Fields = request.Fields.Select(f => new PrintO.Marketplace.SDK.DTOs.CreateCategoryField
+            Fields = request.Fields.Select(f => new Delegat.Marketplace.SDK.DTOs.CreateCategoryField
             {
                 Key = f.Key,
                 Name = f.Name,
@@ -164,7 +189,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 Description = f.Description,
                 Group = f.Group,
                 SortOrder = f.SortOrder,
-                Options = f.Options?.Select(o => new PrintO.Marketplace.SDK.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList()
+                Options = f.Options?.Select(o => new Delegat.Marketplace.SDK.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList()
             }).ToList()
         };
 
@@ -314,7 +339,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         var context = CreateContext(connection);
 
         // Convert backend BulkExportItem → SDK BulkExportItem
-        var sdkItems = items.Select(i => new PrintO.Marketplace.SDK.DTOs.BulkExportItem(
+        var sdkItems = items.Select(i => new Delegat.Marketplace.SDK.DTOs.BulkExportItem(
             i.LocalProductId,
             i.ProductData,
             i.ExistingExternalId
@@ -384,7 +409,15 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             p.OldPrice,
             p.Stock,
             p.DiscountedPrice,
-            p.Currency
+            p.Currency,
+            p.VariantId,
+            p.MinPrice,
+            p.ExternalSku,
+            p.Discount,
+            p.NetPrice,
+            p.AutoActionEnabled,
+            p.PriceStrategyEnabled,
+            p.MinPriceForAutoActionsEnabled
         )).ToList();
     }
 
@@ -400,7 +433,15 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             p.OldPrice,
             p.Stock,
             p.DiscountedPrice,
-            p.Currency
+            p.Currency,
+            p.VariantId,
+            p.MinPrice,
+            p.ExternalSku,
+            p.Discount,
+            p.NetPrice,
+            p.AutoActionEnabled,
+            p.PriceStrategyEnabled,
+            p.MinPriceForAutoActionsEnabled
         )).ToList();
 
         var result = await _plugin.ExportPricesAsync(context, sdkPrices, ct);

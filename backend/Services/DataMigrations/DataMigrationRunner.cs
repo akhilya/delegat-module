@@ -1,8 +1,8 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Models;
+using Delegat.Models;
 
-namespace PrintO.Services.DataMigrations;
+namespace Delegat.Services.DataMigrations;
 
 /// <summary>
 /// Discovers and runs data migrations that haven't been applied yet.

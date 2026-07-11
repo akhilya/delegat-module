@@ -1,6 +1,6 @@
-using PrintO.Models.Products;
+using Delegat.Models.Products;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Status of an image download operation.

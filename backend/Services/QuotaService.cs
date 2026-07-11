@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Products;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Products;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public class QuotaService
 {

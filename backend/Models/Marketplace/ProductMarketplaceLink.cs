@@ -1,10 +1,10 @@
-using PrintO.Enums;
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Models.Products;
+using Delegat.Enums;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Models.Products;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models.Marketplace;
+namespace Delegat.Models.Marketplace;
 
 /// <summary>
 /// Links a local product to its counterpart on an external marketplace.

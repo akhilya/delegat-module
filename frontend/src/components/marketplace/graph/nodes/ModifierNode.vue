@@ -6,9 +6,17 @@ import { MODIFIER_CATALOG } from "../../modifierCatalog.js";
 import {
   modifierOutputType,
   modifierIsReversible,
+  overridableParams,
+  fieldPinsFor,
   pinColor,
 } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const props = defineProps({
   id: String,
@@ -24,7 +32,6 @@ const summary = computed(() =>
   catalog.value ? catalog.value.summary(props.data.params || {}) : "",
 );
 const unknown = computed(() => !catalog.value);
-// Lossy transforms (truncate, replace, split…) can't be reversed on import — warn on the block.
 const irreversible = computed(
   () => !unknown.value && !modifierIsReversible(props.data.modifierType),
 );
@@ -32,6 +39,22 @@ const outType = computed(() =>
   props.data.modifierType === "forceType"
     ? props.data.params?.type || "any"
     : modifierOutputType(props.data.modifierType, "any"),
+);
+const collapsed = computed(() => !!props.data.collapsed);
+
+const paramPins = computed(() => overridableParams(props.data.modifierType));
+const fieldPins = computed(() => fieldPinsFor(props.data));
+const hasFieldPins = computed(() => fieldPins.value.length > 0);
+const hasPins = computed(() => paramPins.value.length > 0 || hasFieldPins.value);
+const paramColor = (t) => pinColor(t === "number" ? "number" : "string");
+
+const HEADER = 26;
+const ROW = 18;
+const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
+
+const fieldPinRowOffset = computed(() => 1);
+const paramPinRowOffset = computed(
+  () => fieldPinRowOffset.value + fieldPins.value.length,
 );
 </script>
 
@@ -42,25 +65,76 @@ const outType = computed(() =>
       'vf-card--modifier',
       unknown && 'vf-card--error',
       selected && 'vf-card--selected',
+      hasPins && 'vf-card--haspins',
+      collapsed && !hasPins && 'vf-card--collapsed',
     ]"
   >
-    <Handle id="in" type="target" :position="Position.Left" />
+    <template v-if="hasPins">
+      <Handle
+        id="in"
+        type="target"
+        :position="Position.Left"
+        :style="{ top: topFor(0) }"
+      />
+      <Handle
+        v-for="(pin, i) in fieldPins"
+        :key="pin.id"
+        :id="`field:${pin.id}`"
+        type="target"
+        :position="Position.Left"
+        :style="{ top: topFor(fieldPinRowOffset + i) }"
+      />
+      <Handle
+        v-for="(p, i) in paramPins"
+        :key="p.key"
+        :id="`p:${p.key}`"
+        type="target"
+        :position="Position.Left"
+        :style="{ top: topFor(paramPinRowOffset + i), background: paramColor(p.type) }"
+      />
+    </template>
+    <Handle v-else id="in" type="target" :position="Position.Left" />
+
     <div class="vf-card__head">
       <Wand2 class="size-3.5 text-muted-foreground" />
       <span class="vf-card__kind">{{ title }}</span>
-      <AlertTriangle
-        v-if="irreversible"
-        class="vf-card__warn"
-        title="Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть."
-      />
+      <TooltipProvider v-if="irreversible" :delay-duration="200">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <AlertTriangle class="vf-card__warn cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" class="max-w-52 text-xs">
+            Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
-    <div v-if="summary" class="vf-card__title vf-card__title--sm">
-      {{ summary }}
+
+    <div v-if="hasPins" class="vf-mod__pins">
+      <div class="vf-mod__pin-row vf-mod__pin-row--value">значение</div>
+      <div
+        v-for="pin in fieldPins"
+        :key="pin.id"
+        class="vf-mod__pin-row"
+        :title="`{{pin:${pin.id}}}`"
+      >
+        {{ pin.label || pin.id }}
+      </div>
+      <div v-for="p in paramPins" :key="p.key" class="vf-mod__pin-row">
+        {{ p.label }}
+      </div>
     </div>
-    <div class="vf-card__pin vf-card__pin--right">
-      <span class="vf-dot" :style="{ background: pinColor(outType) }" />
+
+    <div v-if="!collapsed" :class="hasPins && 'vf-mod__body'">
+      <div v-if="summary" class="vf-card__title vf-card__title--sm">
+        {{ summary }}
+      </div>
+      <div v-if="!hasPins" class="vf-card__pin vf-card__pin--right">
+        <span class="vf-dot" :style="{ background: pinColor(outType) }" />
+      </div>
+      <NodePreview :value="data.previewValue" />
     </div>
-    <NodePreview :value="data.previewValue" />
+
     <Handle
       id="out"
       type="source"

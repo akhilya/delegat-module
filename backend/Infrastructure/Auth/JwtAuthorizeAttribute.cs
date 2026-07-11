@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 
-namespace PrintO.Infrastructure.Auth;
+namespace Delegat.Infrastructure.Auth;
 
 /// <summary>
 /// JWT Authorization attribute for protecting endpoints

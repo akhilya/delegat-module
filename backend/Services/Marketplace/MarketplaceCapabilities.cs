@@ -1,4 +1,4 @@
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Marketplace adapter capabilities.

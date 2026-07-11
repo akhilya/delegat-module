@@ -1,12 +1,22 @@
 <script setup>
 import { useSlots } from "vue";
 import { Loader2 } from "lucide-vue-next";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty";
 
 defineProps({
   loading: { type: Boolean, default: false },
-  title: { type: String, default: '' },
-  description: { type: String, default: '' },
-})
+  title: { type: String, default: "" },
+  description: { type: String, default: "" },
+  // "sm" for table cells / dense sections, "default" for page-level areas
+  size: { type: String, default: "default" },
+});
 
 const slots = useSlots();
 </script>
@@ -15,10 +25,27 @@ const slots = useSlots();
   <div v-if="loading" class="flex justify-center py-12">
     <Loader2 class="size-8 animate-spin text-muted-foreground" />
   </div>
-  <div v-else class="flex flex-col items-center justify-center py-12 text-center">
-    <slot name="icon" />
-    <h3 v-if="title" class="font-medium mb-1">{{ title }}</h3>
-    <p v-if="description" :class="['text-sm text-muted-foreground', slots.default ? 'mb-4' : '']">{{ description }}</p>
-    <slot />
-  </div>
+  <Empty v-else :class="size === 'sm' ? 'gap-3 p-4 md:p-6' : undefined">
+    <EmptyHeader>
+      <EmptyMedia
+        v-if="slots.icon"
+        variant="icon"
+        :class="size === 'sm' ? 'size-10 [&_svg]:size-5' : undefined"
+      >
+        <slot name="icon" />
+      </EmptyMedia>
+      <EmptyTitle v-if="title" :class="size === 'sm' ? 'text-sm' : undefined">
+        {{ title }}
+      </EmptyTitle>
+      <EmptyDescription
+        v-if="description"
+        :class="size === 'sm' ? 'text-xs' : undefined"
+      >
+        {{ description }}
+      </EmptyDescription>
+    </EmptyHeader>
+    <EmptyContent v-if="slots.default">
+      <slot />
+    </EmptyContent>
+  </Empty>
 </template>

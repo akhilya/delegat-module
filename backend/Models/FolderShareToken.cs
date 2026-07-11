@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 public class FolderShareToken : IEntity
 {

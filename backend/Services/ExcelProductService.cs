@@ -1,10 +1,10 @@
 using ClosedXML.Excel;
-using PrintO.Controllers;
-using PrintO.Infrastructure.Data;
-using PrintO.Models;
-using PrintO.Models.Products;
+using Delegat.Controllers;
+using Delegat.Infrastructure.Data;
+using Delegat.Models;
+using Delegat.Models.Products;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public class ExcelProductService
 {

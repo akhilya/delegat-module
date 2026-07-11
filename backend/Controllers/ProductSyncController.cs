@@ -2,17 +2,17 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Products;
-using PrintO.Services;
-using PrintO.Services.Marketplace;
+using Delegat.Enums;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Products;
+using Delegat.Services;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]

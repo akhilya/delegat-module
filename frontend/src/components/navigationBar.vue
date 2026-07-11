@@ -108,9 +108,12 @@ export default {
 
     this.isLoading = false;
 
-    http.get("/health").then(r => {
-      this.platformVersion = r.data?.version;
-    }).catch(() => {});
+    http
+      .get("/health")
+      .then((r) => {
+        this.platformVersion = r.data?.version;
+      })
+      .catch(() => {});
   },
 };
 </script>
@@ -123,6 +126,10 @@ export default {
           <SidebarTrigger />
         </div>
 
+        <div v-if="$slots.left" class="min-w-0 shrink">
+          <slot name="left" />
+        </div>
+
         <div class="hidden sm:flex flex-1 items-center justify-center">
           <slot name="center" />
         </div>
@@ -132,7 +139,9 @@ export default {
             <DropdownMenuTrigger as-child>
               <Button variant="ghost" class="h-9 gap-1.5">
                 <UserRound class="size-4" />
-                <span class="hidden sm:inline max-w-[120px] truncate">{{ me?.userName }}</span>
+                <span class="hidden sm:inline max-w-[120px] truncate">{{
+                  me?.userName
+                }}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -181,7 +190,9 @@ export default {
               </DropdownMenuItem>
               <template v-if="platformVersion">
                 <DropdownMenuSeparator />
-                <div class="px-2 py-1 text-[10px] text-muted-foreground text-center select-none">
+                <div
+                  class="px-2 py-1 text-[10px] text-muted-foreground text-center select-none"
+                >
                   v{{ platformVersion }}
                 </div>
               </template>

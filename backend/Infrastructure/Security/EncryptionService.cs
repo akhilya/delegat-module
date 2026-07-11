@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace PrintO.Infrastructure.Security;
+namespace Delegat.Infrastructure.Security;
 
 public class EncryptionService
 {

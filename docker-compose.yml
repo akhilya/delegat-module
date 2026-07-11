@@ -2,15 +2,17 @@
 # Usage: docker compose up -d
 # Then run backend and frontend locally with: npm run dev
 
+name: delegat-dashboard
+
 services:
   # MySQL Database
   mysql:
     image: mysql:8.0
-    container_name: printo-mysql
+    container_name: delegat-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-printo}
-      MYSQL_USER: ${MYSQL_USER:-printo}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
@@ -23,12 +25,12 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - printo-network
+      - delegat-network
 
   # MinIO Object Storage (S3-compatible)
   minio:
     image: minio/minio:latest
-    container_name: printo-minio
+    container_name: delegat-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
@@ -45,12 +47,12 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - printo-network
+      - delegat-network
 
   # MinIO bucket initialization
   minio-init:
     image: minio/mc:latest
-    container_name: printo-minio-init
+    container_name: delegat-minio-init
     depends_on:
       minio:
         condition: service_started
@@ -65,14 +67,16 @@ services:
     environment:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-printo}
+      - MINIO_BUCKET=${MINIO_BUCKET}
     networks:
-      - printo-network
+      - delegat-network
 
 volumes:
   mysql_data:
+    name: ${MYSQL_VOLUME_NAME:-delegat-mysql-data}
   minio_data:
+    name: ${MINIO_VOLUME_NAME:-delegat-minio-data}
 
 networks:
-  printo-network:
+  delegat-network:
     driver: bridge

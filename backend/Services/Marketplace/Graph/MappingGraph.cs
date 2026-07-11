@@ -1,10 +1,10 @@
-using PrintO.Services.Marketplace.Modifiers;
+using Delegat.Services.Marketplace.Modifiers;
 
-namespace PrintO.Services.Marketplace.Graph;
+namespace Delegat.Services.Marketplace.Graph;
 
 /// <summary>
 /// Serialized whole-category node graph (the "Blueprint" mapping editor).
-/// Stored as <see cref="PrintO.Models.Marketplace.CategoryMapping.graphJson"/>.
+/// Stored as <see cref="Delegat.Models.Marketplace.CategoryMapping.graphJson"/>.
 ///
 /// The frontend (Vue Flow) is the schema owner: it stores the full node objects
 /// (including layout/position) and the backend deserializes only the subset it needs
@@ -20,12 +20,23 @@ public class MappingGraph
 /// <summary>
 /// A single node. <see cref="type"/> selects behaviour:
 /// "attribute" | "storeAttribute" | "productField" | "static" | "groupName"
-/// | "modifier" | "formatString" | "join" | "output".
+/// | "modifier" | "formatString" | "join" | "output" | "adapterFields" | "adapterPriceFields".
 /// </summary>
+/// <summary>Vue Flow node coordinates — persisted by the editor, ignored by the evaluator.</summary>
+public class GraphPosition
+{
+    public double x { get; set; }
+    public double y { get; set; }
+}
+
 public class GraphNode
 {
     public string id { get; set; } = "";
     public string type { get; set; } = "";
+    /// <summary>Editor layout; round-tripped through graphJson so sync operations preserve user positions.</summary>
+    public GraphPosition? position { get; set; }
+    /// <summary>Vue Flow deletable flag (adapter sinks are false).</summary>
+    public bool? deletable { get; set; }
     public GraphNodeData? data { get; set; }
 }
 
@@ -44,6 +55,11 @@ public class GraphNodeData
     public string? staticValue { get; set; }
     /// <summary>Frontend-only display label for source nodes (ignored by the evaluator).</summary>
     public string? label { get; set; }
+    /// <summary>Marks a static node as a "Стандартное значение" block — its value is one of the
+    /// adapter field's predefined options (frontend renders a select instead of free text).</summary>
+    public bool? isAdapterValue { get; set; }
+    /// <summary>Predefined options for "isAdapterValue" static nodes (copied from the adapter field).</summary>
+    public List<GraphNodeOption>? options { get; set; }
     /// <summary>Store shared-storage file id for "storeFileUrl" / "storeFileContent" sources.</summary>
     public int? storeFileId { get; set; }
     /// <summary>Product file name for "productFileByName" / "productFileContentByName" sources.</summary>
@@ -56,12 +72,25 @@ public class GraphNodeData
     /// matching the legacy export pipeline.
     /// </summary>
     public string? valueType { get; set; }
+    /// <summary>
+    /// For productField / attribute / storeAttribute sources: false = export-only lane
+    /// (import from marketplace skips this source). Null or true = importable when the chain allows.
+    /// </summary>
+    public bool? importable { get; set; }
 
     // Modifier node
     /// <summary>Modifier type id (e.g. "multiply", "toText", "forceType").</summary>
     public string? modifierType { get; set; }
     /// <summary>Modifier parameters, same shape as a modifiersJson entry's "params".</summary>
     public Dictionary<string, object>? @params { get; set; }
+    /// <summary>Adapter field key this map modifier feeds (persisted from graph wiring).</summary>
+    public string? targetFieldKey { get; set; }
+    /// <summary>Allowed values of the target adapter field (optionMap right-hand select).</summary>
+    public List<GraphNodeOption>? targetFieldOptions { get; set; }
+    /// <summary>Output type of the target adapter field.</summary>
+    public string? targetValueType { get; set; }
+    /// <summary>Extra input pins for llmGenerate nodes (wired via handle "field:&lt;id&gt;").</summary>
+    public List<GraphFieldPin>? fieldPins { get; set; }
 
     // Combine / array op nodes
     /// <summary>Positional template for "formatString" (e.g. "{0}x{1}x{2}").</summary>
@@ -80,6 +109,20 @@ public class GraphNodeData
     public List<AdapterField>? fields { get; set; }
 }
 
+/// <summary>Option entry for "isAdapterValue" static nodes — same shape the frontend editor uses.</summary>
+public class GraphNodeOption
+{
+    public string? value { get; set; }
+    public string? label { get; set; }
+}
+
+/// <summary>Named extra input on an llmGenerate modifier node.</summary>
+public class GraphFieldPin
+{
+    public string? id { get; set; }
+    public string? label { get; set; }
+}
+
 /// <summary>
 /// One marketplace field exposed as an input pin on the single "adapterFields" sink node.
 /// Edges feed it via the handle id "f:&lt;fieldKey&gt;".
@@ -93,6 +136,10 @@ public class AdapterField
     /// <summary>Optional direct source binding (set via the adapter dropdown) — when present the field
     /// has no input pin and its value is resolved straight from this source instead of an edge.</summary>
     public AdapterFieldSource? source { get; set; }
+    /// <summary>Merged-duplicate marker: this field is an alias of another field (by fieldKey).
+    /// Export copies the primary's evaluated value into this key; import reverses only the primary.
+    /// Alias fields have no input pin and own connections are ignored.</summary>
+    public string? aliasOf { get; set; }
 }
 
 /// <summary>A standard source bound directly to an adapter field (no node/wire).</summary>
@@ -145,6 +192,15 @@ public class GraphEvaluationContext
     /// <summary>Context for modifier nodes (template {{attr:N}} resolution). SourceAttributeOptions
     /// is overridden per-node from the branch's originating attribute.</summary>
     public ModifierContext? ModifierContext { get; init; }
+
+    /// <summary>Pre-resolved llmGenerate outputs keyed by node id.</summary>
+    public IReadOnlyDictionary<string, string>? GenerativeOutputs { get; init; }
+
+    /// <summary>When true, llmGenerate nodes pass input through (used to resolve upstream values).</summary>
+    public bool GenerativePassThrough { get; init; }
+
+    public int? MappingId { get; init; }
+    public int? ProductId { get; init; }
 }
 
 /// <summary>
@@ -158,4 +214,18 @@ public class GraphEvalResult
 
     /// <summary>Value produced at each node (by node id) — for per-node preview in the editor.</summary>
     public Dictionary<string, object?> NodeValues { get; } = new();
+
+    /// <summary>Status per llmGenerate node (ready / pending / failed).</summary>
+    public Dictionary<string, GenerativeNodeStatus> GenerativeStatuses { get; set; } = new();
+
+    /// <summary>Values wired into llmGenerate field pins (node id → pin id → value).</summary>
+    public Dictionary<string, Dictionary<string, object?>> FieldPinValues { get; } = new(StringComparer.Ordinal);
+}
+
+public class GenerativeNodeStatus
+{
+    public string Status { get; set; } = "pending";
+    public string? Output { get; set; }
+    public string? OperationId { get; set; }
+    public string? ErrorMessage { get; set; }
 }

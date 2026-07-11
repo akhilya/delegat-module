@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Services.Marketplace;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]

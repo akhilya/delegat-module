@@ -61,6 +61,8 @@ export default {
     externalFieldType: { type: String, default: null },
     externalFieldOptions: { type: Array, default: () => [] },
     sourceFieldOptions: { type: Array, default: () => [] },
+    adapterFieldsWithOptions: { type: Array, default: () => [] },
+    aiModelOptions: { type: Array, default: () => [] },
     availableSources: { type: Object, default: () => ({}) },
     disabled: { type: Boolean, default: false },
   },
@@ -270,6 +272,7 @@ export default {
             <ValueMapEditor
               :mappings="mod.params?.[param.key] || []"
               :external-field-options="externalFieldOptions"
+              :source-field-options="sourceFieldOptions"
               :default-value="mod.params?.['default'] || ''"
               @update:mappings="(v) => onParamChange(index, param.key, v)"
               @update:defaultValue="(v) => onParamChange(index, 'default', v)"
@@ -282,6 +285,8 @@ export default {
               :mappings="mod.params?.[param.key] || []"
               :external-field-options="externalFieldOptions"
               :source-field-options="sourceFieldOptions"
+              :persisted-target-options="mod.targetFieldOptions || []"
+              :adapter-fields-with-options="adapterFieldsWithOptions"
               :default-value="mod.params?.['default'] || ''"
               @update:mappings="(v) => onParamChange(index, param.key, v)"
               @update:defaultValue="(v) => onParamChange(index, 'default', v)"
@@ -337,6 +342,31 @@ export default {
                   </button>
                 </Badge>
               </div>
+            </div>
+          </template>
+
+          <!-- AI model picker -->
+          <template v-else-if="param.type === 'aiModel'">
+            <div class="space-y-1">
+              <Label class="text-xs">{{ param.label }}</Label>
+              <Select
+                :model-value="getParamValue(mod, param) != null ? String(getParamValue(mod, param)) : undefined"
+                @update:modelValue="(v) => onParamChange(index, param.key, v ? Number(v) : undefined)"
+              >
+                <SelectTrigger class="h-7 text-xs">
+                  <SelectValue placeholder="Выберите модель" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="m in aiModelOptions"
+                    :key="m.value"
+                    :value="String(m.value)"
+                    class="text-xs"
+                  >
+                    {{ m.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </template>
 

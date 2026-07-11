@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Products;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Products;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 /// <summary>
 /// Controller for managing product image references and their display order.

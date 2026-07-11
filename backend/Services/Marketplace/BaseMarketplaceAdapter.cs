@@ -1,8 +1,8 @@
-using PrintO.Marketplace.SDK.RateLimit;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
+using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Base class for marketplace adapters.
@@ -68,6 +68,14 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
     {
         EnsureCapability(MarketplaceCapabilities.GetCategoryFields);
         throw new NotImplementedException($"GetCategoryFieldsAsync not implemented for {Key}");
+    }
+
+    public virtual Task<List<ExternalField>> GetPriceFieldsAsync(
+        MarketplaceConnection connection,
+        string externalCategoryId,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(new List<ExternalField>());
     }
 
     public virtual Task<CreateCategoryResult> CreateCategoryAsync(

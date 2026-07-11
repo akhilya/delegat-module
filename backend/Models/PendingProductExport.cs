@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Status of a product export operation.

@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Products;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Products;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 /// <summary>
 /// Clone or move a product (with all related data) into another store.

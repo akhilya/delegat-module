@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
 using System.Globalization;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public class AppSettingsService
 {

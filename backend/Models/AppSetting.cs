@@ -1,7 +1,7 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 public class AppSetting : IEntity
 {

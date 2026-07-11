@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Tracks versions of platform and plugins for data migration and field sync purposes.

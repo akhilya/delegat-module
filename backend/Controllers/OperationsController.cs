@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Services;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Services;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -36,7 +36,7 @@ public class OperationsController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -97,7 +97,7 @@ public class OperationsController : ControllerBase
         [FromQuery] int take = 200,
         CancellationToken ct = default)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -130,7 +130,7 @@ public class OperationsController : ControllerBase
     [Route("/operations/start")]
     public async Task<IActionResult> StartOperation([FromBody] StartOperationInput input, CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -428,7 +428,7 @@ public class OperationsController : ControllerBase
 
     private async Task<Operation?> GetOperationAsync(string operationId, CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null) return null;
         return await _context.operations
             .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId.Value, ct);
@@ -440,7 +440,7 @@ public class OperationsController : ControllerBase
     {
         await EnsureAdminAsync(ct);
 
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -480,7 +480,7 @@ public class OperationsController : ControllerBase
     {
         await EnsureAdminAsync(ct);
 
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -687,7 +687,7 @@ public class OperationsController : ControllerBase
     [Route("/operations/{operationId}")]
     public async Task<IActionResult> DeleteOperation(string operationId, CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 
@@ -711,7 +711,7 @@ public class OperationsController : ControllerBase
     [Route("/operations/bulk")]
     public async Task<IActionResult> DeleteOperationsBulk([FromBody] List<string> operationIds, CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Не выбран магазин" });
 

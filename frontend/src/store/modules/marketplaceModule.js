@@ -458,11 +458,13 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, onSuccess, onError }) {
+    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, force = false, onSuccess, onError }) {
       try {
-        const url = reassignToMappingId
-          ? `/marketplace/connections/${connectionId}/mappings/${mappingId}?reassignToMappingId=${encodeURIComponent(reassignToMappingId)}`
-          : `/marketplace/connections/${connectionId}/mappings/${mappingId}`;
+        const params = new URLSearchParams();
+        if (reassignToMappingId) params.set("reassignToMappingId", reassignToMappingId);
+        if (force) params.set("force", "true");
+        const query = params.toString();
+        const url = `/marketplace/connections/${connectionId}/mappings/${mappingId}${query ? `?${query}` : ""}`;
         const response = await http.delete(url);
         onSuccess({ data: response.data });
       } catch (error) {
@@ -550,6 +552,19 @@ export default {
     },
 
     /**
+     * Fetches the live adapter schema and additively appends new fields to the mapping graph.
+     * Existing bindings are preserved.
+     */
+    async syncMappingFields(ctx, { connectionId, mappingId }) {
+      const response = await http.post(
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/sync-fields`,
+        null,
+        { timeout: 5 * 60 * 1000 },
+      );
+      return response.data;
+    },
+
+    /**
      * Lists the selected store's shared-storage files (for the graph's «Файл магазина» blocks).
      */
     async getStoreFiles() {
@@ -611,6 +626,20 @@ export default {
     async getExternalFields(ctx, { mappingId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/mappings/${mappingId}/external-fields`,
+        { method: "GET", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async getPriceFields(ctx, { mappingId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/mappings/${mappingId}/price-fields`,
         { method: "GET", cache: false },
         http,
         {

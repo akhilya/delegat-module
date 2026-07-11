@@ -21,10 +21,7 @@ const props = defineProps({
     <div v-else-if="empty" class="flex min-h-[inherit] grow items-center justify-center">
       <EmptyState :title="emptyTitle" :description="emptyDescription">
         <template v-if="emptyIcon" #icon>
-          <component
-            :is="emptyIcon"
-            :class="cn('mb-4 size-12 text-muted-foreground', emptyIconClass)"
-          />
+          <component :is="emptyIcon" :class="emptyIconClass" />
         </template>
         <slot name="empty-action" />
       </EmptyState>

@@ -66,7 +66,7 @@ export default {
     </FormControl>
 
     <ComboboxList>
-      <ComboboxEmpty> Ничего не найдено. </ComboboxEmpty>
+      <ComboboxEmpty> Ничего не найдено </ComboboxEmpty>
 
       <ComboboxGroup>
         <ComboboxItem

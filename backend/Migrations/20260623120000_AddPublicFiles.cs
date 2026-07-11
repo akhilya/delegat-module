@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace PrintO.Migrations
+namespace Delegat.Migrations
 {
     /// <inheritdoc />
     public partial class AddPublicFiles : Migration

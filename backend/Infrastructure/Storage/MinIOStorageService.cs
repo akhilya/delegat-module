@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Minio;
 using Minio.DataModel.Args;
-using PrintO.Infrastructure.Configuration;
+using Delegat.Infrastructure.Configuration;
 
-namespace PrintO.Infrastructure.Storage;
+namespace Delegat.Infrastructure.Storage;
 
 /// <summary>
 /// MinIO storage service implementation

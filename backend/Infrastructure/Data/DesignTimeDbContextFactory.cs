@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace PrintO.Infrastructure.Data;
+namespace Delegat.Infrastructure.Data;
 
 /// <summary>
 /// Factory for creating DataContext at design time (for EF migrations).
@@ -14,8 +14,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<DataContex
         // Read from environment variables, fallback to defaults for local development
         var server = Environment.GetEnvironmentVariable("MYSQL_SERVER") ?? "127.0.0.1";
         var port = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3307";
-        var database = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "printo";
-        var user = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "printo";
+        var database = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "delegat";
+        var user = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "delegat";
         var password = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "your_secure_password_here";
 
         // Force IPv4 by using 127.0.0.1 instead of localhost

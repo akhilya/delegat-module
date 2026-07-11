@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Middleware;
+namespace Delegat.Infrastructure.Middleware;
 
 /// <summary>
 /// Custom exception for API errors with HTTP status codes

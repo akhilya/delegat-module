@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using PrintO.Services;
+using Delegat.Services;
 
-namespace PrintO.Infrastructure.Middleware;
+namespace Delegat.Infrastructure.Middleware;
 
 /// <summary>
 /// Middleware for global exception handling

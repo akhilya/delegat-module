@@ -3,15 +3,15 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Models.Products;
-using PrintO.Services;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Models.Products;
+using Delegat.Services;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]

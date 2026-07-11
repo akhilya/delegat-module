@@ -2,20 +2,28 @@
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Button from "@/components/ui/button/Button.vue";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import { Plus, Trash2, ArrowRight, AlertTriangle } from "lucide-vue-next";
 
+function normalizeOptionValue(raw, options) {
+  if (!raw || !options?.length) return raw || "";
+  const s = String(raw);
+  const byValue = options.find((o) => String(o.value) === s);
+  if (byValue) return String(byValue.value);
+  const byLabel = options.find(
+    (o) =>
+      String(o.label || "").toLowerCase() === s.toLowerCase() ||
+      String(o.value || "").toLowerCase() === s.toLowerCase(),
+  );
+  return byLabel ? String(byLabel.value) : s;
+}
+
 export default {
-  components: { Input, Label, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Plus, Trash2, ArrowRight, AlertTriangle },
+  components: { Input, Label, Button, SearchableSelect, Plus, Trash2, ArrowRight, AlertTriangle },
   props: {
     mappings: { type: Array, default: () => [] },
     externalFieldOptions: { type: Array, default: () => [] },
+    sourceFieldOptions: { type: Array, default: () => [] },
     defaultValue: { type: String, default: "" },
   },
   emits: ["update:mappings", "update:defaultValue"],
@@ -26,27 +34,56 @@ export default {
     };
   },
   computed: {
+    sourceOptions() {
+      return this.sourceFieldOptions.map((o) => ({
+        value: String(o.value),
+        label: o.label || o.value,
+      }));
+    },
     unmappedOptions() {
-      if (!this.externalFieldOptions?.length) return [];
+      if (!this.sourceFieldOptions?.length) return [];
       const mappedFroms = new Set(this.localMappings.map((m) => String(m.from)));
-      return this.externalFieldOptions.filter((o) => !mappedFroms.has(String(o.value)));
+      return this.sourceFieldOptions.filter((o) => !mappedFroms.has(String(o.value)));
     },
   },
   watch: {
     mappings: {
       handler(v) {
-        this.localMappings = (v || []).map((m) => ({ ...m }));
+        this.localMappings = this.normalizeRows(v || []);
       },
       immediate: true,
     },
+    sourceFieldOptions: {
+      handler() {
+        this.localMappings = this.normalizeRows(this.mappings || []);
+      },
+      deep: true,
+    },
     defaultValue: {
       handler(v) {
-        this.localDefault = v || "";
+        this.localDefault = v != null ? String(v) : "";
       },
       immediate: true,
     },
   },
   methods: {
+    normalizeRows(rows) {
+      return (rows || []).map((m) => ({
+        from: normalizeOptionValue(m.from, this.sourceFieldOptions),
+        to: m.to != null ? String(m.to) : "",
+      }));
+    },
+    valueIdLabel(valueId) {
+      if (!valueId) return null;
+      const opt = (this.externalFieldOptions || []).find(
+        (o) => String(o.value) === String(valueId),
+      );
+      return opt?.label || null;
+    },
+    isBrokenRow(row) {
+      if (!row.from || !this.sourceOptions.length) return false;
+      return !this.sourceOptions.some((o) => o.value === String(row.from));
+    },
     addRow() {
       this.localMappings.push({ from: "", to: "" });
       this.emitMappings();
@@ -60,19 +97,15 @@ export default {
       this.emitMappings();
     },
     onToChange(index, value) {
-      this.localMappings[index].to = value;
+      this.localMappings[index].to = value != null ? String(value) : "";
       this.emitMappings();
     },
     onDefaultChange(value) {
-      this.localDefault = value;
-      this.$emit("update:defaultValue", value);
+      this.localDefault = value != null ? String(value) : "";
+      this.$emit("update:defaultValue", this.localDefault);
     },
     emitMappings() {
       this.$emit("update:mappings", [...this.localMappings]);
-    },
-    getOptionLabel(value) {
-      const opt = this.externalFieldOptions?.find((o) => o.value === value);
-      return opt ? opt.label : null;
     },
   },
 };
@@ -80,48 +113,49 @@ export default {
 
 <template>
   <div class="space-y-2">
-    <Label class="text-xs font-medium">Соответствия значений</Label>
+    <Label class="text-xs font-medium">Соответствия: вариант → valueId</Label>
+
+    <p
+      v-if="!sourceOptions.length"
+      class="text-[11px] text-muted-foreground"
+    >
+      Слева — варианты источника (атрибут категории). Подключите блок к атрибуту с вариантами.
+    </p>
+    <p class="text-[11px] text-muted-foreground">
+      Справа — valueId поля адаптера (вводится вручную). Подпись показывается, если valueId совпадает с известной опцией.
+    </p>
 
     <div
       v-for="(row, index) in localMappings"
       :key="index"
       class="flex items-center gap-1"
     >
-      <!-- Select from options when available -->
-      <Select
-        v-if="externalFieldOptions.length > 0"
-        :model-value="row.from"
+      <SearchableSelect
+        class="flex-1 h-7 text-xs"
+        :class="{ 'ring-1 ring-warning': isBrokenRow(row) }"
+        :options="sourceOptions"
+        :model-value="row.from || ''"
+        :disabled="!sourceOptions.length"
         @update:modelValue="(v) => onFromChange(index, v)"
-      >
-        <SelectTrigger size="sm" class="h-7 text-xs flex-1">
-          <SelectValue placeholder="Выберите значение" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="opt in externalFieldOptions"
-            :key="opt.value"
-            :value="String(opt.value)"
-            class="text-xs"
-          >
-            {{ opt.label || opt.value }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <!-- Plain input fallback -->
-      <Input
-        v-else
-        :model-value="row.from"
-        @update:modelValue="(v) => onFromChange(index, v)"
-        placeholder="Исходное"
-        class="h-7 text-xs flex-1"
+        placeholder="Вариант источника"
+        :search-threshold="3"
       />
       <ArrowRight class="size-3 shrink-0 text-muted-foreground" />
-      <Input
-        :model-value="row.to"
-        @update:modelValue="(v) => onToChange(index, v)"
-        placeholder="Результат"
-        class="h-7 text-xs flex-1"
-      />
+      <div class="flex-1 space-y-0.5">
+        <Input
+          :model-value="row.to"
+          @update:modelValue="(v) => onToChange(index, v)"
+          placeholder="valueId"
+          class="h-7 text-xs font-mono"
+        />
+        <p
+          v-if="valueIdLabel(row.to)"
+          class="text-[10px] text-muted-foreground truncate"
+          :title="valueIdLabel(row.to)"
+        >
+          {{ valueIdLabel(row.to) }}
+        </p>
+      </div>
       <Button
         variant="ghost"
         size="icon"
@@ -137,19 +171,31 @@ export default {
       Добавить соответствие
     </Button>
 
-    <div v-if="unmappedOptions.length > 0" class="flex items-start gap-1.5 text-xs text-warning-foreground bg-warning/10 rounded px-2 py-1.5">
+    <div
+      v-if="unmappedOptions.length > 0"
+      class="flex items-start gap-1.5 text-xs text-warning-foreground bg-warning/10 rounded px-2 py-1.5"
+    >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
-      <span>Не указаны соответствия для {{ unmappedOptions.length }} из {{ externalFieldOptions.length }} значений</span>
+      <span>
+        Не указаны соответствия для {{ unmappedOptions.length }} из
+        {{ sourceFieldOptions.length }} значений источника
+      </span>
     </div>
 
     <div class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">Значение по умолчанию (если нет соответствия)</Label>
+      <Label class="text-xs">valueId по умолчанию (если нет соответствия)</Label>
       <Input
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"
         placeholder="Оставить как есть"
-        class="h-7 text-xs"
+        class="h-7 text-xs font-mono"
       />
+      <p
+        v-if="valueIdLabel(localDefault)"
+        class="text-[10px] text-muted-foreground"
+      >
+        {{ valueIdLabel(localDefault) }}
+      </p>
     </div>
   </div>
 </template>

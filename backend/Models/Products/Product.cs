@@ -1,10 +1,10 @@
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Models.Marketplace;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Models.Marketplace;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using static PrintO.Models.Products.Product;
+using static Delegat.Models.Products.Product;
 
-namespace PrintO.Models.Products;
+namespace Delegat.Models.Products;
 
 /// <summary>
 /// Represents a product in the store catalog.

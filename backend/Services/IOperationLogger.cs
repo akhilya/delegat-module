@@ -1,4 +1,4 @@
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public interface IOperationLogger
 {

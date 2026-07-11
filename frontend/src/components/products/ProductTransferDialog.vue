@@ -506,7 +506,7 @@ function close() {
             </ul>
             <p class="text-xs text-muted-foreground">
               <template v-if="mode === 'move'">
-                Сами карточки на Ozon/Wildberries останутся, но связь с товаром в PrintO потеряется —
+                Сами карточки на Ozon/Wildberries останутся, но связь с товаром в Delegat потеряется —
                 в новом магазине их придётся завести заново.
               </template>
               <template v-else>

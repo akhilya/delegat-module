@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Models;
+using Delegat.Models;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 /// <summary>
 /// Background processor for queued product transfers (clone/move into another store).

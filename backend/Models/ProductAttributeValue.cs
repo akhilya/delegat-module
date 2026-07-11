@@ -1,9 +1,9 @@
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Models.Products;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Models.Products;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Represents a value for a category-level attribute on a specific product.
@@ -41,7 +41,6 @@ public class ProductAttributeValue : IEntity, IMapToDTO<ProductAttributeValue.Va
     /// <summary>
     /// String representation of the attribute value.
     /// </summary>
-    [StringLength(VALUE_MAX_LENGTH)]
     public string value { get; set; } = null!;
 
     public bool AddFill(AddForm form)

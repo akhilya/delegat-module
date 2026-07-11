@@ -32,6 +32,9 @@ node_modules/
 backend/bin/
 backend/obj/
 backend/.vs/
+backend.Tests/bin/
+backend.Tests/obj/
+backend.Tests/.vs/
 sdk/**/bin/
 sdk/**/obj/
 sdk/**/.vs/
@@ -83,12 +86,19 @@ publish/
 *.zip
 
 # ======================
-# Claude
+# AI Tools
 # ======================
 .claude/
+.agents/
+.codex/
+.superpowers/
+.impeccable/
+.impeccable.md
+**/.impeccable/
 
 # ======================
 # Misc
 # ======================
 nul
 Thumbs.db
+".vs/"

@@ -2,11 +2,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using PrintO;
+using Delegat;
 
 #nullable disable
 
-namespace PrintO.Migrations
+namespace Delegat.Migrations
 {
     [DbContext(typeof(DataContext))]
     [Migration("20260623120000_AddPublicFiles")]

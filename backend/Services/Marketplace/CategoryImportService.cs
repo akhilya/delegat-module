@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
+using Delegat.Enums;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
+using Delegat.Services.Marketplace.Graph;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Service for importing categories from marketplaces.
@@ -149,6 +150,17 @@ public class CategoryImportService
             if (attributeMap.ContainsKey(sanitizedKey))
                 continue;
 
+            // Reuse existing attribute with the same display name (prevents duplicate «Материал» / «Материал»)
+            var existingByName = category.attributes?
+                .FirstOrDefault(a => string.Equals(a.name, field.Name, StringComparison.OrdinalIgnoreCase));
+            if (existingByName != null)
+            {
+                attributeMap[field.Key] = existingByName.Id;
+                if (!attributeMap.ContainsKey(sanitizedKey))
+                    attributeMap[sanitizedKey] = existingByName.Id;
+                continue;
+            }
+
             // Определяем значение по умолчанию для некоторых типов полей
             string? defaultValue = null;
             if (field.Options != null && field.Options.Count > 0)
@@ -183,51 +195,19 @@ public class CategoryImportService
 
         // Check for existing mapping (localCategoryId + connectionId is unique)
         var categoryMapping = await _context.categoryMappings
-            .Include(m => m.fieldMappings)
             .FirstOrDefaultAsync(m => m.localCategoryId == category.Id && m.connectionId == connection.Id, ct);
-
-        bool reusingMapping = false;
-        var existingFieldKeys = new HashSet<string>();
-        int updatedFieldMappings = 0;
 
         // Remove meta-field from processing (plugin may still emit _hasSizes)
         fields = fields.Where(f => f.Key != "_hasSizes").ToList();
 
+        bool reusingMapping = categoryMapping != null;
+        int updatedFieldMappings = 0;
+
         if (categoryMapping != null)
         {
-            // Existing mapping found — reuse it, update external category info
+            // Existing mapping found - reuse it, update external category info.
             categoryMapping.externalCategoryId = externalCategoryId;
             categoryMapping.externalCategoryName = externalCategoryName ?? localCategoryName;
-            reusingMapping = true;
-
-            // Collect already-mapped field keys so we skip them below (additive import)
-            if (categoryMapping.fieldMappings != null)
-            {
-                foreach (var fm in categoryMapping.fieldMappings)
-                    existingFieldKeys.Add(fm.externalFieldKey);
-
-                // Update existing Static mappings that now have a matching CategoryAttribute.
-                // This happens when a field was mapped as Static in a previous import
-                // (because the user didn't select it for attribute creation), and now the
-                // user imports that attribute — the mapping should auto-link to it.
-                foreach (var fm in categoryMapping.fieldMappings)
-                {
-                    if (fm.sourceType == FieldMappingSourceType.Static
-                        && fm.sourceAttributeId == null)
-                    {
-                        // Try raw key first, then sanitized key as fallback
-                        if (attributeMap.TryGetValue(fm.externalFieldKey, out var attrId)
-                            || attributeMap.TryGetValue(SanitizeKey(fm.externalFieldKey), out attrId))
-                        {
-                            fm.sourceType = FieldMappingSourceType.CategoryAttribute;
-                            fm.sourceAttributeId = attrId;
-                            updatedFieldMappings++;
-                        }
-                    }
-                }
-            }
-
-            await _context.SaveChangesAsync(ct);
         }
         else
         {
@@ -239,52 +219,60 @@ public class CategoryImportService
                 externalCategoryId = externalCategoryId,
                 externalCategoryName = externalCategoryName ?? localCategoryName
             });
-
             _context.categoryMappings.Add(categoryMapping);
-            await _context.SaveChangesAsync(ct);
         }
 
-        // Создаём маппинги полей с автоматическим сопоставлением
-        // Start sort order after existing field mappings
-        int fieldSortOrder = categoryMapping.fieldMappings?.Count ?? 0;
-        int newFieldMappings = 0;
-        foreach (var field in fields.OrderBy(f => f.SortOrder))
-        {
-            // Skip fields that already have a mapping (preserve user-configured mappings)
-            if (existingFieldKeys.Contains(field.Key))
-                continue;
-
-            var fieldMapping = new FieldMapping();
-
-            // Определяем автоматический источник данных
-            var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
-
-            // Если поле маппится на локальное поле товара (description, name, etc.),
-            // то не делаем его обязательным - данные берутся из локального поля
-            var isRequired = sourceType == FieldMappingSourceType.ProductField
-                ? false
-                : field.IsRequired;
-
-            fieldMapping.AddFill(new FieldMapping.AddForm
+        // The node graph is the single source of truth - generate it for a new mapping or additively
+        // sync new marketplace fields into an existing one (never prunes user config).
+        var specs = fields
+            .OrderBy(f => f.SortOrder)
+            .Select(field =>
             {
-                categoryMappingId = categoryMapping.Id,
-                externalFieldKey = field.Key,
-                externalFieldName = field.Name,
-                isRequired = isRequired,
-                isEnabled = true,
-                sourceType = sourceType,
-                sourceField = sourceField,
-                sourceAttributeId = sourceAttributeId,
-                externalFieldType = field.Type,
-                externalFieldOptions = field.Options != null && field.Options.Count > 0
-                    ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
-                    : null,
-                sortOrder = fieldSortOrder++
-            });
+                var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
+                return new FieldSpec
+                {
+                    externalFieldKey = field.Key,
+                    externalFieldName = field.Name,
+                    externalFieldType = field.Type,
+                    // Product-field-fed columns are not required (data comes from the local product).
+                    isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
+                    isEnabled = true,
+                    sortOrder = field.SortOrder,
+                    sourceType = sourceType,
+                    sourceField = sourceField,
+                    sourceAttributeId = sourceAttributeId,
+                };
+            })
+            .ToList();
 
-            _context.fieldMappings.Add(fieldMapping);
-            newFieldMappings++;
+        // Every mapping carries a grouping field (synthetic for endpoint-based adapters)
+        GraphGenerator.EnsureGroupingField(specs, adapter);
+
+        var existingKeys = MappingService.SchemaFields(categoryMapping.graphJson)
+            .Select(f => f.fieldKey)
+            .Where(k => !string.IsNullOrEmpty(k))
+            .ToHashSet();
+        int newFieldMappings = specs.Count(s => !existingKeys.Contains(s.externalFieldKey));
+
+        List<FieldSpec> priceSpecs = new();
+        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+        {
+            try
+            {
+                var priceFields = await adapter.GetPriceFieldsAsync(connection, externalCategoryId, ct);
+                priceSpecs = BuildPriceFieldSpecs(priceFields, attributeMap);
+            }
+            catch
+            {
+                // Non-critical — card mapping still works without price block
+            }
         }
+
+        categoryMapping.graphJson = reusingMapping
+            ? GraphGenerator.SyncPriceFields(
+                GraphGenerator.SyncAdapterFields(categoryMapping.graphJson, specs),
+                priceSpecs)
+            : GraphGenerator.BuildGraphJson(specs, priceSpecs);
 
         await _context.SaveChangesAsync(ct);
 
@@ -399,6 +387,137 @@ public class CategoryImportService
     {
         var patterns = new[] { "price", "цена", "стоимость", "cost" };
         return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
+    }
+
+    internal static List<FieldSpec> BuildPriceFieldSpecs(
+        IReadOnlyCollection<ExternalField> priceFields,
+        Dictionary<string, int> attributeMap,
+        bool skipAutoMapping = false)
+    {
+        return priceFields
+            .OrderBy(f => f.SortOrder)
+            .Select((field, index) =>
+            {
+                var (sourceType, sourceField, sourceAttributeId) = skipAutoMapping
+                    ? (FieldMappingSourceType.Static, (string?)null, (int?)null)
+                    : DeterminePriceAutoMapping(field, attributeMap);
+                return new FieldSpec
+                {
+                    externalFieldKey = field.Key,
+                    externalFieldName = field.Name,
+                    externalFieldType = field.Type,
+                    isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
+                    isEnabled = true,
+                    sortOrder = index,
+                    sourceType = sourceType,
+                    sourceField = sourceField,
+                    sourceAttributeId = sourceAttributeId,
+                    staticValue = sourceType == FieldMappingSourceType.Static && field.Key.Equals("discount", StringComparison.OrdinalIgnoreCase)
+                        ? "0"
+                        : null,
+                };
+            })
+            .ToList();
+    }
+
+    /// <summary>Price-API keys with a fixed semantic target — AI must not guess substitutes.</summary>
+    internal static bool IsStrictPriceSemanticKey(string key)
+    {
+        return key.Equals("price", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("oldPrice", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("minPrice", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("netPrice", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("discount", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
+        DeterminePriceAutoMapping(ExternalField field, Dictionary<string, int> attributeMap)
+    {
+        var keyLower = field.Key.ToLowerInvariant();
+
+        if (keyLower == "price")
+            return (FieldMappingSourceType.ProductField, "price", null);
+
+        if (keyLower == "oldprice" && TryResolveAttribute(attributeMap, "old_price", "oldprice", "старая цена", out var oldId))
+            return (FieldMappingSourceType.CategoryAttribute, null, oldId);
+
+        if (keyLower == "minprice" && TryResolveAttribute(attributeMap, "min_price", "minprice", "минимальная цена", out var minId))
+            return (FieldMappingSourceType.CategoryAttribute, null, minId);
+
+        if (keyLower == "discount" && TryResolveAttribute(attributeMap, "discount", "discount_percent", "скидка", out var discId))
+            return (FieldMappingSourceType.CategoryAttribute, null, discId);
+
+        if (keyLower == "netprice" && TryResolveAttribute(attributeMap, "net_price", "netprice", "себестоимость", out var netId))
+            return (FieldMappingSourceType.CategoryAttribute, null, netId);
+
+        return (FieldMappingSourceType.Static, null, null);
+    }
+
+    /// <summary>
+    /// Validates AI/deterministic price bindings. Rejects cross-wiring (e.g. minPrice → old_price attribute).
+    /// </summary>
+    internal static bool IsValidPriceBinding(
+        ExternalField fieldDef,
+        string? sourceType,
+        string? sourceField,
+        int? sourceAttributeId,
+        Dictionary<string, int> attributeMap)
+    {
+        if (sourceType == null) return true;
+
+        if (fieldDef.Key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!IsStrictPriceSemanticKey(fieldDef.Key))
+            return true;
+
+        var (expectedType, expectedField, expectedAttrId) = DeterminePriceAutoMapping(fieldDef, attributeMap);
+
+        if (fieldDef.Key.Equals("discount", StringComparison.OrdinalIgnoreCase))
+        {
+            return sourceType == "static"
+                || (sourceType == "attribute" && expectedAttrId != null && sourceAttributeId == expectedAttrId);
+        }
+
+        if (expectedType == FieldMappingSourceType.Static)
+            return false;
+
+        return expectedType switch
+        {
+            FieldMappingSourceType.ProductField =>
+                sourceType == "productField"
+                && string.Equals(sourceField, expectedField, StringComparison.OrdinalIgnoreCase),
+            FieldMappingSourceType.CategoryAttribute =>
+                sourceType == "attribute" && sourceAttributeId == expectedAttrId,
+            _ => false,
+        };
+    }
+
+    private static bool TryResolveAttribute(
+        Dictionary<string, int> attributeMap,
+        string primaryKey,
+        string alternateKey,
+        string? alternateName,
+        out int attributeId)
+    {
+        if (attributeMap.TryGetValue(primaryKey, out attributeId))
+            return true;
+        if (attributeMap.TryGetValue(alternateKey, out attributeId))
+            return true;
+        if (alternateName != null)
+        {
+            foreach (var kvp in attributeMap)
+            {
+                if (kvp.Key.Equals(alternateName, StringComparison.OrdinalIgnoreCase))
+                {
+                    attributeId = kvp.Value;
+                    return true;
+                }
+            }
+        }
+        attributeId = 0;
+        return false;
     }
 
     internal static bool IsStockField(string key, string name)

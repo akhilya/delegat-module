@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 
-namespace PrintO.Infrastructure;
+namespace Delegat.Infrastructure;
 
 /// <summary>
 /// Prefixes all controller routes with /api so they don't conflict with SPA (Vue Router) routes.

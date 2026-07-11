@@ -139,6 +139,15 @@ export function resetAuthCache() {
   isAuthenticated = null;
 }
 
+// Proactive token refresh every 8 minutes — prevents 401s during active use.
+// Fires only when the tab is visible; pauses silently when hidden.
+const REFRESH_INTERVAL_MS = 8 * 60 * 1000;
+setInterval(() => {
+  if (document.visibilityState === "visible") {
+    refreshTokens().catch(() => {});
+  }
+}, REFRESH_INTERVAL_MS);
+
 const app = createApp(App);
 
 app.use(router);

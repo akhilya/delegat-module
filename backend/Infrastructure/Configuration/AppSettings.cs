@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Configuration;
+namespace Delegat.Infrastructure.Configuration;
 
 /// <summary>
 /// MySQL database connection settings

@@ -1,6 +1,6 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 public class RefreshToken : IEntity
 {

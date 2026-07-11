@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace PrintO.Services.Marketplace.Modifiers;
+namespace Delegat.Services.Marketplace.Modifiers;
 
 /// <summary>
 /// Applies a chain of modifiers to a field value.
@@ -48,6 +48,11 @@ public static class ModifierPipeline
             new RemoveItemsModifier(),
             // Context-aware
             new TemplateModifier(),
+            // Random (seeded)
+            new RandomIntModifier(),
+            new RandomFloatModifier(),
+            new RandomPickModifier(),
+            new RandomUuidModifier(),
         };
 
         _modifiers = modifierInstances.ToDictionary(m => m.Type, StringComparer.OrdinalIgnoreCase);
@@ -120,6 +125,11 @@ public static class ModifierPipeline
     /// </summary>
     public static bool IsKnownModifier(string? type) =>
         !string.IsNullOrEmpty(type) && _modifiers.ContainsKey(type);
+
+    /// <summary>
+    /// All registered modifier type ids — for validation error messages and AI tool schemas.
+    /// </summary>
+    public static IReadOnlyCollection<string> KnownModifierTypes => _modifiers.Keys;
 
     /// <summary>
     /// Whether a single modifier type is reversible (import direction).

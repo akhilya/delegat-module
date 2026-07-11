@@ -1,9 +1,9 @@
-using PrintO.Enums;
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Enums;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Represents a store-level custom attribute definition that applies to all products in the store.

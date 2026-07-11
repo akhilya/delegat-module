@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using static PrintO.Services.Marketplace.Modifiers.ModifierHelpers;
+using static Delegat.Services.Marketplace.Modifiers.ModifierHelpers;
 
-namespace PrintO.Services.Marketplace.Modifiers;
+namespace Delegat.Services.Marketplace.Modifiers;
 
 // ===== Text Modifiers =====
 
@@ -315,7 +315,7 @@ public class ValueMapModifier : IFieldModifier
 /// Same logic as ValueMapModifier but registered under "optionMap" type.
 /// UI uses this to map source values to marketplace option values.
 /// </summary>
-public class OptionMapModifier : IFieldModifier
+public class OptionMapModifier : IContextAwareModifier
 {
     public string Type => "optionMap";
     public bool IsReversible => true;
@@ -325,8 +325,106 @@ public class OptionMapModifier : IFieldModifier
     public object? Apply(object? value, Dictionary<string, object> parameters)
         => _inner.Apply(value, parameters);
 
+    public object? ApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+    {
+        var result = _inner.Apply(value, parameters);
+        return ValidateTarget(result, context.TargetFieldOptions);
+    }
+
     public object? ReverseApply(object? value, Dictionary<string, object> parameters)
         => _inner.ReverseApply(value, parameters);
+
+    public object? ReverseApplyWithContext(object? value, Dictionary<string, object> parameters, ModifierContext context)
+        => ReverseApply(value, parameters);
+
+    private static object? ValidateTarget(object? result, List<SourceOption>? allowed)
+    {
+        if (allowed is not { Count: > 0 } || result == null) return result;
+        var allowedSet = new HashSet<string>(
+            allowed.Select(a => a.value ?? "").Where(v => v.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        if (allowedSet.Count == 0) return result;
+
+        var elements = ModifierHelpers.TryParseList(result);
+        if (elements != null)
+        {
+            return JsonSerializer.Serialize(elements
+                .Select(e => allowedSet.Contains(e) ? e : e)
+                .ToList());
+        }
+
+        var s = result.ToString() ?? "";
+        return allowedSet.Contains(s) ? s : s;
+    }
+}
+
+// ===== Random modifiers (seeded, irreversible) =====
+
+public class RandomIntModifier : IFieldModifier
+{
+    public string Type => "randomInt";
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var min = ModifierHelpers.GetInt(parameters, "min", 0);
+        var max = ModifierHelpers.GetInt(parameters, "max", 100);
+        if (max < min) (min, max) = (max, min);
+        var rng = RandomModifierHelper.CreateRng(parameters, value);
+        return rng.Next(min, max + 1);
+    }
+}
+
+public class RandomFloatModifier : IFieldModifier
+{
+    public string Type => "randomFloat";
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var min = (double)ModifierHelpers.GetDecimal(parameters, "min", 0m);
+        var max = (double)ModifierHelpers.GetDecimal(parameters, "max", 1m);
+        var decimals = ModifierHelpers.GetInt(parameters, "decimals", 2);
+        if (max < min) (min, max) = (max, min);
+        var rng = RandomModifierHelper.CreateRng(parameters, value);
+        var raw = min + rng.NextDouble() * (max - min);
+        return Math.Round(raw, decimals).ToString(CultureInfo.InvariantCulture);
+    }
+}
+
+public class RandomPickModifier : IFieldModifier
+{
+    public string Type => "randomPick";
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var choices = ModifierHelpers.GetStringList(parameters, "choices");
+        if (choices.Count == 0 && value != null)
+            choices = ModifierHelpers.TryParseList(value) ?? [value.ToString()!];
+        if (choices.Count == 0) return value;
+        var rng = RandomModifierHelper.CreateRng(parameters, value);
+        return choices[rng.Next(choices.Count)];
+    }
+}
+
+public class RandomUuidModifier : IFieldModifier
+{
+    public string Type => "randomUuid";
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var rng = RandomModifierHelper.CreateRng(parameters, value);
+        var bytes = new byte[16];
+        rng.NextBytes(bytes);
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x40);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes).ToString();
+    }
+}
+
+internal static class RandomModifierHelper
+{
+    internal static Random CreateRng(Dictionary<string, object> parameters, object? value)
+    {
+        var seed = parameters.ContainsKey("seed")
+            ? ModifierHelpers.GetInt(parameters, "seed", 0)
+            : HashCode.Combine(value?.ToString() ?? "", parameters.GetValueOrDefault("choices")?.ToString() ?? "");
+        return new Random(seed);
+    }
 }
 
 public class DefaultValueModifier : IFieldModifier

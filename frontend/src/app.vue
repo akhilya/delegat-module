@@ -3,7 +3,6 @@ import { RouterView, useRoute } from "vue-router";
 import { Toaster } from "vue-sonner";
 import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
-import OperationsTriggerButton from "@/components/operations/OperationsTriggerButton.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -11,13 +10,14 @@ import { Loader2 } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import Button from "@/components/ui/button/Button.vue";
 import { Monitor } from "lucide-vue-next";
+import AiChatPanel from "@/components/ai/AiChatPanel.vue";
+import FabGroup from "@/components/FabGroup.vue";
 
 export default {
   components: {
     RouterView,
     Toaster,
     OperationsPanel,
-    OperationsTriggerButton,
     LoadingBar,
     AppSidebar,
     SidebarInset,
@@ -25,6 +25,8 @@ export default {
     Loader2,
     Button,
     Monitor,
+    AiChatPanel,
+    FabGroup,
   },
   setup() {
     const route = useRoute();
@@ -49,6 +51,9 @@ export default {
     },
     isSwitchingStore() {
       return this.$store.state.isSwitchingStore;
+    },
+    isAiPanelOpen() {
+      return this.$store.state.aiChat.isOpen;
     },
     hasActiveUploads() {
       return this.$store.getters["operations/hasLocalActiveUploads"];
@@ -83,16 +88,17 @@ export default {
   </RouterView>
   <SidebarProvider v-else>
     <AppSidebar />
-    <SidebarInset>
+    <SidebarInset :class="{ 'ai-panel-open': isAiPanelOpen }">
       <RouterView v-slot="{ Component, route }">
         <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
       </RouterView>
     </SidebarInset>
+    <AiChatPanel :key="appKey" />
   </SidebarProvider>
   <Toaster />
   <template v-if="!isPublicPage">
     <OperationsPanel />
-    <OperationsTriggerButton />
+    <FabGroup />
   </template>
 
   <!-- Mobile device warning -->
@@ -106,7 +112,7 @@ export default {
         <div>
           <h2 class="text-lg font-semibold mb-2">Лучше с компьютера</h2>
           <p class="text-sm text-muted-foreground leading-relaxed">
-            PrintO — панель управления товарами, оптимизированная для работы на компьютере.
+            Delegat — панель управления товарами, оптимизированная для работы на компьютере.
             На мобильных устройствах часть функций может работать некорректно.
           </p>
         </div>

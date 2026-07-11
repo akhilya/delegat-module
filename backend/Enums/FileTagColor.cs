@@ -1,4 +1,4 @@
-namespace PrintO.Enums;
+namespace Delegat.Enums;
 
 public enum FileTagColor : int
 {

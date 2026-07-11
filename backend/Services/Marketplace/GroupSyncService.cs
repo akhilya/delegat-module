@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
+using Delegat.Enums;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Service for synchronizing product groups with marketplaces (export, import, membership).

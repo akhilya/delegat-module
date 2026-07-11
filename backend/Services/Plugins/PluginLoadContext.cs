@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// AssemblyLoadContext for loading plugins in isolation.

@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 
-namespace PrintO.Infrastructure.Data;
+namespace Delegat.Infrastructure.Data;
 
 /// <summary>
 /// Defines the Unit of Work contract for managing repositories and database transactions.

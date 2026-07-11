@@ -59,7 +59,34 @@ export function modifierOutputType(modifierType, inputType) {
   if (category === "number") return "number";
   if (category === "text") return "string";
   if (category === "array") return "multiselect";
+  if (category === "select") return inputType || "select";
   return inputType || "any";
+}
+
+/** Walk upstream from a node to find the value type feeding its input. */
+export function upstreamOutputType(nodeId, nodes, edges) {
+  if (!nodeId || !nodes?.length) return "any";
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = new Map();
+  for (const e of edges || []) {
+    const list = incoming.get(e.target) || [];
+    list.push(e);
+    incoming.set(e.target, list);
+  }
+  const seen = new Set();
+  const stack = [nodeId];
+  while (stack.length) {
+    const id = stack.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const ins = incoming.get(id) || [];
+    if (!ins.length) {
+      const n = byId.get(id);
+      return n ? nodeOutputType(n, nodes, edges) : "any";
+    }
+    for (const e of ins) stack.push(e.source);
+  }
+  return "any";
 }
 
 // ---- Node taxonomy -------------------------------------------------------
@@ -84,6 +111,7 @@ export const SOURCE_NODE_TYPES = [
 export const OP_SPECS = {
   formatString: {
     label: "Формат строки",
+    aliases: ["format", "sprintf", "template", "шаблон", "format string"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
@@ -94,6 +122,7 @@ export const OP_SPECS = {
   },
   join: {
     label: "Объединить",
+    aliases: ["join", "concat", "merge", "combine", "склеить", "соединить"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
@@ -104,6 +133,7 @@ export const OP_SPECS = {
   },
   makeArray: {
     label: "Создать массив",
+    aliases: ["array", "create", "new array", "make array", "список", "коллекция"],
     icon: "List",
     inputs: "multi",
     output: "array",
@@ -112,6 +142,7 @@ export const OP_SPECS = {
   },
   arrayAppend: {
     label: "Добавить в массив",
+    aliases: ["push", "append", "add", "insert", "добавить"],
     icon: "List",
     inputs: 2,
     inputLabels: ["массив", "элемент"],
@@ -121,6 +152,7 @@ export const OP_SPECS = {
   },
   splitToArray: {
     label: "Разбить в массив",
+    aliases: ["split", "explode", "parse", "separate", "разделить", "разбить"],
     icon: "List",
     inputs: "single",
     output: "array",
@@ -131,6 +163,7 @@ export const OP_SPECS = {
   },
   arrayIndex: {
     label: "Элемент по индексу",
+    aliases: ["index", "get", "nth", "at", "взять", "получить", "element"],
     icon: "List",
     inputs: "single",
     output: "string",
@@ -139,6 +172,7 @@ export const OP_SPECS = {
   },
   arrayLength: {
     label: "Длина массива",
+    aliases: ["length", "count", "size", "len", "количество"],
     icon: "List",
     inputs: "single",
     output: "number",
@@ -149,6 +183,7 @@ export const OP_SPECS = {
   // ---- General-purpose logic / predicate blocks (pure functions) ----
   ifElse: {
     label: "Если",
+    aliases: ["if", "condition", "ternary", "when", "условие", "тернар"],
     icon: "GitBranch",
     category: "logic",
     inputs: 3,
@@ -159,6 +194,7 @@ export const OP_SPECS = {
   },
   not: {
     label: "Не",
+    aliases: ["not", "negate", "invert", "!", "логическое не"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -168,6 +204,7 @@ export const OP_SPECS = {
   },
   and: {
     label: "И",
+    aliases: ["and", "&&", "all", "both", "все"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -177,6 +214,7 @@ export const OP_SPECS = {
   },
   or: {
     label: "Или",
+    aliases: ["or", "||", "any", "OR", "один из"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -186,6 +224,7 @@ export const OP_SPECS = {
   },
   equals: {
     label: "Равно",
+    aliases: ["equals", "equal", "==", "compare", "eq", "сравнить"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
@@ -196,6 +235,7 @@ export const OP_SPECS = {
   },
   notEquals: {
     label: "Не равно",
+    aliases: ["not equal", "!=", "different", "neq", "не равно"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
@@ -206,6 +246,7 @@ export const OP_SPECS = {
   },
   greaterThan: {
     label: "Больше",
+    aliases: ["greater", ">", "more than", "gt", "больше чем"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -216,6 +257,7 @@ export const OP_SPECS = {
   },
   lessThan: {
     label: "Меньше",
+    aliases: ["less", "<", "less than", "lt", "меньше чем"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -226,6 +268,7 @@ export const OP_SPECS = {
   },
   contains: {
     label: "Содержит",
+    aliases: ["contains", "includes", "indexOf", "has", "search", "поиск", "include"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
@@ -236,6 +279,7 @@ export const OP_SPECS = {
   },
   isEmpty: {
     label: "Пусто",
+    aliases: ["empty", "null", "nil", "undefined", "is empty", "нет значения", "isnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -245,6 +289,7 @@ export const OP_SPECS = {
   },
   isValid: {
     label: "Заполнено",
+    aliases: ["filled", "not empty", "has value", "not null", "непусто", "isnotnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -283,6 +328,20 @@ const ROW_H = 150;
 
 /** Fixed id of the single "Поля адаптера" sink node. */
 export const ADAPTER_NODE_ID = "adapter-fields";
+/** Fixed id of the dedicated price-API sink node. */
+export const ADAPTER_PRICE_NODE_ID = "adapter-price-fields";
+
+const MIGRATABLE_PRICE_KEYS = new Set([
+  "price",
+  "oldPrice",
+  "minPrice",
+  "netPrice",
+  "autoActionEnabled",
+  "priceStrategyEnabled",
+  "minPriceForAutoActionsEnabled",
+  "discountedPrice",
+  "discount",
+]);
 
 /**
  * Build a graph from the page's field mappings. Each enabled field becomes a lane:
@@ -305,12 +364,28 @@ export function autoMigrate(fieldMappings, sources = {}) {
 
   const fields = [];
   enabled.forEach((fm, i) => {
+    const field = {
+      fieldKey: fm.externalFieldKey,
+      label: fm.externalFieldName || fm.externalFieldKey,
+      outputType: fm.externalFieldType || "string",
+      isRequired: !!fm.isRequired,
+    };
+
+    const mods = activeModifiers(fm);
+    // Trivial 1:1 fields (a standard source, no transforms) bind directly on the adapter — no node/wire.
+    const binding = mods.length === 0 ? directBinding(fm) : null;
+    if (binding) {
+      field.source = binding;
+      fields.push(field);
+      return;
+    }
+
     const y = i * ROW_H;
     const source = makeSourceNode(fm, { x: 0, y }, sources);
     nodes.push(source);
 
     let prevId = source.id;
-    activeModifiers(fm).forEach((mod, k) => {
+    mods.forEach((mod, k) => {
       const node = {
         id: genId("mod"),
         type: "modifier",
@@ -322,12 +397,7 @@ export function autoMigrate(fieldMappings, sources = {}) {
       prevId = node.id;
     });
 
-    fields.push({
-      fieldKey: fm.externalFieldKey,
-      label: fm.externalFieldName || fm.externalFieldKey,
-      outputType: fm.externalFieldType || "string",
-      isRequired: !!fm.isRequired,
-    });
+    fields.push(field);
     edges.push(makeEdge(prevId, ADAPTER_NODE_ID, `f:${fm.externalFieldKey}`));
   });
 
@@ -347,6 +417,19 @@ function activeModifiers(fm) {
   return (fm.parsedModifiers || []).filter(
     (m) => m && m.enabled !== false && m.type,
   );
+}
+
+/** Direct adapter-field source binding for a simple 1:1 field mapping (or null if not bindable). */
+function directBinding(fm) {
+  const kind = normalizeSourceType(fm.sourceType);
+  if (kind === "CategoryAttribute" && fm.sourceAttributeId != null)
+    return { type: "attribute", attributeId: fm.sourceAttributeId };
+  if (kind === "StoreAttribute" && fm.sourceAttributeId != null)
+    return { type: "storeAttribute", attributeId: fm.sourceAttributeId };
+  if (kind === "ProductField" && fm.sourceField)
+    return { type: "productField", field: fm.sourceField };
+  if (kind === "GroupName") return { type: "groupName" };
+  return null;
 }
 
 function makeSourceNode(fm, position, sources) {
@@ -481,10 +564,16 @@ export function createSourceNode(kind, position, payload = {}) {
     case "static":
     default:
       // Also backs the typed literal nodes (Число / Текст / Логическое / Список) via valueType.
+      // When payload.isAdapterValue is true, creates a "Стандартное значение" node with
+      // options populated from the adapter field's parsedOptions. Stored as "static" for
+      // backend compatibility — backend evaluates staticValue as a plain constant.
       return node("static", position, {
         staticValue: payload.staticValue ?? "",
-        label: payload.label || "Статическое значение",
+        label: payload.label || "",
         valueType: payload.valueType || "string",
+        ...(payload.isAdapterValue
+          ? { isAdapterValue: true, options: payload.options || [] }
+          : {}),
       });
   }
 }
@@ -494,12 +583,42 @@ export function createModifierNode(modifierType, position) {
   (MODIFIER_CATALOG[modifierType]?.params || []).forEach((p) => {
     defaults[p.key] = p.default;
   });
+  const data = { modifierType, params: defaults };
+  if (modifierType === "llmGenerate") data.fieldPins = [];
   return {
     id: genId("mod"),
     type: "modifier",
     position,
-    data: { modifierType, params: defaults },
+    data,
   };
+}
+
+/** Extra input pins on llmGenerate nodes (wired via handle "field:<id>"). */
+export function fieldPinsFor(data) {
+  if (data?.modifierType !== "llmGenerate") return [];
+  return Array.isArray(data.fieldPins) ? data.fieldPins : [];
+}
+
+/** Fill missing modifier params from catalog defaults (e.g. systemPrompt on older graphs). */
+export function ensureModifierParamDefaults(nodes) {
+  if (!nodes?.length) return nodes;
+  for (const n of nodes) {
+    if (n.type !== "modifier" || !n.data?.modifierType) continue;
+    const catalog = MODIFIER_CATALOG[n.data.modifierType];
+    if (!catalog?.params?.length) continue;
+    const params = { ...(n.data.params || {}) };
+    let changed = false;
+    for (const p of catalog.params) {
+      if (p.default == null) continue;
+      const cur = params[p.key];
+      if (cur == null || cur === "") {
+        params[p.key] = p.default;
+        changed = true;
+      }
+    }
+    if (changed) n.data = { ...n.data, params };
+  }
+  return nodes;
 }
 
 export function createOpNode(type, position) {
@@ -510,6 +629,127 @@ export function createOpNode(type, position) {
   });
   if (spec?.inputs === "multi") data.inputCount = 2;
   return { id: genId(type), type, position, data };
+}
+
+/** A transparent pass-through "reroute" node (inserted by double-clicking a wire to bend its path). */
+export function createRerouteNode(position) {
+  return { id: genId("rr"), type: "reroute", position, data: {} };
+}
+
+// ---- Adapter field reconciliation ----------------------------------------
+
+/**
+ * Ensure the single "adapterFields" sink exposes a pin for every current marketplace field.
+ * The platform's field sync (CategoryImportService) keeps the FieldMapping rows complete, but a saved
+ * graph holds a snapshot — so fields added to the category later are missing. Append (never prune, so a
+ * wired field is never lost) the missing ones, matching autoMigrate's field shape. Returns `nodes`.
+ */
+export function syncAdapterFields(nodes, fieldMappings) {
+  const adapter = (nodes || []).find((n) => n.type === "adapterFields");
+  if (!adapter) return nodes;
+  const fields = adapter.data?.fields || [];
+  const have = new Set(fields.map((f) => f.fieldKey));
+  for (const fm of fieldMappings || []) {
+    const key = fm.externalFieldKey;
+    if (!key || have.has(key)) continue;
+    fields.push({
+      fieldKey: key,
+      label: fm.externalFieldName || key,
+      outputType: fm.externalFieldType || "string",
+      isRequired: !!fm.isRequired,
+    });
+    have.add(key);
+  }
+  adapter.data = { ...(adapter.data || {}), fields };
+  return nodes;
+}
+
+/**
+ * Ensure the price sink exists and card sink no longer carries price-API fields.
+ * Migrates wired fields + edges from adapterFields when opening an older graph.
+ */
+export function ensurePriceNode(nodes, edges, priceFieldMappings) {
+  const list = [...(nodes || [])];
+  const edgeList = [...(edges || [])];
+  const priceKeys = new Set([
+    ...MIGRATABLE_PRICE_KEYS,
+    ...(priceFieldMappings || []).map((fm) => fm.externalFieldKey).filter(Boolean),
+  ]);
+
+  let priceNode = list.find((n) => n.type === "adapterPriceFields");
+  const adapter = list.find((n) => n.type === "adapterFields");
+
+  if (!priceNode) {
+    const adapterPos = adapter?.position;
+    priceNode = {
+      id: ADAPTER_PRICE_NODE_ID,
+      type: "adapterPriceFields",
+      deletable: false,
+      position: adapterPos
+        ? { x: adapterPos.x, y: adapterPos.y + 280 }
+        : { x: 0, y: 280 },
+      data: { fields: [] },
+    };
+    list.push(priceNode);
+  } else if (!priceNode.position) {
+    const adapterPos = adapter?.position;
+    priceNode.position = adapterPos
+      ? { x: adapterPos.x, y: adapterPos.y + 280 }
+      : { x: 0, y: 280 };
+  }
+
+  if (adapter?.data?.fields?.length) {
+    const move = [];
+    const keep = [];
+    for (const f of adapter.data.fields) {
+      if (priceKeys.has(f.fieldKey)) move.push(f);
+      else keep.push(f);
+    }
+    if (move.length) {
+      adapter.data = { ...(adapter.data || {}), fields: keep };
+      const have = new Set((priceNode.data?.fields || []).map((f) => f.fieldKey));
+      const merged = [...(priceNode.data?.fields || [])];
+      for (const f of move) {
+        if (!have.has(f.fieldKey)) {
+          merged.push(f);
+          have.add(f.fieldKey);
+        }
+      }
+      priceNode.data = { ...(priceNode.data || {}), fields: merged };
+      for (const e of edgeList) {
+        if (
+          e.target === ADAPTER_NODE_ID &&
+          String(e.targetHandle || "").startsWith("f:")
+        ) {
+          const key = String(e.targetHandle).slice(2);
+          if (priceKeys.has(key)) e.target = ADAPTER_PRICE_NODE_ID;
+        }
+      }
+    }
+  }
+
+  syncAdapterPriceFields(list, priceFieldMappings);
+  return { nodes: list, edges: edgeList };
+}
+
+export function syncAdapterPriceFields(nodes, priceFieldMappings) {
+  const priceNode = (nodes || []).find((n) => n.type === "adapterPriceFields");
+  if (!priceNode) return nodes;
+  const fields = priceNode.data?.fields || [];
+  const have = new Set(fields.map((f) => f.fieldKey));
+  for (const fm of priceFieldMappings || []) {
+    const key = fm.externalFieldKey;
+    if (!key || have.has(key)) continue;
+    fields.push({
+      fieldKey: key,
+      label: fm.externalFieldName || key,
+      outputType: fm.externalFieldType || "string",
+      isRequired: !!fm.isRequired,
+    });
+    have.add(key);
+  }
+  priceNode.data = { ...(priceNode.data || {}), fields };
+  return nodes;
 }
 
 // ---- Display helpers -----------------------------------------------------
@@ -542,17 +782,19 @@ export function validateGraph(nodes, edges) {
   nodes.forEach((n) => {
     const ins = incoming.get(n.id) || [];
 
-    // Required adapter fields with no wire feeding their pin.
-    if (n.type === "adapterFields") {
+    // Required adapter/price fields with no wire feeding their pin.
+    if (n.type === "adapterFields" || n.type === "adapterPriceFields") {
       const connected = new Set(
         ins.map((e) => (e.targetHandle || "").replace(/^f:/, "")),
       );
       (n.data?.fields || []).forEach((f) => {
-        if (f.isRequired && !connected.has(f.fieldKey)) {
+        if (f.isRequired && !f.source && !connected.has(f.fieldKey)) {
+          const block =
+            n.type === "adapterPriceFields" ? "цен" : "адаптера";
           issues.push({
             level: "warning",
             nodeId: n.id,
-            message: `Поле «${f.label || f.fieldKey}» не подключено`,
+            message: `Поле ${block} «${f.label || f.fieldKey}» не подключено`,
           });
         }
       });
@@ -626,7 +868,7 @@ export function hasFanIn(nodes, edges) {
 // ---- Output type + connect helpers --------------------------------------
 
 /** Output pin type for any node (for drag-to-empty menu filtering). */
-export function nodeOutputType(node) {
+export function nodeOutputType(node, nodes, edges) {
   if (!node) return "any";
   switch (node.type) {
     case "attribute":
@@ -640,11 +882,15 @@ export function nodeOutputType(node) {
     case "productFileContentByName":
     case "productFilesByExtension":
       return node.data?.valueType || "any";
-    case "modifier":
+    case "modifier": {
+      const inputType =
+        nodes && edges ? upstreamOutputType(node.id, nodes, edges) : "any";
       return node.data?.modifierType === "forceType"
-        ? node.data?.params?.type || "any"
-        : modifierOutputType(node.data?.modifierType, "any");
+        ? node.data?.params?.type || inputType || "any"
+        : modifierOutputType(node.data?.modifierType, inputType);
+    }
     case "adapterFields":
+    case "adapterPriceFields":
       return "any";
     default:
       return OP_SPECS[node.type]?.output || "any";
@@ -662,6 +908,17 @@ export function firstInputHandle(node) {
 }
 
 /**
+ * Operand params of a modifier that can be driven by an optional override pin (handle `p:<key>`).
+ * Scalar operands only (number/text) — config params (select/checkbox) and complex editors
+ * (valueMap/optionMap/template/tagInput) keep their in-block control.
+ */
+export function overridableParams(modifierType) {
+  return (MODIFIER_CATALOG[modifierType]?.params || []).filter(
+    (p) => p.type === "number" || p.type === "text",
+  );
+}
+
+/**
  * The type a node's INPUT handle expects (for the drag-from-input → producer menu).
  * Sources have no input ⇒ null. Lists collapse to a representative type; null means "any".
  */
@@ -669,10 +926,20 @@ export function nodeInputType(node, handleId) {
   if (!node) return null;
   switch (node.type) {
     case "modifier": {
+      // A param-override pin (`p:<key>`) expects that param's type, not the value type.
+      if (String(handleId || "").startsWith("p:")) {
+        const k = String(handleId).slice(2);
+        const p = overridableParams(node.data?.modifierType).find(
+          (x) => x.key === k,
+        );
+        return p ? (p.type === "number" ? "number" : "string") : null;
+      }
+      if (String(handleId || "").startsWith("field:")) return "string";
       const list = MODIFIER_CATALOG[node.data?.modifierType]?.applicableTypes;
       return list && list.length ? list[0] : null;
     }
-    case "adapterFields": {
+    case "adapterFields":
+    case "adapterPriceFields": {
       const key = String(handleId || "").startsWith("f:")
         ? String(handleId).slice(2)
         : null;
@@ -713,7 +980,10 @@ export function descriptorOutputType(desc) {
     }
   }
   if (desc.group === "modifier")
-    return modifierOutputType(desc.modifierType, "any");
+    return modifierOutputType(
+      desc.modifierType,
+      desc.payload?.inputType || "any",
+    );
   if (desc.group === "op") return OP_SPECS[desc.opType]?.output || "any";
   return "any";
 }
@@ -758,10 +1028,12 @@ export function analyzeFields(nodes, edges) {
     if (incoming.has(e.target)) incoming.get(e.target).push(e);
   });
 
-  const analysis = {};
+  const analysisBySink = {};
   const projections = [];
-  const adapter = nodes.find((n) => n.type === "adapterFields");
-  if (!adapter) return { analysis, projections };
+  const sinks = nodes.filter(
+    (n) => n.type === "adapterFields" || n.type === "adapterPriceFields",
+  );
+  if (!sinks.length) return { analysis: {}, analysisBySink, projections };
 
   const exportOnly = (key) => ({
     externalFieldKey: key,
@@ -770,8 +1042,55 @@ export function analyzeFields(nodes, edges) {
     modifiersJson: null,
   });
 
+  const putEntry = (sinkId, key, entry) => {
+    if (!analysisBySink[sinkId]) analysisBySink[sinkId] = {};
+    analysisBySink[sinkId][key] = entry;
+  };
+
+  for (const adapter of sinks) {
   for (const f of adapter.data?.fields || []) {
     const key = f.fieldKey;
+
+    // A field bound directly to a standard source (dropdown in the adapter) has no pin/edge.
+    if (f.source?.type) {
+      const s = f.source;
+      if (s.type === "attribute" || s.type === "storeAttribute") {
+        putEntry(adapter.id, key, {
+          importable: true, reversible: true, connected: true,
+          _sk: `${s.type}:${s.attributeId}`,
+        });
+        projections.push({
+          externalFieldKey: key,
+          sourceType:
+            s.type === "attribute" ? "CategoryAttribute" : "StoreAttribute",
+          sourceAttributeId: s.attributeId ?? null,
+          modifiersJson: null,
+        });
+      } else {
+        const sk = s.type === "productField"
+          ? `productField:${s.field}`
+          : s.type === "groupName"
+          ? "groupName"
+          : `${s.type}:${JSON.stringify(s)}`;
+        if (s.type === "productField") {
+          // productField-пил двунаправленный по умолчанию.
+          // explicitImport=true позволяет fan-out-детектору выбрать его "победителем",
+          // даже если другие graph-пути к тому же productField явно export-only.
+          putEntry(adapter.id, key, { importable: true, reversible: true, connected: true, _sk: sk, explicitImport: true });
+          projections.push({
+            externalFieldKey: key,
+            sourceType: "ProductField",
+            sourceField: s.field,
+            modifiersJson: null,
+          });
+        } else {
+          putEntry(adapter.id, key, { importable: false, reversible: false, connected: true, _sk: sk });
+          projections.push(exportOnly(key));
+        }
+      }
+      continue;
+    }
+
     const inEdge = (incoming.get(adapter.id) || []).find(
       (e) => e.targetHandle === `f:${key}`,
     );
@@ -779,6 +1098,8 @@ export function analyzeFields(nodes, edges) {
     let importable = false;
     let reversible = false;
     let projection = exportOnly(key);
+    let terminalSk = null;
+    let explicitImport = false;
 
     if (inEdge) {
       const mods = [];
@@ -799,24 +1120,59 @@ export function analyzeFields(nodes, edges) {
             enabled: true,
           });
           cur = byId.get(ins[0].source);
+        } else if (cur.type === "reroute") {
+          // Reroute is a transparent pass-through — step through it without affecting the lane.
+          if (ins.length !== 1) {
+            ok = false;
+            break;
+          }
+          cur = byId.get(ins[0].source);
         } else if (cur.type === "attribute" || cur.type === "storeAttribute") {
           if (cur.data?.attributeId != null) {
-            importable = ok;
-            reversible =
+            const forcedExport = cur.data?.importable === false;
+            const forcedImport = cur.data?.importable === true;
+            const modsReversible =
               ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
-            projection = {
-              externalFieldKey: key,
-              sourceType:
-                cur.type === "attribute"
-                  ? "CategoryAttribute"
-                  : "StoreAttribute",
-              sourceAttributeId: cur.data.attributeId,
-              modifiersJson: mods.length ? JSON.stringify(mods) : null,
-            };
+            importable = !forcedExport && (forcedImport || ok);
+            reversible = importable && modsReversible;
+            if (importable) {
+              projection = {
+                externalFieldKey: key,
+                sourceType:
+                  cur.type === "attribute"
+                    ? "CategoryAttribute"
+                    : "StoreAttribute",
+                sourceAttributeId: cur.data.attributeId,
+                modifiersJson: mods.length ? JSON.stringify(mods) : null,
+              };
+              terminalSk = `${cur.type}:${cur.data.attributeId}`;
+              if (forcedImport || modsReversible) explicitImport = true;
+            }
+          }
+          break;
+        } else if (SOURCE_NODE_TYPES.includes(cur.type) && cur.type !== "static") {
+          // Non-attribute source (productField, groupName, file types): importable for
+          // animation purposes when the modifier chain is fully reversible.
+          // Backend projection stays exportOnly — no actual write-back for these types.
+          // productField / attribute / storeAttribute: importable=false forces export-only;
+          // importable=true can win fan-out resolution (attribute lanes also affect import projection).
+          const forcedExport = cur.type === "productField" && cur.data?.importable === false;
+          const forcedImport = cur.type === "productField" && cur.data?.importable === true;
+          const modsReversible = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+          importable = !forcedExport && (forcedImport || modsReversible);
+          // Only mark as explicit winner when modifier chain is reversible — a path through an
+          // irreversible modifier (e.g. truncate) must never be explicitImport=true, otherwise
+          // two paths to the same _sk both become explicit and neither wins fan-out resolution.
+          if (importable && modsReversible) explicitImport = true;
+          if (importable) {
+            terminalSk =
+              cur.type === "productField"
+                ? `productField:${cur.data?.field ?? cur.id}`
+                : `${cur.type}:${cur.id}`;
           }
           break;
         } else {
-          // op node (fan-in / lossy) or productField/static/groupName ⇒ export-only
+          // static value or op nodes (fan-in / lossy) ⇒ always export-only
           ok = false;
           break;
         }
@@ -824,9 +1180,106 @@ export function analyzeFields(nodes, edges) {
       if (!importable) projection = exportOnly(key);
     }
 
-    analysis[key] = { importable, reversible, connected: !!inEdge };
+    putEntry(adapter.id, key, { importable, reversible, connected: !!inEdge, _sk: terminalSk, explicitImport });
     projections.push(projection);
   }
+  }
 
-  return { analysis, projections };
+  // Detect fan-out: if 2+ fields share the same logical source (via wires or direct bindings),
+  // import is ambiguous — downgrade all of them to export-only and warn.
+  const skToRefs = new Map();
+  for (const [sinkId, fields] of Object.entries(analysisBySink)) {
+    for (const [key, v] of Object.entries(fields)) {
+      if (v._sk) {
+        const arr = skToRefs.get(v._sk) ?? [];
+        arr.push({ sinkId, key });
+        skToRefs.set(v._sk, arr);
+      }
+    }
+  }
+  for (const refs of skToRefs.values()) {
+    if (refs.length > 1) {
+      // If exactly one path was explicitly marked importable by the user, let it win.
+      // When several price-API fields bind to the same product field, prefer canonical "price".
+      const explicit = refs.filter(({ sinkId, key }) => analysisBySink[sinkId][key].explicitImport);
+      let winner = explicit.length === 1 ? explicit[0] : null;
+      if (!winner && explicit.length > 1) {
+        winner = explicit.find(({ key }) => key === "price") ?? null;
+      }
+      for (const { sinkId, key } of refs) {
+        if (winner && winner.sinkId === sinkId && winner.key === key) continue;
+        const entry = analysisBySink[sinkId][key];
+        entry.importable = false;
+        entry.reversible = false;
+        entry.fanOut = true;
+        const pidx = projections.findIndex((p) => p.externalFieldKey === key);
+        if (pidx !== -1) projections[pidx] = exportOnly(key);
+      }
+    }
+  }
+  for (const fields of Object.values(analysisBySink)) {
+    for (const v of Object.values(fields)) delete v._sk;
+  }
+
+  const analysis = {};
+  for (const fields of Object.values(analysisBySink)) {
+    Object.assign(analysis, fields);
+  }
+
+  return { analysis, analysisBySink, projections };
+}
+
+/**
+ * For each adapter field, a short label of what feeds it — for display inside the adapter block.
+ * Walks back through single-input pass-throughs (modifier / single-input op / reroute) to the
+ * originating source node's label; on fan-in (>1 input) returns the producing op's display label.
+ * Returns { fieldKey: label } (unconnected fields omitted).
+ */
+export function adapterSourceLabels(nodes, edges) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = new Map();
+  nodes.forEach((n) => incoming.set(n.id, []));
+  (edges || []).forEach((e) => {
+    if (incoming.has(e.target)) incoming.get(e.target).push(e);
+  });
+
+  const adapter = nodes.find((n) => n.type === "adapterFields");
+  const out = {};
+  if (!adapter) return out;
+  const isSource = new Set(SOURCE_NODE_TYPES);
+
+  for (const f of adapter.data?.fields || []) {
+    const key = f.fieldKey;
+    const inEdge = (incoming.get(adapter.id) || []).find(
+      (e) => e.targetHandle === `f:${key}`,
+    );
+    if (!inEdge) continue;
+
+    let cur = byId.get(inEdge.source);
+    const seen = new Set();
+    let label = null;
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (isSource.has(cur.type)) {
+        label = cur.data?.label || cur.type;
+        break;
+      }
+      const ins = incoming.get(cur.id) || [];
+      if (ins.length === 1) {
+        cur = byId.get(ins[0].source); // transparent pass-through
+      } else {
+        // fan-in / op — name the producing node
+        label =
+          OP_SPECS[cur.type]?.label ||
+          (cur.type === "modifier"
+            ? MODIFIER_CATALOG[cur.data?.modifierType]?.displayName
+            : null) ||
+          cur.data?.label ||
+          cur.type;
+        break;
+      }
+    }
+    if (label) out[key] = label;
+  }
+  return out;
 }

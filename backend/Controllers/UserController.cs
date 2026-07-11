@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using static PrintO.Models.Store;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using static Delegat.Models.Store;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -64,8 +64,8 @@ public class UserController : ControllerBase
             if (string.IsNullOrWhiteSpace(normalizedName))
                 throw ApiException.BadRequest("Имя пользователя не может быть пустым");
 
-            if (normalizedName.Length > PrintO.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {PrintO.Models.User.USER_NAME_MAX_LENGTH} символов");
+            if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
+                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {Delegat.Models.User.USER_NAME_MAX_LENGTH} символов");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)
@@ -177,8 +177,8 @@ public class UserController : ControllerBase
             if (string.IsNullOrWhiteSpace(normalizedName))
                 throw ApiException.BadRequest("Имя пользователя не может быть пустым");
 
-            if (normalizedName.Length > PrintO.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {PrintO.Models.User.USER_NAME_MAX_LENGTH} символов");
+            if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
+                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {Delegat.Models.User.USER_NAME_MAX_LENGTH} символов");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)

@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   preview: {
-    allowedHosts: ["dashboard.printo.studio"],
+    allowedHosts: ["dashboard.your-domain.com"],
   },
   server: {
     host: "0.0.0.0",

@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Products;
-using PrintO.Services;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Products;
+using Delegat.Services;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 /// <summary>
 /// Endpoints for cloning or moving a product (with all related data) into another store.

@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Interfaces;
+namespace Delegat.Infrastructure.Interfaces;
 
 /// <summary>
 /// Interface for entities that can be created from a form

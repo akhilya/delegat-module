@@ -55,6 +55,7 @@ export default {
     modifiers: { type: Array, default: () => [] },
     externalFieldType: { type: String, default: null },
     externalFieldOptions: { type: Array, default: () => [] },
+    sourceFieldOptions: { type: Array, default: () => [] },
     disabled: { type: Boolean, default: false },
   },
   emits: ["update:modifiers"],
@@ -200,6 +201,7 @@ export default {
             <ModifierEditor
               :modifier="mod"
               :external-field-options="externalFieldOptions"
+              :source-field-options="sourceFieldOptions"
               @update="(updated) => updateModifier(index, updated)"
               @close="closeEditor"
             />

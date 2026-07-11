@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Configuration;
+namespace Delegat.Infrastructure.Configuration;
 
 /// <summary>
 /// Extension methods to read configuration from environment variables

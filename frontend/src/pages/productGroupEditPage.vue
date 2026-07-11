@@ -483,7 +483,7 @@ export default {
               description="Товары в группе синхронизируются на адаптеры как единое предложение"
             >
               <template #icon>
-                <Package class="size-12 mb-4 text-muted-foreground" />
+                <Package />
               </template>
             </EmptyState>
 
@@ -669,10 +669,16 @@ export default {
               <Loader2 class="size-6 animate-spin text-muted-foreground" />
             </div>
 
-            <div v-else-if="availableProductsFiltered.length === 0" class="flex flex-col items-center justify-center py-8 text-center">
-              <Package class="size-8 mb-2 text-muted-foreground" />
-              <p class="text-sm text-muted-foreground">Нет доступных товаров</p>
-            </div>
+            <EmptyState
+              v-else-if="availableProductsFiltered.length === 0"
+              size="sm"
+              title="Нет доступных товаров"
+              description="Все товары уже в группе, или поиск не дал результатов."
+            >
+              <template #icon>
+                <Package />
+              </template>
+            </EmptyState>
 
             <div v-else class="divide-y">
               <label

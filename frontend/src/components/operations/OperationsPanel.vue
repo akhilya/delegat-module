@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import OperationItem from "./OperationItem.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
 
 const store = useStore();
@@ -192,10 +193,17 @@ function handleRemove(id) {
           <!-- Empty state -->
           <div
             v-else-if="activeOperations.length === 0 && historyOperations.length === 0"
-            class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2"
+            class="flex h-full items-center justify-center"
           >
-            <Activity class="size-8" />
-            <span class="text-sm">Нет операций</span>
+            <EmptyState
+              size="sm"
+              title="Нет операций"
+              description="Здесь появится прогресс экспорта, импорта и AI-задач."
+            >
+              <template #icon>
+                <Activity />
+              </template>
+            </EmptyState>
           </div>
         </div>
       </div>

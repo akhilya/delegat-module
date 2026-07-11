@@ -3,25 +3,28 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using PrintO;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Configuration;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Controllers;
-using PrintO.Services;
-using PrintO.Services.DataMigrations;
-using PrintO.Services.Marketplace;
-using PrintO.Services.Plugins;
+using Delegat;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Controllers;
+using Delegat.Services;
+using Delegat.Services.DataMigrations;
+using Delegat.Services.Ai;
+using Delegat.Services.Ai.Tools;
+using Delegat.Services.Ai.Tools.Handlers;
+using Delegat.Services.Marketplace;
+using Delegat.Services.Plugins;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using PrintO.Infrastructure.Security;
-using PrintO.Hubs;
+using Delegat.Infrastructure.Security;
+using Delegat.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -184,7 +187,28 @@ builder.Services.AddScoped<ProductTransferService>();
 // Persisted error logs
 builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
 
+// AI services
+builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<AiModelConfigService>();
+builder.Services.AddScoped<AiChatService>();
+builder.Services.AddScoped<AiMappingService>();
+// AI tool handlers
+builder.Services.AddScoped<ProductToolHandlers>();
+builder.Services.AddScoped<CategoryToolHandlers>();
+builder.Services.AddScoped<MappingToolHandlers>();
+builder.Services.AddScoped<GroupToolHandlers>();
+builder.Services.AddScoped<SyncToolHandlers>();
+builder.Services.AddScoped<FileToolHandlers>();
+builder.Services.AddScoped<AnalyticsToolHandlers>();
+builder.Services.AddScoped<RollbackToolHandlers>();
+builder.Services.AddScoped<ToolDispatcher>();
+builder.Services.AddScoped<GraphMutationService>();
+builder.Services.AddScoped<MappingIntelligenceService>();
+builder.Services.AddScoped<MappingCompatibilityService>();
+builder.Services.AddScoped<AiOperationService>();
+
 // Sync services
+builder.Services.AddScoped<GenerativeMappingService>();
 builder.Services.AddScoped<MappingService>();
 builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<ProductSyncService>();
@@ -200,15 +224,13 @@ builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
 builder.Services.AddHostedService<ProductTransferBackgroundService>();
-// TEMP — one-time backfill of graphJson for mappings without a graph. Remove after it has run in prod.
-builder.Services.AddHostedService<GraphBackfillBackgroundService>();
 
 // SignalR for real-time operation logs
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IOperationLogger, OperationLogger>();
 
 // Marketplace adapters are now loaded as DLL plugins from ./plugins/ directory
-// See: PrintO.Marketplace.SDK for plugin development
+// See: Delegat.Marketplace.SDK for plugin development
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -230,7 +252,7 @@ builder.Services.AddCors(options =>
             .ToList();
 
         if (!origins.Any())
-            origins.Add("https://dashboard.printo.studio");
+            origins.Add("https://dashboard.your-domain.com");
 
         if (environment == "Development" || environment == "Staging")
         {
@@ -254,7 +276,7 @@ builder.Services.AddCors(options =>
 // Health checks
 builder.Services.AddHealthChecks()
     .AddMySql(connectionString, name: "mysql")
-    .AddCheck<PrintO.Infrastructure.Health.MinIOHealthCheck>("minio");
+    .AddCheck<Delegat.Infrastructure.Health.MinIOHealthCheck>("minio");
 
 // Rate limiting
 builder.Services.AddRateLimiter(options =>
@@ -293,7 +315,7 @@ builder.Services.Configure<FormOptions>(options =>
 // Controllers
 builder.Services.AddControllers(options =>
     {
-        options.Conventions.Add(new PrintO.Infrastructure.ApiRoutePrefixConvention());
+        options.Conventions.Add(new Delegat.Infrastructure.ApiRoutePrefixConvention());
     })
     .AddJsonOptions(options =>
     {
@@ -309,21 +331,70 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
 
+    // Log what EF thinks still needs to be applied. This helps diagnose drift
+    // (e.g. aiModelConfigs table exists but "20260704100000_AddAiTables" row is missing from history).
+    var pendingMigrations = db.Database.GetPendingMigrations().ToList();
+    if (pendingMigrations.Any())
+    {
+        logger.LogInformation("Pending migrations to apply ({Count}): {Migrations}", pendingMigrations.Count, string.Join(", ", pendingMigrations));
+    }
+
     const int maxRetries = 30;
+    bool applied = false;
+
     for (int i = 0; i < maxRetries; i++)
     {
         try
         {
-            logger.LogInformation("Applying database migrations...");
+            logger.LogInformation("Applying database migrations (attempt {Attempt}/{Max})...", i + 1, maxRetries);
             await db.Database.MigrateAsync();
             logger.LogInformation("Database migrations applied successfully.");
+            applied = true;
             break;
         }
-        catch (Exception ex) when (i < maxRetries - 1)
+        catch (Exception ex)
         {
-            logger.LogWarning("Database not ready (attempt {Attempt}/{Max}): {Message}", i + 1, maxRetries, ex.InnerException?.Message ?? ex.Message);
+            string message = ex.InnerException?.Message ?? ex.Message;
+
+            // Detect common symptoms of history vs. actual schema drift (the situation
+            // that produces "Table 'aiModelConfigs' already exists" even when history "looks up to date").
+            bool isSchemaDrift = message.Contains("already exists", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Duplicate column", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("1050") || message.Contains("1060"); // MySQL error codes
+
+            if (isSchemaDrift)
+            {
+                logger.LogError(
+                    "Schema drift detected while applying migrations. " +
+                    "An object (table/column/index) already exists but the migration that should have created it " +
+                    "is not recorded in __EFMigrationsHistory (common with the AI tables after using recovery guards). " +
+                    "Message: {Message}", message);
+            }
+            else
+            {
+                logger.LogWarning("Database not ready (attempt {Attempt}/{Max}): {Message}", i + 1, maxRetries, message);
+            }
+
+            if (i == maxRetries - 1)
+            {
+                // Surface a clear, actionable error instead of swallowing the last failure.
+                throw new InvalidOperationException(
+                    "Failed to apply EF Core database migrations after all retries. " +
+                    "If the logs mention 'already exists' for aiModelConfigs/aiOperations (or duplicate column), " +
+                    "your __EFMigrationsHistory is out of sync with the actual tables in the DB. " +
+                    "Common recovery: connect to the dev MySQL and INSERT the missing MigrationId row(s), " +
+                    "or remove the mysql docker volume and let migrations run on a fresh DB. " +
+                    $"Last error: {message}", ex);
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(3));
         }
+    }
+
+    if (!applied)
+    {
+        // Shouldn't normally reach here because the last iteration throws, but belt-and-suspenders.
+        throw new InvalidOperationException("Database migrations could not be applied.");
     }
 }
 
@@ -338,6 +409,51 @@ var adminSettings = builder.Configuration.GetAdminSeedSettings();
 using (var scope = app.Services.CreateScope())
 {
     await DatabaseSeeder.SeedAsync(scope.ServiceProvider, adminSettings);
+}
+
+// --reset-admin mode: reset superadmin credentials and exit without starting the web server.
+// Usage inside container: dotnet Delegat.dll --reset-admin
+if (args.Contains("--reset-admin"))
+{
+    if (string.IsNullOrEmpty(adminSettings.Email) || string.IsNullOrEmpty(adminSettings.Password))
+    {
+        Console.Error.WriteLine("ADMIN_EMAIL and ADMIN_PASSWORD must be set.");
+        return 1;
+    }
+    var resetSettings = new AdminSeedSettings
+    {
+        Email = adminSettings.Email,
+        Username = adminSettings.Username,
+        Password = adminSettings.Password,
+        ForceReset = true,
+    };
+    using var resetScope = app.Services.CreateScope();
+    await DatabaseSeeder.SeedAsync(resetScope.ServiceProvider, resetSettings);
+    Console.WriteLine("Admin reset complete.");
+    return 0;
+}
+
+// Reset stuck InProgress tasks to Pending on startup (prevents permanent hang after container restart)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+    var resetLogger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
+
+    var stuckImports = await db.pendingProductImports
+        .Where(p => p.status == ProductImportStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Pending));
+
+    var stuckExports = await db.pendingProductExports
+        .Where(p => p.status == ProductExportStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Pending));
+
+    var stuckImages = await db.pendingImageDownloads
+        .Where(p => p.status == ImageDownloadStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Pending));
+
+    if (stuckImports + stuckExports + stuckImages > 0)
+        resetLogger.LogWarning("Startup recovery: reset {Imports} imports, {Exports} exports, {Images} image downloads from InProgress to Pending",
+            stuckImports, stuckExports, stuckImages);
 }
 
 // Middleware pipeline
@@ -378,3 +494,4 @@ app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthCh
 });
 
 await app.RunAsync("http://0.0.0.0:5000");
+return 0;

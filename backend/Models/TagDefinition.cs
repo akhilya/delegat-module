@@ -1,8 +1,8 @@
-using PrintO.Enums;
+using Delegat.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Store-level tag definition. Shared across all files in the store.

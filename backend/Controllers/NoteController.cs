@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Products;
-using static PrintO.Models.Note;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Products;
+using static Delegat.Models.Note;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 /// <summary>
 /// Controller for managing notes attached to products.

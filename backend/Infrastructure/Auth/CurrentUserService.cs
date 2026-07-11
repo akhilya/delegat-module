@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Models;
+using Delegat.Models;
 using System.Security.Claims;
 
-namespace PrintO.Infrastructure.Auth;
+namespace Delegat.Infrastructure.Auth;
 
 /// <summary>
 /// Interface for accessing current user information

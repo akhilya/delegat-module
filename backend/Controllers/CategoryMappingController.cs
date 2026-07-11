@@ -1,16 +1,18 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Services;
-using PrintO.Services.Marketplace;
+using Delegat.Enums;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Services;
+using Delegat.Services.Marketplace;
+using Delegat.Services.Marketplace.Graph;
+using Delegat.Services.Plugins;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -22,6 +24,7 @@ public class CategoryMappingController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly CategoryImportService _categoryImportService;
+    private readonly PluginVersionSyncService _pluginVersionSyncService;
     private readonly ILogger<CategoryMappingController> _logger;
 
     private readonly IOperationLogger _operationLogger;
@@ -33,6 +36,7 @@ public class CategoryMappingController : ControllerBase
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
         CategoryImportService categoryImportService,
+        PluginVersionSyncService pluginVersionSyncService,
         ILogger<CategoryMappingController> logger,
         IOperationLogger operationLogger)
     {
@@ -42,6 +46,7 @@ public class CategoryMappingController : ControllerBase
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
         _categoryImportService = categoryImportService;
+        _pluginVersionSyncService = pluginVersionSyncService;
         _logger = logger;
         _operationLogger = operationLogger;
     }
@@ -106,12 +111,25 @@ public class CategoryMappingController : ControllerBase
                 localCategoryName = m.localCategory.name,
                 externalCategoryId = m.externalCategoryId,
                 externalCategoryName = m.externalCategoryName,
-                fieldMappingsCount = m.fieldMappings.Count,
+                graphJson = m.graphJson,
                 linkedProductsCount = _context.productMarketplaceLinks.Count(l => l.categoryMappingId == m.Id)
             })
             .ToListAsync();
 
-        return Ok(result);
+        // Field count now comes from the graph's adapter schema (parsed in memory, not in SQL).
+        var shaped = result.Select(m => new
+        {
+            m.id,
+            m.name,
+            m.localCategoryId,
+            m.localCategoryName,
+            m.externalCategoryId,
+            m.externalCategoryName,
+            fieldMappingsCount = MappingService.SchemaFields(m.graphJson).Count,
+            m.linkedProductsCount,
+        });
+
+        return Ok(shaped);
     }
 
     /// <summary>
@@ -155,7 +173,8 @@ public class CategoryMappingController : ControllerBase
             try
             {
                 var fields = await adapter.GetCategoryFieldsAsync(connection, input.externalCategoryId, ct);
-                fieldsCreated = await CreateFieldMappingsAsync(mapping.Id, input.localCategoryId, fields);
+                fieldsCreated = await CreateFieldMappingsAsync(mapping, connection, input.localCategoryId, fields, adapter,
+                    skipAutoMapping: input.useAiMapping == true, ct: ct);
             }
             catch (Exception ex)
             {
@@ -245,7 +264,7 @@ public class CategoryMappingController : ControllerBase
         if (fields == null || fields.Count == 0)
             fields = await adapter.GetCategoryFieldsAsync(connection, result.ExternalCategoryId, ct);
 
-        var fieldsCreated = await CreateFieldMappingsAsync(mapping.Id, category.Id, fields);
+        var fieldsCreated = await CreateFieldMappingsAsync(mapping, connection, category.Id, fields, adapter, ct: ct);
 
         return Ok(new
         {
@@ -286,14 +305,61 @@ public class CategoryMappingController : ControllerBase
     }
 
     /// <summary>
+    /// Fetch the current adapter field schema and append any new fields to the mapping graph.
+    /// Existing bindings and user configuration are preserved (additive sync only).
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/sync-fields")]
+    public async Task<IActionResult> SyncMappingFields(
+        int connectionId,
+        int mappingId,
+        CancellationToken ct)
+    {
+        await GetConnectionAsync(connectionId);
+
+        var exists = await _context.categoryMappings.AnyAsync(
+            m => m.Id == mappingId && m.connectionId == connectionId, ct);
+        if (!exists)
+            throw ApiException.NotFound("Маппинг не найден");
+
+        try
+        {
+            var result = await _pluginVersionSyncService.SyncMappingFieldsAsync(
+                connectionId, mappingId, ct);
+
+            var message = result.TotalAdded > 0
+                ? $"Добавлено полей: {result.CardFieldsAdded} карточки"
+                  + (result.PriceFieldsAdded > 0 ? $", {result.PriceFieldsAdded} цены" : "")
+                : "Схема актуальна — новых полей нет";
+
+            return Ok(new
+            {
+                success = true,
+                cardFieldsAdded = result.CardFieldsAdded,
+                priceFieldsAdded = result.PriceFieldsAdded,
+                totalAdded = result.TotalAdded,
+                totalFromApi = result.TotalFromApi,
+                existingCount = result.ExistingCount,
+                addedFieldKeys = result.AddedFieldKeys,
+                addedPriceFieldKeys = result.AddedPriceFieldKeys,
+                message,
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Get the visual node graph for a mapping. Returns the saved graph, or null when none
     /// exists yet (the client then auto-migrates the current field mappings into a graph).
     /// </summary>
     [HttpGet]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph")]
-    public async Task<IActionResult> GetMappingGraph(int connectionId, int mappingId)
+    public async Task<IActionResult> GetMappingGraph(int connectionId, int mappingId, CancellationToken ct = default)
     {
-        await GetConnectionAsync(connectionId);
+        var connection = await GetConnectionAsync(connectionId);
 
         var mapping = await _unitOfWork.Repository<CategoryMapping>()
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
@@ -302,9 +368,28 @@ public class CategoryMappingController : ControllerBase
             throw ApiException.NotFound("Маппинг не найден");
 
         object? graph = null;
-        if (!string.IsNullOrWhiteSpace(mapping.graphJson))
+        var graphJson = mapping.graphJson;
+        if (!string.IsNullOrWhiteSpace(graphJson))
         {
-            try { graph = JsonSerializer.Deserialize<JsonElement>(mapping.graphJson); }
+            var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+            if (adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) == true)
+            {
+                try
+                {
+                    var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+                    var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
+                        priceFields,
+                        new Dictionary<string, int>(),
+                        skipAutoMapping: true);
+                    graphJson = GraphGenerator.SyncPriceFields(graphJson, priceSpecs);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to sync price fields in graph for mapping {MappingId}", mappingId);
+                }
+            }
+
+            try { graph = JsonSerializer.Deserialize<JsonElement>(graphJson); }
             catch (JsonException) { graph = null; }
         }
 
@@ -338,23 +423,7 @@ public class CategoryMappingController : ControllerBase
 
         await repo.UpdateAsync(mapping);
 
-        // Project reversible lanes back onto the per-field rows so the import (reverse) path keeps working.
-        if (input.fields != null && input.fields.Count > 0)
-        {
-            var fmRepo = _unitOfWork.Repository<FieldMapping>();
-            var fieldMappings = (await fmRepo.FindAllAsync(fm => fm.categoryMappingId == mappingId)).ToList();
-            foreach (var proj in input.fields)
-            {
-                var fm = fieldMappings.FirstOrDefault(x => x.externalFieldKey == proj.externalFieldKey);
-                if (fm == null)
-                    continue;
-                fm.sourceType = proj.sourceType;
-                fm.sourceAttributeId = proj.sourceAttributeId;
-                fm.modifiersJson = proj.modifiersJson;
-                await fmRepo.UpdateAsync(fm);
-            }
-        }
-
+        // The graph is the single source of truth — no per-field projection needed (input.fields ignored).
         return Ok(new { success = true, hasGraph = mapping.graphJson != null });
     }
 
@@ -409,12 +478,21 @@ public class CategoryMappingController : ControllerBase
             throw ApiException.NotFound("Товар не найден");
 
         var mappingService = _serviceProvider.GetRequiredService<MappingService>();
-        var eval = mappingService.EvaluateGraph(product, graphJson);
+        var eval = await mappingService.EvaluateGraphAsync(product, graphJson, mappingId, ct: ct);
 
         var outputs = eval.Outputs.ToDictionary(kv => kv.Key, kv => FormatGraphValue(kv.Value));
         var nodeValues = eval.NodeValues.ToDictionary(kv => kv.Key, kv => FormatGraphValue(kv.Value));
+        var generativeStatuses = eval.GenerativeStatuses.ToDictionary(
+            kv => kv.Key,
+            kv => new
+            {
+                status = kv.Value.Status,
+                output = kv.Value.Output,
+                operationId = kv.Value.OperationId,
+                errorMessage = kv.Value.ErrorMessage,
+            });
 
-        return Ok(new { outputs, fieldTypes = eval.FieldTypes, nodeValues });
+        return Ok(new { outputs, fieldTypes = eval.FieldTypes, nodeValues, generativeStatuses });
     }
 
     /// <summary>
@@ -432,7 +510,7 @@ public class CategoryMappingController : ControllerBase
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
         var original = await mappingRepo.FindAsync(
             m => m.Id == mappingId && m.connectionId == connectionId,
-            query => query.Include(m => m.fieldMappings));
+            query => query);
 
         if (original == null)
             throw ApiException.NotFound("Маппинг не найден");
@@ -452,42 +530,11 @@ public class CategoryMappingController : ControllerBase
 
         await mappingRepo.AddAsync(duplicate);
 
-        // Copy all field mappings
-        var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
-        var fieldsCreated = 0;
-
-        foreach (var fm in original.fieldMappings)
-        {
-            var copy = new FieldMapping();
-            copy.AddFill(new FieldMapping.AddForm
-            {
-                categoryMappingId = duplicate.Id,
-                externalFieldKey = fm.externalFieldKey,
-                externalFieldName = fm.externalFieldName,
-                isRequired = fm.isRequired,
-                isEnabled = fm.isEnabled,
-                sourceType = fm.sourceType,
-                sourceField = fm.sourceField,
-                sourceAttributeId = fm.sourceAttributeId,
-                staticValue = fm.staticValue,
-                transformExpression = fm.transformExpression,
-                modifiersJson = fm.modifiersJson,
-                externalFieldType = fm.externalFieldType,
-                externalFieldOptions = fm.externalFieldOptions,
-                sortOrder = fm.sortOrder
-            });
-
-            await fieldMappingRepo.AddAsync(copy);
-            fieldsCreated++;
-        }
-
-        // Carry over the visual node graph (keyed by externalFieldKey / attributeId, which are
-        // identical for the duplicate since it shares the same local category).
-        if (!string.IsNullOrWhiteSpace(original.graphJson))
-        {
-            duplicate.graphJson = original.graphJson;
-            await mappingRepo.UpdateAsync(duplicate);
-        }
+        // The graph (single source of truth) carries all field config — clone it directly. Keys/attributeIds
+        // are identical for the duplicate since it shares the same local category.
+        duplicate.graphJson = original.graphJson;
+        await mappingRepo.UpdateAsync(duplicate);
+        var fieldsCreated = MappingService.SchemaFields(original.graphJson).Count;
 
         return Ok(new { id = duplicate.Id, fieldsCreated });
     }
@@ -501,6 +548,7 @@ public class CategoryMappingController : ControllerBase
         int connectionId,
         int mappingId,
         [FromQuery] int? reassignToMappingId = null,
+        [FromQuery] bool force = false,
         CancellationToken ct = default)
     {
         await GetConnectionAsync(connectionId);
@@ -508,7 +556,7 @@ public class CategoryMappingController : ControllerBase
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
         var mapping = await mappingRepo.FindAsync(
             m => m.Id == mappingId && m.connectionId == connectionId,
-            query => query.Include(m => m.fieldMappings));
+            query => query);
 
         if (mapping == null)
             throw ApiException.NotFound("Маппинг не найден");
@@ -517,6 +565,17 @@ public class CategoryMappingController : ControllerBase
             .Where(l => l.connectionId == connectionId && l.categoryMappingId == mappingId)
             .Include(l => l.product)
             .ToListAsync(ct);
+
+        if (linkedProducts.Count > 0 && force)
+        {
+            // Forced delete: detach links — products stay linked to the marketplace
+            // but lose their mapping until the user assigns a new one
+            foreach (var link in linkedProducts)
+                link.categoryMappingId = null;
+            await _context.SaveChangesAsync(ct);
+            await mappingRepo.DeleteAsync(mapping);
+            return Ok(new { success = true, reassignedProducts = 0, detachedProducts = linkedProducts.Count });
+        }
 
         if (linkedProducts.Count > 0)
         {
@@ -566,13 +625,6 @@ public class CategoryMappingController : ControllerBase
                 link.categoryMappingId = replacement.Id;
 
             await _context.SaveChangesAsync(ct);
-        }
-
-        // Удаляем связанные field mappings
-        var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
-        foreach (var fm in mapping.fieldMappings.ToList())
-        {
-            await fieldMappingRepo.DeleteAsync(fm);
         }
 
         await mappingRepo.DeleteAsync(mapping);
@@ -692,17 +744,17 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
-        var categoryRepo = _unitOfWork.Repository<Category>();
-        var categories = await categoryRepo.FindAllAsync(
-            c => c.storeId == connection.storeId,
-            query => query.Include(c => c.attributes));
-
-        var result = categories.Select(c => new
-        {
-            id = c.Id,
-            name = c.name,
-            attributesCount = c.attributes?.Count ?? 0
-        }).ToList();
+        // Project directly in SQL — avoids loading LONGTEXT attribute options into memory just to count them
+        var result = await _context.categories
+            .AsNoTracking()
+            .Where(c => c.storeId == connection.storeId)
+            .Select(c => new
+            {
+                id = c.Id,
+                name = c.name,
+                attributesCount = c.attributes.Count()
+            })
+            .ToListAsync();
 
         return Ok(result);
     }
@@ -858,11 +910,14 @@ public class CategoryMappingController : ControllerBase
     }
 
     private async Task<int> CreateFieldMappingsAsync(
-        int categoryMappingId,
+        CategoryMapping mapping,
+        MarketplaceConnection connection,
         int localCategoryId,
-        IReadOnlyCollection<Models.Marketplace.DTOs.ExternalField> fields)
+        IReadOnlyCollection<Models.Marketplace.DTOs.ExternalField> fields,
+        IMarketplaceAdapter adapter,
+        bool skipAutoMapping = false,
+        CancellationToken ct = default)
     {
-        var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
         var categoryAttributes = await _unitOfWork.Repository<CategoryAttribute>()
             .FindAllAsync(a => a.categoryId == localCategoryId);
 
@@ -876,39 +931,48 @@ public class CategoryMappingController : ControllerBase
             .GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
-        var fieldsCreated = 0;
         var sortOrder = 0;
-
-        foreach (var field in fields.OrderBy(f => f.SortOrder))
+        var specs = fields.OrderBy(f => f.SortOrder).Select(field =>
         {
-            var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
-            var isRequired = sourceType == FieldMappingSourceType.ProductField
-                ? false
-                : field.IsRequired;
-
-            var fieldMapping = new FieldMapping();
-            fieldMapping.AddFill(new FieldMapping.AddForm
+            var (sourceType, sourceField, sourceAttributeId) = skipAutoMapping
+                ? (FieldMappingSourceType.Static, (string?)null, (int?)null)
+                : DetermineAutoMapping(field, attributeMap);
+            return new FieldSpec
             {
-                categoryMappingId = categoryMappingId,
                 externalFieldKey = field.Key,
                 externalFieldName = field.Name,
-                isRequired = isRequired,
+                externalFieldType = field.Type,
+                isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                 isEnabled = true,
+                sortOrder = sortOrder++,
                 sourceType = sourceType,
                 sourceField = sourceField,
                 sourceAttributeId = sourceAttributeId,
-                externalFieldType = field.Type,
-                externalFieldOptions = field.Options != null && field.Options.Count > 0
-                    ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
-                    : null,
-                sortOrder = sortOrder++
-            });
+            };
+        }).ToList();
 
-            await fieldMappingRepo.AddAsync(fieldMapping);
-            fieldsCreated++;
+        // Every mapping carries a grouping field (synthetic for endpoint-based adapters)
+        GraphGenerator.EnsureGroupingField(specs, adapter);
+
+        List<FieldSpec> priceSpecs = new();
+        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+        {
+            try
+            {
+                var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+                priceSpecs = CategoryImportService.BuildPriceFieldSpecs(priceFields, attributeMap, skipAutoMapping);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch price fields for mapping {MappingId}", mapping.Id);
+            }
         }
 
-        return fieldsCreated;
+        // The graph is the single source of truth — generate it onto the (tracked) mapping entity.
+        mapping.graphJson = GraphGenerator.BuildGraphJson(specs, priceSpecs);
+        await _unitOfWork.Repository<CategoryMapping>().UpdateAsync(mapping);
+
+        return specs.Count + priceSpecs.Count;
     }
 
     /// <summary>
@@ -1130,6 +1194,7 @@ public class CategoryMappingController : ControllerBase
         public string externalCategoryId { get; set; }
         public string? externalCategoryName { get; set; }
         public string? name { get; set; }
+        public bool? useAiMapping { get; set; }
     }
 
     public struct CreateExternalCategoryInput

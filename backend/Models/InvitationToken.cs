@@ -1,8 +1,8 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Represents a single-use invitation token for user registration.

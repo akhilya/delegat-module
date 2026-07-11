@@ -1,4 +1,6 @@
 <script>
+import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
+import MappingCompatibilityWizard from "@/components/marketplace/MappingCompatibilityWizard.vue";
 import Page from "@/components/page.vue";
 import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
@@ -9,9 +11,14 @@ import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 import { mapActions } from "vuex";
 import { http } from "@/main";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
 import {
   Plus,
   Store,
@@ -27,7 +34,8 @@ import {
   XCircle,
   Save,
   TestTube,
-  ArrowLeft,
+  ArrowRight,
+  ListChecks,
   Settings,
   Link,
   Link2,
@@ -48,6 +56,8 @@ import {
   Copy,
   FileText,
   Settings2,
+  ArrowRightLeft,
+  Unlink,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -95,12 +105,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Switch from "@/components/ui/switch/Switch.vue";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   DropdownMenu,
@@ -115,6 +120,7 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 export default {
   components: {
+    AiErrorExplainer,
     Page,
     PageSection,
     NavigationBar,
@@ -124,6 +130,7 @@ export default {
     Label,
     Badge,
     Checkbox,
+    EmptyState,
     Plus,
     Store,
     Loader2,
@@ -138,7 +145,8 @@ export default {
     XCircle,
     Save,
     TestTube,
-    ArrowLeft,
+    ArrowRight,
+    ListChecks,
     Settings,
     Link,
     Link2,
@@ -207,7 +215,10 @@ export default {
     Copy,
     FileText,
     Settings2,
+    ArrowRightLeft,
+    Unlink,
     FieldChangesTable,
+    PasswordInput,
   },
   data() {
     const validTabs = ["settings", "mappings", "products"];
@@ -237,7 +248,14 @@ export default {
         externalCategoryId: "",
         externalCategoryName: "",
         name: "",
+        useAiMapping: true,
       },
+      // PR4 compatibility wizard state
+      showCompatibilityWizard: false,
+      wizardMappingId: null,
+      wizardQuestions: [],
+      wizardAnswers: {},
+      wizardReport: null,
       externalCategorySearch: "",
       credentialValues: {},
       PAGE_MARKETPLACE,
@@ -313,11 +331,16 @@ export default {
       renameMappingValue: "",
       isRenamingMapping: false,
 
+      // === Duplicate mapping confirmation ===
+      showDuplicateMappingDialog: false,
+      duplicateMappingId: null,
+
       // === Delete mapping dialog ===
       showDeleteMappingDialog: false,
       deleteMappingTarget: null,
       deleteMappingImpact: null,
       deleteMappingReplacementId: null,
+      deleteMappingMode: "reassign", // "reassign" | "force"
       isDeletingMapping: false,
 
       // === Mapping settings dialog ===
@@ -420,34 +443,66 @@ export default {
       return parseInt(this.$route.params.connId);
     },
     breadcrumbs() {
+      const tabLabels = { settings: "Настройки", mappings: "Маппинги", products: "Товары" };
       return [
         { label: "Адаптеры", to: PAGE_MARKETPLACE },
-        { label: this.connection?.name || "Подключение" },
+        { label: this.connection?.name || "Подключение", to: this.$route.fullPath.split("?")[0] },
+        { label: tabLabels[this.activeTab] || "Настройки" },
       ];
     },
     selectedAdapterSchema() {
       if (!this.connection) return null;
-      const adapter = this.adapters.find((a) => a.key === this.connection.adapterKey);
+      const adapter = this.adapters.find(
+        (a) => a.key === this.connection.adapterKey,
+      );
       return adapter?.credentialsSchema;
     },
     credentialFields() {
       const schema = this.selectedAdapterSchema;
       if (!schema) return [];
-      return schema.fields || schema.Fields || [];
+      // Plugin-sourced schemas arrive PascalCase; normalize each field so the
+      // template's camelCase access (key/displayName/isSecret/…) always resolves.
+      const raw = schema.fields || schema.Fields || [];
+      return raw.map((f) => {
+        const type = f.type ?? f.Type ?? "text";
+        return {
+          key: f.key ?? f.Key,
+          displayName: f.displayName ?? f.DisplayName ?? f.key ?? f.Key,
+          description: f.description ?? f.Description,
+          placeholder: f.placeholder ?? f.Placeholder,
+          type,
+          isRequired: f.isRequired ?? f.IsRequired ?? true,
+          isSecret: (f.isSecret ?? f.IsSecret ?? false) || type === "password",
+        };
+      });
     },
     adapterDisplayName() {
       if (!this.connection) return "";
-      const adapter = this.adapters.find((a) => a.key === this.connection.adapterKey);
+      const adapter = this.adapters.find(
+        (a) => a.key === this.connection.adapterKey,
+      );
       return adapter?.displayName || this.connection.adapterKey;
     },
     selectedLocalCategory() {
       if (!this.newMapping.localCategoryId) return null;
-      return this.localCategories.find((cat) => cat.id === this.newMapping.localCategoryId) || null;
+      return (
+        this.localCategories.find(
+          (cat) => cat.id === this.newMapping.localCategoryId,
+        ) || null
+      );
     },
 
     // Products computed - server handles SKU filtering, just return products
     filteredProducts() {
       return this.products;
+    },
+    // Resolve each row's status once per render instead of 3× inline in the table cell.
+    productStatusMap() {
+      const map = {};
+      for (const p of this.filteredProducts) {
+        map[p.externalId] = this.getStatusInfo(p);
+      }
+      return map;
     },
     allSelected() {
       return (
@@ -460,12 +515,12 @@ export default {
     },
     selectedLinkedItems() {
       return this.filteredProducts.filter(
-        (p) => p.isLinked && this.selectedItems.includes(p.externalId)
+        (p) => p.isLinked && this.selectedItems.includes(p.externalId),
       );
     },
     selectedUnlinkedItems() {
       return this.filteredProducts.filter(
-        (p) => !p.isLinked && this.selectedItems.includes(p.externalId)
+        (p) => !p.isLinked && this.selectedItems.includes(p.externalId),
       );
     },
     hasSelectedLinked() {
@@ -516,7 +571,7 @@ export default {
       if (!this.mappingSelectionProducts.length) return [];
       const groups = {};
       for (const p of this.mappingSelectionProducts) {
-        const key = p.categoryName || 'Без категории';
+        const key = p.categoryName || "Без категории";
         if (!groups[key]) {
           groups[key] = {
             categoryName: key,
@@ -535,21 +590,30 @@ export default {
         return replacements;
       }
 
-      return this.categoryMappings.filter((mapping) =>
-        mapping.id !== this.deleteMappingTarget.id &&
-        mapping.localCategoryId === this.deleteMappingTarget.localCategoryId
+      return this.categoryMappings.filter(
+        (mapping) =>
+          mapping.id !== this.deleteMappingTarget.id &&
+          mapping.localCategoryId === this.deleteMappingTarget.localCategoryId,
       );
     },
     singleImportPreviewItems() {
       if (!this.singleImportPreviewData?.updatedFields) return [];
-      return [{
-        fields: this.singleImportPreviewData.updatedFields.map((field) => ({
-          key: field,
-          label: this.getImportFieldLabel(field),
-          oldValue: this.formatImportFieldValue(field, this.singleImportPreviewData.oldValues[field]),
-          newValue: this.formatImportFieldValue(field, this.singleImportPreviewData.newValues[field]),
-        })),
-      }];
+      return [
+        {
+          fields: this.singleImportPreviewData.updatedFields.map((field) => ({
+            key: field,
+            label: this.getImportFieldLabel(field),
+            oldValue: this.formatImportFieldValue(
+              field,
+              this.singleImportPreviewData.oldValues[field],
+            ),
+            newValue: this.formatImportFieldValue(
+              field,
+              this.singleImportPreviewData.newValues[field],
+            ),
+          })),
+        },
+      ];
     },
     bulkImportPreviewItems() {
       if (!this.bulkImportPreviewData?.items) return [];
@@ -611,9 +675,11 @@ export default {
         this.fetchCapabilities(),
         this.fetchMappings(),
         this.fetchLocalCategories(),
-        this.fetchLimits(),
       ]);
       this.isLoading = false;
+      // fetchLimits makes an external API call (GetQuotasAsync) that can be slow;
+      // run it after the page is already visible so it doesn't block rendering.
+      this.fetchLimits();
       this.startLimitsAutoRefresh();
 
       // If products tab was restored from URL, fetch products now
@@ -632,6 +698,11 @@ export default {
           this.connection = extractResponseData(response);
           setPageTitle(this.connection.name);
           this.parseCredentials();
+          this.$store.commit("aiChat/setPageContext", {
+            page: "connection",
+            connectionId: parseInt(this.connectionId),
+            connectionName: this.connection.name || "",
+          });
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -694,7 +765,7 @@ export default {
     getRpsColor(current, max) {
       const ratio = current / max;
       if (ratio < 0.5) return "bg-success";
-      if (ratio < 0.8) return "bg-yellow-500";
+      if (ratio < 0.8) return "bg-warning";
       return "bg-error";
     },
 
@@ -702,14 +773,19 @@ export default {
       if (limit <= 0) return "bg-success";
       const ratio = usage / limit;
       if (ratio < 0.5) return "bg-success";
-      if (ratio < 0.8) return "bg-yellow-500";
+      if (ratio < 0.8) return "bg-warning";
       return "bg-error";
     },
 
     formatQuotaResetTime(resetsAt) {
       if (!resetsAt) return null;
       const date = new Date(resetsAt);
-      return date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleString("ru-RU", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     },
 
     async fetchMappings() {
@@ -741,7 +817,9 @@ export default {
       await this.getExternalCategories({
         connectionId: this.connectionId,
         search: this.externalCategorySearch || undefined,
-        parentId: this.externalCategorySearch ? undefined : this.currentParentId,
+        parentId: this.externalCategorySearch
+          ? undefined
+          : this.currentParentId,
         onSuccess: (response) => {
           this.externalCategories = extractResponseData(response, []);
         },
@@ -783,9 +861,10 @@ export default {
       if (this.categoryPath.length === 0) return;
       this.externalCategorySearch = "";
       this.categoryPath.pop();
-      this.currentParentId = this.categoryPath.length > 0
-        ? this.categoryPath[this.categoryPath.length - 1].id
-        : null;
+      this.currentParentId =
+        this.categoryPath.length > 0
+          ? this.categoryPath[this.categoryPath.length - 1].id
+          : null;
       await this.searchExternalCategories();
     },
 
@@ -803,7 +882,9 @@ export default {
         externalCategoryId: "",
         externalCategoryName: "",
         name: "",
+        useAiMapping: true,
       };
+      // Do not clear wizard state here — it may be used right after create for the new flow
     },
 
     parseCredentials() {
@@ -848,9 +929,13 @@ export default {
         onSuccess: (response) => {
           this.testResult = extractResponseData(response, {});
           if (this.testResult.success) {
-            displaySonnerSuccess(this.testResult.message || "Подключение успешно");
+            displaySonnerSuccess(
+              this.testResult.message || "Подключение успешно",
+            );
           } else {
-            displaySonnerError(this.testResult.errorMessage || "Ошибка подключения");
+            displaySonnerError(
+              this.testResult.errorMessage || "Ошибка подключения",
+            );
           }
         },
         onError: (error) => {
@@ -861,26 +946,141 @@ export default {
     },
 
     async handleCreateMapping() {
-      if (!this.newMapping.localCategoryId || !this.newMapping.externalCategoryId) {
+      if (
+        !this.newMapping.localCategoryId ||
+        !this.newMapping.externalCategoryId
+      ) {
         displaySonnerError("Выберите обе категории");
         return;
       }
 
+      const useAi = this.newMapping.useAiMapping;
       this.isCreatingMapping = true;
       await this.createCategoryMapping({
         connectionId: this.connectionId,
         data: this.newMapping,
-        onSuccess: () => {
-          displaySonnerSuccess("Маппинг создан");
+        onSuccess: (response) => {
+          // useAxios resolves to a VueUse state object where .data is a ShallowRef — use .value to unbox
+          const newMappingId = response?.data?.value?.id ?? response?.data?.id;
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
           this.fetchMappings();
+
+          if (useAi && newMappingId) {
+            this.runAndSaveCompatibilityAnalysis(newMappingId);
+          } else {
+            displaySonnerSuccess("Маппинг создан");
+          }
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isCreatingMapping = false;
+    },
+
+    async runAndSaveCompatibilityAnalysis(mappingId) {
+      const { http } = await import("@/main");
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      try {
+        await http.post(`/ai/mapping-analyze/${mappingId}`, { operationId });
+        displaySonnerSuccess("Маппинг создан. Анализ совместимости запущен…", {
+          label: "Открыть прогресс",
+          onClick: () => this.$store.dispatch("operations/openPanel"),
+        });
+      } catch (error) {
+        displaySonnerError(error);
+      }
+    },
+
+    handleCompatibilityAnalyzeFinished(op) {
+      const match = op.title?.match(/#(\d+)\)/);
+      const mappingId = match ? parseInt(match[1], 10) : null;
+      if (!mappingId) return;
+
+      const summary = op.summary || "";
+      if (summary.includes("вопросов совместимости")) {
+        const countMatch = summary.match(/(\d+) вопросов/);
+        const count = countMatch ? countMatch[1] : "";
+        displaySonnerSuccess(
+          count
+            ? `Анализ завершён. ${count} вопросов о смысле данных.`
+            : "Анализ завершён. Есть вопросы о смысле данных.",
+          {
+            label: "Ответить",
+            onClick: () => this.openCompatibilityWizard(mappingId),
+          },
+        );
+        return;
+      }
+
+      if (summary.includes("вопросов нет")) {
+        this.startAiGeneration(mappingId);
+      }
+    },
+
+    openCompatibilityWizard(mappingId) {
+      this.wizardMappingId = mappingId;
+      this.showCompatibilityWizard = true;
+    },
+
+    // Starts the actual AI generation (with or without answers) and shows the background progress toast
+    async startAiGeneration(mappingId, answers = null) {
+      const { http } = await import("@/main");
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+
+      try {
+        const payload = { operationId };
+        if (answers && Object.keys(answers).length > 0) {
+          payload.answers = answers;
+        }
+
+        await http.post(`/ai/mapping-suggest/${mappingId}`, payload);
+
+        const msg = answers 
+          ? "Анализ совместимости завершён. AI генерирует осмысленные связи…"
+          : "AI генерирует маппинг…";
+
+        displaySonnerSuccess(msg, {
+          label: "Открыть прогресс",
+          onClick: () => this.$store.dispatch("operations/openPanel"),
+        });
+      } catch (error) {
+        displaySonnerError(error);
+      }
+    },
+
+    // Wizard handlers (PR4)
+    async submitCompatibilityWizard() {
+      if (!this.wizardMappingId) return;
+      const { http } = await import("@/main");
+      const answers = { ...this.wizardAnswers };
+      const operationId = crypto.randomUUID().replace(/-/g, "");
+      try {
+        await http.post(`/ai/mapping-suggest/${this.wizardMappingId}`, { operationId, answers });
+        this.showCompatibilityWizard = false;
+        this.wizardMappingId = null;
+        this.wizardQuestions = [];
+        this.wizardAnswers = {};
+        displaySonnerSuccess("Ответы отправлены. AI генерирует маппинг с учётом совместимости…", {
+          label: "Открыть прогресс",
+          onClick: () => this.$store.dispatch("operations/openPanel"),
+        });
+        this.fetchMappings();
+      } catch (error) {
+        displaySonnerError(error);
+      }
+    },
+
+    onWizardCompleted(payload) {
+      this.showCompatibilityWizard = false;
+      this.wizardMappingId = null;
+      this.fetchMappings();
+    },
+
+    onWizardCancel() {
+      this.showCompatibilityWizard = false;
+      this.wizardMappingId = null;
     },
 
     async handleCreateExternalCategoryMapping() {
@@ -899,7 +1099,9 @@ export default {
         connectionId: this.connectionId,
         data: {
           localCategoryId: this.newMapping.localCategoryId,
-          externalCategoryName: this.newMapping.externalCategoryName || this.selectedLocalCategory?.name,
+          externalCategoryName:
+            this.newMapping.externalCategoryName ||
+            this.selectedLocalCategory?.name,
           parentExternalCategoryId: this.currentParentId,
           mappingName: this.newMapping.name,
         },
@@ -918,21 +1120,27 @@ export default {
     },
 
     handleDeleteMapping(mapping) {
-      const target = typeof mapping === "object"
-        ? mapping
-        : this.categoryMappings.find((m) => m.id === mapping);
+      const target =
+        typeof mapping === "object"
+          ? mapping
+          : this.categoryMappings.find((m) => m.id === mapping);
 
       if (!target) return;
 
       if ((target.linkedProductsCount || 0) > 0) {
         this.deleteMappingTarget = target;
+        const replacements = this.categoryMappings.filter(
+          (m) =>
+            m.id !== target.id &&
+            m.localCategoryId === target.localCategoryId,
+        );
         this.deleteMappingImpact = {
           linkedProductsCount: target.linkedProductsCount,
-          replacementMappings: this.categoryMappings.filter((m) =>
-            m.id !== target.id && m.localCategoryId === target.localCategoryId
-          ),
+          replacementMappings: replacements,
         };
-        this.deleteMappingReplacementId = null;
+        // Default to the safe path when it exists; pre-select the first target
+        this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
+        this.deleteMappingReplacementId = replacements[0]?.id?.toString() ?? null;
         this.showDeleteMappingDialog = true;
         return;
       }
@@ -940,7 +1148,7 @@ export default {
       this.confirmDeleteMapping(target.id, null);
     },
 
-    async confirmDeleteMapping(mappingId = null, reassignToMappingId = null) {
+    async confirmDeleteMapping(mappingId = null, reassignToMappingId = null, force = false) {
       const targetId = mappingId || this.deleteMappingTarget?.id;
       if (!targetId) return;
 
@@ -949,11 +1157,17 @@ export default {
         connectionId: this.connectionId,
         mappingId: targetId,
         reassignToMappingId,
+        force,
         onSuccess: (response) => {
           const reassigned = response?.data?.reassignedProducts || 0;
-          displaySonnerSuccess(reassigned > 0
-            ? `Маппинг удалён, товары переназначены: ${reassigned}`
-            : "Маппинг удалён");
+          const detached = response?.data?.detachedProducts || 0;
+          displaySonnerSuccess(
+            reassigned > 0
+              ? `Маппинг удалён, товары перенесены: ${reassigned}`
+              : detached > 0
+                ? `Маппинг удалён, товаров без маппинга: ${detached}`
+                : "Маппинг удалён",
+          );
           this.showDeleteMappingDialog = false;
           this.deleteMappingTarget = null;
           this.deleteMappingImpact = null;
@@ -962,7 +1176,11 @@ export default {
         },
         onError: (error) => {
           if (error?.response?.status === 409 && error.response.data?.data) {
-            this.deleteMappingImpact = error.response.data.data;
+            const impact = error.response.data.data;
+            this.deleteMappingImpact = impact;
+            const replacements = impact.replacementMappings || [];
+            this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
+            this.deleteMappingReplacementId = replacements[0]?.id?.toString() ?? null;
             this.showDeleteMappingDialog = true;
           } else {
             displaySonnerError(error);
@@ -972,16 +1190,32 @@ export default {
       this.isDeletingMapping = false;
     },
 
-    async confirmDeleteMappingWithReassign() {
-      if (!this.deleteMappingReplacementId) {
-        displaySonnerError({ response: { data: { title: "Выберите маппинг для переназначения" } } });
+    confirmDeleteMappingChoice() {
+      if (this.deleteMappingMode === "force") {
+        this.confirmDeleteMapping(this.deleteMappingTarget?.id, null, true);
         return;
       }
-
-      await this.confirmDeleteMapping(
+      if (!this.deleteMappingReplacementId) {
+        displaySonnerError({
+          response: { data: { title: "Выберите маппинг, на который перенести товары" } },
+        });
+        return;
+      }
+      this.confirmDeleteMapping(
         this.deleteMappingTarget?.id,
-        parseInt(this.deleteMappingReplacementId)
+        parseInt(this.deleteMappingReplacementId),
       );
+    },
+
+    requestDuplicateMapping(mappingId) {
+      this.duplicateMappingId = mappingId;
+      this.showDuplicateMappingDialog = true;
+    },
+
+    confirmDuplicateMapping() {
+      if (this.duplicateMappingId != null) {
+        this.handleDuplicateMapping(this.duplicateMappingId);
+      }
     },
 
     async handleDuplicateMapping(mappingId) {
@@ -993,7 +1227,10 @@ export default {
         displaySonnerSuccess("Маппинг продублирован");
         this.fetchMappings();
       } catch (err) {
-        displaySonnerError("Ошибка дублирования: " + (err.response?.data?.message || err.message || err));
+        displaySonnerError(
+          "Ошибка дублирования: " +
+            (err.response?.data?.message || err.message || err),
+        );
       }
     },
 
@@ -1016,7 +1253,9 @@ export default {
         this.showRenameMappingDialog = false;
         this.fetchMappings();
       } catch (error) {
-        displaySonnerError(error.response?.data?.message || "Ошибка переименования");
+        displaySonnerError(
+          error.response?.data?.message || "Ошибка переименования",
+        );
       } finally {
         this.isRenamingMapping = false;
       }
@@ -1041,14 +1280,18 @@ export default {
         this.showMappingSettingsDialog = false;
         this.fetchMappings();
       } catch (error) {
-        displaySonnerError(error.response?.data?.message || "Ошибка сохранения");
+        displaySonnerError(
+          error.response?.data?.message || "Ошибка сохранения",
+        );
       } finally {
         this.isSavingMappingSettings = false;
       }
     },
 
     openFieldMapping(mappingId) {
-      this.$router.push(`/adapter/${this.connectionId}/categories/${mappingId}`);
+      this.$router.push(
+        `/adapter/${this.connectionId}/categories/${mappingId}`,
+      );
     },
 
     selectExternalCategory(category) {
@@ -1063,7 +1306,7 @@ export default {
 
       // Try exact match first
       let match = this.externalCategories.find(
-        (cat) => cat.name?.toLowerCase().trim() === normalizedName
+        (cat) => cat.name?.toLowerCase().trim() === normalizedName,
       );
 
       // If no exact match, try partial match (category name contains search or vice versa)
@@ -1071,7 +1314,7 @@ export default {
         match = this.externalCategories.find(
           (cat) =>
             cat.name?.toLowerCase().includes(normalizedName) ||
-            normalizedName.includes(cat.name?.toLowerCase())
+            normalizedName.includes(cat.name?.toLowerCase()),
         );
       }
 
@@ -1113,7 +1356,8 @@ export default {
     },
 
     async loadMoreProducts() {
-      if (!this.hasMoreProducts || !this.nextCursor || this.isLoadingMore) return;
+      if (!this.hasMoreProducts || !this.nextCursor || this.isLoadingMore)
+        return;
 
       this.isLoadingMore = true;
 
@@ -1187,7 +1431,11 @@ export default {
       const shouldSelect = checked === true;
 
       if (this.isShiftSelecting && this.lastSelectedExternalId) {
-        this.selectExternalRange(this.lastSelectedExternalId, externalId, shouldSelect);
+        this.selectExternalRange(
+          this.lastSelectedExternalId,
+          externalId,
+          shouldSelect,
+        );
         this.lastSelectedExternalId = externalId;
         this.isShiftSelecting = false;
         return;
@@ -1208,7 +1456,11 @@ export default {
 
       const shouldSelect = !this.isSelected(product.externalId);
       if (event?.shiftKey && this.lastSelectedExternalId) {
-        this.selectExternalRange(this.lastSelectedExternalId, product.externalId, shouldSelect);
+        this.selectExternalRange(
+          this.lastSelectedExternalId,
+          product.externalId,
+          shouldSelect,
+        );
       } else {
         this.toggleSelect(product.externalId, shouldSelect);
       }
@@ -1230,23 +1482,28 @@ export default {
         return;
       }
 
-      const [start, end] = anchorIndex < targetIndex
-        ? [anchorIndex, targetIndex]
-        : [targetIndex, anchorIndex];
+      const [start, end] =
+        anchorIndex < targetIndex
+          ? [anchorIndex, targetIndex]
+          : [targetIndex, anchorIndex];
       const rangeIds = ids.slice(start, end + 1);
 
       if (shouldSelect) {
-        this.selectedItems = Array.from(new Set([...this.selectedItems, ...rangeIds]));
+        this.selectedItems = Array.from(
+          new Set([...this.selectedItems, ...rangeIds]),
+        );
       } else {
         const rangeSet = new Set(rangeIds);
-        this.selectedItems = this.selectedItems.filter((id) => !rangeSet.has(id));
+        this.selectedItems = this.selectedItems.filter(
+          (id) => !rangeSet.has(id),
+        );
       }
     },
 
     isSelectionIgnoredClick(event) {
       const target = event?.target;
       return !!target?.closest?.(
-        'a, button, input, textarea, select, [role="button"], [role="checkbox"], [data-ignore-row-select]'
+        'a, button, input, textarea, select, [role="button"], [role="checkbox"], [data-ignore-row-select]',
       );
     },
 
@@ -1290,7 +1547,9 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
-            displaySonnerSuccess(`Обновлено: ${result.updatedFields.join(", ")}`);
+            displaySonnerSuccess(
+              `Обновлено: ${result.updatedFields.join(", ")}`,
+            );
           } else {
             displaySonnerSuccess("Изменений не обнаружено");
           }
@@ -1325,16 +1584,22 @@ export default {
     },
     allSingleImportFieldsIncluded() {
       if (!this.singleImportPreviewData?.updatedFields) return false;
-      return this.singleImportPreviewData.updatedFields.every((f) => !this.singleImportExcludedFields.has(f));
+      return this.singleImportPreviewData.updatedFields.every(
+        (f) => !this.singleImportExcludedFields.has(f),
+      );
     },
     allSingleImportFieldsExcluded() {
       if (!this.singleImportPreviewData?.updatedFields) return true;
-      return this.singleImportPreviewData.updatedFields.every((f) => this.singleImportExcludedFields.has(f));
+      return this.singleImportPreviewData.updatedFields.every((f) =>
+        this.singleImportExcludedFields.has(f),
+      );
     },
     toggleAllSingleImportFields() {
       if (!this.singleImportPreviewData?.updatedFields) return;
       if (this.allSingleImportFieldsIncluded()) {
-        this.singleImportExcludedFields = new Set(this.singleImportPreviewData.updatedFields);
+        this.singleImportExcludedFields = new Set(
+          this.singleImportPreviewData.updatedFields,
+        );
       } else {
         this.singleImportExcludedFields = new Set();
       }
@@ -1366,7 +1631,9 @@ export default {
         linkId: product.linkId,
         onSuccess: () => {
           displaySonnerSuccess("Товар отвязан от адаптера");
-          this.selectedItems = this.selectedItems.filter((id) => id !== product.externalId);
+          this.selectedItems = this.selectedItems.filter(
+            (id) => id !== product.externalId,
+          );
           this.fetchProducts(true);
           this.fetchLocalProducts();
         },
@@ -1426,12 +1693,16 @@ export default {
       for (const group of this.productsByExternalCategory) {
         const extCatId = group.externalCategoryId;
         if (!extCatId) {
-          this.categoryAssignments["__none__"] = { mode: "none", localCategoryId: null, newCategoryName: "" };
+          this.categoryAssignments["__none__"] = {
+            mode: "none",
+            localCategoryId: null,
+            newCategoryName: "",
+          };
           continue;
         }
 
         const existingMapping = this.existingMappings.find(
-          (m) => m.externalCategoryId === extCatId
+          (m) => m.externalCategoryId === extCatId,
         );
 
         if (existingMapping) {
@@ -1441,14 +1712,22 @@ export default {
             newCategoryName: group.externalCategoryName || "",
           };
         } else {
-          this.categoryAssignments[extCatId] = { mode: "new", localCategoryId: null, newCategoryName: group.externalCategoryName || "" };
+          this.categoryAssignments[extCatId] = {
+            mode: "new",
+            localCategoryId: null,
+            newCategoryName: group.externalCategoryName || "",
+          };
         }
       }
     },
 
     setAssignmentMode(extCatId, mode) {
       if (!this.categoryAssignments[extCatId]) {
-        this.categoryAssignments[extCatId] = { mode: "none", localCategoryId: null, newCategoryName: "" };
+        this.categoryAssignments[extCatId] = {
+          mode: "none",
+          localCategoryId: null,
+          newCategoryName: "",
+        };
       }
       this.categoryAssignments[extCatId].mode = mode;
       if (mode !== "existing") {
@@ -1458,13 +1737,18 @@ export default {
 
     setAssignmentCategory(extCatId, localCategoryId) {
       if (!this.categoryAssignments[extCatId]) {
-        this.categoryAssignments[extCatId] = { mode: "existing", localCategoryId: null };
+        this.categoryAssignments[extCatId] = {
+          mode: "existing",
+          localCategoryId: null,
+        };
       }
       this.categoryAssignments[extCatId].localCategoryId = localCategoryId;
     },
 
     getExistingMappingForCategory(extCatId) {
-      return this.existingMappings.find((m) => m.externalCategoryId === extCatId);
+      return this.existingMappings.find(
+        (m) => m.externalCategoryId === extCatId,
+      );
     },
 
     async handleImportWithCategories() {
@@ -1485,7 +1769,9 @@ export default {
           connectionName,
           totalItems: totalProducts,
         });
-      } catch { /* operation panel will still work via SignalR */ }
+      } catch {
+        /* operation panel will still work via SignalR */
+      }
 
       try {
         const categoryIdMap = {};
@@ -1494,12 +1780,16 @@ export default {
         for (const group of this.productsByExternalCategory) {
           // Check if operation was paused or stopped
           try {
-            const { data } = await http.get(`/operations/${operationId}/status`);
+            const { data } = await http.get(
+              `/operations/${operationId}/status`,
+            );
             if (data.status === "paused" || data.status === "cancelled") {
               cancelled = true;
               break;
             }
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
 
           const extCatId = group.externalCategoryId;
           const key = extCatId || "__none__";
@@ -1510,7 +1800,8 @@ export default {
           } else if (assignment.mode === "existing") {
             categoryIdMap[key] = assignment.localCategoryId;
           } else if (assignment.mode === "new") {
-            const categoryName = assignment.newCategoryName || group.externalCategoryName;
+            const categoryName =
+              assignment.newCategoryName || group.externalCategoryName;
             if (!categoryName) {
               categoryIdMap[key] = null;
               continue;
@@ -1522,7 +1813,8 @@ export default {
                 connectionId: this.connectionId,
                 data: {
                   externalCategoryId: extCatId,
-                  externalCategoryName: group.externalCategoryName || categoryName,
+                  externalCategoryName:
+                    group.externalCategoryName || categoryName,
                   localCategoryName: categoryName,
                   operationId,
                 },
@@ -1566,7 +1858,8 @@ export default {
             externalId: p.externalId,
             externalCategoryId: p.externalCategoryId || null,
             targetCategoryId: targetCategoryId || null,
-            forceImportWithoutMapping: !assignment || assignment.mode === "none",
+            forceImportWithoutMapping:
+              !assignment || assignment.mode === "none",
             productName: p.name || p.externalId,
           };
         });
@@ -1578,12 +1871,14 @@ export default {
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
             if (result.batchId) {
-              displaySonnerSuccess(`Добавлено в очередь: ${result.queued} товаров`);
+              displaySonnerSuccess(
+                `Добавлено в очередь: ${result.queued} товаров`,
+              );
               this.showImportDialog = false;
               this.selectedItems = [];
             } else {
               displaySonnerSuccess(
-                `Создано: ${result.imported || 0}, пропущено: ${result.skipped || 0}, ошибок: ${result.failed || 0}`
+                `Создано: ${result.imported || 0}, пропущено: ${result.skipped || 0}, ошибок: ${result.failed || 0}`,
               );
               this.showImportDialog = false;
               this.selectedItems = [];
@@ -1643,7 +1938,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Импортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`
+            `Импортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`,
           );
           this.selectedItems = [];
         },
@@ -1681,7 +1976,9 @@ export default {
         const needsSelection = resolved.products.some((p) => p.needsSelection);
 
         if (needsSelection) {
-          this.mappingSelectionProducts = resolved.products.filter((p) => p.needsSelection);
+          this.mappingSelectionProducts = resolved.products.filter(
+            (p) => p.needsSelection,
+          );
           this.mappingSelections = {};
           this.pendingExportType = "existing";
           this.pendingExportProductIds = productIds;
@@ -1689,7 +1986,10 @@ export default {
           return;
         }
       } catch (error) {
-        displaySonnerError("Ошибка проверки маппингов: " + (error.response?.data?.message || error.message));
+        displaySonnerError(
+          "Ошибка проверки маппингов: " +
+            (error.response?.data?.message || error.message),
+        );
         return;
       } finally {
         this.isResolvingMappings = false;
@@ -1703,14 +2003,16 @@ export default {
       try {
         const response = await http.post(
           `/marketplace/connections/${this.connectionId}/products/export-batch`,
-          { productIds }
+          { productIds },
         );
         const result = response.data;
 
         displaySonnerSuccess(result.message);
         this.selectedItems = [];
       } catch (error) {
-        displaySonnerError(error.response?.data?.message || "Ошибка создания пакета экспорта");
+        displaySonnerError(
+          error.response?.data?.message || "Ошибка создания пакета экспорта",
+        );
       } finally {
         this.isExportingBulk = false;
       }
@@ -1732,7 +2034,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано цен: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
+            `Экспортировано цен: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`,
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -1760,7 +2062,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано остатков: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`
+            `Экспортировано остатков: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`,
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -1848,7 +2150,11 @@ export default {
 
       const shouldSelect = !this.isLocalSelected(product.id);
       if (event?.shiftKey && this.lastSelectedLocalId) {
-        this.selectLocalRange(this.lastSelectedLocalId, product.id, shouldSelect);
+        this.selectLocalRange(
+          this.lastSelectedLocalId,
+          product.id,
+          shouldSelect,
+        );
       } else {
         this.toggleSelectLocal(product.id, shouldSelect);
       }
@@ -1871,9 +2177,10 @@ export default {
         return;
       }
 
-      const [start, end] = anchorIndex < targetIndex
-        ? [anchorIndex, targetIndex]
-        : [targetIndex, anchorIndex];
+      const [start, end] =
+        anchorIndex < targetIndex
+          ? [anchorIndex, targetIndex]
+          : [targetIndex, anchorIndex];
       const next = { ...this.selectedLocalItemsMap };
 
       for (const id of ids.slice(start, end + 1)) {
@@ -1909,7 +2216,9 @@ export default {
         const needsSelection = resolved.products.some((p) => p.needsSelection);
 
         if (needsSelection) {
-          this.mappingSelectionProducts = resolved.products.filter((p) => p.needsSelection);
+          this.mappingSelectionProducts = resolved.products.filter(
+            (p) => p.needsSelection,
+          );
           this.mappingSelections = {};
           this.pendingExportType = "new";
           this.pendingExportProductIds = [...productIds];
@@ -1917,7 +2226,10 @@ export default {
           return;
         }
       } catch (error) {
-        displaySonnerError("Ошибка проверки маппингов: " + (error.response?.data?.message || error.message));
+        displaySonnerError(
+          "Ошибка проверки маппингов: " +
+            (error.response?.data?.message || error.message),
+        );
         return;
       } finally {
         this.isResolvingMappings = false;
@@ -1931,14 +2243,16 @@ export default {
       try {
         const response = await http.post(
           `/marketplace/connections/${this.connectionId}/products/export-batch`,
-          { productIds }
+          { productIds },
         );
         const result = response.data;
 
         displaySonnerSuccess(result.message);
         this.selectedLocalItemsMap = {};
       } catch (error) {
-        displaySonnerError(error.response?.data?.message || "Ошибка создания пакета экспорта");
+        displaySonnerError(
+          error.response?.data?.message || "Ошибка создания пакета экспорта",
+        );
       } finally {
         this.isExportingNewBulk = false;
         this.exportNewBulkProgress = null;
@@ -1948,19 +2262,23 @@ export default {
     async confirmMappingSelections() {
       // Validate all products have a selection
       const unselected = this.mappingSelectionProducts.filter(
-        (p) => !this.mappingSelections[p.productId]
+        (p) => !this.mappingSelections[p.productId],
       );
       if (unselected.length > 0) {
-        displaySonnerError(`Выберите маппинг для всех товаров (осталось: ${unselected.length})`);
+        displaySonnerError(
+          `Выберите маппинг для всех товаров (осталось: ${unselected.length})`,
+        );
         return;
       }
 
       this.isSavingMappingSelections = true;
       try {
-        const selections = Object.entries(this.mappingSelections).map(([productId, categoryMappingId]) => ({
-          productId: parseInt(productId),
-          categoryMappingId,
-        }));
+        const selections = Object.entries(this.mappingSelections).map(
+          ([productId, categoryMappingId]) => ({
+            productId: parseInt(productId),
+            categoryMappingId,
+          }),
+        );
 
         await this.saveMappingSelections({
           connectionId: this.connectionId,
@@ -1976,7 +2294,10 @@ export default {
           await this.executeExportBulk(this.pendingExportProductIds);
         }
       } catch (error) {
-        displaySonnerError("Ошибка сохранения выбора маппингов: " + (error.response?.data?.message || error.message));
+        displaySonnerError(
+          "Ошибка сохранения выбора маппингов: " +
+            (error.response?.data?.message || error.message),
+        );
       } finally {
         this.isSavingMappingSelections = false;
       }
@@ -2020,22 +2341,57 @@ export default {
 
     getStatusInfo(product) {
       if (!product.isLinked) {
-        return { variant: "secondary", icon: Package, label: "Не связан", color: "text-muted-foreground" };
+        return {
+          variant: "secondary",
+          icon: Package,
+          label: "Не связан",
+          color: "text-muted-foreground",
+        };
       }
       if (product.mappingMissing) {
-        return { variant: "destructive", icon: AlertTriangle, label: "Нет маппинга", color: "text-error" };
+        return {
+          variant: "destructive",
+          icon: AlertTriangle,
+          label: "Нет маппинга",
+          color: "text-error",
+        };
       }
       switch (product.linkStatus) {
         case "Synced":
-          return { variant: "default", icon: CheckCircle, label: "Синхронизирован", color: "text-success" };
+          return {
+            variant: "default",
+            icon: CheckCircle,
+            label: "Синхронизирован",
+            color: "text-success",
+          };
         case "NotSynced":
-          return { variant: "secondary", icon: AlertTriangle, label: "Не синхронизирован", color: "text-muted-foreground" };
+          return {
+            variant: "secondary",
+            icon: AlertTriangle,
+            label: "Не синхронизирован",
+            color: "text-muted-foreground",
+          };
         case "SyncError":
-          return { variant: "destructive", icon: XCircle, label: "Ошибка", color: "text-error" };
+          return {
+            variant: "destructive",
+            icon: XCircle,
+            label: "Ошибка",
+            color: "text-error",
+          };
         case "Modified":
-          return { variant: "outline", icon: AlertTriangle, label: "Изменён", color: "text-warning" };
+          return {
+            variant: "outline",
+            icon: AlertTriangle,
+            label: "Изменён",
+            color: "text-warning",
+          };
         default:
-          return { variant: "secondary", icon: Package, label: product.linkStatus || "—", color: "text-muted-foreground" };
+          return {
+            variant: "secondary",
+            icon: Package,
+            label: product.linkStatus || "—",
+            color: "text-muted-foreground",
+          };
       }
     },
 
@@ -2057,8 +2413,24 @@ export default {
   mounted() {
     this.fetchData();
 
+    this.unsubscribeOps = this.$store.subscribe((mutation) => {
+      if (mutation.type !== "operations/FINISH_OPERATION") return;
+      const op = this.$store.state.operations.operations.find(
+        (o) => o.id === mutation.payload.id,
+      );
+      if (op?.type !== "ai-compatibility") return;
+      this.handleCompatibilityAnalyzeFinished(op);
+    });
+
     // Handle query params
-    const { tab, ePage, lPage, createMapping, localCategoryId, localCategoryName } = this.$route.query;
+    const {
+      tab,
+      ePage,
+      lPage,
+      createMapping,
+      localCategoryId,
+      localCategoryName,
+    } = this.$route.query;
 
     if (tab) {
       this.activeTab = tab;
@@ -2092,8 +2464,8 @@ export default {
               ...this.$route.query,
               createMapping: undefined,
               localCategoryId: undefined,
-              localCategoryName: undefined
-            }
+              localCategoryName: undefined,
+            },
           });
         }
       }, 100);
@@ -2102,7 +2474,9 @@ export default {
     }
   },
   beforeUnmount() {
+    this.unsubscribeOps?.();
     this.stopLimitsAutoRefresh();
+    this.$store.commit("aiChat/clearPageContext");
   },
 };
 </script>
@@ -2115,7 +2489,9 @@ export default {
           <TabsList>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
             <TabsTrigger value="mappings">Маппинги</TabsTrigger>
-            <TabsTrigger value="products" @click="onProductsTabActivated">Товары</TabsTrigger>
+            <TabsTrigger value="products" @click="onProductsTabActivated"
+              >Товары</TabsTrigger
+            >
           </TabsList>
         </Tabs>
       </template>
@@ -2123,852 +2499,1145 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageSection :loading="isLoading" class="flex flex-col">
-    <div v-if="connection" class="flex flex-col flex-1">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-4">
-          <Button variant="ghost" size="icon" @click="$router.push(PAGE_MARKETPLACE)">
-            <ArrowLeft class="size-4" />
-          </Button>
-          <div>
-            <h1 class="text-lg font-semibold">{{ connection.name }}</h1>
-            <p class="text-sm text-muted-foreground">{{ adapterDisplayName }}</p>
-          </div>
-          <Badge :variant="connection.isActive ? 'default' : 'secondary'">
-            {{ connection.isActive ? "Активен" : "Неактивен" }}
-          </Badge>
-        </div>
-      </div>
-
-      <Tabs v-model="activeTab"  class="w-full flex-1 flex flex-col">
-        <!-- Settings Tab -->
-        <TabsContent value="settings" class="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle class="flex items-center gap-2">
-                <Settings class="size-5" />
-                Настройки подключения
-              </CardTitle>
-            </CardHeader>
-            <CardContent class="space-y-4">
-              <div class="space-y-2">
-                <Label>Название</Label>
-                <Input v-model="connection.name" />
-              </div>
-
-              <div class="flex items-center gap-2">
-                <Switch :model-value="connection.isActive" @update:model-value="connection.isActive = $event" id="active" />
-                <Label for="active">Активное подключение</Label>
-              </div>
-
-              <template v-if="credentialFields?.length">
-                <div class="border-t pt-4">
-                  <h3 class="font-medium mb-4">Данные для подключения</h3>
-                  <div
-                    v-for="field in credentialFields"
-                    :key="field.key"
-                    class="space-y-2 mb-4"
-                  >
-                    <Label>
-                      {{ field.displayName }}
-                      <span v-if="field.isRequired" class="text-destructive">*</span>
-                    </Label>
-                    <PasswordInput
-                      v-if="field.isSecret"
-                      v-model="credentialValues[field.key]"
-                      :placeholder="field.placeholder || field.description"
-                    />
-                    <Input
-                      v-else
-                      v-model="credentialValues[field.key]"
-                      type="text"
-                      :placeholder="field.placeholder || field.description"
-                    />
-                  </div>
+      <div v-if="connection" class="flex flex-col flex-1">
+        <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col">
+          <!-- Settings Tab -->
+          <TabsContent value="settings" class="space-y-4">
+            <h2 class="sr-only">Настройки подключения</h2>
+            <Card>
+              <CardHeader>
+                <CardTitle class="flex items-center gap-2">
+                  <Settings class="size-5" />
+                  Настройки подключения
+                </CardTitle>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="space-y-2">
+                  <Label>Название</Label>
+                  <Input v-model="connection.name" />
                 </div>
-              </template>
 
-              <div class="flex gap-2 pt-4">
-                <Button @click="handleSave" :disabled="isSaving">
-                  <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-                  <Save v-else class="size-4 mr-2" />
-                  Сохранить
-                </Button>
-                <Button variant="outline" @click="handleTest" :disabled="isTesting">
-                  <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
-                  <TestTube v-else class="size-4 mr-2" />
-                  Тест соединения
-                </Button>
-                <Dialog v-model:open="showLimitsDialog">
-                  <DialogTrigger as-child>
-                    <Button variant="outline" :disabled="!limitsData">
-                      <Activity class="size-4 mr-2" />
-                      API Лимиты
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent size="lg">
-                    <DialogHeader>
-                      <DialogTitle>API Лимиты</DialogTitle>
-                      <DialogDescription>
-                        {{ limitsData && !limitsData.supported ? 'Адаптер не поддерживает отслеживание лимитов' : 'Текущие лимиты API адаптера' }}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div v-if="limitsData && limitsData.supported" class="space-y-6">
-                      <!-- RPS Gauge -->
-                      <div class="space-y-2">
-                        <div class="flex items-center justify-between text-sm">
-                          <div class="flex items-center gap-2">
-                            <Gauge class="size-4 text-muted-foreground" />
-                            <span class="font-medium">Запросов в секунду</span>
-                          </div>
-                          <span class="text-muted-foreground">
-                            {{ limitsData.currentWindowRequests }} / {{ limitsData.maxRequestsPerSecond }} RPS
-                          </span>
-                        </div>
-                        <div class="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            class="h-full rounded-full transition-all duration-300"
-                            :class="getRpsColor(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond)"
-                            :style="{ width: Math.min(100, (limitsData.currentWindowRequests / limitsData.maxRequestsPerSecond) * 100) + '%' }"
-                          />
-                        </div>
-                        <div class="text-xs text-muted-foreground">
-                          Всего запросов с момента запуска: {{ limitsData.totalRequestsSinceStart.toLocaleString('ru-RU') }}
-                        </div>
-                      </div>
+                <div class="flex items-center gap-2">
+                  <Switch
+                    :model-value="connection.isActive"
+                    @update:model-value="connection.isActive = $event"
+                    id="active"
+                  />
+                  <Label for="active">Активное подключение</Label>
+                </div>
 
-                      <!-- Quota Bars -->
-                      <div v-if="limitsData.quotas?.length > 0" class="space-y-4">
-                        <Separator />
-                        <div
-                          v-for="quota in limitsData.quotas"
-                          :key="quota.key"
-                          class="space-y-2"
+                <template v-if="credentialFields?.length">
+                  <div class="border-t pt-4">
+                    <h3 class="font-medium mb-4">Данные для подключения</h3>
+                    <div
+                      v-for="field in credentialFields"
+                      :key="field.key"
+                      class="space-y-2 mb-4"
+                    >
+                      <Label>
+                        {{ field.displayName }}
+                        <span v-if="field.isRequired" class="text-destructive"
+                          >*</span
                         >
-                          <div class="flex items-center justify-between text-sm">
-                            <span class="font-medium">{{ quota.displayName }}</span>
-                            <span v-if="quota.limit < 0" class="text-muted-foreground">
-                              {{ quota.usage.toLocaleString('ru-RU') }} (безлимитный)
-                            </span>
-                            <span v-else class="text-muted-foreground">
-                              {{ quota.usage.toLocaleString('ru-RU') }} / {{ quota.limit.toLocaleString('ru-RU') }}
+                      </Label>
+                      <PasswordInput
+                        v-if="field.isSecret"
+                        v-model="credentialValues[field.key]"
+                        :placeholder="field.placeholder || field.description"
+                      />
+                      <Input
+                        v-else
+                        v-model="credentialValues[field.key]"
+                        type="text"
+                        :placeholder="field.placeholder || field.description"
+                      />
+                    </div>
+                  </div>
+                </template>
+
+                <div class="flex gap-2 pt-4">
+                  <Button @click="handleSave" :disabled="isSaving">
+                    <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+                    <Save v-else class="size-4 mr-2" />
+                    Сохранить
+                  </Button>
+                  <Button
+                    variant="outline"
+                    @click="handleTest"
+                    :disabled="isTesting"
+                  >
+                    <Loader2
+                      v-if="isTesting"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <TestTube v-else class="size-4 mr-2" />
+                    Тест соединения
+                  </Button>
+                  <Dialog v-model:open="showLimitsDialog">
+                    <DialogTrigger as-child>
+                      <Button variant="outline" :disabled="!limitsData">
+                        <Activity class="size-4 mr-2" />
+                        API Лимиты
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent size="lg">
+                      <DialogHeader>
+                        <DialogTitle>API Лимиты</DialogTitle>
+                        <DialogDescription>
+                          {{
+                            limitsData && !limitsData.supported
+                              ? "Адаптер не поддерживает отслеживание лимитов"
+                              : "Текущие лимиты API адаптера"
+                          }}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div
+                        v-if="limitsData && limitsData.supported"
+                        class="space-y-6"
+                      >
+                        <!-- RPS Gauge -->
+                        <div class="space-y-2">
+                          <div
+                            class="flex items-center justify-between text-sm"
+                          >
+                            <div class="flex items-center gap-2">
+                              <Gauge class="size-4 text-muted-foreground" />
+                              <span class="font-medium"
+                                >Запросов в секунду</span
+                              >
+                            </div>
+                            <span class="text-muted-foreground">
+                              {{ limitsData.currentWindowRequests }} /
+                              {{ limitsData.maxRequestsPerSecond }} RPS
                             </span>
                           </div>
-                          <div v-if="quota.limit > 0" class="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            class="h-2 bg-muted rounded-full overflow-hidden"
+                          >
                             <div
                               class="h-full rounded-full transition-all duration-300"
-                              :class="getQuotaColor(quota.usage, quota.limit)"
-                              :style="{ width: Math.min(100, (quota.usage / quota.limit) * 100) + '%' }"
+                              :class="
+                                getRpsColor(
+                                  limitsData.currentWindowRequests,
+                                  limitsData.maxRequestsPerSecond,
+                                )
+                              "
+                              :style="{
+                                width:
+                                  Math.min(
+                                    100,
+                                    (limitsData.currentWindowRequests /
+                                      limitsData.maxRequestsPerSecond) *
+                                      100,
+                                  ) + '%',
+                              }"
                             />
                           </div>
-                          <div v-if="quota.resetsAt" class="text-xs text-muted-foreground">
-                            Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                          <div class="text-xs text-muted-foreground">
+                            Всего запросов с момента запуска:
+                            {{
+                              limitsData.totalRequestsSinceStart.toLocaleString(
+                                "ru-RU",
+                              )
+                            }}
+                          </div>
+                        </div>
+
+                        <!-- Quota Bars -->
+                        <div
+                          v-if="limitsData.quotas?.length > 0"
+                          class="space-y-4"
+                        >
+                          <Separator />
+                          <div
+                            v-for="quota in limitsData.quotas"
+                            :key="quota.key"
+                            class="space-y-2"
+                          >
+                            <div
+                              class="flex items-center justify-between text-sm"
+                            >
+                              <span class="font-medium">{{
+                                quota.displayName
+                              }}</span>
+                              <span
+                                v-if="quota.limit < 0"
+                                class="text-muted-foreground"
+                              >
+                                {{ quota.usage.toLocaleString("ru-RU") }}
+                                (безлимитный)
+                              </span>
+                              <span v-else class="text-muted-foreground">
+                                {{ quota.usage.toLocaleString("ru-RU") }} /
+                                {{ quota.limit.toLocaleString("ru-RU") }}
+                              </span>
+                            </div>
+                            <div
+                              v-if="quota.limit > 0"
+                              class="h-2 bg-muted rounded-full overflow-hidden"
+                            >
+                              <div
+                                class="h-full rounded-full transition-all duration-300"
+                                :class="getQuotaColor(quota.usage, quota.limit)"
+                                :style="{
+                                  width:
+                                    Math.min(
+                                      100,
+                                      (quota.usage / quota.limit) * 100,
+                                    ) + '%',
+                                }"
+                              />
+                            </div>
+                            <div
+                              v-if="quota.resetsAt"
+                              class="text-xs text-muted-foreground"
+                            >
+                              Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div v-if="testResult" class="mt-4 p-4 rounded-lg" :class="testResult.success ? 'bg-success-muted border-success/30' : 'bg-error-muted border-error/30'">
-                <div class="flex items-center gap-2">
-                  <CheckCircle v-if="testResult.success" class="size-5 text-success-foreground" />
-                  <XCircle v-else class="size-5 text-error-foreground" />
-                  <span :class="testResult.success ? 'text-success-foreground' : 'text-error-foreground'">
-                    {{ testResult.success ? testResult.message || 'Подключение успешно' : testResult.errorMessage || 'Ошибка подключения' }}
-                  </span>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card v-if="capabilities">
-            <CardHeader>
-              <CardTitle>Возможности адаптера</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                <div v-for="(value, key) in capabilities.capabilities" :key="key" class="flex items-center gap-2">
-                  <CheckCircle v-if="value" class="size-4 text-success-foreground" />
-                  <XCircle v-else class="size-4 text-muted-foreground/50" />
-                  <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
+                <div
+                  v-if="testResult"
+                  class="mt-4 p-4 rounded-lg border"
+                  :class="
+                    testResult.success
+                      ? 'bg-success-muted border-success/30'
+                      : 'bg-error-muted border-error/30'
+                  "
+                >
+                  <div class="flex items-center gap-2">
+                    <CheckCircle
+                      v-if="testResult.success"
+                      class="size-5 text-success-foreground"
+                    />
+                    <XCircle v-else class="size-5 text-error-foreground" />
+                    <span
+                      :class="
+                        testResult.success
+                          ? 'text-success-foreground'
+                          : 'text-error-foreground'
+                      "
+                    >
+                      {{
+                        testResult.success
+                          ? testResult.message || "Подключение успешно"
+                          : testResult.errorMessage || "Ошибка подключения"
+                      }}
+                    </span>
+                    <AiErrorExplainer
+                      v-if="!testResult.success && (testResult.errorMessage || 'Ошибка подключения')"
+                      :error-message="testResult.errorMessage || 'Ошибка подключения'"
+                      :context="`test_connection`"
+                      :connection-id="connection?.id"
+                    />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
 
-        <!-- Mappings Tab -->
-        <TabsContent value="mappings" class="space-y-4">
-          <div class="flex justify-end gap-2">
-            <Dialog v-model:open="showCreateMappingDialog" @update:open="$event && onCategoryDialogOpen()">
-              <DialogTrigger as-child>
-                <Button variant="outline">
-                  <Link class="size-4 mr-2" />
-                  Создать маппинг
-                </Button>
-              </DialogTrigger>
-              <DialogContent class="sm:max-w-4xl md:max-w-6xl">
-                <DialogHeader>
-                  <DialogTitle>Создать маппинг</DialogTitle>
-                  <DialogDescription>
-                    Выберите локальную категорию и категорию адаптера для связывания
-                  </DialogDescription>
-                </DialogHeader>
-                <div class="py-4 space-y-4">
-                  <div class="space-y-2">
-                    <Label>Локальная категория</Label>
-                    <Select v-model="newMapping.localCategoryId">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Выберите категорию" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem
-                          v-for="cat in localCategories"
-                          :key="cat.id"
-                          :value="cat.id"
-                        >
-                          {{ cat.name }}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p v-if="selectedLocalCategory" class="text-xs text-muted-foreground">
-                      Атрибутов: {{ selectedLocalCategory.attributesCount || 0 }}
-                    </p>
-                  </div>
-
-                  <div class="space-y-2">
-                    <Label>Категория адаптера</Label>
-                    <div class="flex gap-2">
-                      <Input
-                        v-model="externalCategorySearch"
-                        placeholder="Поиск по названию..."
-                        @keyup.enter="searchExternalCategories"
-                      />
-                      <Button variant="outline" size="icon" @click="searchExternalCategories">
-                        <Search class="size-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div v-if="categoryPath.length > 0 && !externalCategorySearch" class="flex items-center gap-1 text-sm flex-wrap">
-                    <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
-                      <Home class="size-3" />
-                    </Button>
-                    <ChevronRight class="size-3 text-muted-foreground" />
-                    <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 px-2 text-xs"
-                        :disabled="index === categoryPath.length - 1"
-                        @click="navigateToPathIndex(index)"
-                      >
-                        {{ pathItem.name }}
-                      </Button>
-                      <ChevronRight v-if="index < categoryPath.length - 1" class="size-3 text-muted-foreground" />
-                    </template>
-                  </div>
-
-                  <Button
-                    v-if="categoryPath.length > 0 && !externalCategorySearch"
-                    variant="outline"
-                    size="sm"
-                    @click="navigateBack"
-                    class="w-full justify-start"
+            <Card v-if="capabilities">
+              <CardHeader>
+                <CardTitle>Возможности адаптера</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div
+                    v-for="(value, key) in capabilities.capabilities"
+                    :key="key"
+                    class="flex items-center gap-2"
                   >
-                    <ChevronLeft class="size-4 mr-2" />
-                    Назад
-                  </Button>
+                    <CheckCircle
+                      v-if="value"
+                      class="size-4 text-success-foreground"
+                    />
+                    <XCircle v-else class="size-4 text-muted-foreground" />
+                    <span class="text-sm">{{
+                      capabilityLabels[key] || key
+                    }}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  <div class="border rounded-lg max-h-48 overflow-y-auto">
-                    <div v-if="isLoadingCategories" class="flex justify-center py-8">
-                      <Loader2 class="size-6 animate-spin text-muted-foreground" />
+          <!-- Mappings Tab -->
+          <TabsContent value="mappings" class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">Маппинги категорий</h2>
+                <Badge v-if="categoryMappings.length" variant="secondary">
+                  {{ categoryMappings.length }}
+                </Badge>
+              </div>
+              <div class="flex shrink-0 flex-wrap gap-2">
+                <Dialog
+                  v-model:open="showCreateMappingDialog"
+                  @update:open="$event && onCategoryDialogOpen()"
+                >
+                  <DialogTrigger as-child>
+                    <Button variant="outline">
+                      <Link class="size-4 mr-2" />
+                      Создать маппинг
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent class="sm:max-w-5xl">
+                    <DialogHeader>
+                      <DialogTitle>Создать маппинг</DialogTitle>
+                    </DialogHeader>
+
+                    <!-- Название -->
+                    <div class="space-y-1.5">
+                      <Label>Название маппинга <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
+                      <Input
+                        v-model="newMapping.name"
+                        placeholder="Например: Стандарт, Премиум..."
+                      />
                     </div>
-                    <div v-else-if="externalCategories.length === 0" class="text-center py-8 text-muted-foreground text-sm space-y-3">
-                      <div>
-                        <p>Категории не найдены</p>
-                        <p v-if="capabilities?.capabilities?.createCategory && selectedLocalCategory" class="text-xs">
-                          Можно создать категорию в {{ adapterDisplayName }} из выбранной локальной категории
+
+                    <!-- Двуколоночный выбор категорий -->
+                    <div class="grid grid-cols-2 gap-5 min-h-[320px]">
+                      <!-- Левая: локальная категория -->
+                      <div class="flex flex-col gap-2 min-h-0">
+                        <Label>Локальная категория</Label>
+                        <div class="border rounded-lg overflow-y-auto flex-1 max-h-[320px]">
+                          <div
+                            v-for="cat in localCategories"
+                            :key="cat.id"
+                            class="p-2.5 cursor-pointer border-b last:border-b-0 flex items-center justify-between hover:bg-accent transition-colors"
+                            :class="{ 'bg-accent': newMapping.localCategoryId === cat.id }"
+                            @click="newMapping.localCategoryId = cat.id"
+                          >
+                            <span class="text-sm font-medium truncate">{{ cat.name }}</span>
+                            <span v-if="cat.attributesCount" class="text-xs text-muted-foreground ml-2 shrink-0">{{ cat.attributesCount }} атр.</span>
+                          </div>
+                          <div v-if="!localCategories.length" class="text-center py-8 text-muted-foreground text-sm">
+                            Нет категорий
+                          </div>
+                        </div>
+                        <p v-if="selectedLocalCategory" class="text-xs text-muted-foreground">
+                          Выбрано: <strong>{{ selectedLocalCategory.name }}</strong> ({{ selectedLocalCategory.attributesCount || 0 }} атр.)
                         </p>
                       </div>
+
+                      <!-- Правая: категория адаптера -->
+                      <div class="flex flex-col gap-2 min-h-0">
+                        <Label>Категория {{ adapterDisplayName }}</Label>
+
+                        <!-- Поиск -->
+                        <div class="flex gap-2">
+                          <Input
+                            v-model="externalCategorySearch"
+                            placeholder="Поиск по названию..."
+                            @keyup.enter="searchExternalCategories"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Найти категории"
+                            @click="searchExternalCategories"
+                          >
+                            <Search class="size-4" />
+                          </Button>
+                        </div>
+
+                        <!-- Breadcrumb path -->
+                        <div
+                          v-if="categoryPath.length > 0 && !externalCategorySearch"
+                          class="flex items-center gap-1 text-sm flex-wrap"
+                        >
+                          <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
+                            <Home class="size-3" />
+                          </Button>
+                          <ChevronRight class="size-3 text-muted-foreground" />
+                          <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
+                            <Button
+                              variant="ghost" size="sm" class="h-7 px-2 text-xs"
+                              :disabled="index === categoryPath.length - 1"
+                              @click="navigateToPathIndex(index)"
+                            >{{ pathItem.name }}</Button>
+                            <ChevronRight v-if="index < categoryPath.length - 1" class="size-3 text-muted-foreground" />
+                          </template>
+                        </div>
+
+                        <!-- Кнопка Назад -->
+                        <Button
+                          v-if="categoryPath.length > 0 && !externalCategorySearch"
+                          variant="outline" size="sm" class="w-full justify-start"
+                          @click="navigateBack"
+                        >
+                          <ChevronLeft class="size-4 mr-2" />
+                          Назад
+                        </Button>
+
+                        <!-- Список категорий адаптера -->
+                        <div class="border rounded-lg overflow-y-auto flex-1 max-h-[240px]">
+                          <div v-if="isLoadingCategories" class="flex justify-center py-8">
+                            <Loader2 class="size-6 animate-spin text-muted-foreground" />
+                          </div>
+                          <EmptyState
+                            v-else-if="externalCategories.length === 0"
+                            size="sm"
+                            title="Категории не найдены"
+                            :description="
+                              capabilities?.capabilities?.createCategory && selectedLocalCategory
+                                ? `Измените запрос или создайте категорию в ${adapterDisplayName}.`
+                                : 'Измените поисковый запрос.'
+                            "
+                          >
+                            <template #icon>
+                              <Search />
+                            </template>
+                            <Button
+                              v-if="capabilities?.capabilities?.createCategory"
+                              size="sm" variant="outline"
+                              :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                              @click="handleCreateExternalCategoryMapping"
+                            >
+                              <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                              <FolderTree v-else class="size-4 mr-2" />
+                              {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
+                            </Button>
+                          </EmptyState>
+                          <div
+                            v-else
+                            v-for="cat in externalCategories"
+                            :key="cat.id"
+                            class="p-2 hover:bg-accent cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
+                            :class="{ 'bg-accent': newMapping.externalCategoryId === cat.id }"
+                            @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
+                          >
+                            <div class="flex-1 min-w-0">
+                              <div class="text-sm font-medium truncate">{{ cat.name }}</div>
+                              <div v-if="cat.fullPath" class="text-xs text-muted-foreground truncate">{{ cat.fullPath }}</div>
+                            </div>
+                            <ChevronRight v-if="cat.hasChildren && !externalCategorySearch" class="size-4 text-muted-foreground flex-shrink-0 ml-2" />
+                          </div>
+                        </div>
+
+                        <p v-if="newMapping.externalCategoryId" class="text-xs text-muted-foreground">
+                          Выбрано: <strong>{{ newMapping.externalCategoryName || newMapping.externalCategoryId }}</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <!-- AI-чекбокс -->
+                    <div class="flex items-center gap-2 pt-1">
+                      <Checkbox id="useAiMapping" v-model="newMapping.useAiMapping" />
+                      <Label for="useAiMapping" class="cursor-pointer font-normal text-sm">
+                        Использовать умный AI-маппинг с анализом совместимости (рекомендуется)
+                      </Label>
+                    </div>
+
+                    <DialogFooter>
+                      <DialogClose as-child>
+                        <Button variant="outline">Отмена</Button>
+                      </DialogClose>
                       <Button
                         v-if="capabilities?.capabilities?.createCategory"
-                        size="sm"
                         variant="outline"
-                        :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
                         @click="handleCreateExternalCategoryMapping"
+                        :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
                       >
                         <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
                         <FolderTree v-else class="size-4 mr-2" />
-                        {{ isCreatingExternalCategory ? 'Создание...' : `Создать в ${adapterDisplayName}` }}
+                        {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
                       </Button>
-                    </div>
-                    <div
-                      v-else
-                      v-for="cat in externalCategories"
-                      :key="cat.id"
-                      class="p-2 hover:bg-accent cursor-pointer border-b last:border-b-0 flex items-center justify-between"
-                      :class="{ 'bg-accent': newMapping.externalCategoryId === cat.id }"
-                      @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
-                    >
-                      <div class="flex-1 min-w-0">
-                        <div class="font-medium truncate">{{ cat.name }}</div>
-                        <div v-if="cat.fullPath" class="text-xs text-muted-foreground truncate">{{ cat.fullPath }}</div>
-                      </div>
-                      <ChevronRight v-if="cat.hasChildren && !externalCategorySearch" class="size-4 text-muted-foreground flex-shrink-0 ml-2" />
-                    </div>
-                  </div>
+                      <Button
+                        @click="handleCreateMapping"
+                        :disabled="isCreatingMapping || isCreatingExternalCategory"
+                      >
+                        <Loader2
+                          v-if="isCreatingMapping"
+                          class="size-4 mr-2 animate-spin"
+                        />
+                        {{ isCreatingMapping ? "Связывание..." : "Связать" }}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
-                  <div class="space-y-2">
-                    <Label>Или введите ID категории вручную</Label>
-                    <Input
-                      v-model="newMapping.externalCategoryId"
-                      placeholder="ID категории адаптера"
-                    />
-                  </div>
+                <!-- PR4: Reusable Compatibility Wizard -->
+                <MappingCompatibilityWizard
+                  v-model="showCompatibilityWizard"
+                  :mapping-id="wizardMappingId"
+                  @completed="onWizardCompleted"
+                  @cancel="onWizardCancel"
+                />
 
-                  <div class="space-y-2">
-                    <Label>Название маппинга <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
-                    <Input
-                      v-model="newMapping.name"
-                      placeholder="Например: Стандарт, Премиум..."
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <DialogClose as-child>
-                    <Button variant="outline">Отмена</Button>
-                  </DialogClose>
-                  <Button
-                    v-if="capabilities?.capabilities?.createCategory"
-                    variant="outline"
-                    @click="handleCreateExternalCategoryMapping"
-                    :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
-                  >
-                    <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
-                    <FolderTree v-else class="size-4 mr-2" />
-                    {{ isCreatingExternalCategory ? 'Создание...' : `Создать в ${adapterDisplayName}` }}
-                  </Button>
-                  <Button @click="handleCreateMapping" :disabled="isCreatingMapping || isCreatingExternalCategory">
-                    <Loader2 v-if="isCreatingMapping" class="size-4 mr-2 animate-spin" />
-                    {{ isCreatingMapping ? 'Связывание...' : 'Связать' }}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                <Button
+                  @click="
+                    $router.push(`/adapter/${connectionId}/categories/import`)
+                  "
+                >
+                  <Plus class="size-4 mr-2" />
+                  Импортировать категорию
+                </Button>
+              </div>
+            </div>
 
-            <Button @click="$router.push(`/adapter/${connectionId}/categories/import`)">
-              <Plus class="size-4 mr-2" />
-              Импортировать категорию
-            </Button>
-          </div>
-
-          <div v-if="categoryMappings.length === 0" class="text-center py-12 text-muted-foreground border rounded-lg">
-            <FolderTree class="size-12 mx-auto mb-4 opacity-50" />
-            <p>Нет маппингов</p>
-            <p class="text-sm">Импортируйте категорию или создайте маппинг вручную</p>
-          </div>
-
-          <div v-else class="space-y-2">
-            <Card
-              v-for="mapping in categoryMappings"
-              :key="mapping.id"
-              class="cursor-pointer hover:bg-accent/50 transition-colors"
-              @click="openFieldMapping(mapping.id)"
+            <EmptyState
+              v-if="categoryMappings.length === 0"
+              class="border border-dashed"
+              title="Пока нет маппингов"
+              :description="`Маппинг связывает локальную категорию с категорией ${adapterDisplayName} и управляет полями при экспорте и импорте.`"
             >
-              <CardContent>
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-4">
-                    <FolderTree class="size-5 text-muted-foreground" />
-                    <div>
-                      <div class="font-medium">
-                        {{ mapping.localCategoryName }}
-                        <span v-if="mapping.name" class="text-muted-foreground font-normal"> — {{ mapping.name }}</span>
-                      </div>
-                      <div class="text-sm text-muted-foreground">
-                        {{ mapping.externalCategoryName || mapping.externalCategoryId }}
-                      </div>
+              <template #icon>
+                <FolderTree />
+              </template>
+              <Button
+                @click="$router.push(`/adapter/${connectionId}/categories/import`)"
+              >
+                <Download class="size-4 mr-2" />
+                Импортировать категорию
+              </Button>
+              <Button variant="outline" @click="showCreateMappingDialog = true">
+                <Plus class="size-4 mr-2" />
+                Создать маппинг
+              </Button>
+            </EmptyState>
+
+            <div v-else class="rounded-lg border overflow-hidden">
+              <ul class="divide-y divide-border">
+                <li
+                  v-for="mapping in categoryMappings"
+                  :key="mapping.id"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`Открыть маппинг: ${mapping.localCategoryName}`"
+                  class="group flex items-center gap-4 px-5 py-4 hover:bg-accent/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  @click="openFieldMapping(mapping.id)"
+                  @keydown.enter.prevent="openFieldMapping(mapping.id)"
+                  @keydown.space.prevent="openFieldMapping(mapping.id)"
+                >
+                  <!-- Main content -->
+                  <div class="flex-1 min-w-0">
+                    <!-- Categories row -->
+                    <div class="flex items-baseline gap-2 min-w-0">
+                      <span class="font-semibold truncate">{{ mapping.localCategoryName }}</span>
+                      <span class="text-muted-foreground shrink-0 text-sm">→</span>
+                      <span class="font-semibold truncate text-muted-foreground">{{ mapping.externalCategoryName || mapping.externalCategoryId }}</span>
                     </div>
-                    <Badge variant="outline">
-                      {{ mapping.fieldMappingsCount }} полей
-                    </Badge>
-                    <Badge v-if="mapping.linkedProductsCount" variant="secondary">
-                      {{ mapping.linkedProductsCount }} товаров
-                    </Badge>
+                    <!-- Mapping name -->
+                    <div v-if="mapping.name" class="mt-0.5 text-sm text-muted-foreground truncate">
+                      {{ mapping.name }}
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2">
+
+                  <!-- Right side: products count + open hint + menu -->
+                  <div class="flex items-center gap-4 shrink-0">
+                    <span v-if="mapping.linkedProductsCount" class="text-sm text-muted-foreground">
+                      {{ mapping.linkedProductsCount }} товаров
+                    </span>
+                    <span class="text-sm text-muted-foreground/60 group-hover:text-foreground transition-colors">
+                      Открыть →
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger as-child>
-                        <Button variant="ghost" size="icon" @click.stop>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="shrink-0 text-muted-foreground"
+                          aria-label="Действия с маппингом"
+                          @click.stop
+                        >
                           <EllipsisVertical class="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem @click.stop="openFieldMapping(mapping.id)">
-                          <FileText class="size-4 mr-2" />
-                          Настроить поля
-                        </DropdownMenuItem>
-                        <DropdownMenuItem @click.stop="openMappingSettingsDialog(mapping)">
-                          <Settings2 class="size-4 mr-2" />
-                          Настройки
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
                         <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
-                          <Pencil class="size-4 mr-2" />
                           Переименовать
                         </DropdownMenuItem>
-                        <DropdownMenuItem @click.stop="handleDuplicateMapping(mapping.id)">
-                          <Copy class="size-4 mr-2" />
+                        <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
                           Дублировать
                         </DropdownMenuItem>
+                        <!-- Кнопка 'Анализ совместимости' убрана из списка по требованию -->
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem class="text-destructive" @click.stop="handleDeleteMapping(mapping)">
-                          <Trash2 class="size-4 mr-2" />
+                        <DropdownMenuItem
+                          class="text-destructive"
+                          @click.stop="handleDeleteMapping(mapping)"
+                        >
                           Удалить
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
+                </li>
+              </ul>
+            </div>
+          </TabsContent>
+
+          <!-- Products Tab -->
+          <TabsContent value="products" class="flex-1 flex flex-col space-y-4">
+            <h2 class="sr-only">Товары адаптера</h2>
+            <!-- View toggle + Search -->
+            <div class="flex items-center gap-2">
+              <Button
+                :variant="
+                  productsViewMode === 'external' ? 'default' : 'outline'
+                "
+                @click="switchProductsView('external')"
+              >
+                Товары адаптера
+              </Button>
+              <Button
+                :variant="productsViewMode === 'local' ? 'default' : 'outline'"
+                @click="switchProductsView('local')"
+              >
+                Локальные для экспорта
+              </Button>
+              <div class="relative flex-1">
+                <Search
+                  class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
+                />
+                <Input
+                  v-if="productsViewMode === 'external'"
+                  v-model="searchQuery"
+                  placeholder="Поиск по SKU (точное совпадение)"
+                  class="pl-10"
+                />
+                <Input
+                  v-else
+                  v-model="localSearchQuery"
+                  placeholder="Поиск по названию или SKU..."
+                  class="pl-10"
+                />
+              </div>
+              <div
+                v-if="productsViewMode === 'local'"
+                class="text-sm text-muted-foreground whitespace-nowrap"
+              >
+                Найдено: {{ localTotalCount }}
+              </div>
+            </div>
+
+            <!-- ==================== EXTERNAL VIEW ==================== -->
+            <template v-if="productsViewMode === 'external'">
+              <!-- Loading state -->
+              <div v-if="isLoadingProducts" class="flex justify-center py-12">
+                <Loader2 class="size-8 animate-spin text-muted-foreground" />
+              </div>
+
+              <!-- Products table -->
+              <div v-else class="border rounded-lg flex-1 overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="w-[50px]">
+                        <Checkbox
+                          :model-value="allSelected"
+                          :indeterminate="someSelected"
+                          @update:model-value="toggleSelectAll"
+                        />
+                      </TableHead>
+                      <TableHead>Название</TableHead>
+                      <TableHead>Внешний ID</TableHead>
+                      <TableHead>Локальный SKU</TableHead>
+                      <TableHead class="text-right">Цена</TableHead>
+                      <TableHead class="text-right">Остаток</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead class="w-[100px]">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow
+                      v-for="product in filteredProducts"
+                      :key="product.externalId"
+                      :class="[
+                        'cursor-pointer select-none',
+                        { 'bg-muted/30': !product.isLinked },
+                      ]"
+                      @click="handleExternalRowClick(product, $event)"
+                    >
+                      <TableCell>
+                        <Checkbox
+                          :model-value="isSelected(product.externalId)"
+                          @click.capture="captureShiftSelection"
+                          @update:model-value="
+                            (checked) =>
+                              toggleSelect(product.externalId, checked)
+                          "
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <RouterLink
+                          v-if="product.localProductId"
+                          :to="`/products/${product.localProductId}/edit`"
+                          class="font-medium hover:underline underline-offset-2"
+                          @click.stop
+                          >{{ product.name }}</RouterLink
+                        >
+                        <div v-else class="font-medium">{{ product.name }}</div>
+                        <div
+                          v-if="product.sku"
+                          class="text-xs text-muted-foreground"
+                        >
+                          SKU: {{ product.sku }}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <a
+                          v-if="getMarketplaceProductUrl(product.externalId)"
+                          :href="getMarketplaceProductUrl(product.externalId)"
+                          target="_blank"
+                          rel="noopener"
+                          class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
+                          >{{ product.externalId }}</a
+                        >
+                        <code
+                          v-else
+                          class="text-sm bg-muted px-1.5 py-0.5 rounded"
+                          >{{ product.externalId }}</code
+                        >
+                      </TableCell>
+                      <TableCell>
+                        <div
+                          v-if="product.isLinked"
+                          class="flex items-center gap-1.5"
+                        >
+                          <Link2 class="size-3 text-success-foreground" />
+                          <code class="text-sm">{{
+                            product.localProductSku
+                          }}</code>
+                        </div>
+                        <span v-else class="text-muted-foreground">—</span>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        <div v-if="product.isLinked" class="space-y-0.5">
+                          <div class="font-medium">
+                            {{ formatPrice(product.localPrice) }}
+                          </div>
+                          <div
+                            v-if="
+                              product.externalPrice !== null &&
+                              product.externalPrice !== product.localPrice
+                            "
+                            class="text-xs text-muted-foreground"
+                          >
+                            Адаптер: {{ formatPrice(product.externalPrice) }}
+                          </div>
+                        </div>
+                        <span v-else class="text-muted-foreground">—</span>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        <div v-if="product.isLinked" class="space-y-0.5">
+                          <div class="font-medium">
+                            {{ product.localStock ?? "—" }}
+                          </div>
+                          <div
+                            v-if="
+                              product.externalStock !== null &&
+                              product.externalStock !== product.localStock
+                            "
+                            class="text-xs text-muted-foreground"
+                          >
+                            Адаптер: {{ product.externalStock }}
+                          </div>
+                        </div>
+                        <span v-else class="text-muted-foreground">—</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          :variant="
+                            productStatusMap[product.externalId].variant
+                          "
+                        >
+                          <component
+                            :is="productStatusMap[product.externalId].icon"
+                            class="size-3 mr-1"
+                          />
+                          {{ productStatusMap[product.externalId].label }}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div
+                          v-if="product.isLinked"
+                          class="flex items-center gap-1"
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="handleImportSingle(product)"
+                            :disabled="importingLinkId === product.linkId"
+                            title="Импорт с адаптера"
+                            aria-label="Импорт с адаптера"
+                          >
+                            <Loader2
+                              v-if="importingLinkId === product.linkId"
+                              class="size-4 animate-spin"
+                            />
+                            <Download v-else class="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="handleExportSingle(product)"
+                            :disabled="
+                              exportingLinkId === product.linkId ||
+                              product.mappingMissing
+                            "
+                            title="Экспорт на адаптер"
+                            aria-label="Экспорт на адаптер"
+                          >
+                            <Loader2
+                              v-if="exportingLinkId === product.linkId"
+                              class="size-4 animate-spin"
+                            />
+                            <Upload v-else class="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            class="text-destructive hover:text-destructive"
+                            @click="handleUnlinkProduct(product)"
+                            :disabled="unlinkingLinkId === product.linkId"
+                            title="Отвязать товар"
+                            aria-label="Отвязать товар"
+                          >
+                            <Loader2
+                              v-if="unlinkingLinkId === product.linkId"
+                              class="size-4 animate-spin"
+                            />
+                            <Ban v-else class="size-4" />
+                          </Button>
+                        </div>
+                        <span v-else class="text-muted-foreground">—</span>
+                      </TableCell>
+                    </TableRow>
+
+                    <TableRow v-if="filteredProducts.length === 0">
+                      <TableCell colspan="8">
+                        <EmptyState
+                          size="sm"
+                          title="Нет товаров"
+                          description="Товары появятся здесь после экспорта или привязки к адаптеру."
+                        >
+                          <template #icon>
+                            <Package />
+                          </template>
+                        </EmptyState>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <!-- Load more -->
+              <div v-if="canLoadMore" class="flex justify-center py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  :disabled="isLoadingMore"
+                  @click="loadMoreProducts"
+                >
+                  <Loader2
+                    v-if="isLoadingMore"
+                    class="size-4 mr-2 animate-spin"
+                  />
+                  {{ isLoadingMore ? "Загрузка..." : "Загрузить ещё" }}
+                </Button>
+              </div>
+
+              <!-- Bulk actions bar -->
+              <div
+                v-if="hasAnySelected"
+                class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+              >
+                <div class="text-sm text-muted-foreground">
+                  Выбрано: {{ selectedItems.length }}
+                  <span v-if="hasSelectedLinked && hasSelectedUnlinked">
+                    ({{ selectedLinkedItems.length }} связанных,
+                    {{ selectedUnlinkedItems.length }} несвязанных)
+                  </span>
+                  <span v-else-if="hasSelectedLinked">
+                    ({{ selectedLinkedItems.length }} связанных)
+                  </span>
+                  <span v-else-if="hasSelectedUnlinked">
+                    ({{ selectedUnlinkedItems.length }} несвязанных)
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <!-- Products Tab -->
-        <TabsContent value="products" class="flex-1 flex flex-col space-y-4">
-          <!-- View toggle + Search -->
-          <div class="flex items-center gap-2">
-            <Button
-              :variant="productsViewMode === 'external' ? 'default' : 'outline'"
-              @click="switchProductsView('external')"
-            >
-              Товары адаптера
-            </Button>
-            <Button
-              :variant="productsViewMode === 'local' ? 'default' : 'outline'"
-              @click="switchProductsView('local')"
-            >
-              Локальные для экспорта
-            </Button>
-            <div class="relative flex-1">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                v-if="productsViewMode === 'external'"
-                v-model="searchQuery"
-                placeholder="Поиск по SKU (точное совпадение)"
-                class="pl-10"
-              />
-              <Input
-                v-else
-                v-model="localSearchQuery"
-                placeholder="Поиск по названию или SKU..."
-                class="pl-10"
-              />
-            </div>
-            <div v-if="productsViewMode === 'local'" class="text-sm text-muted-foreground whitespace-nowrap">
-              Найдено: {{ localTotalCount }}
-            </div>
-          </div>
-
-          <!-- ==================== EXTERNAL VIEW ==================== -->
-          <template v-if="productsViewMode === 'external'">
-
-            <!-- Loading state -->
-            <div v-if="isLoadingProducts" class="flex justify-center py-12">
-              <Loader2 class="size-8 animate-spin text-muted-foreground" />
-            </div>
-
-            <!-- Products table -->
-            <div v-else class="border rounded-lg flex-1 overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="w-[50px]">
-                      <Checkbox
-                        :model-value="allSelected"
-                        :indeterminate="someSelected"
-                        @update:model-value="toggleSelectAll"
-                      />
-                    </TableHead>
-                    <TableHead>Название</TableHead>
-                    <TableHead>Внешний ID</TableHead>
-                    <TableHead>Локальный SKU</TableHead>
-                    <TableHead class="text-right">Цена</TableHead>
-                    <TableHead class="text-right">Остаток</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead class="w-[100px]">Действия</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="product in filteredProducts"
-                    :key="product.externalId"
-                    :class="['cursor-pointer select-none', { 'bg-muted/30': !product.isLinked }]"
-                    @click="handleExternalRowClick(product, $event)"
+                <div class="flex items-center gap-2">
+                  <!-- Create local products from unlinked -->
+                  <Button
+                    v-if="hasSelectedUnlinked"
+                    variant="outline"
+                    @click="openImportDialog"
+                    :disabled="isCreatingLocal"
                   >
-                    <TableCell>
-                      <Checkbox
-                        :model-value="isSelected(product.externalId)"
-                        @click.capture="captureShiftSelection"
-                        @update:model-value="(checked) => toggleSelect(product.externalId, checked)"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <RouterLink
-                        v-if="product.localProductId"
-                        :to="`/products/${product.localProductId}/edit`"
-                        class="font-medium hover:underline underline-offset-2"
-                        @click.stop
-                      >{{ product.name }}</RouterLink>
-                      <div v-else class="font-medium">{{ product.name }}</div>
-                      <div v-if="product.sku" class="text-xs text-muted-foreground">
-                        SKU: {{ product.sku }}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <a
-                        v-if="getMarketplaceProductUrl(product.externalId)"
-                        :href="getMarketplaceProductUrl(product.externalId)"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
-                      >{{ product.externalId }}</a>
-                      <code v-else class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.externalId }}</code>
-                    </TableCell>
-                    <TableCell>
-                      <div v-if="product.isLinked" class="flex items-center gap-1.5">
-                        <Link2 class="size-3 text-success" />
-                        <code class="text-sm">{{ product.localProductSku }}</code>
-                      </div>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </TableCell>
-                    <TableCell class="text-right">
-                      <div v-if="product.isLinked" class="space-y-0.5">
-                        <div class="font-medium">{{ formatPrice(product.localPrice) }}</div>
-                        <div v-if="product.externalPrice !== null && product.externalPrice !== product.localPrice" class="text-xs text-muted-foreground">
-                          Адаптер: {{ formatPrice(product.externalPrice) }}
-                        </div>
-                      </div>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </TableCell>
-                    <TableCell class="text-right">
-                      <div v-if="product.isLinked" class="space-y-0.5">
-                        <div class="font-medium">{{ product.localStock ?? '—' }}</div>
-                        <div v-if="product.externalStock !== null && product.externalStock !== product.localStock" class="text-xs text-muted-foreground">
-                          Адаптер: {{ product.externalStock }}
-                        </div>
-                      </div>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge :variant="getStatusInfo(product).variant">
-                        <component :is="getStatusInfo(product).icon" class="size-3 mr-1" />
-                        {{ getStatusInfo(product).label }}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div v-if="product.isLinked" class="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          @click="handleImportSingle(product)"
-                          :disabled="importingLinkId === product.linkId"
-                          title="Импорт с адаптера"
-                        >
-                          <Loader2 v-if="importingLinkId === product.linkId" class="size-4 animate-spin" />
-                          <Download v-else class="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          @click="handleExportSingle(product)"
-                          :disabled="exportingLinkId === product.linkId || product.mappingMissing"
-                          title="Экспорт на адаптер"
-                        >
-                          <Loader2 v-if="exportingLinkId === product.linkId" class="size-4 animate-spin" />
-                          <Upload v-else class="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          class="text-destructive hover:text-destructive"
-                          @click="handleUnlinkProduct(product)"
-                          :disabled="unlinkingLinkId === product.linkId"
-                          title="Отвязать товар"
-                        >
-                          <Loader2 v-if="unlinkingLinkId === product.linkId" class="size-4 animate-spin" />
-                          <Ban v-else class="size-4" />
-                        </Button>
-                      </div>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </TableCell>
-                  </TableRow>
+                    <Loader2
+                      v-if="isCreatingLocal"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <Plus v-else class="size-4 mr-2" />
+                    Создать локальные ({{ selectedUnlinkedItems.length }})
+                  </Button>
 
-                  <TableRow v-if="filteredProducts.length === 0">
-                    <TableCell colspan="8" class="text-center py-8 text-muted-foreground">
-                      <Package class="size-12 mx-auto mb-4 opacity-50" />
-                      <p>Нет товаров для отображения</p>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
+                  <!-- Import from marketplace for linked -->
+                  <Button
+                    v-if="hasSelectedLinked"
+                    variant="outline"
+                    @click="handleImportBulk"
+                    :disabled="isImportingBulk"
+                  >
+                    <Loader2
+                      v-if="isImportingBulk"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <Download v-else class="size-4 mr-2" />
+                    Импорт ({{ selectedLinkedItems.length }})
+                  </Button>
 
-            <!-- Load more -->
-            <div v-if="canLoadMore" class="flex justify-center py-4">
-              <Button
-                variant="outline"
-                size="sm"
-                :disabled="isLoadingMore"
-                @click="loadMoreProducts"
-              >
-                <Loader2 v-if="isLoadingMore" class="size-4 mr-2 animate-spin" />
-                {{ isLoadingMore ? 'Загрузка...' : 'Загрузить ещё' }}
-              </Button>
-            </div>
+                  <!-- Export to marketplace for linked -->
+                  <Button
+                    v-if="hasSelectedLinked"
+                    variant="outline"
+                    @click="handleExportBulk"
+                    :disabled="isExportingBulk"
+                  >
+                    <Loader2
+                      v-if="isExportingBulk"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <Upload v-else class="size-4 mr-2" />
+                    Экспорт ({{ selectedLinkedItems.length }})
+                  </Button>
 
-            <!-- Bulk actions bar -->
-            <div
-              v-if="hasAnySelected"
-              class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
-            >
-              <div class="text-sm text-muted-foreground">
-                Выбрано: {{ selectedItems.length }}
-                <span v-if="hasSelectedLinked && hasSelectedUnlinked">
-                  ({{ selectedLinkedItems.length }} связанных, {{ selectedUnlinkedItems.length }} несвязанных)
-                </span>
-                <span v-else-if="hasSelectedLinked">
-                  ({{ selectedLinkedItems.length }} связанных)
-                </span>
-                <span v-else-if="hasSelectedUnlinked">
-                  ({{ selectedUnlinkedItems.length }} несвязанных)
-                </span>
+                  <!-- Export prices -->
+                  <Button
+                    v-if="hasSelectedLinked"
+                    variant="outline"
+                    @click="handleExportPricesBulk"
+                    :disabled="isExportingPrices"
+                  >
+                    <Loader2
+                      v-if="isExportingPrices"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <DollarSign v-else class="size-4 mr-2" />
+                    Экспорт цен
+                  </Button>
+
+                  <!-- Export stocks -->
+                  <Button
+                    v-if="hasSelectedLinked"
+                    @click="handleExportStocksBulk"
+                    :disabled="isExportingStocks"
+                  >
+                    <Loader2
+                      v-if="isExportingStocks"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <Boxes v-else class="size-4 mr-2" />
+                    Экспорт остатков
+                  </Button>
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <!-- Create local products from unlinked -->
-                <Button
-                  v-if="hasSelectedUnlinked"
-                  variant="outline"
-                  @click="openImportDialog"
-                  :disabled="isCreatingLocal"
-                >
-                  <Loader2 v-if="isCreatingLocal" class="size-4 mr-2 animate-spin" />
-                  <Plus v-else class="size-4 mr-2" />
-                  Создать локальные ({{ selectedUnlinkedItems.length }})
-                </Button>
+            </template>
 
-                <!-- Import from marketplace for linked -->
-                <Button
-                  v-if="hasSelectedLinked"
-                  variant="outline"
-                  @click="handleImportBulk"
-                  :disabled="isImportingBulk"
-                >
-                  <Loader2 v-if="isImportingBulk" class="size-4 mr-2 animate-spin" />
-                  <Download v-else class="size-4 mr-2" />
-                  Импорт ({{ selectedLinkedItems.length }})
-                </Button>
+            <!-- ==================== LOCAL VIEW ==================== -->
+            <template v-if="productsViewMode === 'local'">
+              <!-- Loading state -->
+              <div
+                v-if="isLoadingLocalProducts && localProducts.length === 0"
+                class="flex justify-center py-12"
+              >
+                <Loader2 class="size-8 animate-spin text-muted-foreground" />
+              </div>
 
-                <!-- Export to marketplace for linked -->
+              <!-- Local products table -->
+              <div v-else class="border rounded-lg flex-1 overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="w-[50px]">
+                        <Checkbox
+                          :model-value="allLocalSelected"
+                          :indeterminate="someLocalSelected"
+                          @update:model-value="toggleSelectAllLocal"
+                        />
+                      </TableHead>
+                      <TableHead>Название</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead class="text-right">Цена</TableHead>
+                      <TableHead class="text-right">Остаток</TableHead>
+                      <TableHead>Категория</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow
+                      v-for="product in localProducts"
+                      :key="product.id"
+                      class="cursor-pointer select-none"
+                      @click="handleLocalRowClick(product, $event)"
+                    >
+                      <TableCell>
+                        <Checkbox
+                          :model-value="isLocalSelected(product.id)"
+                          @click.capture="captureShiftSelection"
+                          @update:model-value="
+                            (checked) => toggleSelectLocal(product.id, checked)
+                          "
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <RouterLink
+                          :to="`/products/${product.id}/edit`"
+                          class="font-medium hover:underline underline-offset-2"
+                          >{{ product.name }}</RouterLink
+                        >
+                      </TableCell>
+                      <TableCell>
+                        <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{
+                          product.sku
+                        }}</code>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        {{ formatPrice(product.price) }}
+                      </TableCell>
+                      <TableCell class="text-right">
+                        {{ product.storageQuantity ?? "—" }}
+                      </TableCell>
+                      <TableCell>
+                        <span class="text-sm text-muted-foreground">{{
+                          product.categoryName || "—"
+                        }}</span>
+                      </TableCell>
+                    </TableRow>
+
+                    <TableRow v-if="localProducts.length === 0">
+                      <TableCell colspan="6">
+                        <EmptyState
+                          size="sm"
+                          title="Нет товаров для экспорта"
+                          description="Все товары уже экспортированы, или для их категорий нет маппингов."
+                        >
+                          <template #icon>
+                            <Package />
+                          </template>
+                        </EmptyState>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <!-- Pagination -->
+              <div
+                v-if="localTotalCount > 0"
+                class="flex items-center justify-between py-3"
+              >
+                <div class="flex items-center gap-2">
+                  <p class="text-sm text-muted-foreground">по</p>
+                  <Select
+                    :model-value="String(localPageSize)"
+                    @update:model-value="
+                      (val) => {
+                        localPageSize = Number(val);
+                        localPage = 1;
+                        fetchLocalProducts();
+                      }
+                    "
+                  >
+                    <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem as="button" value="10">10</SelectItem>
+                        <SelectItem as="button" value="25">25</SelectItem>
+                        <SelectItem as="button" value="50">50</SelectItem>
+                        <SelectItem as="button" value="100">100</SelectItem>
+                        <SelectItem as="button" value="250">250</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p class="text-sm text-muted-foreground">
+                    Всего: {{ localTotalCount }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <p class="text-sm text-muted-foreground mr-2">
+                    {{ localPage }} / {{ localLastPage }}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 w-8 p-0"
+                    :disabled="localPage <= 1"
+                    @click="
+                      localPage = 1;
+                      fetchLocalProducts();
+                    "
+                  >
+                    <ChevronsLeft class="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 w-8 p-0"
+                    :disabled="localPage <= 1"
+                    @click="
+                      localPage--;
+                      fetchLocalProducts();
+                    "
+                  >
+                    <ChevronLeft class="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 w-8 p-0"
+                    :disabled="localPage >= localLastPage"
+                    @click="
+                      localPage++;
+                      fetchLocalProducts();
+                    "
+                  >
+                    <ChevronRight class="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 w-8 p-0"
+                    :disabled="localPage >= localLastPage"
+                    @click="
+                      localPage = localLastPage;
+                      fetchLocalProducts();
+                    "
+                  >
+                    <ChevronsRight class="size-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Bulk export bar -->
+              <div
+                v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
+                class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+              >
+                <div class="text-sm text-muted-foreground">
+                  Выбрано: {{ selectedLocalIds.length }}
+                </div>
                 <Button
-                  v-if="hasSelectedLinked"
-                  variant="outline"
-                  @click="handleExportBulk"
-                  :disabled="isExportingBulk"
+                  @click="handleExportNewBulk"
+                  :disabled="isExportingNewBulk"
                 >
-                  <Loader2 v-if="isExportingBulk" class="size-4 mr-2 animate-spin" />
+                  <Loader2
+                    v-if="isExportingNewBulk"
+                    class="size-4 mr-2 animate-spin"
+                  />
                   <Upload v-else class="size-4 mr-2" />
-                  Экспорт ({{ selectedLinkedItems.length }})
-                </Button>
-
-                <!-- Export prices -->
-                <Button
-                  v-if="hasSelectedLinked"
-                  variant="outline"
-                  @click="handleExportPricesBulk"
-                  :disabled="isExportingPrices"
-                >
-                  <Loader2 v-if="isExportingPrices" class="size-4 mr-2 animate-spin" />
-                  <DollarSign v-else class="size-4 mr-2" />
-                  Экспорт цен
-                </Button>
-
-                <!-- Export stocks -->
-                <Button
-                  v-if="hasSelectedLinked"
-                  @click="handleExportStocksBulk"
-                  :disabled="isExportingStocks"
-                >
-                  <Loader2 v-if="isExportingStocks" class="size-4 mr-2 animate-spin" />
-                  <Boxes v-else class="size-4 mr-2" />
-                  Экспорт остатков
+                  Экспортировать на адаптер ({{ selectedLocalIds.length }})
                 </Button>
               </div>
-            </div>
-          </template>
-
-          <!-- ==================== LOCAL VIEW ==================== -->
-          <template v-if="productsViewMode === 'local'">
-            <!-- Loading state -->
-            <div v-if="isLoadingLocalProducts && localProducts.length === 0" class="flex justify-center py-12">
-              <Loader2 class="size-8 animate-spin text-muted-foreground" />
-            </div>
-
-            <!-- Local products table -->
-            <div v-else class="border rounded-lg flex-1 overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="w-[50px]">
-                      <Checkbox
-                        :model-value="allLocalSelected"
-                        :indeterminate="someLocalSelected"
-                        @update:model-value="toggleSelectAllLocal"
-                      />
-                    </TableHead>
-                    <TableHead>Название</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead class="text-right">Цена</TableHead>
-                    <TableHead class="text-right">Остаток</TableHead>
-                    <TableHead>Категория</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="product in localProducts"
-                    :key="product.id"
-                    class="cursor-pointer select-none"
-                    @click="handleLocalRowClick(product, $event)"
-                  >
-                    <TableCell>
-                      <Checkbox
-                        :model-value="isLocalSelected(product.id)"
-                        @click.capture="captureShiftSelection"
-                        @update:model-value="(checked) => toggleSelectLocal(product.id, checked)"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <RouterLink
-                        :to="`/products/${product.id}/edit`"
-                        class="font-medium hover:underline underline-offset-2"
-                      >{{ product.name }}</RouterLink>
-                    </TableCell>
-                    <TableCell>
-                      <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{ product.sku }}</code>
-                    </TableCell>
-                    <TableCell class="text-right">
-                      {{ formatPrice(product.price) }}
-                    </TableCell>
-                    <TableCell class="text-right">
-                      {{ product.storageQuantity ?? '—' }}
-                    </TableCell>
-                    <TableCell>
-                      <span class="text-sm text-muted-foreground">{{ product.categoryName || '—' }}</span>
-                    </TableCell>
-                  </TableRow>
-
-                  <TableRow v-if="localProducts.length === 0">
-                    <TableCell colspan="6" class="text-center py-8 text-muted-foreground">
-                      <Package class="size-12 mx-auto mb-4 opacity-50" />
-                      <p>Нет товаров для экспорта</p>
-                      <p class="text-sm">Все товары уже экспортированы, или нет маппингов</p>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-
-            <!-- Pagination -->
-            <div v-if="localTotalCount > 0" class="flex items-center justify-between py-3">
-              <div class="flex items-center gap-2">
-                <p class="text-sm text-muted-foreground">по</p>
-                <Select
-                  :model-value="String(localPageSize)"
-                  @update:model-value="(val) => { localPageSize = Number(val); localPage = 1; fetchLocalProducts(); }"
-                >
-                  <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem as="button" value="10">10</SelectItem>
-                      <SelectItem as="button" value="25">25</SelectItem>
-                      <SelectItem as="button" value="50">50</SelectItem>
-                      <SelectItem as="button" value="100">100</SelectItem>
-                      <SelectItem as="button" value="250">250</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <p class="text-sm text-muted-foreground">
-                  Всего: {{ localTotalCount }}
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <p class="text-sm text-muted-foreground mr-2">
-                  {{ localPage }} / {{ localLastPage }}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="localPage <= 1"
-                  @click="localPage = 1; fetchLocalProducts()"
-                >
-                  <ChevronsLeft class="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="localPage <= 1"
-                  @click="localPage--; fetchLocalProducts()"
-                >
-                  <ChevronLeft class="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="localPage >= localLastPage"
-                  @click="localPage++; fetchLocalProducts()"
-                >
-                  <ChevronRight class="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-8 w-8 p-0"
-                  :disabled="localPage >= localLastPage"
-                  @click="localPage = localLastPage; fetchLocalProducts()"
-                >
-                  <ChevronsRight class="size-4" />
-                </Button>
-              </div>
-            </div>
-
-            <!-- Bulk export bar -->
-            <div
-              v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
-              class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
-            >
-              <div class="text-sm text-muted-foreground">
-                Выбрано: {{ selectedLocalIds.length }}
-              </div>
-              <Button
-                @click="handleExportNewBulk"
-                :disabled="isExportingNewBulk"
-              >
-                <Loader2 v-if="isExportingNewBulk" class="size-4 mr-2 animate-spin" />
-                <Upload v-else class="size-4 mr-2" />
-                Экспортировать на адаптер ({{ selectedLocalIds.length }})
-              </Button>
-            </div>
-          </template>
-        </TabsContent>
-      </Tabs>
-    </div>
+            </template>
+          </TabsContent>
+        </Tabs>
+      </div>
     </PageSection>
 
     <!-- Single Import Preview Dialog -->
@@ -2980,7 +3649,10 @@ export default {
             Следующие поля будут обновлены из адаптера
           </DialogDescription>
         </DialogHeader>
-        <div v-if="singleImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+        <div
+          v-if="singleImportPreviewData"
+          class="py-4 max-h-[60vh] overflow-y-auto"
+        >
           <FieldChangesTable
             :items="singleImportPreviewItems"
             selectable
@@ -2990,10 +3662,20 @@ export default {
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline" @click="cancelSingleImport">Отмена</Button>
+            <Button variant="outline" @click="cancelSingleImport"
+              >Отмена</Button
+            >
           </DialogClose>
-          <Button @click="confirmSingleImport" :disabled="isApplyingSingleImport || allSingleImportFieldsExcluded()">
-            <Loader2 v-if="isApplyingSingleImport" class="size-4 mr-2 animate-spin" />
+          <Button
+            @click="confirmSingleImport"
+            :disabled="
+              isApplyingSingleImport || allSingleImportFieldsExcluded()
+            "
+          >
+            <Loader2
+              v-if="isApplyingSingleImport"
+              class="size-4 mr-2 animate-spin"
+            />
             <Download v-else class="size-4 mr-2" />
             Подтвердить
           </Button>
@@ -3008,10 +3690,17 @@ export default {
           <DialogTitle>Подтверждение массового импорта</DialogTitle>
           <DialogDescription v-if="bulkImportPreviewData">
             Будет обновлено {{ bulkImportPreviewData.totalWithChanges }} из
-            {{ bulkImportPreviewData.totalWithChanges + bulkImportPreviewData.totalWithoutChanges }} товаров
+            {{
+              bulkImportPreviewData.totalWithChanges +
+              bulkImportPreviewData.totalWithoutChanges
+            }}
+            товаров
           </DialogDescription>
         </DialogHeader>
-        <div v-if="bulkImportPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
+        <div
+          v-if="bulkImportPreviewData"
+          class="py-4 max-h-[60vh] overflow-y-auto"
+        >
           <FieldChangesTable :items="bulkImportPreviewItems" />
         </div>
         <DialogFooter>
@@ -3019,7 +3708,10 @@ export default {
             <Button variant="outline" @click="cancelBulkImport">Отмена</Button>
           </DialogClose>
           <Button @click="confirmBulkImport" :disabled="isApplyingBulkImport">
-            <Loader2 v-if="isApplyingBulkImport" class="size-4 mr-2 animate-spin" />
+            <Loader2
+              v-if="isApplyingBulkImport"
+              class="size-4 mr-2 animate-spin"
+            />
             <Download v-else class="size-4 mr-2" />
             Подтвердить
           </Button>
@@ -3062,23 +3754,53 @@ export default {
             <Separator class="mb-3" />
 
             <div class="space-y-3">
-              <Label class="text-sm text-muted-foreground">Локальная категория:</Label>
+              <Label class="text-sm text-muted-foreground"
+                >Локальная категория:</Label
+              >
 
               <RadioGroup
-                :model-value="categoryAssignments[group.externalCategoryId || '__none__']?.mode || 'none'"
-                @update:model-value="setAssignmentMode(group.externalCategoryId || '__none__', $event)"
+                :model-value="
+                  categoryAssignments[group.externalCategoryId || '__none__']
+                    ?.mode || 'none'
+                "
+                @update:model-value="
+                  setAssignmentMode(
+                    group.externalCategoryId || '__none__',
+                    $event,
+                  )
+                "
                 class="space-y-3"
               >
                 <div class="flex items-center gap-3">
-                  <RadioGroupItem value="existing" :id="`existing-${group.externalCategoryId}`" class="mt-0.5 shrink-0" />
-                  <Label :for="`existing-${group.externalCategoryId}`" class="flex items-center gap-2 cursor-pointer">
-                    <Link2 class="size-4 text-blue-500 shrink-0" />
+                  <RadioGroupItem
+                    value="existing"
+                    :id="`existing-${group.externalCategoryId}`"
+                    class="mt-0.5 shrink-0"
+                  />
+                  <Label
+                    :for="`existing-${group.externalCategoryId}`"
+                    class="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Link2 class="size-4 text-muted-foreground shrink-0" />
                     <span>Выбрать существующую:</span>
                   </Label>
                   <Select
-                    :model-value="categoryAssignments[group.externalCategoryId || '__none__']?.localCategoryId?.toString() || ''"
-                    @update:model-value="setAssignmentCategory(group.externalCategoryId || '__none__', parseInt($event))"
-                    :disabled="categoryAssignments[group.externalCategoryId || '__none__']?.mode !== 'existing'"
+                    :model-value="
+                      categoryAssignments[
+                        group.externalCategoryId || '__none__'
+                      ]?.localCategoryId?.toString() || ''
+                    "
+                    @update:model-value="
+                      setAssignmentCategory(
+                        group.externalCategoryId || '__none__',
+                        parseInt($event),
+                      )
+                    "
+                    :disabled="
+                      categoryAssignments[
+                        group.externalCategoryId || '__none__'
+                      ]?.mode !== 'existing'
+                    "
                   >
                     <SelectTrigger class="w-[180px]">
                       <SelectValue placeholder="Выберите категорию" />
@@ -3090,7 +3812,14 @@ export default {
                         :value="cat.id.toString()"
                       >
                         {{ cat.name }}
-                        <span v-if="getExistingMappingForCategory(group.externalCategoryId)?.localCategoryId === cat.id" class="text-success ml-1">
+                        <span
+                          v-if="
+                            getExistingMappingForCategory(
+                              group.externalCategoryId,
+                            )?.localCategoryId === cat.id
+                          "
+                          class="text-success ml-1"
+                        >
                           (маппинг)
                         </span>
                       </SelectItem>
@@ -3099,23 +3828,50 @@ export default {
                 </div>
 
                 <div class="flex items-start gap-3">
-                  <RadioGroupItem value="new" :id="`new-${group.externalCategoryId || '__none__'}`" class="mt-0.5 shrink-0" />
-                  <Label :for="`new-${group.externalCategoryId || '__none__'}`" class="flex items-start gap-2 cursor-pointer">
+                  <RadioGroupItem
+                    value="new"
+                    :id="`new-${group.externalCategoryId || '__none__'}`"
+                    class="mt-0.5 shrink-0"
+                  />
+                  <Label
+                    :for="`new-${group.externalCategoryId || '__none__'}`"
+                    class="flex items-start gap-2 cursor-pointer"
+                  >
                     <Sparkles class="size-4 text-warning mt-0.5 shrink-0" />
-                    <span v-if="group.externalCategoryId">Создать новую из адаптера: "{{ group.externalCategoryName }}"</span>
+                    <span v-if="group.externalCategoryId"
+                      >Создать новую из адаптера: "{{
+                        group.externalCategoryName
+                      }}"</span
+                    >
                     <span v-else>Создать новую категорию:</span>
                   </Label>
                   <Input
-                    v-if="!group.externalCategoryId && categoryAssignments[group.externalCategoryId || '__none__']?.mode === 'new'"
-                    v-model="categoryAssignments[group.externalCategoryId || '__none__'].newCategoryName"
+                    v-if="
+                      !group.externalCategoryId &&
+                      categoryAssignments[
+                        group.externalCategoryId || '__none__'
+                      ]?.mode === 'new'
+                    "
+                    v-model="
+                      categoryAssignments[
+                        group.externalCategoryId || '__none__'
+                      ].newCategoryName
+                    "
                     placeholder="Название категории"
                     class="w-[180px]"
                   />
                 </div>
 
                 <div class="flex items-center gap-3">
-                  <RadioGroupItem value="none" :id="`none-${group.externalCategoryId || '__none__'}`" class="shrink-0" />
-                  <Label :for="`none-${group.externalCategoryId || '__none__'}`" class="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem
+                    value="none"
+                    :id="`none-${group.externalCategoryId || '__none__'}`"
+                    class="shrink-0"
+                  />
+                  <Label
+                    :for="`none-${group.externalCategoryId || '__none__'}`"
+                    class="flex items-center gap-2 cursor-pointer"
+                  >
                     <Ban class="size-4 text-muted-foreground shrink-0" />
                     <span>Без категории</span>
                   </Label>
@@ -3133,19 +3889,43 @@ export default {
             @click="handleImportWithCategories"
             :disabled="isImportingWithCategories"
           >
-            <Loader2 v-if="isImportingWithCategories" class="size-4 mr-2 animate-spin" />
+            <Loader2
+              v-if="isImportingWithCategories"
+              class="size-4 mr-2 animate-spin"
+            />
             <Download v-else class="size-4 mr-2" />
             Импортировать ({{ selectedUnlinkedItems.length }})
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <!-- Duplicate Mapping confirmation -->
+    <AlertDialog v-model:open="showDuplicateMappingDialog">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Дублировать маппинг?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Будет создана полная копия этого маппинга со всеми настройками
+            графа.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDuplicateMapping">
+            Дублировать
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <!-- Rename Mapping Dialog -->
     <Dialog v-model:open="showRenameMappingDialog">
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Переименовать маппинг</DialogTitle>
-          <DialogDescription>Укажите новое название для маппинга</DialogDescription>
+          <DialogDescription
+            >Укажите новое название для маппинга</DialogDescription
+          >
         </DialogHeader>
         <div class="py-4">
           <Input
@@ -3159,7 +3939,10 @@ export default {
             <Button variant="outline">Отмена</Button>
           </DialogClose>
           <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
-            <Loader2 v-if="isRenamingMapping" class="size-4 mr-2 animate-spin" />
+            <Loader2
+              v-if="isRenamingMapping"
+              class="size-4 mr-2 animate-spin"
+            />
             Сохранить
           </Button>
         </DialogFooter>
@@ -3170,64 +3953,155 @@ export default {
     <Dialog v-model:open="showDeleteMappingDialog">
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Удалить маппинг</DialogTitle>
+          <DialogTitle>
+            Удалить маппинг
+            «{{ deleteMappingTarget?.name || deleteMappingTarget?.localCategoryName }}»?
+          </DialogTitle>
           <DialogDescription>
-            Этот маппинг используется товарами. Чтобы экспорт не сломался, переназначьте товары на другой маппинг той же категории.
+            С ним связано товаров:
+            {{
+              deleteMappingImpact?.linkedProductsCount ||
+              deleteMappingTarget?.linkedProductsCount ||
+              0
+            }}. Выберите, что с ними сделать.
           </DialogDescription>
         </DialogHeader>
 
-        <div class="space-y-4 py-4">
-          <div class="rounded-md border p-3 text-sm">
-            <div class="font-medium">
-              {{ deleteMappingTarget?.localCategoryName }}
-              <span v-if="deleteMappingTarget?.name" class="text-muted-foreground font-normal">
-                — {{ deleteMappingTarget.name }}
-              </span>
+        <div
+          class="space-y-2 py-2"
+          role="radiogroup"
+          aria-label="Что сделать с товарами"
+        >
+          <!-- Safe path: only rendered when an alternative mapping exists -->
+          <button
+            v-if="deleteMappingReplacementOptions.length > 0"
+            type="button"
+            role="radio"
+            :aria-checked="deleteMappingMode === 'reassign'"
+            :class="[
+              'w-full rounded-lg border p-3 text-left transition-colors',
+              deleteMappingMode === 'reassign'
+                ? 'border-primary bg-primary/5'
+                : 'border-input hover:bg-accent/50',
+            ]"
+            @click="deleteMappingMode = 'reassign'"
+          >
+            <div class="flex items-start gap-3">
+              <ArrowRightLeft
+                :class="[
+                  'mt-0.5 size-4 shrink-0',
+                  deleteMappingMode === 'reassign'
+                    ? 'text-primary'
+                    : 'text-muted-foreground',
+                ]"
+              />
+              <div class="min-w-0 flex-1 space-y-1.5">
+                <div class="text-sm font-medium">
+                  Перенести товары на другой маппинг
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  Связи переключатся на выбранный маппинг, экспорт продолжит
+                  работать.
+                </p>
+                <Select
+                  v-if="deleteMappingMode === 'reassign'"
+                  :model-value="deleteMappingReplacementId ?? undefined"
+                  @update:model-value="
+                    (value) => (deleteMappingReplacementId = value)
+                  "
+                >
+                  <SelectTrigger class="h-9 w-full" @click.stop>
+                    <SelectValue placeholder="Маппинг для переноса" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="mapping in deleteMappingReplacementOptions"
+                      :key="mapping.id"
+                      :value="mapping.id.toString()"
+                    >
+                      {{ mapping.name || `Маппинг #${mapping.id}` }}
+                      <span class="text-muted-foreground ml-1">
+                        ({{
+                          mapping.externalCategoryName ||
+                          mapping.externalCategoryId
+                        }})
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div class="text-muted-foreground">
-              Зависимых товаров: {{ deleteMappingImpact?.linkedProductsCount || deleteMappingTarget?.linkedProductsCount || 0 }}
-            </div>
-          </div>
+          </button>
 
-          <div v-if="deleteMappingImpact?.products?.length" class="space-y-2">
-            <Label>Примеры товаров</Label>
-            <div class="max-h-32 overflow-y-auto rounded-md border divide-y">
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="deleteMappingMode === 'force'"
+            :class="[
+              'w-full rounded-lg border p-3 text-left transition-colors',
+              deleteMappingMode === 'force'
+                ? 'border-destructive/60 bg-destructive/5'
+                : 'border-input hover:bg-accent/50',
+            ]"
+            @click="deleteMappingMode = 'force'"
+          >
+            <div class="flex items-start gap-3">
+              <Unlink
+                :class="[
+                  'mt-0.5 size-4 shrink-0',
+                  deleteMappingMode === 'force'
+                    ? 'text-destructive'
+                    : 'text-muted-foreground',
+                ]"
+              />
+              <div class="min-w-0 flex-1 space-y-1.5">
+                <div class="text-sm font-medium">Удалить без переноса</div>
+                <p class="text-xs text-muted-foreground">
+                  Товары останутся связанными с маркетплейсом, но потеряют
+                  маппинг — экспорт будет недоступен, пока не назначите новый.
+                </p>
+                <p
+                  v-if="deleteMappingReplacementOptions.length === 0"
+                  class="text-xs text-muted-foreground"
+                >
+                  Перенести некуда: другого маппинга для этой категории нет.
+                  Чтобы перенести, сначала создайте или продублируйте маппинг.
+                </p>
+              </div>
+            </div>
+          </button>
+
+          <div v-if="deleteMappingImpact?.products?.length" class="pt-1">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              Связанные товары
+            </div>
+            <div class="max-h-28 divide-y overflow-y-auto rounded-md border">
               <div
                 v-for="product in deleteMappingImpact.products"
                 :key="product.id"
-                class="px-3 py-2 text-sm"
+                class="flex items-baseline justify-between gap-2 px-3 py-1.5 text-xs"
               >
-                <div class="font-medium truncate">{{ product.name || `Товар #${product.id}` }}</div>
-                <div class="text-xs text-muted-foreground">{{ product.sku || `ID ${product.id}` }}</div>
+                <span class="truncate">
+                  {{ product.name || `Товар #${product.id}` }}
+                </span>
+                <span class="shrink-0 font-mono text-muted-foreground">
+                  {{ product.sku || `ID ${product.id}` }}
+                </span>
+              </div>
+              <div
+                v-if="
+                  (deleteMappingImpact.linkedProductsCount || 0) >
+                  deleteMappingImpact.products.length
+                "
+                class="px-3 py-1.5 text-xs text-muted-foreground"
+              >
+                и ещё
+                {{
+                  deleteMappingImpact.linkedProductsCount -
+                  deleteMappingImpact.products.length
+                }}
               </div>
             </div>
-          </div>
-
-          <div class="space-y-2">
-            <Label>Переназначить на</Label>
-            <Select
-              :model-value="deleteMappingReplacementId?.toString()"
-              @update:model-value="(value) => deleteMappingReplacementId = value"
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите маппинг..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="mapping in deleteMappingReplacementOptions"
-                  :key="mapping.id"
-                  :value="mapping.id.toString()"
-                >
-                  {{ mapping.name || `Маппинг #${mapping.id}` }}
-                  <span class="text-muted-foreground ml-1">
-                    ({{ mapping.externalCategoryName || mapping.externalCategoryId }})
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p v-if="deleteMappingReplacementOptions.length === 0" class="text-sm text-destructive">
-              Нет другого маппинга для этой локальной категории. Сначала создайте или продублируйте маппинг.
-            </p>
           </div>
         </div>
 
@@ -3237,11 +4111,21 @@ export default {
           </DialogClose>
           <Button
             variant="destructive"
-            @click="confirmDeleteMappingWithReassign"
-            :disabled="isDeletingMapping || !deleteMappingReplacementId"
+            @click="confirmDeleteMappingChoice"
+            :disabled="
+              isDeletingMapping ||
+              (deleteMappingMode === 'reassign' && !deleteMappingReplacementId)
+            "
           >
-            <Loader2 v-if="isDeletingMapping" class="size-4 mr-2 animate-spin" />
-            Переназначить и удалить
+            <Loader2
+              v-if="isDeletingMapping"
+              class="size-4 mr-2 animate-spin"
+            />
+            {{
+              deleteMappingMode === "reassign"
+                ? "Перенести и удалить"
+                : "Удалить без переноса"
+            }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3252,7 +4136,9 @@ export default {
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Настройки маппинга</DialogTitle>
-          <DialogDescription>Настройте параметры маппинга категорий</DialogDescription>
+          <DialogDescription
+            >Настройте параметры маппинга категорий</DialogDescription
+          >
         </DialogHeader>
         <div class="space-y-4 py-4">
           <div class="space-y-2">
@@ -3267,8 +4153,14 @@ export default {
           <DialogClose as-child>
             <Button variant="outline">Отмена</Button>
           </DialogClose>
-          <Button @click="saveMappingSettingsDialog" :disabled="isSavingMappingSettings">
-            <Loader2 v-if="isSavingMappingSettings" class="size-4 mr-2 animate-spin" />
+          <Button
+            @click="saveMappingSettingsDialog"
+            :disabled="isSavingMappingSettings"
+          >
+            <Loader2
+              v-if="isSavingMappingSettings"
+              class="size-4 mr-2 animate-spin"
+            />
             Сохранить
           </Button>
         </DialogFooter>
@@ -3276,28 +4168,44 @@ export default {
     </Dialog>
 
     <!-- Mapping Selection Dialog (pre-export) -->
-    <Dialog v-model:open="showMappingSelectionDialog" @update:open="!$event && cancelMappingSelection()">
+    <Dialog
+      v-model:open="showMappingSelectionDialog"
+      @update:open="!$event && cancelMappingSelection()"
+    >
       <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Выберите маппинг для товаров</DialogTitle>
           <DialogDescription>
-            Для некоторых товаров доступно несколько маппингов категории. Выберите нужный маппинг для каждого товара.
+            Для некоторых товаров доступно несколько маппингов категории.
+            Выберите нужный маппинг для каждого товара.
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4 max-h-96 overflow-y-auto">
           <!-- Быстрый выбор по категории -->
-          <div v-if="mappingCategoryGroups.length > 0" class="space-y-2 pb-3 border-b">
-            <div class="text-sm font-medium text-muted-foreground">Применить ко всем</div>
+          <div
+            v-if="mappingCategoryGroups.length > 0"
+            class="space-y-2 pb-3 border-b"
+          >
+            <div class="text-sm font-medium text-muted-foreground">
+              Применить ко всем
+            </div>
             <div
               v-for="group in mappingCategoryGroups"
               :key="group.categoryName"
               class="flex items-center gap-2"
             >
-              <span class="text-sm shrink-0 w-[140px] truncate" :title="group.categoryName">
+              <span
+                class="text-sm shrink-0 w-[140px] truncate"
+                :title="group.categoryName"
+              >
                 {{ group.categoryName }}
-                <span class="text-muted-foreground">({{ group.products.length }})</span>
+                <span class="text-muted-foreground"
+                  >({{ group.products.length }})</span
+                >
               </span>
-              <Select @update:model-value="(val) => applyMappingToGroup(group, val)">
+              <Select
+                @update:model-value="(val) => applyMappingToGroup(group, val)"
+              >
                 <SelectTrigger class="h-8 flex-1">
                   <SelectValue placeholder="Выберите маппинг..." />
                 </SelectTrigger>
@@ -3325,12 +4233,16 @@ export default {
             <div class="flex items-center justify-between">
               <div>
                 <div class="font-medium text-sm">{{ product.productName }}</div>
-                <div class="text-xs text-muted-foreground">{{ product.categoryName }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ product.categoryName }}
+                </div>
               </div>
             </div>
             <Select
               :model-value="mappingSelections[product.productId]?.toString()"
-              @update:model-value="(val) => mappingSelections[product.productId] = parseInt(val)"
+              @update:model-value="
+                (val) => (mappingSelections[product.productId] = parseInt(val))
+              "
             >
               <SelectTrigger class="w-full">
                 <SelectValue placeholder="Выберите маппинг..." />
@@ -3343,7 +4255,10 @@ export default {
                 >
                   {{ mapping.name || `Маппинг #${mapping.id}` }}
                   <span class="text-muted-foreground ml-1">
-                    ({{ mapping.externalCategoryName || mapping.externalCategoryId }})
+                    ({{
+                      mapping.externalCategoryName ||
+                      mapping.externalCategoryId
+                    }})
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -3352,13 +4267,18 @@ export default {
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline" @click="cancelMappingSelection">Отмена</Button>
+            <Button variant="outline" @click="cancelMappingSelection"
+              >Отмена</Button
+            >
           </DialogClose>
           <Button
             @click="confirmMappingSelections"
             :disabled="isSavingMappingSelections"
           >
-            <Loader2 v-if="isSavingMappingSelections" class="size-4 mr-2 animate-spin" />
+            <Loader2
+              v-if="isSavingMappingSelections"
+              class="size-4 mr-2 animate-spin"
+            />
             <Upload v-else class="size-4 mr-2" />
             Продолжить экспорт
           </Button>

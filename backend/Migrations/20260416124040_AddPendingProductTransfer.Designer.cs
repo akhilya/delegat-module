@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using PrintO;
+using Delegat;
 
 #nullable disable
 
-namespace PrintO.Migrations
+namespace Delegat.Migrations
 {
     [DbContext(typeof(DataContext))]
     [Migration("20260416124040_AddPendingProductTransfer")]
@@ -85,7 +85,7 @@ namespace PrintO.Migrations
                     b.ToTable("UserRoles");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Category", b =>
+            modelBuilder.Entity("Delegat.Models.Category", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -118,7 +118,7 @@ namespace PrintO.Migrations
                     b.ToTable("categories");
                 });
 
-            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.CategoryAttribute", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -170,7 +170,7 @@ namespace PrintO.Migrations
                     b.ToTable("categoryAttributes");
                 });
 
-            modelBuilder.Entity("PrintO.Models.File", b =>
+            modelBuilder.Entity("Delegat.Models.File", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -218,7 +218,7 @@ namespace PrintO.Migrations
                     b.ToTable("files");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FileShareToken", b =>
+            modelBuilder.Entity("Delegat.Models.FileShareToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -254,7 +254,7 @@ namespace PrintO.Migrations
                     b.ToTable("fileShareTokens");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FileTag", b =>
+            modelBuilder.Entity("Delegat.Models.FileTag", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -280,7 +280,7 @@ namespace PrintO.Migrations
                     b.ToTable("tags");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FolderShareToken", b =>
+            modelBuilder.Entity("Delegat.Models.FolderShareToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -321,7 +321,7 @@ namespace PrintO.Migrations
                     b.ToTable("folderShareTokens");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ImageReference", b =>
+            modelBuilder.Entity("Delegat.Models.ImageReference", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -347,7 +347,7 @@ namespace PrintO.Migrations
                     b.ToTable("images");
                 });
 
-            modelBuilder.Entity("PrintO.Models.InvitationToken", b =>
+            modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -379,7 +379,7 @@ namespace PrintO.Migrations
                     b.ToTable("invitationTokens");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.CategoryMapping", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -418,7 +418,7 @@ namespace PrintO.Migrations
                     b.ToTable("categoryMappings");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.FieldMapping", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.FieldMapping", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -482,7 +482,7 @@ namespace PrintO.Migrations
                     b.ToTable("fieldMappings");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceConnection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -527,7 +527,7 @@ namespace PrintO.Migrations
                     b.ToTable("marketplaceConnections");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.ProductGroupMarketplaceLink", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.ProductGroupMarketplaceLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -576,7 +576,7 @@ namespace PrintO.Migrations
                     b.ToTable("productGroupMarketplaceLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.ProductMarketplaceLink", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.ProductMarketplaceLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -636,7 +636,7 @@ namespace PrintO.Migrations
                     b.ToTable("productMarketplaceLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Note", b =>
+            modelBuilder.Entity("Delegat.Models.Note", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -662,7 +662,7 @@ namespace PrintO.Migrations
                     b.ToTable("notes");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Operation", b =>
+            modelBuilder.Entity("Delegat.Models.Operation", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -732,7 +732,7 @@ namespace PrintO.Migrations
                     b.ToTable("operations");
                 });
 
-            modelBuilder.Entity("PrintO.Models.OperationLogEntry", b =>
+            modelBuilder.Entity("Delegat.Models.OperationLogEntry", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -762,7 +762,7 @@ namespace PrintO.Migrations
                     b.ToTable("operationLogEntries");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingImageDownload", b =>
+            modelBuilder.Entity("Delegat.Models.PendingImageDownload", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -816,7 +816,7 @@ namespace PrintO.Migrations
                     b.ToTable("pendingImageDownloads");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingProductExport", b =>
+            modelBuilder.Entity("Delegat.Models.PendingProductExport", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -875,7 +875,7 @@ namespace PrintO.Migrations
                     b.ToTable("pendingProductExports");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingProductImport", b =>
+            modelBuilder.Entity("Delegat.Models.PendingProductImport", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -937,7 +937,7 @@ namespace PrintO.Migrations
                     b.ToTable("pendingProductImports");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingProductTransfer", b =>
+            modelBuilder.Entity("Delegat.Models.PendingProductTransfer", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1017,7 +1017,7 @@ namespace PrintO.Migrations
                     b.ToTable("pendingProductTransfers");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>
+            modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1045,7 +1045,7 @@ namespace PrintO.Migrations
                     b.ToTable("productAttributeValues");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+            modelBuilder.Entity("Delegat.Models.ProductFolder", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1076,7 +1076,7 @@ namespace PrintO.Migrations
                     b.ToTable("productFolders");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+            modelBuilder.Entity("Delegat.Models.ProductGroup", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1109,7 +1109,7 @@ namespace PrintO.Migrations
                     b.ToTable("productGroups");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroupMember", b =>
+            modelBuilder.Entity("Delegat.Models.ProductGroupMember", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1142,7 +1142,7 @@ namespace PrintO.Migrations
                     b.ToTable("productGroupMembers");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Product", b =>
+            modelBuilder.Entity("Delegat.Models.Products.Product", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1201,7 +1201,7 @@ namespace PrintO.Migrations
                     b.ToTable("products");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+            modelBuilder.Entity("Delegat.Models.Products.ProductVariant", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1246,7 +1246,7 @@ namespace PrintO.Migrations
                     b.ToTable("productVariants");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.ProductVariantLink", b =>
+            modelBuilder.Entity("Delegat.Models.Products.ProductVariantLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1285,7 +1285,7 @@ namespace PrintO.Migrations
                     b.ToTable("productVariantLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.RefreshToken", b =>
+            modelBuilder.Entity("Delegat.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1319,7 +1319,7 @@ namespace PrintO.Migrations
                     b.ToTable("refreshTokens");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Store", b =>
+            modelBuilder.Entity("Delegat.Models.Store", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1337,7 +1337,7 @@ namespace PrintO.Migrations
                     b.ToTable("stores");
                 });
 
-            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.StoreAttribute", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1389,7 +1389,7 @@ namespace PrintO.Migrations
                     b.ToTable("storeAttributes");
                 });
 
-            modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
+            modelBuilder.Entity("Delegat.Models.StoreProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1417,7 +1417,7 @@ namespace PrintO.Migrations
                     b.ToTable("storeProductAttributeValues");
                 });
 
-            modelBuilder.Entity("PrintO.Models.SystemVersion", b =>
+            modelBuilder.Entity("Delegat.Models.SystemVersion", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1446,7 +1446,7 @@ namespace PrintO.Migrations
                     b.ToTable("systemVersions");
                 });
 
-            modelBuilder.Entity("PrintO.Models.User", b =>
+            modelBuilder.Entity("Delegat.Models.User", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1510,7 +1510,7 @@ namespace PrintO.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("PrintO.Models.UserRole", b =>
+            modelBuilder.Entity("Delegat.Models.UserRole", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1547,9 +1547,9 @@ namespace PrintO.Migrations
                     b.ToTable("StoreUser");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Category", b =>
+            modelBuilder.Entity("Delegat.Models.Category", b =>
                 {
-                    b.HasOne("PrintO.Models.Store", "store")
+                    b.HasOne("Delegat.Models.Store", "store")
                         .WithMany("categories")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1558,9 +1558,9 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
-            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.CategoryAttribute", b =>
                 {
-                    b.HasOne("PrintO.Models.Category", "category")
+                    b.HasOne("Delegat.Models.Category", "category")
                         .WithMany("attributes")
                         .HasForeignKey("categoryId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1569,20 +1569,20 @@ namespace PrintO.Migrations
                     b.Navigation("category");
                 });
 
-            modelBuilder.Entity("PrintO.Models.File", b =>
+            modelBuilder.Entity("Delegat.Models.File", b =>
                 {
-                    b.HasOne("PrintO.Models.User", "authorUser")
+                    b.HasOne("Delegat.Models.User", "authorUser")
                         .WithMany()
                         .HasForeignKey("authorUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.ProductFolder", "folder")
+                    b.HasOne("Delegat.Models.ProductFolder", "folder")
                         .WithMany("files")
                         .HasForeignKey("folderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("files")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1595,15 +1595,15 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FileShareToken", b =>
+            modelBuilder.Entity("Delegat.Models.FileShareToken", b =>
                 {
-                    b.HasOne("PrintO.Models.User", "createdByUser")
+                    b.HasOne("Delegat.Models.User", "createdByUser")
                         .WithMany()
                         .HasForeignKey("createdByUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.File", "file")
+                    b.HasOne("Delegat.Models.File", "file")
                         .WithMany()
                         .HasForeignKey("fileId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1614,9 +1614,9 @@ namespace PrintO.Migrations
                     b.Navigation("file");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FileTag", b =>
+            modelBuilder.Entity("Delegat.Models.FileTag", b =>
                 {
-                    b.HasOne("PrintO.Models.File", "file")
+                    b.HasOne("Delegat.Models.File", "file")
                         .WithMany("tags")
                         .HasForeignKey("fileId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1625,19 +1625,19 @@ namespace PrintO.Migrations
                     b.Navigation("file");
                 });
 
-            modelBuilder.Entity("PrintO.Models.FolderShareToken", b =>
+            modelBuilder.Entity("Delegat.Models.FolderShareToken", b =>
                 {
-                    b.HasOne("PrintO.Models.User", "createdByUser")
+                    b.HasOne("Delegat.Models.User", "createdByUser")
                         .WithMany()
                         .HasForeignKey("createdByUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.ProductFolder", "folder")
+                    b.HasOne("Delegat.Models.ProductFolder", "folder")
                         .WithMany()
                         .HasForeignKey("folderId");
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany()
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1650,15 +1650,15 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ImageReference", b =>
+            modelBuilder.Entity("Delegat.Models.ImageReference", b =>
                 {
-                    b.HasOne("PrintO.Models.File", "file")
+                    b.HasOne("Delegat.Models.File", "file")
                         .WithMany()
                         .HasForeignKey("fileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("images")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1669,24 +1669,24 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.InvitationToken", b =>
+            modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
                 {
-                    b.HasOne("PrintO.Models.User", "usedByUser")
+                    b.HasOne("Delegat.Models.User", "usedByUser")
                         .WithMany()
                         .HasForeignKey("usedByUserId");
 
                     b.Navigation("usedByUser");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.CategoryMapping", b =>
                 {
-                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", "connection")
                         .WithMany("categoryMappings")
                         .HasForeignKey("connectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Category", "localCategory")
+                    b.HasOne("Delegat.Models.Category", "localCategory")
                         .WithMany()
                         .HasForeignKey("localCategoryId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1697,9 +1697,9 @@ namespace PrintO.Migrations
                     b.Navigation("localCategory");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.FieldMapping", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.FieldMapping", b =>
                 {
-                    b.HasOne("PrintO.Models.Marketplace.CategoryMapping", "categoryMapping")
+                    b.HasOne("Delegat.Models.Marketplace.CategoryMapping", "categoryMapping")
                         .WithMany("fieldMappings")
                         .HasForeignKey("categoryMappingId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1708,9 +1708,9 @@ namespace PrintO.Migrations
                     b.Navigation("categoryMapping");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceConnection", b =>
                 {
-                    b.HasOne("PrintO.Models.Store", "store")
+                    b.HasOne("Delegat.Models.Store", "store")
                         .WithMany("marketplaceConnections")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1719,15 +1719,15 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.ProductGroupMarketplaceLink", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.ProductGroupMarketplaceLink", b =>
                 {
-                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", "connection")
                         .WithMany("productGroupLinks")
                         .HasForeignKey("connectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.ProductGroup", "productGroup")
+                    b.HasOne("Delegat.Models.ProductGroup", "productGroup")
                         .WithMany("marketplaceLinks")
                         .HasForeignKey("productGroupId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1738,20 +1738,20 @@ namespace PrintO.Migrations
                     b.Navigation("productGroup");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.ProductMarketplaceLink", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.ProductMarketplaceLink", b =>
                 {
-                    b.HasOne("PrintO.Models.Marketplace.CategoryMapping", "categoryMapping")
+                    b.HasOne("Delegat.Models.Marketplace.CategoryMapping", "categoryMapping")
                         .WithMany()
                         .HasForeignKey("categoryMappingId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", "connection")
                         .WithMany("productLinks")
                         .HasForeignKey("connectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("marketplaceLinks")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1764,9 +1764,9 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Note", b =>
+            modelBuilder.Entity("Delegat.Models.Note", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("notes")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1775,9 +1775,9 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingImageDownload", b =>
+            modelBuilder.Entity("Delegat.Models.PendingImageDownload", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany()
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1786,33 +1786,33 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingProductImport", b =>
+            modelBuilder.Entity("Delegat.Models.PendingProductImport", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "importedProduct")
+                    b.HasOne("Delegat.Models.Products.Product", "importedProduct")
                         .WithMany()
                         .HasForeignKey("importedProductId");
 
                     b.Navigation("importedProduct");
                 });
 
-            modelBuilder.Entity("PrintO.Models.PendingProductTransfer", b =>
+            modelBuilder.Entity("Delegat.Models.PendingProductTransfer", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "newProduct")
+                    b.HasOne("Delegat.Models.Products.Product", "newProduct")
                         .WithMany()
                         .HasForeignKey("newProductId");
 
                     b.Navigation("newProduct");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductAttributeValue", b =>
+            modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
-                    b.HasOne("PrintO.Models.CategoryAttribute", "attribute")
+                    b.HasOne("Delegat.Models.CategoryAttribute", "attribute")
                         .WithMany("values")
                         .HasForeignKey("attributeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("attributeValues")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1823,14 +1823,14 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+            modelBuilder.Entity("Delegat.Models.ProductFolder", b =>
                 {
-                    b.HasOne("PrintO.Models.ProductFolder", "parentFolder")
+                    b.HasOne("Delegat.Models.ProductFolder", "parentFolder")
                         .WithMany("childFolders")
                         .HasForeignKey("parentFolderId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("folders")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1841,9 +1841,9 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+            modelBuilder.Entity("Delegat.Models.ProductGroup", b =>
                 {
-                    b.HasOne("PrintO.Models.Store", "store")
+                    b.HasOne("Delegat.Models.Store", "store")
                         .WithMany("productGroups")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1852,15 +1852,15 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroupMember", b =>
+            modelBuilder.Entity("Delegat.Models.ProductGroupMember", b =>
                 {
-                    b.HasOne("PrintO.Models.ProductGroup", "group")
+                    b.HasOne("Delegat.Models.ProductGroup", "group")
                         .WithMany("members")
                         .HasForeignKey("groupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("groupMemberships")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1871,13 +1871,13 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Product", b =>
+            modelBuilder.Entity("Delegat.Models.Products.Product", b =>
                 {
-                    b.HasOne("PrintO.Models.Category", "category")
+                    b.HasOne("Delegat.Models.Category", "category")
                         .WithMany("products")
                         .HasForeignKey("categoryId");
 
-                    b.HasOne("PrintO.Models.Store", "store")
+                    b.HasOne("Delegat.Models.Store", "store")
                         .WithMany("products")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1888,9 +1888,9 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+            modelBuilder.Entity("Delegat.Models.Products.ProductVariant", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("variants")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1899,15 +1899,15 @@ namespace PrintO.Migrations
                     b.Navigation("product");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.ProductVariantLink", b =>
+            modelBuilder.Entity("Delegat.Models.Products.ProductVariantLink", b =>
                 {
-                    b.HasOne("PrintO.Models.Marketplace.MarketplaceConnection", "connection")
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", "connection")
                         .WithMany()
                         .HasForeignKey("connectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Products.ProductVariant", "variant")
+                    b.HasOne("Delegat.Models.Products.ProductVariant", "variant")
                         .WithMany("marketplaceLinks")
                         .HasForeignKey("variantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1918,9 +1918,9 @@ namespace PrintO.Migrations
                     b.Navigation("variant");
                 });
 
-            modelBuilder.Entity("PrintO.Models.RefreshToken", b =>
+            modelBuilder.Entity("Delegat.Models.RefreshToken", b =>
                 {
-                    b.HasOne("PrintO.Models.User", "user")
+                    b.HasOne("Delegat.Models.User", "user")
                         .WithMany()
                         .HasForeignKey("userId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1929,9 +1929,9 @@ namespace PrintO.Migrations
                     b.Navigation("user");
                 });
 
-            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.StoreAttribute", b =>
                 {
-                    b.HasOne("PrintO.Models.Store", "store")
+                    b.HasOne("Delegat.Models.Store", "store")
                         .WithMany("storeAttributes")
                         .HasForeignKey("storeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1940,15 +1940,15 @@ namespace PrintO.Migrations
                     b.Navigation("store");
                 });
 
-            modelBuilder.Entity("PrintO.Models.StoreProductAttributeValue", b =>
+            modelBuilder.Entity("Delegat.Models.StoreProductAttributeValue", b =>
                 {
-                    b.HasOne("PrintO.Models.Products.Product", "product")
+                    b.HasOne("Delegat.Models.Products.Product", "product")
                         .WithMany("storeAttributeValues")
                         .HasForeignKey("productId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.StoreAttribute", "storeAttribute")
+                    b.HasOne("Delegat.Models.StoreAttribute", "storeAttribute")
                         .WithMany("values")
                         .HasForeignKey("storeAttributeId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1959,9 +1959,9 @@ namespace PrintO.Migrations
                     b.Navigation("storeAttribute");
                 });
 
-            modelBuilder.Entity("PrintO.Models.User", b =>
+            modelBuilder.Entity("Delegat.Models.User", b =>
                 {
-                    b.HasOne("PrintO.Models.Store", "selectedStore")
+                    b.HasOne("Delegat.Models.Store", "selectedStore")
                         .WithMany()
                         .HasForeignKey("selectedStoreId");
 
@@ -1970,42 +1970,42 @@ namespace PrintO.Migrations
 
             modelBuilder.Entity("StoreUser", b =>
                 {
-                    b.HasOne("PrintO.Models.User", null)
+                    b.HasOne("Delegat.Models.User", null)
                         .WithMany()
                         .HasForeignKey("membersId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PrintO.Models.Store", null)
+                    b.HasOne("Delegat.Models.Store", null)
                         .WithMany()
                         .HasForeignKey("membershipsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("PrintO.Models.Category", b =>
+            modelBuilder.Entity("Delegat.Models.Category", b =>
                 {
                     b.Navigation("attributes");
 
                     b.Navigation("products");
                 });
 
-            modelBuilder.Entity("PrintO.Models.CategoryAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.CategoryAttribute", b =>
                 {
                     b.Navigation("values");
                 });
 
-            modelBuilder.Entity("PrintO.Models.File", b =>
+            modelBuilder.Entity("Delegat.Models.File", b =>
                 {
                     b.Navigation("tags");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.CategoryMapping", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.CategoryMapping", b =>
                 {
                     b.Navigation("fieldMappings");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Marketplace.MarketplaceConnection", b =>
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceConnection", b =>
                 {
                     b.Navigation("categoryMappings");
 
@@ -2014,21 +2014,21 @@ namespace PrintO.Migrations
                     b.Navigation("productLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductFolder", b =>
+            modelBuilder.Entity("Delegat.Models.ProductFolder", b =>
                 {
                     b.Navigation("childFolders");
 
                     b.Navigation("files");
                 });
 
-            modelBuilder.Entity("PrintO.Models.ProductGroup", b =>
+            modelBuilder.Entity("Delegat.Models.ProductGroup", b =>
                 {
                     b.Navigation("marketplaceLinks");
 
                     b.Navigation("members");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.Product", b =>
+            modelBuilder.Entity("Delegat.Models.Products.Product", b =>
                 {
                     b.Navigation("attributeValues");
 
@@ -2049,12 +2049,12 @@ namespace PrintO.Migrations
                     b.Navigation("variants");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Products.ProductVariant", b =>
+            modelBuilder.Entity("Delegat.Models.Products.ProductVariant", b =>
                 {
                     b.Navigation("marketplaceLinks");
                 });
 
-            modelBuilder.Entity("PrintO.Models.Store", b =>
+            modelBuilder.Entity("Delegat.Models.Store", b =>
                 {
                     b.Navigation("categories");
 
@@ -2067,7 +2067,7 @@ namespace PrintO.Migrations
                     b.Navigation("storeAttributes");
                 });
 
-            modelBuilder.Entity("PrintO.Models.StoreAttribute", b =>
+            modelBuilder.Entity("Delegat.Models.StoreAttribute", b =>
                 {
                     b.Navigation("values");
                 });

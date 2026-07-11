@@ -1,9 +1,9 @@
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Models.Marketplace;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Models.Marketplace;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models.Products;
+namespace Delegat.Models.Products;
 
 /// <summary>
 /// Maps a local ProductVariant to its marketplace-specific identifier.

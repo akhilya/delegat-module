@@ -1,8 +1,14 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Target, ArrowUpFromLine } from "lucide-vue-next";
-import { pinColor, pinTypeLabel } from "../graphModel.js";
+import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
+import { pinColor } from "../graphModel.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const props = defineProps({
   id: String,
@@ -11,35 +17,52 @@ const props = defineProps({
 });
 
 const fields = computed(() => props.data.fields || []);
-const preview = computed(() => props.data.preview || {});
 const analysis = computed(() => props.data.analysis || {});
 
-// Export-only marker: lanes whose source isn't an attribute (fan-in / op / storage) can't be read
-// back on import. Irreversibility of individual transforms is shown on the modifier blocks instead.
-function isExportOnly(fieldKey) {
-  const a = analysis.value[fieldKey];
-  return !!a && a.connected && !a.importable;
+function aliasPrimaryLabel(f) {
+  const primary = fields.value.find((x) => x.fieldKey === f.aliasOf);
+  return primary?.label || f.aliasOf;
+}
+const avail = computed(() => props.data.availableSources || {});
+const productFields = computed(() => avail.value.productFields || []);
+const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
+const storeAttributes = computed(() => avail.value.storeAttributes || []);
+
+function boundLabel(f) {
+  const s = f.source;
+  if (!s) return "";
+  if (s.type === "groupName") return "Название группы";
+  if (s.type === "productField")
+    return productFields.value.find((x) => x.key === s.field)?.displayName || s.field;
+  if (s.type === "attribute")
+    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+  if (s.type === "storeAttribute")
+    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+  return "";
 }
 
-// Pixel-aligned handle positions: header + row center. Rows render at the same metrics
-// so each input pin lines up with its field row, and Vue Flow reads the real handle rect.
+function pillStyle(type) {
+  const c = pinColor(type);
+  return { background: `${c}1f`, borderColor: `${c}47`, color: c };
+}
+
 const HEADER = 30;
 const ROW = 24;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 </script>
 
 <template>
-  <div
-    :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
-  >
-    <Handle
-      v-for="(f, i) in fields"
-      :key="f.fieldKey"
-      :id="`f:${f.fieldKey}`"
-      type="target"
-      :position="Position.Left"
-      :style="{ top: topFor(i), background: pinColor(f.outputType) }"
-    />
+  <div :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']">
+    <template v-for="(f, i) in fields" :key="f.fieldKey">
+      <!-- Alias fields (merged duplicates) take the primary's value — no input pin -->
+      <Handle
+        v-if="!f.source && !f.aliasOf"
+        :id="`f:${f.fieldKey}`"
+        type="target"
+        :position="Position.Left"
+        :style="{ top: topFor(i), background: pinColor(f.outputType) }"
+      />
+    </template>
 
     <div class="vf-adapter__head">
       <Target class="size-3.5 text-primary" />
@@ -48,23 +71,66 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
     </div>
 
     <div class="vf-adapter__list">
-      <div v-for="f in fields" :key="f.fieldKey" class="vf-adapter__row">
+      <div v-for="f in fields" :key="f.fieldKey" class="vf-adapter__row cursor-pointer" @click.stop="data.openField?.(f.fieldKey)">
         <span class="vf-adapter__label" :title="f.fieldKey">
-          {{ f.label || f.fieldKey
-          }}<span v-if="f.isRequired" class="vf-req"> *</span>
+          {{ f.label || f.fieldKey }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
-        <ArrowUpFromLine
-          v-if="isExportOnly(f.fieldKey)"
-          class="vf-adapter__marker vf-adapter__marker--muted"
-          title="Только экспорт: обратное чтение (импорт) для этого поля недоступно"
+
+        <!-- Merged duplicate: exports the primary's value under its own key -->
+        <TooltipProvider v-if="f.aliasOf" :delay-duration="400">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <span class="vf-adapter__pill vf-adapter__pill--alias" @click.stop="data.openField?.(f.fieldKey)">
+                = {{ aliasPrimaryLabel(f) }}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" class="max-w-56 text-xs">
+              Объединено с «{{ aliasPrimaryLabel(f) }}»: при экспорте получает его значение,
+              при импорте игнорируется
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <!-- Direction indicator for pill-bound fields only (wire fields show direction on the canvas edge) -->
+        <component
+          v-if="f.source"
+          :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
+          :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
         />
-        <span class="vf-adapter__type">{{ pinTypeLabel(f.outputType) }}</span>
-        <span
-          v-if="preview[f.fieldKey] != null"
-          class="vf-adapter__preview"
-          :title="String(preview[f.fieldKey])"
-          >{{ preview[f.fieldKey] }}</span
-        >
+
+        <!-- Fan-out warning -->
+        <TooltipProvider v-if="analysis[f.fieldKey]?.fanOut" :delay-duration="200">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <AlertTriangle class="size-2.5 shrink-0 cursor-help text-amber-500" />
+            </TooltipTrigger>
+            <TooltipContent side="top" class="max-w-56 text-xs">
+              {{
+                f.source
+                  ? "Этот источник уже используется другим полем — возможен конфликт данных."
+                  : "Импорт отключён: этот источник уже используется несколькими полями адаптера."
+              }}
+              Если поля дублируют друг друга — объедините их в настройках поля («Объединить с полем»).
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <!-- Direct-binding pill -->
+        <TooltipProvider v-if="f.source" :delay-duration="400">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <span
+                class="vf-adapter__pill"
+                :style="pillStyle(f.outputType)"
+                @click.stop="data.openField?.(f.fieldKey)"
+              >{{ boundLabel(f) }}</span>
+            </TooltipTrigger>
+            <TooltipContent side="top" class="text-xs">
+              <div class="font-medium">{{ boundLabel(f) }}</div>
+              <div class="text-muted-foreground">Нажмите для настройки</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   </div>

@@ -1,8 +1,8 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models.Marketplace;
+namespace Delegat.Models.Marketplace;
 
 /// <summary>
 /// Maps a local product category to an external marketplace category.
@@ -63,17 +63,18 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// JSON-serialized node graph for the whole-category visual mapping editor
-    /// (nodes + edges). When present, the graph is the source of truth for export;
-    /// when null, export falls back to per-field <see cref="FieldMapping.modifiersJson"/>
-    /// / <see cref="FieldMapping.transformExpression"/>. Stored as LONGTEXT.
+    /// JSON-serialized node graph (nodes + edges) for the whole-category visual mapping editor.
+    /// The single source of truth for the mapping — schema, per-field config, and export/import.
+    /// Stored as LONGTEXT.
     /// </summary>
     public string? graphJson { get; set; }
 
     /// <summary>
-    /// Collection of field mappings for this category mapping.
+    /// Stores answers from compatibility analysis questions (for the new semantic flow).
+    /// Structure: { "version": "1", "answers": { "fieldKey": "user choice or source" }, "reportSummary": {...} }
+    /// Used to skip re-asking questions on re-generate and to provide context.
     /// </summary>
-    public virtual ICollection<FieldMapping> fieldMappings { get; set; } = new List<FieldMapping>();
+    public string? compatibilityContextJson { get; set; }
 
     #region IAddable / IUpdateable
 
@@ -95,6 +96,8 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             externalCategoryName = form.externalCategoryName;
         if (form.name != null)
             name = form.name;
+        if (form.compatibilityContextJson != null)
+            compatibilityContextJson = form.compatibilityContextJson;
         return true;
     }
 
@@ -113,10 +116,30 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
             externalCategoryId = externalCategoryId,
             externalCategoryName = externalCategoryName,
             name = name,
-            fieldMappingsCount = fieldMappings?.Count ?? 0,
+            fieldMappingsCount = CountGraphFields(graphJson),
             hasGraph = !string.IsNullOrEmpty(graphJson),
-            createdAt = createdAt
+            createdAt = createdAt,
+            compatibilityContextJson = compatibilityContextJson
         };
+    }
+
+    /// <summary>Number of adapter fields declared in the node graph (the field schema).</summary>
+    private static int CountGraphFields(string? graphJson)
+    {
+        if (string.IsNullOrWhiteSpace(graphJson))
+            return 0;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(graphJson);
+            if (doc.RootElement.TryGetProperty("nodes", out var nodes))
+                foreach (var n in nodes.EnumerateArray())
+                    if (n.TryGetProperty("type", out var t) && t.GetString() == "adapterFields"
+                        && n.TryGetProperty("data", out var d) && d.TryGetProperty("fields", out var f)
+                        && f.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        return f.GetArrayLength();
+        }
+        catch (System.Text.Json.JsonException) { }
+        return 0;
     }
 
     #endregion
@@ -228,6 +251,10 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         [StringLength(NAME_MAX_LENGTH)]
         public string? name { get; set; }
 
+        /// <summary>
+        /// Compatibility context (answers from wizard).
+        /// </summary>
+        public string? compatibilityContextJson { get; set; }
     }
 
     /// <summary>
@@ -285,6 +312,11 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
         /// Timestamp when the mapping was created.
         /// </summary>
         public DateTime createdAt { get; set; }
+
+        /// <summary>
+        /// Compatibility analysis context and user answers (new flow).
+        /// </summary>
+        public string? compatibilityContextJson { get; set; }
     }
 
     #endregion

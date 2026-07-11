@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
 
 // Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
@@ -27,6 +28,7 @@ export default {
   components: {
     Input,
     Switch,
+    EmptyState,
     Label,
     SearchableSelect,
     MultiSelectDropdown,
@@ -370,11 +372,11 @@ export default {
       </div>
     </div>
 
-    <p
+    <EmptyState
       v-if="sortedAttributes.length === 0"
-      class="text-sm text-muted-foreground text-center py-4"
-    >
-      Нет атрибутов для заполнения
-    </p>
+      size="sm"
+      title="Нет атрибутов для заполнения"
+      description="Добавьте атрибуты в категорию товара — они появятся здесь."
+    />
   </div>
 </template>

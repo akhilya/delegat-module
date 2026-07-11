@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
-using PrintO.Services.Marketplace.Modifiers;
+using Delegat.Services.Marketplace.Modifiers;
 
-namespace PrintO.Services.Marketplace.Graph;
+namespace Delegat.Services.Marketplace.Graph;
 
 /// <summary>
 /// Evaluates a <see cref="MappingGraph"/> for one product, producing the same
@@ -121,8 +121,25 @@ public static class GraphEvaluator
                     case "modifier":
                     {
                         var input = MainInput(incoming, pins, nodeId);
+                        var modType = data.modifierType ?? "";
 
-                        // Operand params can be overridden by wires into `p:<key>` pins.
+                        if (string.Equals(modType, "llmGenerate", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (ctx.GenerativePassThrough)
+                            {
+                                pins[nodeId] = input;
+                                CollectFieldPinValues(nodeId, data, incoming, pins, result);
+                                break;
+                            }
+
+                            var genOut = ctx.GenerativeOutputs?.GetValueOrDefault(nodeId);
+                            pins[nodeId] = new PinValue(
+                                genOut ?? "[ожидание генерации…]",
+                                input.OriginOptions,
+                                input.ForcedType);
+                            break;
+                        }
+
                         var modParams = data.@params;
                         if (incoming.TryGetValue(nodeId, out var modEdges))
                         {
@@ -142,17 +159,27 @@ public static class GraphEvaluator
                                 modParams = overridden;
                         }
 
+                        List<SourceOption>? targetOpts = null;
+                        if (data.targetFieldOptions is { Count: > 0 })
+                        {
+                            targetOpts = data.targetFieldOptions
+                                .Select(o => new SourceOption { value = o.value, label = o.label })
+                                .ToList();
+                        }
+
                         var nodeCtx = ctx.ModifierContext == null
                             ? null
                             : new ModifierContext
                             {
                                 ResolveReference = ctx.ModifierContext.ResolveReference,
-                                SourceAttributeOptions = input.OriginOptions
+                                SourceAttributeOptions = input.OriginOptions,
+                                TargetFieldOptions = targetOpts,
+                                TargetFieldKey = data.targetFieldKey,
                             };
                         var outValue = ModifierPipeline.ApplySingle(
-                            data.modifierType ?? "", input.Value, modParams, nodeCtx);
+                            modType, input.Value, modParams, nodeCtx);
 
-                        var forced = string.Equals(data.modifierType, "forceType", StringComparison.OrdinalIgnoreCase)
+                        var forced = string.Equals(modType, "forceType", StringComparison.OrdinalIgnoreCase)
                             ? GetStringParam(modParams, "type") ?? input.ForcedType
                             : input.ForcedType;
 
@@ -283,54 +310,9 @@ public static class GraphEvaluator
                         break;
 
                     case "adapterFields":
-                    {
-                        var adapterFields = (data.fields ?? new List<AdapterField>())
-                            .Where(f => !string.IsNullOrEmpty(f.fieldKey))
-                            .GroupBy(f => f.fieldKey!)
-                            .ToDictionary(g => g.Key, g => g.First());
-                        // Fields with a direct source binding have no input pin — skip their edges.
-                        var bound = new HashSet<string>(
-                            adapterFields.Where(kv => kv.Value.source?.type != null).Select(kv => kv.Key));
-
-                        if (incoming.TryGetValue(nodeId, out var inEdges))
-                        {
-                            foreach (var e in inEdges)
-                            {
-                                var handle = e.targetHandle;
-                                if (string.IsNullOrEmpty(handle) || !handle.StartsWith("f:"))
-                                    continue;
-                                var key = handle.Substring(2);
-                                if (bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
-                                    continue;
-
-                                var declared = adapterFields.TryGetValue(key, out var fld) ? fld.outputType : null;
-                                var effectiveType = pv.ForcedType ?? declared;
-                                result.Outputs[key] = ctx.Coerce(pv.Value, effectiveType);
-                                if (!string.IsNullOrEmpty(effectiveType))
-                                    result.FieldTypes[key] = effectiveType!;
-                            }
-                        }
-
-                        // Resolve directly-bound fields straight from their source (no edge).
-                        foreach (var key in bound)
-                        {
-                            var f = adapterFields[key];
-                            var s = f.source!;
-                            object? value = s.type switch
-                            {
-                                "attribute" => ctx.ResolveCategoryAttribute(s.attributeId ?? 0),
-                                "storeAttribute" => ctx.ResolveStoreAttribute(s.attributeId ?? 0),
-                                "productField" => ctx.ResolveProductField(s.field ?? ""),
-                                "groupName" => ctx.ResolveGroupName(),
-                                _ => null
-                            };
-                            value = ApplySourceType(value, f.outputType);
-                            result.Outputs[key] = ctx.Coerce(value, f.outputType);
-                            if (!string.IsNullOrEmpty(f.outputType))
-                                result.FieldTypes[key] = f.outputType!;
-                        }
+                    case "adapterPriceFields":
+                        EvaluateAdapterSink(nodeId, data, incoming, pins, ctx, result);
                         break;
-                    }
 
                     case "output":
                     {
@@ -428,6 +410,74 @@ public static class GraphEvaluator
         };
     }
 
+    private static void EvaluateAdapterSink(
+        string nodeId,
+        GraphNodeData data,
+        Dictionary<string, List<GraphEdge>> incoming,
+        Dictionary<string, PinValue> pins,
+        GraphEvaluationContext ctx,
+        GraphEvalResult result)
+    {
+        var adapterFields = (data.fields ?? new List<AdapterField>())
+            .Where(f => !string.IsNullOrEmpty(f.fieldKey))
+            .GroupBy(f => f.fieldKey!)
+            .ToDictionary(g => g.Key, g => g.First());
+        var aliases = adapterFields.Values
+            .Where(f => !string.IsNullOrEmpty(f.aliasOf))
+            .ToList();
+        var aliasKeys = new HashSet<string>(aliases.Select(f => f.fieldKey!));
+        var bound = new HashSet<string>(
+            adapterFields.Where(kv => kv.Value.source?.type != null && !aliasKeys.Contains(kv.Key))
+                .Select(kv => kv.Key));
+
+        if (incoming.TryGetValue(nodeId, out var inEdges))
+        {
+            foreach (var e in inEdges)
+            {
+                var handle = e.targetHandle;
+                if (string.IsNullOrEmpty(handle) || !handle.StartsWith("f:"))
+                    continue;
+                var key = handle.Substring(2);
+                if (aliasKeys.Contains(key) || bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
+                    continue;
+
+                var declared = adapterFields.TryGetValue(key, out var fld) ? fld.outputType : null;
+                var effectiveType = pv.ForcedType ?? declared;
+                result.Outputs[key] = ctx.Coerce(pv.Value, effectiveType);
+                if (!string.IsNullOrEmpty(effectiveType))
+                    result.FieldTypes[key] = effectiveType!;
+            }
+        }
+
+        foreach (var key in bound)
+        {
+            var f = adapterFields[key];
+            var s = f.source!;
+            object? value = s.type switch
+            {
+                "attribute" => ctx.ResolveCategoryAttribute(s.attributeId ?? 0),
+                "storeAttribute" => ctx.ResolveStoreAttribute(s.attributeId ?? 0),
+                "productField" => ctx.ResolveProductField(s.field ?? ""),
+                "groupName" => ctx.ResolveGroupName(),
+                _ => null
+            };
+            value = ApplySourceType(value, f.outputType);
+            result.Outputs[key] = ctx.Coerce(value, f.outputType);
+            if (!string.IsNullOrEmpty(f.outputType))
+                result.FieldTypes[key] = f.outputType!;
+        }
+
+        foreach (var alias in aliases)
+        {
+            if (alias.aliasOf != null && result.Outputs.TryGetValue(alias.aliasOf, out var primaryValue))
+            {
+                result.Outputs[alias.fieldKey!] = ctx.Coerce(primaryValue, alias.outputType);
+                if (!string.IsNullOrEmpty(alias.outputType))
+                    result.FieldTypes[alias.fieldKey!] = alias.outputType!;
+            }
+        }
+    }
+
     private static bool ValuesEqual(object? a, object? b)
     {
         if (TryToDecimal(a, out var da) && TryToDecimal(b, out var db))
@@ -466,6 +516,47 @@ public static class GraphEvaluator
             return en.Cast<object?>().Any(x => string.Equals(ToInvariantString(x), n, StringComparison.Ordinal));
         }
         return false;
+    }
+
+    /// <summary>Collect values wired into llmGenerate field pins (handle "field:&lt;pinId&gt;").</summary>
+    private static void CollectFieldPinValues(
+        string nodeId,
+        GraphNodeData data,
+        Dictionary<string, List<GraphEdge>> incoming,
+        Dictionary<string, PinValue> pins,
+        GraphEvalResult result)
+    {
+        if (!incoming.TryGetValue(nodeId, out var edges))
+            return;
+
+        var allowed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pin in data.fieldPins ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(pin.id))
+                allowed.Add(pin.id!);
+        }
+
+        foreach (var e in edges)
+        {
+            var handle = e.targetHandle;
+            if (string.IsNullOrEmpty(handle) || !handle.StartsWith("field:", StringComparison.Ordinal))
+                continue;
+
+            var pinId = handle["field:".Length..];
+            if (allowed.Count > 0 && !allowed.Contains(pinId))
+                continue;
+
+            if (!pins.TryGetValue(e.source, out var pv))
+                continue;
+
+            if (!result.FieldPinValues.TryGetValue(nodeId, out var pinMap))
+            {
+                pinMap = new Dictionary<string, object?>(StringComparer.Ordinal);
+                result.FieldPinValues[nodeId] = pinMap;
+            }
+
+            pinMap[pinId] = pv.Value;
+        }
     }
 
     /// <summary>Coerce a pin value to a list (a plain string is a single element, not a char list).</summary>

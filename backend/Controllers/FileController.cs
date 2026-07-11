@@ -5,15 +5,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Models.Products;
-using PrintO.Services;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Models.Products;
+using Delegat.Services;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 /// <summary>
 /// Controller for uploading and deleting product files in object storage.

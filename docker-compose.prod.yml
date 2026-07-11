@@ -1,35 +1,31 @@
-# Production / Dokploy deployment
-# Uses external volumes from existing Dokploy infrastructure
-
 services:
   # Backend API (ASP.NET Core)
-  printo-api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+  delegat-api:
+    image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "5000:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - MYSQL_SERVER=mysql
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-printo}
-      - MYSQL_USER=${MYSQL_USER:-printo}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-printo}
+      - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_SECURE=false
       - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-}
       - MINIO_PUBLIC_SECURE=${MINIO_PUBLIC_SECURE:-false}
       - JWT_KEY=${JWT_KEY}
-      - JWT_ISSUER=${JWT_ISSUER:-printo.studio}
-      - JWT_AUDIENCE=${JWT_AUDIENCE:-printo.studio}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-      - CORS_ORIGINS=${CORS_ORIGINS:-https://dashboard.printo.studio}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     depends_on:
       mysql:
         condition: service_healthy
@@ -42,14 +38,13 @@ services:
       retries: 10
       start_period: 120s
     networks:
-      - printo-network
+      - delegat-network
     restart: unless-stopped
 
   # Frontend (Nginx + Vue SPA)
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
       interval: 10s
@@ -57,19 +52,25 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - printo-network
+      - delegat-network
     restart: unless-stopped
 
   # MySQL Database
   mysql:
     image: mysql:8.4
-    command: --innodb-lock-wait-timeout=3600 --lock-wait-timeout=3600
+    command: >
+      --innodb-lock-wait-timeout=3600
+      --lock-wait-timeout=3600
+      --innodb-buffer-pool-size=64M
+      --performance-schema=OFF
+      --max-connections=50
+      --skip-name-resolve
     ports:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-printo}
-      MYSQL_USER: ${MYSQL_USER:-printo}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
@@ -80,7 +81,7 @@ services:
       retries: 10
       start_period: 300s
     networks:
-      - printo-network
+      - delegat-network
     restart: unless-stopped
 
   # MinIO Object Storage
@@ -98,7 +99,7 @@ services:
       timeout: 20s
       retries: 3
     networks:
-      - printo-network
+      - delegat-network
     restart: unless-stopped
 
   # MinIO bucket initialization
@@ -118,18 +119,16 @@ services:
     environment:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-printo}
+      - MINIO_BUCKET=${MINIO_BUCKET}
     networks:
-      - printo-network
+      - delegat-network
 
 volumes:
   mysql_data:
-    # New volume - old one was corrupted during MySQL 8.4.7->8.4.8 upgrade
-    name: printo-mysql-data-v3
+    name: ${MYSQL_VOLUME_NAME:-delegat-mysql-data}
   minio_data:
-    external: true
-    name: system-minio-ecslls_minio-data-system-minio-ecslls
+    name: ${MINIO_VOLUME_NAME:-delegat-minio-data}
 
 networks:
-  printo-network:
+  delegat-network:
     driver: bridge

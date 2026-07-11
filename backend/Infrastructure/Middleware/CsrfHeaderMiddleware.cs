@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Middleware;
+namespace Delegat.Infrastructure.Middleware;
 
 public class CsrfHeaderMiddleware
 {

@@ -1,4 +1,4 @@
-namespace PrintO.Services.Marketplace.Modifiers;
+namespace Delegat.Services.Marketplace.Modifiers;
 
 /// <summary>
 /// Context passed to context-aware modifiers, providing access to
@@ -16,6 +16,11 @@ public class ModifierContext
     /// Used by ToTextModifier to resolve value→label.
     /// </summary>
     public List<SourceOption>? SourceAttributeOptions { get; init; }
+
+    /// <summary>Target adapter field allowed values (optionMap validation).</summary>
+    public List<SourceOption>? TargetFieldOptions { get; init; }
+
+    public string? TargetFieldKey { get; init; }
 }
 
 /// <summary>

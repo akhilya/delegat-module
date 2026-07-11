@@ -1,8 +1,8 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Represents a reference linking a file to a product as an ordered image.

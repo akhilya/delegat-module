@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Storage;
+namespace Delegat.Infrastructure.Storage;
 
 /// <summary>
 /// Result of file upload with metadata

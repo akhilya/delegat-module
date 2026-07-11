@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
+using Delegat.Enums;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 /// <summary>
 /// Background service that processes the pending image download queue.

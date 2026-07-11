@@ -11,6 +11,7 @@ export default {
   props: {
     modifier: { type: Object, required: true },
     externalFieldOptions: { type: Array, default: () => [] },
+    sourceFieldOptions: { type: Array, default: () => [] },
   },
   emits: ["update", "close"],
   data() {
@@ -66,6 +67,7 @@ export default {
         <ValueMapEditor
           :mappings="localParams[param.key] || []"
           :external-field-options="externalFieldOptions"
+          :source-field-options="sourceFieldOptions"
           :default-value="localParams['default'] || ''"
           @update:mappings="(v) => onParamChange(param.key, v)"
           @update:defaultValue="(v) => onParamChange('default', v)"

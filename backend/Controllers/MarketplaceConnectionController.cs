@@ -1,15 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Infrastructure.Security;
-using PrintO.Marketplace.SDK.RateLimit;
-using PrintO.Models.Marketplace;
-using PrintO.Services;
-using PrintO.Services.Marketplace;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Models.Marketplace;
+using Delegat.Services;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -22,6 +22,7 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly ILogger<MarketplaceConnectionController> _logger;
     private readonly EncryptionService? _encryptionService;
     private readonly QuotaService _quotaService;
+    private readonly DataContext _db;
 
     public MarketplaceConnectionController(
         ICurrentUserService currentUserService,
@@ -30,6 +31,7 @@ public class MarketplaceConnectionController : ControllerBase
         IMarketplaceAdapterRegistry adapterRegistry,
         ILogger<MarketplaceConnectionController> logger,
         QuotaService quotaService,
+        DataContext db,
         EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
@@ -39,6 +41,7 @@ public class MarketplaceConnectionController : ControllerBase
         _logger = logger;
         _quotaService = quotaService;
         _encryptionService = encryptionService;
+        _db = db;
     }
 
     /// <summary>
@@ -73,18 +76,20 @@ public class MarketplaceConnectionController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
-        var repo = _unitOfWork.Repository<MarketplaceConnection>();
-
-        var connections = await repo.FindAllAsync(
-            c => c.storeId == selectedStoreId.Value,
-            query => query
-                .Include(c => c.categoryMappings)
-                .Include(c => c.productLinks));
-
-        var result = connections
+        var result = await _db.marketplaceConnections
+            .Where(c => c.storeId == selectedStoreId.Value)
             .OrderByDescending(c => c.createdAt)
-            .Select(c => ((Infrastructure.Interfaces.IMapToDTO<MarketplaceConnection.ConnectionDTO>)c).MapToDTO(_serviceProvider))
-            .ToList();
+            .Select(c => new MarketplaceConnection.ConnectionDTO
+            {
+                id = c.Id,
+                name = c.name,
+                adapterKey = c.adapterKey,
+                isActive = c.isActive,
+                lastSyncAt = c.lastSyncAt,
+                categoryMappingsCount = c.categoryMappings.Count(),
+                productLinksCount = c.productLinks.Count(),
+            })
+            .ToListAsync();
 
         return Ok(result);
     }
@@ -100,18 +105,32 @@ public class MarketplaceConnectionController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Магазин не выбран");
 
-        var repo = _unitOfWork.Repository<MarketplaceConnection>();
-
-        var connection = await repo.FindAsync(
-            c => c.Id == connectionId && c.storeId == selectedStoreId.Value,
-            query => query
-                .Include(c => c.categoryMappings)
-                .Include(c => c.productLinks));
+        var connection = await _db.marketplaceConnections
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
             throw ApiException.NotFound("Подключение не найдено");
 
-        return Ok(((Infrastructure.Interfaces.IMapToDTO<MarketplaceConnection.ConnectionDetailDTO>)connection).MapToDTO(_serviceProvider));
+        var credentialsJson = connection.credentialsJson;
+        if (_encryptionService != null
+            && !string.IsNullOrEmpty(credentialsJson)
+            && _encryptionService.IsEncrypted(credentialsJson))
+        {
+            credentialsJson = _encryptionService.Decrypt(credentialsJson);
+        }
+
+        return Ok(new MarketplaceConnection.ConnectionDetailDTO
+        {
+            id = connection.Id,
+            name = connection.name,
+            adapterKey = connection.adapterKey,
+            credentialsJson = credentialsJson,
+            settingsJson = connection.settingsJson,
+            isActive = connection.isActive,
+            lastSyncAt = connection.lastSyncAt,
+            createdAt = connection.createdAt,
+        });
     }
 
     /// <summary>
@@ -199,23 +218,17 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value,
             query => query
                 .Include(c => c.categoryMappings)
-                    .ThenInclude(cm => cm.fieldMappings)
                 .Include(c => c.productLinks));
 
         if (connection == null)
             throw ApiException.NotFound("Подключение не найдено");
 
         // Delete related entities
-        var fieldMappingRepo = _unitOfWork.Repository<FieldMapping>();
         var categoryMappingRepo = _unitOfWork.Repository<CategoryMapping>();
         var productLinkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
 
         foreach (var mapping in connection.categoryMappings.ToList())
         {
-            foreach (var fieldMapping in mapping.fieldMappings.ToList())
-            {
-                await fieldMappingRepo.DeleteAsync(fieldMapping);
-            }
             await categoryMappingRepo.DeleteAsync(mapping);
         }
 

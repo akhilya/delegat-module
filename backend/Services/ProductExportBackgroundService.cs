@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Models;
-using PrintO.Services.Marketplace;
+using Delegat.Models;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 /// <summary>
 /// Background service that processes the pending product export queue.

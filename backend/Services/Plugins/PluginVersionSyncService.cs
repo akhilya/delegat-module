@@ -1,11 +1,27 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
-using PrintO.Services.Marketplace;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
+using Delegat.Services.Marketplace;
+using Delegat.Services.Marketplace.Graph;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
+
+/// <summary>
+/// Result of an additive adapter-field schema sync for a single category mapping.
+/// Existing graph connections and user config are never removed.
+/// </summary>
+public sealed class MappingFieldSyncResult
+{
+    public int CardFieldsAdded { get; set; }
+    public int PriceFieldsAdded { get; set; }
+    public int TotalFromApi { get; set; }
+    public int ExistingCount { get; set; }
+    public List<string> AddedFieldKeys { get; set; } = [];
+    public List<string> AddedPriceFieldKeys { get; set; } = [];
+    public int TotalAdded => CardFieldsAdded + PriceFieldsAdded;
+}
 
 /// <summary>
 /// Detects plugin version changes and adds missing fields to existing category mappings.
@@ -27,6 +43,36 @@ public class PluginVersionSyncService
         _pluginManager = pluginManager;
         _adapterRegistry = adapterRegistry;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Fetch the current adapter schema for one mapping and append any new fields to graphJson.
+    /// Does not remove or overwrite existing field bindings.
+    /// </summary>
+    public async Task<MappingFieldSyncResult> SyncMappingFieldsAsync(
+        int connectionId,
+        int mappingId,
+        CancellationToken ct = default)
+    {
+        var mapping = await _context.categoryMappings
+            .Include(m => m.localCategory!)
+                .ThenInclude(c => c.attributes)
+            .FirstOrDefaultAsync(m => m.Id == mappingId && m.connectionId == connectionId, ct);
+
+        if (mapping == null)
+            throw new InvalidOperationException("Маппинг не найден");
+
+        var connection = await _context.marketplaceConnections
+            .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
+
+        if (connection == null)
+            throw new InvalidOperationException("Подключение не найдено");
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw new InvalidOperationException($"Адаптер {connection.adapterKey} не найден");
+
+        return await SyncCategoryMappingFieldsAsync(mapping, connection, adapter, ct);
     }
 
     /// <summary>
@@ -110,9 +156,8 @@ public class PluginVersionSyncService
 
         foreach (var connection in connections)
         {
-            // Load category mappings with field mappings and local category attributes
+            // Load category mappings with local category attributes (schema lives in graphJson)
             var mappings = await _context.categoryMappings
-                .Include(m => m.fieldMappings)
                 .Include(m => m.localCategory)
                     .ThenInclude(c => c.attributes)
                 .Where(m => m.connectionId == connection.Id)
@@ -126,10 +171,10 @@ public class PluginVersionSyncService
             {
                 try
                 {
-                    var added = await SyncCategoryMappingFieldsAsync(mapping, connection, adapter, ct);
-                    if (added > 0)
+                    var result = await SyncCategoryMappingFieldsAsync(mapping, connection, adapter, ct);
+                    if (result.TotalAdded > 0)
                     {
-                        totalFieldsAdded += added;
+                        totalFieldsAdded += result.TotalAdded;
                         totalMappings++;
                     }
                 }
@@ -145,12 +190,14 @@ public class PluginVersionSyncService
             adapterKey, totalMappings, totalFieldsAdded);
     }
 
-    private async Task<int> SyncCategoryMappingFieldsAsync(
+    private async Task<MappingFieldSyncResult> SyncCategoryMappingFieldsAsync(
         CategoryMapping mapping,
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
         CancellationToken ct)
     {
+        var result = new MappingFieldSyncResult();
+
         // Get current fields from marketplace
         List<ExternalField> fields;
         try
@@ -161,13 +208,20 @@ public class PluginVersionSyncService
         {
             _logger.LogWarning(ex, "Failed to fetch fields for category {CatId} on connection {ConnId}.",
                 mapping.externalCategoryId, connection.Id);
-            return 0;
+            throw new InvalidOperationException(
+                "Не удалось получить поля категории от маркетплейса. Проверьте подключение и попробуйте снова.", ex);
         }
 
-        // Build set of already-mapped field keys
-        var existingKeys = mapping.fieldMappings
-            .Select(fm => fm.externalFieldKey)
-            .ToHashSet();
+        fields = fields.Where(f => f.Key != "_hasSizes").ToList();
+
+        // Already-mapped field keys come from the graph's adapter schema (single source of truth).
+        var existingKeys = MappingService.SchemaFields(mapping.graphJson)
+            .Select(f => f.fieldKey)
+            .Where(k => !string.IsNullOrEmpty(k))
+            .ToHashSet(StringComparer.Ordinal);
+
+        result.TotalFromApi = fields.Count;
+        result.ExistingCount = existingKeys.Count;
 
         // Build attribute map from local category
         var attributeMap = new Dictionary<string, int>();
@@ -181,61 +235,78 @@ public class PluginVersionSyncService
             }
         }
 
-        // Start sort order after existing field mappings
-        var maxSortOrder = mapping.fieldMappings.Any()
-            ? mapping.fieldMappings.Max(fm => fm.sortOrder)
-            : -1;
-
         var newFields = fields.Where(f => !existingKeys.Contains(f.Key)).ToList();
         _logger.LogInformation(
             "Mapping {Id} ({Category}): {Total} fields from API, {Existing} already mapped, {New} new.",
             mapping.Id, mapping.externalCategoryName,
             fields.Count, existingKeys.Count, newFields.Count);
 
-        int count = 0;
+        var cardFieldsAdded = newFields.Count;
+        var addedFieldKeys = newFields.Select(f => f.Key).ToList();
 
-        foreach (var field in fields.OrderBy(f => f.SortOrder))
+        if (cardFieldsAdded > 0)
         {
-            if (existingKeys.Contains(field.Key))
-                continue;
-
-            // Use the same auto-mapping logic as CategoryImportService
-            var (sourceType, sourceField, sourceAttributeId) =
-                CategoryImportService.DetermineAutoMapping(field, attributeMap);
-
-            var isRequired = sourceType == Enums.FieldMappingSourceType.ProductField
-                ? false
-                : field.IsRequired;
-
-            var fieldMapping = new FieldMapping();
-            fieldMapping.AddFill(new FieldMapping.AddForm
+            // Additively sync the new fields into the mapping's node graph.
+            var specs = fields.OrderBy(f => f.SortOrder).Select(field =>
             {
-                categoryMappingId = mapping.Id,
-                externalFieldKey = field.Key,
-                externalFieldName = field.Name,
-                isRequired = isRequired,
-                isEnabled = true,
-                sourceType = sourceType,
-                sourceField = sourceField,
-                sourceAttributeId = sourceAttributeId,
-                externalFieldType = field.Type,
-                externalFieldOptions = field.Options != null && field.Options.Count > 0
-                    ? JsonSerializer.Serialize(field.Options.Select(o => new { value = o.Value, label = o.Label }))
-                    : null,
-                sortOrder = ++maxSortOrder
-            });
+                var (sourceType, sourceField, sourceAttributeId) =
+                    CategoryImportService.DetermineAutoMapping(field, attributeMap);
+                return new FieldSpec
+                {
+                    externalFieldKey = field.Key,
+                    externalFieldName = field.Name,
+                    externalFieldType = field.Type,
+                    isRequired = sourceType != Enums.FieldMappingSourceType.ProductField && field.IsRequired,
+                    isEnabled = true,
+                    sortOrder = field.SortOrder,
+                    sourceType = sourceType,
+                    sourceField = sourceField,
+                    sourceAttributeId = sourceAttributeId,
+                };
+            }).ToList();
 
-            _context.fieldMappings.Add(fieldMapping);
-            count++;
+            mapping.graphJson = GraphGenerator.SyncAdapterFields(mapping.graphJson, specs);
         }
 
-        if (count > 0)
+        var priceFieldsAdded = 0;
+        var addedPriceFieldKeys = new List<string>();
+
+        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+        {
+            try
+            {
+                var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+                var existingPriceKeys = MappingService.SchemaPriceFields(mapping.graphJson)
+                    .Select(f => f.fieldKey)
+                    .Where(k => !string.IsNullOrEmpty(k))
+                    .ToHashSet(StringComparer.Ordinal);
+                var newPriceFields = priceFields.Where(f => !existingPriceKeys.Contains(f.Key)).ToList();
+                priceFieldsAdded = newPriceFields.Count;
+                addedPriceFieldKeys = newPriceFields.Select(f => f.Key).ToList();
+                if (priceFieldsAdded > 0)
+                {
+                    var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(priceFields, attributeMap);
+                    mapping.graphJson = GraphGenerator.SyncPriceFields(mapping.graphJson, priceSpecs);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync price fields for mapping {Id}.", mapping.Id);
+            }
+        }
+
+        result.CardFieldsAdded = cardFieldsAdded;
+        result.PriceFieldsAdded = priceFieldsAdded;
+        result.AddedFieldKeys = addedFieldKeys;
+        result.AddedPriceFieldKeys = addedPriceFieldKeys;
+
+        if (result.TotalAdded > 0)
         {
             await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Mapping {Id} ({Category}): +{Count} fields.",
-                mapping.Id, mapping.externalCategoryName, count);
+                mapping.Id, mapping.externalCategoryName, result.TotalAdded);
         }
 
-        return count;
+        return result;
     }
 }

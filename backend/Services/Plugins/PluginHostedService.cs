@@ -1,4 +1,4 @@
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// Hosted service that loads all plugins at application startup

@@ -27,6 +27,7 @@ export default {
   props: {
     modelValue: { type: String, default: "" },
     availableSources: { type: Object, default: () => ({}) },
+    extraPlaceholders: { type: Array, default: () => [] },
   },
   emits: ["update:modelValue"],
   computed: {
@@ -155,6 +156,23 @@ export default {
             >
               {{ attr.name }}
               <span class="ml-auto font-mono text-xs text-muted-foreground">storeAttr:{{ attr.id }}</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </template>
+
+        <!-- Extra placeholders (e.g. llmGenerate field pins) -->
+        <template v-if="extraPlaceholders.length">
+          <DropdownMenuLabel class="text-xs py-0.5">Входные пины</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              v-for="item in extraPlaceholders"
+              :key="item.snippet"
+              class="text-xs cursor-pointer py-1"
+              @click="insertPlaceholder(item.snippet)"
+            >
+              {{ item.label }}
+              <span class="ml-auto font-mono text-xs text-muted-foreground">{{ item.snippet }}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </template>

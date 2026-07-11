@@ -1,7 +1,7 @@
 using System.Reflection;
-using PrintO.Marketplace.SDK;
+using Delegat.Marketplace.SDK;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// Loads plugin instances from DLL files.
@@ -87,7 +87,7 @@ public static class PluginLoader
         }
 
         var dllFiles = Directory.GetFiles(pluginsDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-            .Where(f => !Path.GetFileName(f).Equals("PrintO.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase));
+            .Where(f => !Path.GetFileName(f).Equals("Delegat.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase));
 
         foreach (var dllPath in dllFiles)
         {

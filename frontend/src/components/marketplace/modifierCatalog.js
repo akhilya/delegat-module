@@ -10,6 +10,7 @@ export const MODIFIER_CATALOG = {
   truncate: {
     type: "truncate",
     displayName: "Обрезать",
+    aliases: ["truncate", "cut", "substr", "crop", "limit text"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -21,6 +22,7 @@ export const MODIFIER_CATALOG = {
   split: {
     type: "split",
     displayName: "Разделить",
+    aliases: ["split", "explode", "separate", "delimiter", "разделить"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -33,6 +35,7 @@ export const MODIFIER_CATALOG = {
   replace: {
     type: "replace",
     displayName: "Заменить",
+    aliases: ["replace", "substitute", "regex", "regexp", "swap"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -45,6 +48,7 @@ export const MODIFIER_CATALOG = {
   append: {
     type: "append",
     displayName: "Добавить в конец",
+    aliases: ["append", "suffix", "postfix", "add after", "после"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -56,6 +60,7 @@ export const MODIFIER_CATALOG = {
   prepend: {
     type: "prepend",
     displayName: "Добавить в начало",
+    aliases: ["prepend", "prefix", "add before", "перед"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -67,6 +72,7 @@ export const MODIFIER_CATALOG = {
   uppercase: {
     type: "uppercase",
     displayName: "В верхний регистр",
+    aliases: ["uppercase", "upper", "caps", "toupper", "заглавные"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -76,6 +82,7 @@ export const MODIFIER_CATALOG = {
   lowercase: {
     type: "lowercase",
     displayName: "В нижний регистр",
+    aliases: ["lowercase", "lower", "small", "tolower", "строчные"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -85,6 +92,7 @@ export const MODIFIER_CATALOG = {
   trim: {
     type: "trim",
     displayName: "Убрать пробелы",
+    aliases: ["trim", "strip", "whitespace", "spaces", "пробел", "ltrim", "rtrim"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -96,6 +104,7 @@ export const MODIFIER_CATALOG = {
   multiply: {
     type: "multiply",
     displayName: "Умножить",
+    aliases: ["multiply", "times", "*", "product", "умнож"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
@@ -107,6 +116,7 @@ export const MODIFIER_CATALOG = {
   divide: {
     type: "divide",
     displayName: "Разделить",
+    aliases: ["divide", "division", "/", "quot", "делить"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
@@ -118,6 +128,7 @@ export const MODIFIER_CATALOG = {
   add: {
     type: "add",
     displayName: "Прибавить",
+    aliases: ["add", "plus", "+", "sum", "increment", "сложить"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
@@ -129,6 +140,7 @@ export const MODIFIER_CATALOG = {
   round: {
     type: "round",
     displayName: "Округлить",
+    aliases: ["round", "math.round"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -140,6 +152,7 @@ export const MODIFIER_CATALOG = {
   floor: {
     type: "floor",
     displayName: "Округлить вниз",
+    aliases: ["floor", "round down", "вниз", "math.floor"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -149,6 +162,7 @@ export const MODIFIER_CATALOG = {
   ceiling: {
     type: "ceiling",
     displayName: "Округлить вверх",
+    aliases: ["ceil", "ceiling", "round up", "вверх", "math.ceil"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -158,6 +172,7 @@ export const MODIFIER_CATALOG = {
   clamp: {
     type: "clamp",
     displayName: "Ограничить диапазон",
+    aliases: ["clamp", "min max", "range", "between", "диапазон"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -171,7 +186,8 @@ export const MODIFIER_CATALOG = {
   // Select modifiers
   valueMap: {
     type: "valueMap",
-    displayName: "Маппинг значений",
+    displayName: "Маппинг значений (→ valueId)",
+    aliases: ["map", "mapping", "lookup", "translate", "dict", "словарь", "convert"],
     category: "select",
     reversible: true,
     applicableTypes: ["select", "multiselect"],
@@ -181,12 +197,13 @@ export const MODIFIER_CATALOG = {
     ],
     summary: (p) => {
       const count = Array.isArray(p.mappings) ? p.mappings.length : 0;
-      return `${count} правил${count === 1 ? "о" : count > 1 && count < 5 ? "а" : ""}`;
+      return count ? `${count} → valueId` : "пусто";
     },
   },
   optionMap: {
     type: "optionMap",
-    displayName: "Маппинг по вариантам",
+    displayName: "Маппинг значений по вариантам",
+    aliases: ["option map", "enum map", "варианты", "options", "translate"],
     category: "select",
     reversible: true,
     applicableTypes: ["select", "multiselect"],
@@ -196,13 +213,100 @@ export const MODIFIER_CATALOG = {
     ],
     summary: (p) => {
       const count = Array.isArray(p.mappings) ? p.mappings.length : 0;
-      return `${count} правил${count === 1 ? "о" : count > 1 && count < 5 ? "а" : ""}`;
+      return count ? `${count} вариантов` : "пусто";
     },
+  },
+
+  llmGenerate: {
+    type: "llmGenerate",
+    displayName: "AI-генерация",
+    aliases: ["llm", "ai generate", "gpt", "генерация", "ai"],
+    category: "text",
+    reversible: false,
+    applicableTypes: ["string", "text", "select", "number", "any"],
+    params: [
+      { key: "prompt", label: "Промпт", type: "template", required: true, default: "{{value}}" },
+      {
+        key: "systemPrompt",
+        label: "Системный промпт",
+        type: "template",
+        required: false,
+        default:
+          "You generate concise marketplace field values. Respond with plain text only — no markdown, no quotes, no preamble.",
+      },
+      { key: "modelId", label: "Модель", type: "aiModel", required: true, default: null },
+      { key: "seed", label: "Seed", type: "number", required: false, default: null },
+      { key: "cacheEnabled", label: "Кэшировать", type: "checkbox", required: false, default: true },
+      { key: "perProduct", label: "Уникально для каждого товара", type: "checkbox", required: false, default: false },
+    ],
+    summary: (p) => {
+      const prompt = p.prompt || "";
+      return prompt.length > 24 ? prompt.substring(0, 24) + "…" : prompt || "промпт";
+    },
+  },
+
+  randomInt: {
+    type: "randomInt",
+    displayName: "Случайное целое",
+    aliases: ["random int", "rand int", "случайное число"],
+    category: "number",
+    reversible: false,
+    applicableTypes: ["number", "integer", "string", "any"],
+    params: [
+      { key: "min", label: "Минимум", type: "number", required: true, default: 0 },
+      { key: "max", label: "Максимум", type: "number", required: true, default: 100 },
+      { key: "seed", label: "Seed", type: "number", required: false, default: null },
+    ],
+    summary: (p) => `[${p.min ?? 0}, ${p.max ?? 100}]`,
+  },
+  randomFloat: {
+    type: "randomFloat",
+    displayName: "Случайное дробное",
+    aliases: ["random float", "rand float"],
+    category: "number",
+    reversible: false,
+    applicableTypes: ["number", "integer", "string", "any"],
+    params: [
+      { key: "min", label: "Минимум", type: "number", required: true, default: 0 },
+      { key: "max", label: "Максимум", type: "number", required: true, default: 1 },
+      { key: "decimals", label: "Знаков", type: "number", required: false, default: 2 },
+      { key: "seed", label: "Seed", type: "number", required: false, default: null },
+    ],
+    summary: (p) => `[${p.min ?? 0}, ${p.max ?? 1}]`,
+  },
+  randomPick: {
+    type: "randomPick",
+    displayName: "Случайный выбор",
+    aliases: ["random pick", "choice", "выбор"],
+    category: "any",
+    reversible: false,
+    applicableTypes: null,
+    params: [
+      { key: "choices", label: "Варианты", type: "tagInput", required: false, default: [] },
+      { key: "seed", label: "Seed", type: "number", required: false, default: null },
+    ],
+    summary: (p) => {
+      const n = Array.isArray(p.choices) ? p.choices.length : 0;
+      return n ? `из ${n}` : "из входа";
+    },
+  },
+  randomUuid: {
+    type: "randomUuid",
+    displayName: "Случайный UUID",
+    aliases: ["uuid", "guid", "random uuid"],
+    category: "any",
+    reversible: false,
+    applicableTypes: ["string", "text", "any"],
+    params: [
+      { key: "seed", label: "Seed", type: "number", required: false, default: null },
+    ],
+    summary: () => "UUID",
   },
 
   toText: {
     type: "toText",
     displayName: "Преобразовать в текст",
+    aliases: ["to text", "to string", "stringify", "tostring", "cast", "в текст"],
     category: "any",
     reversible: true,
     applicableTypes: ["select", "multiselect", "number", "integer"],
@@ -221,6 +325,7 @@ export const MODIFIER_CATALOG = {
   forceType: {
     type: "forceType",
     displayName: "Принудительный тип",
+    aliases: ["cast", "force type", "convert", "typecast", "тип"],
     category: "any",
     reversible: true,
     applicableTypes: null,
@@ -246,6 +351,7 @@ export const MODIFIER_CATALOG = {
   template: {
     type: "template",
     displayName: "Подставить поля товара",
+    aliases: ["template", "interpolate", "substitute", "format", "шаблон", "fields", "подстав"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -262,6 +368,7 @@ export const MODIFIER_CATALOG = {
   defaultValue: {
     type: "defaultValue",
     displayName: "Значение по умолчанию",
+    aliases: ["default", "fallback", "null coalesce", "если пусто", "or else", "если нет"],
     category: "any",
     reversible: false,
     applicableTypes: null, // applicable to all types
@@ -274,6 +381,7 @@ export const MODIFIER_CATALOG = {
   takeFirst: {
     type: "takeFirst",
     displayName: "Взять первый",
+    aliases: ["first", "head", "take first", "первый"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -283,6 +391,7 @@ export const MODIFIER_CATALOG = {
   limit: {
     type: "limit",
     displayName: "Ограничить количество",
+    aliases: ["limit", "take", "top", "slice", "max count"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -294,6 +403,7 @@ export const MODIFIER_CATALOG = {
   skip: {
     type: "skip",
     displayName: "Пропустить первые",
+    aliases: ["skip", "drop", "offset", "пропуст"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -305,6 +415,7 @@ export const MODIFIER_CATALOG = {
   reverse: {
     type: "reverse",
     displayName: "Перевернуть порядок",
+    aliases: ["reverse", "invert", "flip", "перевернуть", "backwards"],
     category: "array",
     reversible: true,
     applicableTypes: ["multiselect", "array"],
@@ -314,6 +425,7 @@ export const MODIFIER_CATALOG = {
   join: {
     type: "join",
     displayName: "Объединить в строку",
+    aliases: ["join", "join array", "concat array", "соединить"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -325,6 +437,7 @@ export const MODIFIER_CATALOG = {
   sort: {
     type: "sort",
     displayName: "Сортировать",
+    aliases: ["sort", "order", "arrange", "sorted", "alphabetical", "упорядочить"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -334,6 +447,7 @@ export const MODIFIER_CATALOG = {
   addItems: {
     type: "addItems",
     displayName: "Добавить элементы",
+    aliases: ["add items", "push", "extend", "concat arrays", "добавить элементы"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -348,6 +462,7 @@ export const MODIFIER_CATALOG = {
   removeItems: {
     type: "removeItems",
     displayName: "Удалить элементы",
+    aliases: ["remove", "filter", "exclude", "delete", "убрать", "удалить", "minus"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -367,6 +482,7 @@ export const MODIFIER_CATEGORIES = {
   select: { label: "Выбор", icon: "List" },
   array: { label: "Массив", icon: "List" },
   any: { label: "Универсальные", icon: "Sparkles" },
+  random: { label: "Случайные", icon: "Dices" },
 };
 
 /**

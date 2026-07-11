@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Minio;
 using Minio.DataModel.Args;
-using PrintO.Infrastructure.Configuration;
+using Delegat.Infrastructure.Configuration;
 
-namespace PrintO.Infrastructure.Health;
+namespace Delegat.Infrastructure.Health;
 
 public class MinIOHealthCheck : IHealthCheck
 {

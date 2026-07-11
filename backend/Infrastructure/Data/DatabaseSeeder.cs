@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
-using PrintO.Infrastructure.Configuration;
-using PrintO.Models;
+using Delegat.Infrastructure.Configuration;
+using Delegat.Models;
 
-namespace PrintO.Infrastructure.Data;
+namespace Delegat.Infrastructure.Data;
 
 public static class DatabaseSeeder
 {

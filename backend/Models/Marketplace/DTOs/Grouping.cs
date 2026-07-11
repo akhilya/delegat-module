@@ -1,4 +1,4 @@
-namespace PrintO.Models.Marketplace.DTOs;
+namespace Delegat.Models.Marketplace.DTOs;
 
 #region Field-based Grouping
 

@@ -1,15 +1,16 @@
-using PrintO.Enums;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Products;
-using PrintO.Services.Marketplace.Graph;
-using PrintO.Services.Marketplace.Modifiers;
+using Delegat.Enums;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
+using Delegat.Models.Products;
+using Delegat.Services.Marketplace.Graph;
+using Delegat.Services.Marketplace.Modifiers;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Service for building export data based on field mappings
@@ -18,11 +19,16 @@ public class MappingService
 {
     private readonly DataContext _context;
     private readonly IServiceProvider _serviceProvider;
+    private readonly GenerativeMappingService? _generativeService;
 
-    public MappingService(DataContext context, IServiceProvider serviceProvider)
+    public MappingService(
+        DataContext context,
+        IServiceProvider serviceProvider,
+        GenerativeMappingService? generativeService = null)
     {
         _context = context;
         _serviceProvider = serviceProvider;
+        _generativeService = generativeService;
     }
 
     /// <summary>
@@ -36,83 +42,8 @@ public class MappingService
         CategoryMapping categoryMapping,
         CancellationToken ct = default)
     {
-        // Whole-category visual node graph takes precedence over per-field mappings when present.
-        if (!string.IsNullOrWhiteSpace(categoryMapping.graphJson))
-            return Task.FromResult(BuildExportDataFromGraph(product, categoryMapping));
-
-        var result = new Dictionary<string, object?>();
-        var fieldTypes = new Dictionary<string, string>();
-
-        // Get all active field mappings
-        var fieldMappings = categoryMapping.fieldMappings
-            .Where(fm => fm.isEnabled)
-            .OrderBy(fm => fm.sortOrder)
-            .ToList();
-
-        foreach (var mapping in fieldMappings)
-        {
-            var value = GetFieldValue(product, mapping);
-
-            // Deserialize multiselect values BEFORE modifiers,
-            // so modifiers work with List<string> instead of raw JSON/CSV strings
-            if (mapping.externalFieldType == "multiselect" && value is string multiStr
-                && !string.IsNullOrEmpty(multiStr))
-            {
-                if (multiStr.StartsWith('['))
-                {
-                    try
-                    {
-                        var list = JsonSerializer.Deserialize<List<string>>(multiStr);
-                        if (list != null && list.Count > 0)
-                            value = list;
-                    }
-                    catch (JsonException) { }
-                }
-                else if (multiStr.Contains(','))
-                {
-                    var parts = multiStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    if (parts.Length > 1)
-                        value = parts.ToList();
-                }
-            }
-
-            // Build modifier context for template resolution
-            var modifierContext = new ModifierContext
-            {
-                ResolveReference = (reference) => ResolveFieldReference(product, reference),
-                SourceAttributeOptions = ResolveSourceOptions(product, mapping)
-            };
-
-            // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
-            if (!string.IsNullOrEmpty(mapping.modifiersJson))
-            {
-                value = ModifierPipeline.ApplyModifiers(value, mapping.modifiersJson, modifierContext);
-            }
-            else if (!string.IsNullOrEmpty(mapping.transformExpression))
-            {
-                value = ApplyTransform(value, mapping.transformExpression);
-            }
-
-            // Coerce value to match the effective field type (forceType overrides externalFieldType)
-            var effectiveType = GetEffectiveFieldType(mapping.modifiersJson, mapping.externalFieldType);
-            value = CoerceToFieldType(value, effectiveType);
-            if (!string.IsNullOrEmpty(effectiveType))
-                fieldTypes[mapping.externalFieldKey] = effectiveType;
-
-            result[mapping.externalFieldKey] = value;
-        }
-
-        if (!result.ContainsKey("images"))
-        {
-            var imageUrls = GetProductImageUrlsAsync(product).GetAwaiter().GetResult();
-            if (imageUrls.Count > 0)
-                result["_imageUrls"] = imageUrls;
-        }
-
-        // Attach field type metadata for the plugin
-        result["_fieldTypes"] = fieldTypes;
-
-        return Task.FromResult(result);
+        // Export is graph-only: the whole-category node graph is the single source of truth.
+        return Task.FromResult(BuildExportDataFromGraph(product, categoryMapping));
     }
 
     /// <summary>
@@ -124,7 +55,15 @@ public class MappingService
     /// Evaluate a category's node graph for a product, returning outputs, effective field types,
     /// and per-node values (for the editor's per-node preview).
     /// </summary>
-    public GraphEvalResult EvaluateGraph(Product product, string? graphJson)
+    public GraphEvalResult EvaluateGraph(Product product, string? graphJson, int? mappingId = null)
+        => EvaluateGraphAsync(product, graphJson, mappingId).GetAwaiter().GetResult();
+
+    public async Task<GraphEvalResult> EvaluateGraphAsync(
+        Product product,
+        string? graphJson,
+        int? mappingId = null,
+        bool waitForGenerative = true,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(graphJson))
             return new GraphEvalResult();
@@ -148,16 +87,57 @@ public class MappingService
             ResolveReference = (reference) => ResolveFieldReference(product, reference)
         };
 
-        return GraphEvaluator.Evaluate(graph, BuildGraphContext(product, modifierContext));
+        var baseCtx = BuildGraphContext(product, modifierContext);
+        GenerativeMappingService.GenerativeEnsureResult? genResult = null;
+
+        if (_generativeService != null && mappingId.HasValue)
+        {
+            genResult = await _generativeService.EnsureGenerativeOutputsAsync(
+                product, graph, mappingId.Value, baseCtx, waitForGenerative, ct);
+        }
+
+        var evalCtx = new GraphEvaluationContext
+        {
+            ResolveCategoryAttribute = baseCtx.ResolveCategoryAttribute,
+            ResolveStoreAttribute = baseCtx.ResolveStoreAttribute,
+            ResolveProductField = baseCtx.ResolveProductField,
+            ResolveGroupName = baseCtx.ResolveGroupName,
+            ResolveStoreFileUrl = baseCtx.ResolveStoreFileUrl,
+            ResolveStoreFileContent = baseCtx.ResolveStoreFileContent,
+            ResolveProductFileUrlByName = baseCtx.ResolveProductFileUrlByName,
+            ResolveProductFileContentByName = baseCtx.ResolveProductFileContentByName,
+            ResolveProductFilesByExtension = baseCtx.ResolveProductFilesByExtension,
+            ResolveCategoryAttributeOptions = baseCtx.ResolveCategoryAttributeOptions,
+            ResolveStoreAttributeOptions = baseCtx.ResolveStoreAttributeOptions,
+            Coerce = baseCtx.Coerce,
+            ModifierContext = baseCtx.ModifierContext,
+            GenerativeOutputs = genResult?.Outputs,
+            MappingId = mappingId,
+            ProductId = product.Id,
+        };
+
+        var result = GraphEvaluator.Evaluate(graph, evalCtx);
+        if (genResult != null)
+            result.GenerativeStatuses = genResult.Statuses;
+        return result;
     }
 
     public Dictionary<string, object?> BuildExportDataFromGraph(Product product, CategoryMapping categoryMapping)
     {
         var result = new Dictionary<string, object?>();
-        var eval = EvaluateGraph(product, categoryMapping.graphJson);
+        var eval = EvaluateGraph(product, categoryMapping.graphJson, categoryMapping.Id);
+
+        var cardKeys = new HashSet<string>(
+            SchemaFields(categoryMapping.graphJson)
+                .Where(f => !string.IsNullOrEmpty(f.fieldKey))
+                .Select(f => f.fieldKey!),
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var kv in eval.Outputs)
-            result[kv.Key] = kv.Value;
+        {
+            if (cardKeys.Contains(kv.Key) || IsPriceOnlyFieldKey(kv.Key, categoryMapping.graphJson))
+                result[kv.Key] = kv.Value;
+        }
 
         if (!result.ContainsKey("images"))
         {
@@ -167,6 +147,266 @@ public class MappingService
         }
 
         result["_fieldTypes"] = eval.FieldTypes;
+        return result;
+    }
+
+    /// <summary>Parse the stored graph JSON, or null if empty/invalid.</summary>
+    private static MappingGraph? ParseGraph(string? graphJson)
+    {
+        if (string.IsNullOrWhiteSpace(graphJson))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<MappingGraph>(graphJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The marketplace field schema declared on the graph's adapter sink.</summary>
+    public static List<AdapterField> SchemaFields(string? graphJson)
+    {
+        var adapter = ParseGraph(graphJson)?.nodes?.FirstOrDefault(n => n.type == "adapterFields");
+        return adapter?.data?.fields ?? new List<AdapterField>();
+    }
+
+    /// <summary>Price-API field schema declared on the graph's price sink.</summary>
+    public static List<AdapterField> SchemaPriceFields(string? graphJson)
+    {
+        var price = ParseGraph(graphJson)?.nodes?.FirstOrDefault(n => n.type == "adapterPriceFields");
+        return price?.data?.fields ?? new List<AdapterField>();
+    }
+
+    private static bool IsPriceOnlyFieldKey(string key, string? graphJson)
+    {
+        return SchemaPriceFields(graphJson)
+            .Any(f => string.Equals(f.fieldKey, key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Build <see cref="Models.Marketplace.DTOs.PriceInfo"/> by evaluating the price sink of the mapping graph.
+    /// Returns null when the price node is absent or required price is missing.
+    /// </summary>
+    public PriceInfo? BuildPriceInfoFromGraph(
+        Product product,
+        CategoryMapping categoryMapping,
+        string externalProductId,
+        string? externalSku = null,
+        int? stock = null)
+    {
+        if (SchemaPriceFields(categoryMapping.graphJson).Count == 0)
+            return null;
+
+        var eval = EvaluateGraph(product, categoryMapping.graphJson, categoryMapping.Id);
+        var outputs = eval.Outputs;
+
+        decimal? GetDecimal(string fieldKey) =>
+            TryParseDecimal(outputs.GetValueOrDefault(fieldKey), out var v) ? v : null;
+
+        int? GetInt(string fieldKey) =>
+            TryParseInt(outputs.GetValueOrDefault(fieldKey), out var v) ? v : null;
+
+        bool? GetBool(string fieldKey)
+        {
+            var raw = outputs.GetValueOrDefault(fieldKey);
+            if (raw is bool b) return b;
+            if (raw is string s)
+            {
+                var t = s.Trim().ToLowerInvariant();
+                if (t is "true" or "1" or "да" or "yes") return true;
+                if (t is "false" or "0" or "нет" or "no") return false;
+            }
+            return null;
+        }
+
+        string? GetString(string fieldKey)
+        {
+            var raw = outputs.GetValueOrDefault(fieldKey);
+            return raw == null ? null : raw.ToString();
+        }
+
+        var price = GetDecimal("price");
+        if (!price.HasValue)
+            return null;
+
+        return new PriceInfo(
+            ExternalProductId: externalProductId,
+            Price: price,
+            OldPrice: GetDecimal("oldPrice"),
+            Stock: stock,
+            DiscountedPrice: GetDecimal("discountedPrice"),
+            MinPrice: GetDecimal("minPrice"),
+            ExternalSku: externalSku,
+            Discount: GetInt("discount"),
+            NetPrice: GetDecimal("netPrice"),
+            AutoActionEnabled: GetString("autoActionEnabled"),
+            PriceStrategyEnabled: GetString("priceStrategyEnabled"),
+            MinPriceForAutoActionsEnabled: GetBool("minPriceForAutoActionsEnabled")
+        );
+    }
+
+    private static bool TryParseDecimal(object? value, out decimal result)
+    {
+        switch (value)
+        {
+            case decimal d:
+                result = d;
+                return true;
+            case int i:
+                result = i;
+                return true;
+            case long l:
+                result = l;
+                return true;
+            case double db:
+                result = (decimal)db;
+                return true;
+        }
+        return decimal.TryParse(value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out result);
+    }
+
+    private static bool TryParseInt(object? value, out int result)
+    {
+        switch (value)
+        {
+            case int i:
+                result = i;
+                return true;
+            case long l when l >= int.MinValue && l <= int.MaxValue:
+                result = (int)l;
+                return true;
+            case decimal d when d >= int.MinValue && d <= int.MaxValue:
+                result = (int)Math.Round(d);
+                return true;
+        }
+        return int.TryParse(value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out result);
+    }
+
+    /// <summary>
+    /// Project the graph to per-field import descriptors (the old FieldMapping shape) for the reverse
+    /// (import) path — a C# port of the frontend graphModel.analyzeFields projections. Only IMPORTABLE
+    /// lanes are returned: a direct attribute/storeAttribute binding, or a single-input modifier/reroute
+    /// chain back to an attribute. Fan-in / ops / productField / static / groupName lanes are export-only
+    /// and omitted (so the import path naturally skips them).
+    /// </summary>
+    public static List<ImportField> ProjectGraphForImport(string? graphJson)
+    {
+        var result = new List<ImportField>();
+        var graph = ParseGraph(graphJson);
+        if (graph?.nodes == null)
+            return result;
+
+        var nodesById = new Dictionary<string, GraphNode>();
+        foreach (var n in graph.nodes)
+            if (!string.IsNullOrEmpty(n.id))
+                nodesById[n.id] = n;
+
+        var incoming = new Dictionary<string, List<GraphEdge>>();
+        foreach (var e in graph.edges ?? new List<GraphEdge>())
+            if (!string.IsNullOrEmpty(e.target))
+                (incoming.TryGetValue(e.target, out var l) ? l : incoming[e.target] = new()).Add(e);
+
+        var adapter = graph.nodes.FirstOrDefault(n => n.type == "adapterFields");
+        if (adapter == null)
+            return result;
+
+        foreach (var field in adapter.data?.fields ?? new List<AdapterField>())
+        {
+            if (string.IsNullOrEmpty(field.fieldKey))
+                continue;
+
+            // Merged duplicates: only the primary field participates in import —
+            // reversing both fields into the same local source would be last-write-wins
+            if (!string.IsNullOrEmpty(field.aliasOf))
+                continue;
+
+            // Direct source binding (chosen in the adapter settings).
+            if (field.source?.type is string st)
+            {
+                if (st is "attribute" or "storeAttribute")
+                    result.Add(new ImportField
+                    {
+                        externalFieldKey = field.fieldKey!,
+                        externalFieldName = field.label,
+                        sourceType = st == "attribute"
+                            ? FieldMappingSourceType.CategoryAttribute
+                            : FieldMappingSourceType.StoreAttribute,
+                        sourceAttributeId = field.source.attributeId,
+                        modifiersJson = null,
+                        isRequired = field.isRequired,
+                    });
+                continue; // productField / groupName ⇒ export-only
+            }
+
+            // Wired lane: trace the edge feeding this field's pin back to an attribute.
+            var inEdge = incoming.TryGetValue(adapter.id, out var adEdges)
+                ? adEdges.FirstOrDefault(e => e.targetHandle == $"f:{field.fieldKey}")
+                : null;
+            if (inEdge == null)
+                continue;
+
+            var mods = new List<object>();
+            var seen = new HashSet<string>();
+            var cur = nodesById.GetValueOrDefault(inEdge.source);
+            var ok = true;
+            string? srcType = null;
+            int? attrId = null;
+
+            while (cur != null && !seen.Contains(cur.id))
+            {
+                seen.Add(cur.id);
+                var ins = incoming.GetValueOrDefault(cur.id) ?? new List<GraphEdge>();
+                if (cur.type == "modifier")
+                {
+                    if (ins.Count != 1) { ok = false; break; }
+                    mods.Insert(0, new
+                    {
+                        type = cur.data?.modifierType,
+                        @params = cur.data?.@params ?? new Dictionary<string, object>(),
+                        enabled = true,
+                    });
+                    cur = nodesById.GetValueOrDefault(ins[0].source);
+                }
+                else if (cur.type == "reroute")
+                {
+                    if (ins.Count != 1) { ok = false; break; }
+                    cur = nodesById.GetValueOrDefault(ins[0].source); // transparent pass-through
+                }
+                else if (cur.type is "attribute" or "storeAttribute")
+                {
+                    if (cur.data?.attributeId != null)
+                    {
+                        if (cur.data.importable == false)
+                            ok = false;
+                        else
+                        {
+                            srcType = cur.type;
+                            attrId = cur.data.attributeId;
+                        }
+                    }
+                    else ok = false;
+                    break;
+                }
+                else { ok = false; break; }
+            }
+
+            if (ok && srcType != null && attrId != null)
+                result.Add(new ImportField
+                {
+                    externalFieldKey = field.fieldKey!,
+                    externalFieldName = field.label,
+                    sourceType = srcType == "attribute"
+                        ? FieldMappingSourceType.CategoryAttribute
+                        : FieldMappingSourceType.StoreAttribute,
+                    sourceAttributeId = attrId,
+                    modifiersJson = mods.Count > 0 ? JsonSerializer.Serialize(mods) : null,
+                    isRequired = field.isRequired,
+                });
+        }
+
         return result;
     }
 
@@ -249,14 +489,14 @@ public class MappingService
         return content;
     }
 
-    private static string ProductFileName(PrintO.Models.File f) =>
+    private static string ProductFileName(Delegat.Models.File f) =>
         f.displayName ?? System.IO.Path.GetFileName(f.filePath);
 
-    private static string ProductFileExt(PrintO.Models.File f) =>
+    private static string ProductFileExt(Delegat.Models.File f) =>
         System.IO.Path.GetExtension(f.displayName ?? f.filePath).TrimStart('.').ToLowerInvariant();
 
     /// <summary>First product file whose name (display name or filename) matches, case-insensitive.</summary>
-    private static PrintO.Models.File? FindProductFileByName(Product product, string name)
+    private static Delegat.Models.File? FindProductFileByName(Product product, string name)
     {
         if (string.IsNullOrEmpty(name) || product.files == null)
             return null;
@@ -331,25 +571,6 @@ public class MappingService
 
         cache[key] = urls;
         return urls;
-    }
-
-    /// <summary>
-    /// Get field value from the data source.
-    /// Public to allow preview endpoint to access source values.
-    /// </summary>
-    public object? GetFieldValue(
-        Product product,
-        FieldMapping mapping)
-    {
-        return mapping.sourceType switch
-        {
-            FieldMappingSourceType.ProductField => GetProductFieldValue(product, mapping.sourceField),
-            FieldMappingSourceType.CategoryAttribute => GetCategoryAttributeValue(product, mapping.sourceAttributeId),
-            FieldMappingSourceType.StoreAttribute => GetStoreAttributeValue(product, mapping.sourceAttributeId),
-            FieldMappingSourceType.Static => mapping.staticValue,
-            FieldMappingSourceType.GroupName => GetGroupNameValue(product),
-            _ => null
-        };
     }
 
     /// <summary>
@@ -573,29 +794,6 @@ public class MappingService
     }
 
     /// <summary>
-    /// Resolve options from the source attribute (for select/multiselect toText modifier).
-    /// </summary>
-    private List<Modifiers.SourceOption>? ResolveSourceOptions(Product product, FieldMapping mapping)
-    {
-        string? optionsJson = null;
-
-        if (mapping.sourceType == FieldMappingSourceType.CategoryAttribute && mapping.sourceAttributeId.HasValue)
-        {
-            optionsJson = product.attributeValues?
-                .FirstOrDefault(av => av.attributeId == mapping.sourceAttributeId.Value)
-                ?.attribute?.options;
-        }
-        else if (mapping.sourceType == FieldMappingSourceType.StoreAttribute && mapping.sourceAttributeId.HasValue)
-        {
-            optionsJson = product.storeAttributeValues?
-                .FirstOrDefault(sav => sav.storeAttributeId == mapping.sourceAttributeId.Value)
-                ?.storeAttribute?.options;
-        }
-
-        return ParseOptions(optionsJson);
-    }
-
-    /// <summary>
     /// Resolve options for a category attribute by id (graph source nodes).
     /// </summary>
     private List<Modifiers.SourceOption>? GetCategoryAttributeOptions(Product product, int attributeId)
@@ -761,3 +959,16 @@ public record ProductFieldInfo(
     string DisplayName,
     string Type
 );
+
+/// <summary>
+/// One importable field projected from the graph (the per-field shape the reverse/import path needs).
+/// </summary>
+public class ImportField
+{
+    public required string externalFieldKey { get; set; }
+    public string? externalFieldName { get; set; }
+    public FieldMappingSourceType sourceType { get; set; }
+    public int? sourceAttributeId { get; set; }
+    public string? modifiersJson { get; set; }
+    public bool isRequired { get; set; }
+}

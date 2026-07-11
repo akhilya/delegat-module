@@ -1,4 +1,4 @@
-namespace PrintO.Models.Marketplace.DTOs;
+namespace Delegat.Models.Marketplace.DTOs;
 
 /// <summary>
 /// Product from an external marketplace

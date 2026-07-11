@@ -1,4 +1,4 @@
-namespace PrintO.Infrastructure.Interfaces;
+namespace Delegat.Infrastructure.Interfaces;
 
 /// <summary>
 /// Interface for entities that can be mapped to a DTO

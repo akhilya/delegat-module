@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Infrastructure.Storage;
-using PrintO.Models;
-using PrintO.Services;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
+using Delegat.Models;
+using Delegat.Services;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]

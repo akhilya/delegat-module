@@ -1,7 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
-using PrintO.Models;
+using Delegat.Models;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public interface IErrorLogService
 {

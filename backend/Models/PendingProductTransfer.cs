@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using PrintO.Models.Products;
+using Delegat.Models.Products;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Status of a product transfer (clone or move) operation.

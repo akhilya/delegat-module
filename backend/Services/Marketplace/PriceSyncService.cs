@@ -1,9 +1,12 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
+using Delegat.Enums;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
+using Delegat.Models.Products;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Service for synchronizing prices and stock with marketplaces
@@ -12,12 +15,18 @@ public class PriceSyncService
 {
     private readonly DataContext _context;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
+    private readonly MappingService _mappingService;
     private readonly IOperationLogger _operationLogger;
 
-    public PriceSyncService(DataContext context, IMarketplaceAdapterRegistry adapterRegistry, IOperationLogger operationLogger)
+    public PriceSyncService(
+        DataContext context,
+        IMarketplaceAdapterRegistry adapterRegistry,
+        MappingService mappingService,
+        IOperationLogger operationLogger)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
+        _mappingService = mappingService;
         _operationLogger = operationLogger;
     }
 
@@ -126,15 +135,21 @@ public class PriceSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportPrices))
             return PriceSyncResult.Failure("Адаптер не поддерживает импорт цен");
 
-        // Get links
+        // Get links with mapping for reverse price import
         var linksQuery = _context.productMarketplaceLinks
             .Include(l => l.product)
+                .ThenInclude(p => p!.attributeValues)
+                    .ThenInclude(av => av.attribute)
             .Where(l => l.connectionId == connectionId);
 
         if (linkIds != null && linkIds.Any())
             linksQuery = linksQuery.Where(l => linkIds.Contains(l.Id));
 
         var links = await linksQuery.ToListAsync(ct);
+        var mappingIds = links.Where(l => l.categoryMappingId != null).Select(l => l.categoryMappingId!.Value).Distinct().ToList();
+        var mappings = await _context.categoryMappings
+            .Where(m => mappingIds.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id, ct);
 
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
@@ -171,9 +186,14 @@ public class PriceSyncService
                 }
 
                 // Update local product
-                if (link.product != null && externalPrice.Price.HasValue)
+                if (link.product != null)
                 {
-                    link.product.price = externalPrice.Price;
+                    ApplyImportedPriceToProduct(
+                        link.product,
+                        externalPrice,
+                        link.categoryMappingId != null && mappings.TryGetValue(link.categoryMappingId.Value, out var mapping)
+                            ? mapping
+                            : null);
                     if (externalPrice.Stock.HasValue)
                         link.product.storageQuantity = externalPrice.Stock;
                 }
@@ -228,9 +248,10 @@ public class PriceSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             return PriceSyncResult.Failure("Адаптер не поддерживает экспорт цен");
 
-        // Get links
         var linksQuery = _context.productMarketplaceLinks
             .Include(l => l.product)
+                .ThenInclude(p => p!.attributeValues)
+                    .ThenInclude(av => av.attribute)
             .Where(l => l.connectionId == connectionId);
 
         if (linkIds != null && linkIds.Any())
@@ -241,6 +262,11 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
 
+        var mappingIds = links.Where(l => l.categoryMappingId != null).Select(l => l.categoryMappingId!.Value).Distinct().ToList();
+        var mappings = await _context.categoryMappings
+            .Where(m => mappingIds.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id, ct);
+
         var canLog = operationId != null && storeId != null;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -249,30 +275,66 @@ public class PriceSyncService
                 $"Найдено {links.Count} связанных товаров для подключения #{connectionId} ({connection.adapterKey})");
 
         var exportableLinks = links
-            .Where(l => l.product?.price != null)
+            .Where(l => l.product != null)
+            .Where(l => !string.IsNullOrWhiteSpace(l.externalProductId)
+                     || !string.IsNullOrWhiteSpace(l.externalSku))
             .ToList();
 
         // Marketplaces such as Wildberries reject duplicate product IDs in one price upload.
+        // Use sku:-prefixed key for links that only have externalSku so they aren't collapsed together.
         var uniqueExportableLinks = exportableLinks
-            .GroupBy(l => l.externalProductId, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.externalProductId)
+                ? "sku:" + l.externalSku
+                : l.externalProductId,
+                StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
 
-        // Build data for export
         var pricesToExport = uniqueExportableLinks
-            .Select(l => new PriceInfo(
-                l.externalProductId,
-                l.product!.price,
-                null, // oldPrice
-                l.product.storageQuantity
-            ))
+            .Select(l =>
+            {
+                CategoryMapping? mapping = null;
+                if (l.categoryMappingId != null)
+                    mappings.TryGetValue(l.categoryMappingId.Value, out mapping);
+
+                if (mapping != null)
+                {
+                    var fromGraph = _mappingService.BuildPriceInfoFromGraph(
+                        l.product!,
+                        mapping,
+                        l.externalProductId,
+                        l.externalSku,
+                        l.product!.storageQuantity);
+                    if (fromGraph != null)
+                        return fromGraph;
+                }
+
+                return BuildLegacyPriceInfo(l);
+            })
+            .Where(p => p.Price != null)
             .ToList();
 
-        var skippedNoPrice = links.Count - exportableLinks.Count;
+        var skippedNoPrice = exportableLinks.Count(l =>
+        {
+            if (l.categoryMappingId != null && mappings.TryGetValue(l.categoryMappingId.Value, out var mapping)
+                && MappingService.SchemaPriceFields(mapping.graphJson).Count > 0)
+            {
+                return _mappingService.BuildPriceInfoFromGraph(
+                    l.product!, mapping, l.externalProductId, l.externalSku, l.product!.storageQuantity) == null;
+            }
+            return l.product?.price == null;
+        });
+        var skippedNoIdentifier = links.Count(l =>
+            l.product?.price != null
+            && string.IsNullOrWhiteSpace(l.externalProductId)
+            && string.IsNullOrWhiteSpace(l.externalSku));
         var skippedDuplicateExternalIds = exportableLinks.Count - uniqueExportableLinks.Count;
         if (canLog && skippedNoPrice > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Пропущено {skippedNoPrice} товаров без цены");
+        if (canLog && skippedNoIdentifier > 0)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                $"Пропущено {skippedNoIdentifier} товаров без внешнего идентификатора");
         if (canLog && skippedDuplicateExternalIds > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Пропущено {skippedDuplicateExternalIds} дублей внешних ID в одном запросе");
@@ -532,6 +594,80 @@ public class PriceSyncService
             stock.ExternalProductId,
             stock.VariantId ?? "",
             stock.WarehouseId ?? "");
+    }
+
+    private static PriceInfo BuildLegacyPriceInfo(ProductMarketplaceLink l)
+    {
+        var avs = l.product!.attributeValues;
+        return new PriceInfo(
+            ExternalProductId: l.externalProductId,
+            Price: l.product.price,
+            OldPrice: ParsePriceAttr(avs, "old_price"),
+            Stock: l.product.storageQuantity,
+            MinPrice: ParsePriceAttr(avs, "min_price"),
+            ExternalSku: l.externalSku,
+            Discount: ParseIntAttr(avs, "discount")
+        );
+    }
+
+    private static void ApplyImportedPriceToProduct(Product product, PriceInfo externalPrice, CategoryMapping? mapping)
+    {
+        if (externalPrice.Price.HasValue)
+            product.price = externalPrice.Price;
+
+        if (mapping == null || MappingService.SchemaPriceFields(mapping.graphJson).Count == 0)
+            return;
+
+        WriteDirectPriceBinding(product, mapping, "price", externalPrice.Price);
+        WriteDirectPriceBinding(product, mapping, "oldPrice", externalPrice.OldPrice);
+        WriteDirectPriceBinding(product, mapping, "minPrice", externalPrice.MinPrice);
+        WriteDirectPriceBinding(product, mapping, "discountedPrice", externalPrice.DiscountedPrice);
+        WriteDirectPriceBinding(product, mapping, "discount", externalPrice.Discount);
+        WriteDirectPriceBinding(product, mapping, "netPrice", externalPrice.NetPrice);
+    }
+
+    private static void WriteDirectPriceBinding(Product product, CategoryMapping mapping, string fieldKey, object? value)
+    {
+        if (value == null) return;
+
+        var field = MappingService.SchemaPriceFields(mapping.graphJson)
+            .FirstOrDefault(f => string.Equals(f.fieldKey, fieldKey, StringComparison.OrdinalIgnoreCase));
+        var source = field?.source;
+        if (source?.type is not ("attribute" or "storeAttribute") || source.attributeId == null)
+            return;
+
+        var str = value switch
+        {
+            decimal d => d.ToString(CultureInfo.InvariantCulture),
+            int i => i.ToString(CultureInfo.InvariantCulture),
+            bool b => b ? "true" : "false",
+            _ => value.ToString() ?? ""
+        };
+
+        var av = product.attributeValues.FirstOrDefault(x => x.attributeId == source.attributeId);
+        if (av != null)
+            av.value = str;
+        else
+            product.attributeValues.Add(new ProductAttributeValue
+            {
+                attributeId = source.attributeId.Value,
+                value = str,
+            });
+    }
+
+    private static decimal? ParsePriceAttr(IEnumerable<ProductAttributeValue> avs, string key)
+    {
+        var av = avs.FirstOrDefault(x => x.attribute?.key == key);
+        if (av == null) return null;
+        return decimal.TryParse(av.value, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) && v > 0
+            ? v : null;
+    }
+
+    private static int? ParseIntAttr(IEnumerable<ProductAttributeValue> avs, string key)
+    {
+        var av = avs.FirstOrDefault(x => x.attribute?.key == key);
+        if (av == null) return null;
+        return int.TryParse(av.value, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 }
 

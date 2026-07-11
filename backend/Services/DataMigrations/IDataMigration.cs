@@ -1,4 +1,4 @@
-namespace PrintO.Services.DataMigrations;
+namespace Delegat.Services.DataMigrations;
 
 /// <summary>
 /// Interface for one-time data migrations that run when the platform version advances.

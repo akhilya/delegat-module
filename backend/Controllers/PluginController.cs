@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Services.Plugins;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Services.Plugins;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 /// <summary>
 /// Represents an application role, extending ASP.NET Identity.

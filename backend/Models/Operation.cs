@@ -1,4 +1,4 @@
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 public class Operation
 {

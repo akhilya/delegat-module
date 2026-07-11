@@ -1,17 +1,17 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Enums;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Products;
-using PrintO.Services.Marketplace;
-using PrintO.Services.Marketplace.Modifiers;
+using Delegat.Enums;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Products;
+using Delegat.Services.Marketplace;
+using Delegat.Services.Marketplace.Modifiers;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 [ApiController]
 [JwtAuthorize]
@@ -88,183 +88,110 @@ public class FieldMappingController : ControllerBase
     }
 
     /// <summary>
-    /// Get current field mappings
+    /// Get marketplace price-API fields for the dedicated price mapping block.
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/mappings/{mappingId}/price-fields")]
+    public async Task<IActionResult> GetPriceFields(int mappingId, CancellationToken ct)
+    {
+        var mapping = await GetMappingAsync(mappingId);
+
+        var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
+        var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
+
+        if (connection == null)
+            throw ApiException.NotFound("Подключение не найдено");
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+            return Ok(Array.Empty<object>());
+
+        try
+        {
+            var fields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+            return Ok(fields.Select(f => new
+            {
+                key = f.Key,
+                name = f.Name,
+                isRequired = f.IsRequired,
+                type = f.Type,
+                options = f.Options,
+                description = f.Description,
+                sortOrder = f.SortOrder,
+                group = f.Group,
+                minValue = f.MinValue,
+                maxValue = f.MaxValue,
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting price fields for mapping {MappingId}", mappingId);
+            throw ApiException.BadRequest($"Не удалось получить поля цен: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Mapping metadata for the editor page. The per-field schema now lives in the graph
+    /// (<see cref="CategoryMapping.graphJson"/>), so this returns only the mapping info the page needs.
     /// </summary>
     [HttpGet]
     [Route("/marketplace/mappings/{mappingId}/field-mappings")]
     public async Task<IActionResult> GetFieldMappings(int mappingId, CancellationToken ct)
     {
         var mapping = await GetMappingAsync(mappingId);
-
-        var repo = _unitOfWork.Repository<FieldMapping>();
-        var fieldMappings = await repo.FindAllAsync(
-            fm => fm.categoryMappingId == mappingId,
-            query => query.OrderBy(fm => fm.sortOrder));
-
-        // Lazy backfill: if any field mappings are missing type metadata, fetch from marketplace
-        if (fieldMappings.Any(fm => fm.externalFieldType == null))
-        {
-            await BackfillFieldTypeMetadataAsync(mapping, fieldMappings, ct);
-        }
-
-        var result = fieldMappings.Select(fm => new
-        {
-            id = fm.Id,
-            externalFieldKey = fm.externalFieldKey,
-            externalFieldName = fm.externalFieldName,
-            isRequired = fm.isRequired,
-            isEnabled = fm.isEnabled,
-            sourceType = fm.sourceType.ToString(),
-            sourceField = fm.sourceField,
-            sourceAttributeId = fm.sourceAttributeId,
-            staticValue = fm.staticValue,
-            transformExpression = fm.transformExpression,
-            modifiersJson = fm.modifiersJson,
-            externalFieldType = fm.externalFieldType,
-            externalFieldOptions = (fm.externalFieldType == "select" || fm.externalFieldType == "multiselect")
-                ? fm.externalFieldOptions : null,
-            sortOrder = fm.sortOrder
-        }).ToList();
-
         return Ok(new
         {
-            fieldMappings = result,
+            fieldMappings = Array.Empty<object>(),
+            name = mapping.name,
+            connectionName = mapping.connection?.name,
             localCategoryId = mapping.localCategoryId,
             localCategoryName = mapping.localCategory?.name,
             externalCategoryId = mapping.externalCategoryId,
             externalCategoryName = mapping.externalCategoryName,
-            name = mapping.name
+            compatibilityContextJson = mapping.compatibilityContextJson,
         });
     }
 
     /// <summary>
-    /// Save field mappings (bulk)
+    /// Read-only compatibility survey state (never re-runs analysis).
     /// </summary>
-    [HttpPost]
-    [Route("/marketplace/mappings/{mappingId}/field-mappings")]
-    public async Task<IActionResult> SaveFieldMappings(
-        int mappingId,
-        [FromBody] SaveFieldMappingsInput input)
+    [HttpGet]
+    [Route("/marketplace/mappings/{mappingId}/compatibility-context")]
+    public async Task<IActionResult> GetCompatibilityContext(int mappingId, CancellationToken ct)
     {
         var mapping = await GetMappingAsync(mappingId);
+        var ctx = Delegat.Services.Ai.CompatibilityContextHelper.Parse(mapping.compatibilityContextJson);
 
-        var repo = _unitOfWork.Repository<FieldMapping>();
+        var runningAnalyze = await _context.operations.AnyAsync(
+            o => o.storeId == mapping.connection!.storeId
+                 && o.type == "ai-compatibility"
+                 && o.status == "running"
+                 && o.title.Contains($"(#{mappingId})"), ct);
+        var runningMapping = await _context.operations.AnyAsync(
+            o => o.storeId == mapping.connection!.storeId
+                 && o.type == "ai-mapping"
+                 && o.status == "running"
+                 && o.title.Contains($"(#{mappingId})"), ct);
 
-        // Get existing mappings
-        var existingMappings = await repo.FindAllAsync(fm => fm.categoryMappingId == mappingId);
-        var existingDict = existingMappings.ToDictionary(fm => fm.externalFieldKey);
+        var status = runningAnalyze ? "analyzing"
+            : runningMapping ? "generating"
+            : Delegat.Services.Ai.CompatibilityContextHelper.SurveyStatus(ctx);
 
-        foreach (var item in input.fieldMappings)
+        return Ok(new
         {
-            if (existingDict.TryGetValue(item.externalFieldKey, out var existing))
-            {
-                // Update existing
-                existing.UpdateFill(new FieldMapping.UpdateForm
-                {
-                    isEnabled = item.isEnabled,
-                    sourceType = Enum.Parse<FieldMappingSourceType>(item.sourceType),
-                    sourceField = item.sourceField,
-                    sourceAttributeId = item.sourceAttributeId,
-                    staticValue = item.staticValue,
-                    transformExpression = item.transformExpression,
-                    modifiersJson = item.modifiersJson,
-                    sortOrder = item.sortOrder
-                });
-                await repo.UpdateAsync(existing);
-            }
-            else
-            {
-                // Create new
-                var newMapping = new FieldMapping();
-                newMapping.AddFill(new FieldMapping.AddForm
-                {
-                    categoryMappingId = mappingId,
-                    externalFieldKey = item.externalFieldKey,
-                    externalFieldName = item.externalFieldName,
-                    isRequired = item.isRequired,
-                    isEnabled = item.isEnabled,
-                    sourceType = Enum.Parse<FieldMappingSourceType>(item.sourceType),
-                    sourceField = item.sourceField,
-                    sourceAttributeId = item.sourceAttributeId,
-                    staticValue = item.staticValue,
-                    transformExpression = item.transformExpression,
-                    modifiersJson = item.modifiersJson,
-                    sortOrder = item.sortOrder
-                });
-                await repo.AddAsync(newMapping);
-            }
-        }
-
-        return Ok(new { success = true, count = input.fieldMappings.Count });
-    }
-
-    /// <summary>
-    /// Toggle field enable/disable
-    /// </summary>
-    [HttpPatch]
-    [Route("/marketplace/mappings/{mappingId}/field-mappings/{fieldMappingId}/toggle")]
-    public async Task<IActionResult> ToggleFieldMapping(int mappingId, int fieldMappingId)
-    {
-        await GetMappingAsync(mappingId);
-
-        var repo = _unitOfWork.Repository<FieldMapping>();
-        var fieldMapping = await repo.FindAsync(
-            fm => fm.Id == fieldMappingId && fm.categoryMappingId == mappingId);
-
-        if (fieldMapping == null)
-            throw ApiException.NotFound("Маппинг поля не найден");
-
-        fieldMapping.UpdateFill(new FieldMapping.UpdateForm
-        {
-            isEnabled = !fieldMapping.isEnabled
+            status,
+            analyzedAt = ctx?.AnalyzedAt,
+            questions = ctx != null
+                ? Delegat.Services.Ai.CompatibilityContextHelper.PendingQuestions(ctx).ToList()
+                : new List<Delegat.Services.Ai.MappingCompatibilityService.CompatibilityQuestion>(),
+            report = ctx?.Report,
+            answers = ctx?.Answers ?? new Dictionary<string, string>(),
+            surveyCompletedAt = ctx?.SurveyCompletedAt,
+            compatibilityScore = ctx?.Report?.CompatibilityScore,
         });
-        await repo.UpdateAsync(fieldMapping);
-
-        return Ok(new { isEnabled = fieldMapping.isEnabled });
-    }
-
-    /// <summary>
-    /// Update a single field mapping
-    /// </summary>
-    [HttpPatch]
-    [Route("/marketplace/mappings/{mappingId}/field-mappings/{fieldMappingId}")]
-    public async Task<IActionResult> UpdateFieldMapping(
-        int mappingId,
-        int fieldMappingId,
-        [FromBody] FieldMappingUpdateInput input)
-    {
-        await GetMappingAsync(mappingId);
-
-        var repo = _unitOfWork.Repository<FieldMapping>();
-        var fieldMapping = await repo.FindAsync(
-            fm => fm.Id == fieldMappingId && fm.categoryMappingId == mappingId);
-
-        if (fieldMapping == null)
-            throw ApiException.NotFound("Маппинг поля не найден");
-
-        var updateForm = new FieldMapping.UpdateForm();
-
-        if (input.isEnabled.HasValue)
-            updateForm.isEnabled = input.isEnabled.Value;
-        if (!string.IsNullOrEmpty(input.sourceType))
-            updateForm.sourceType = Enum.Parse<FieldMappingSourceType>(input.sourceType);
-        if (input.sourceField != null)
-            updateForm.sourceField = input.sourceField;
-        if (input.sourceAttributeId.HasValue)
-            updateForm.sourceAttributeId = input.sourceAttributeId;
-        if (input.staticValue != null)
-            updateForm.staticValue = input.staticValue;
-        if (input.transformExpression != null)
-            updateForm.transformExpression = input.transformExpression;
-        if (input.modifiersJson != null)
-            updateForm.modifiersJson = input.modifiersJson;
-        if (input.sortOrder.HasValue)
-            updateForm.sortOrder = input.sortOrder.Value;
-
-        fieldMapping.UpdateFill(updateForm);
-        await repo.UpdateAsync(fieldMapping);
-
-        return Ok(new { success = true });
     }
 
     /// <summary>
@@ -307,7 +234,12 @@ public class FieldMappingController : ControllerBase
                 key = a.key,
                 name = a.name,
                 type = a.type.ToString(),
-                isRequired = a.isRequired
+                isRequired = a.isRequired,
+                options = a.type is AttributeType.Select or AttributeType.MultiSelect
+                    ? Delegat.Services.Marketplace.Mapping.OptionAlignmentHelper.ParseAttributeOptions(a.options)
+                        .Select(o => new { value = o.Value, label = o.Label })
+                        .ToList()
+                    : null
             }) ?? Enumerable.Empty<object>(),
             storeAttributes = storeAttributes.Select(sa => new
             {
@@ -351,171 +283,7 @@ public class FieldMappingController : ControllerBase
         return Ok(new { options });
     }
 
-    /// <summary>
-    /// Preview modifier results for a specific product
-    /// </summary>
-    [HttpPost]
-    [Route("/marketplace/mappings/{mappingId}/preview")]
-    public async Task<IActionResult> PreviewFieldMappings(
-        int mappingId,
-        [FromBody] PreviewInput input,
-        CancellationToken ct)
-    {
-        var mapping = await GetMappingAsync(mappingId);
-
-        // Load product with all relations needed for field value extraction
-        var product = await _context.products
-            .Include(p => p.category)
-            .Include(p => p.attributeValues)
-                .ThenInclude(av => av.attribute)
-            .Include(p => p.storeAttributeValues)
-                .ThenInclude(sav => sav.storeAttribute)
-            .Include(p => p.files)
-            .Include(p => p.images)
-                .ThenInclude(i => i.file)
-            .Include(p => p.groupMemberships)
-                .ThenInclude(gm => gm.group)
-            .FirstOrDefaultAsync(p => p.Id == input.productId, ct);
-
-        if (product == null)
-            throw ApiException.NotFound("Товар не найден");
-
-        // Build field mapping list: use overrides from request body if provided,
-        // otherwise fall back to DB records.
-        List<FieldMapping> fieldMappings;
-        if (input.fieldMappings is { Count: > 0 })
-        {
-            fieldMappings = input.fieldMappings
-                .Where(fm => fm.isEnabled)
-                .Select(fm => new FieldMapping
-                {
-                    externalFieldKey = fm.externalFieldKey,
-                    sourceType = fm.sourceType,
-                    sourceField = fm.sourceField,
-                    sourceAttributeId = fm.sourceAttributeId,
-                    staticValue = fm.staticValue,
-                    modifiersJson = fm.modifiersJson,
-                    isEnabled = fm.isEnabled,
-                })
-                .ToList();
-        }
-        else
-        {
-            var repo = _unitOfWork.Repository<FieldMapping>();
-            fieldMappings = (await repo.FindAllAsync(
-                fm => fm.categoryMappingId == mappingId && fm.isEnabled,
-                query => query.OrderBy(fm => fm.sortOrder))).ToList();
-        }
-
-        var previews = new List<object>();
-
-        foreach (var fm in fieldMappings)
-        {
-            string? error = null;
-            object? sourceValue = null;
-            object? resultValue = null;
-
-            try
-            {
-                sourceValue = _mappingService.GetFieldValue(product, fm);
-
-                var modifierContext = new ModifierContext
-                {
-                    ResolveReference = (reference) => _mappingService.ResolveFieldReference(product, reference)
-                };
-
-                // Apply modifiers: prefer modifiersJson, fall back to legacy transformExpression
-                if (!string.IsNullOrEmpty(fm.modifiersJson))
-                {
-                    resultValue = ModifierPipeline.ApplyModifiers(sourceValue, fm.modifiersJson, modifierContext);
-                }
-                else if (!string.IsNullOrEmpty(fm.transformExpression) && sourceValue != null)
-                {
-                    resultValue = sourceValue;
-                }
-                else
-                {
-                    resultValue = sourceValue;
-                }
-            }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-            }
-
-            previews.Add(new
-            {
-                fieldMappingId = fm.Id,
-                externalFieldKey = fm.externalFieldKey,
-                sourceValue = FormatPreviewValue(sourceValue),
-                resultValue = FormatPreviewValue(resultValue),
-                error
-            });
-        }
-
-        return Ok(new { previews });
-    }
-
-    private static string? FormatPreviewValue(object? value)
-    {
-        if (value == null) return null;
-        if (value is string s) return s;
-        if (value is List<string> list) return string.Join(", ", list);
-        if (value is decimal d) return d.ToString();
-        return value.ToString();
-    }
-
     #region Helpers
-
-    /// <summary>
-    /// Backfill externalFieldType and externalFieldOptions from the marketplace API
-    /// for field mappings that are missing this data (created before this feature).
-    /// </summary>
-    private async Task BackfillFieldTypeMetadataAsync(
-        CategoryMapping mapping,
-        List<FieldMapping> fieldMappings,
-        CancellationToken ct)
-    {
-        try
-        {
-            var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
-            var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
-            if (connection == null) return;
-
-            var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
-            if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
-                return;
-
-            var externalFields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
-            var fieldLookup = externalFields.ToDictionary(f => f.Key);
-
-            var repo = _unitOfWork.Repository<FieldMapping>();
-            foreach (var fm in fieldMappings.Where(fm => fm.externalFieldType == null))
-            {
-                if (fieldLookup.TryGetValue(fm.externalFieldKey, out var extField))
-                {
-                    fm.externalFieldType = extField.Type;
-                    fm.externalFieldOptions = extField.Options != null && extField.Options.Count > 0
-                        ? JsonSerializer.Serialize(extField.Options.Select(o => new { value = o.Value, label = o.Label }))
-                        : null;
-                    repo.UpdateWithoutSave(fm);
-                }
-                else
-                {
-                    // Field not found on marketplace - default to string
-                    fm.externalFieldType = "string";
-                    repo.UpdateWithoutSave(fm);
-                }
-            }
-
-            await _unitOfWork.SaveChangesAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to backfill field type metadata for mapping {MappingId}", mapping.Id);
-        }
-    }
-
     private async Task<CategoryMapping> GetMappingAsync(int mappingId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -541,60 +309,4 @@ public class FieldMappingController : ControllerBase
 
     #endregion
 
-    #region Input DTOs
-
-    public struct SaveFieldMappingsInput
-    {
-        public List<FieldMappingItem> fieldMappings { get; set; }
-    }
-
-    public struct FieldMappingItem
-    {
-        public string externalFieldKey { get; set; }
-        public string? externalFieldName { get; set; }
-        public bool isRequired { get; set; }
-        public bool isEnabled { get; set; }
-        public string sourceType { get; set; }
-        public string? sourceField { get; set; }
-        public int? sourceAttributeId { get; set; }
-        public string? staticValue { get; set; }
-        public string? transformExpression { get; set; }
-        public string? modifiersJson { get; set; }
-        public int sortOrder { get; set; }
-    }
-
-    public struct FieldMappingUpdateInput
-    {
-        public bool? isEnabled { get; set; }
-        public string? sourceType { get; set; }
-        public string? sourceField { get; set; }
-        public int? sourceAttributeId { get; set; }
-        public string? staticValue { get; set; }
-        public string? transformExpression { get; set; }
-        public string? modifiersJson { get; set; }
-        public int? sortOrder { get; set; }
-    }
-
-    public struct PreviewInput
-    {
-        public int productId { get; set; }
-        /// <summary>
-        /// Optional in-memory field mapping overrides (unsaved state from the UI).
-        /// When provided, these are used instead of DB records.
-        /// </summary>
-        public List<PreviewFieldMappingItem>? fieldMappings { get; set; }
-    }
-
-    public struct PreviewFieldMappingItem
-    {
-        public string externalFieldKey { get; set; }
-        public FieldMappingSourceType sourceType { get; set; }
-        public string? sourceField { get; set; }
-        public int? sourceAttributeId { get; set; }
-        public string? staticValue { get; set; }
-        public string? modifiersJson { get; set; }
-        public bool isEnabled { get; set; }
-    }
-
-    #endregion
 }

@@ -8,7 +8,8 @@
      Fallback chain: cross-platform Cyrillic-safe stack. We deliberately AVOID `system-ui`
      here — it resolves to different fonts on different OSes (SF Pro / Segoe UI / various)
      and was the root cause of "different browsers, different fonts". */
-  font-family: 'Onest', 'Helvetica Neue', 'Arial', 'Liberation Sans', sans-serif;
+  font-family:
+    "Onest", "Helvetica Neue", "Arial", "Liberation Sans", sans-serif;
   line-height: 1.55;
   font-weight: 400;
   letter-spacing: -0.005em;
@@ -64,21 +65,40 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   /* Z-index scale — single source of truth.
-     Reka overlays render in portals that self-order by DOM mount order, so the
-     whole floating layer shares one base level (overlay / popover / modal = 50):
-     a Select opened inside a Dialog paints above it because it mounts later.
+     Portaled overlays (SelectContent, DropdownMenu, Popover etc.) are teleported to <body>
+     and must exceed the dialog z-index (--z-modal) so they render above dialogs and sheets.
      The operations slide-over is persistent chrome on a high band (9996–9998);
-     a blocking confirmation must sit above even that, so --z-alert is the ceiling. */
-  --z-sticky: 20;   /* sticky table headers / sub-nav */
-  --z-overlay: 50;  /* dialog & sheet backdrops */
-  --z-popover: 50;  /* selects, dropdowns, popovers, comboboxes, tooltips, context menus */
-  --z-modal: 50;    /* dialog & sheet content */
-  --z-toast: 9999;  /* sonner toasts (sonner manages its own; listed here for ordering) */
-  --z-alert: 10000; /* blocking confirmations — above the operations panel and toasts */
+     a blocking confirmation must sit above everything, so --z-alert is the ceiling. */
+  --z-sticky: 20;    /* sticky table headers / sub-nav */
+  --z-overlay: 9997; /* dialog & sheet backdrops — above FABs (9996) */
+  --z-modal: 9998;   /* dialog & sheet content */
+  --z-popover: 9999; /* selects, dropdowns, popovers, comboboxes, tooltips — must exceed --z-modal */
+  --z-toast: 10000;  /* sonner toasts */
+  --z-alert: 10001;  /* blocking confirmations — ceiling */
 }
 
 button {
   cursor: pointer;
+}
+
+/* Touch devices: guarantee a 44px-min tap target on the dense desktop UI without
+   touching the visual size on mouse/trackpad pointers (WCAG 2.5.5). */
+@media (pointer: coarse) {
+  [data-slot="button"] {
+    min-height: 2.75rem;
+  }
+}
+
+/* Respect users who ask for less motion: collapse transitions/animations to a crossfade. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .card {
@@ -86,7 +106,17 @@ button {
 }
 
 .adaptive-padding {
-  @apply px-[8vw] max-[2000px]:px-28 max-2xl:px-16 max-[1281px]:px-10 max-lg:px-5 max-sm:px-3;
+  /* Right side gets extra clearance for fixed FAB buttons (size-12 + 24px gap = 72px) */
+  @apply pl-[8vw] pr-[max(8vw,5rem)]
+    max-[2000px]:px-28
+    max-2xl:pl-16 max-2xl:pr-20
+    max-[1281px]:pl-10 max-[1281px]:pr-20
+    max-lg:pl-5 max-lg:pr-20
+    max-sm:pl-3 max-sm:pr-20;
+}
+
+.ai-panel-open .adaptive-padding {
+  @apply px-3 sm:px-4 lg:px-5;
 }
 
 @theme inline {
@@ -135,7 +165,7 @@ button {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-display: 'Onest', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: "Onest", "Helvetica Neue", Arial, sans-serif;
 }
 
 .dark {
@@ -196,7 +226,12 @@ button {
       font-size: 16px;
     }
   }
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-display);
     /* Tighter optical letter-spacing on headings — at larger sizes default tracking
        reads loose. Slight negative tracking is the standard editorial polish. */
@@ -215,10 +250,14 @@ input:-webkit-autofill:active {
 }
 
 /* Match form control color scheme to app theme */
-input, select, textarea {
+input,
+select,
+textarea {
   color-scheme: light;
 }
-.dark input, .dark select, .dark textarea {
+.dark input,
+.dark select,
+.dark textarea {
   color-scheme: dark;
 }
 
@@ -244,12 +283,15 @@ input[type="number"] {
 }
 .thin-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent) transparent;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent)
+    transparent;
 }
 
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

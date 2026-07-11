@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PrintO.Infrastructure.Interfaces;
+namespace Delegat.Infrastructure.Interfaces;
 
 /// <summary>
 /// Base interface for all entities with Id property

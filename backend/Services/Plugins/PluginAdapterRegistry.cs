@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
-using PrintO.Infrastructure.Security;
-using PrintO.Marketplace.SDK;
-using PrintO.Services.Marketplace;
+using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.SDK;
+using Delegat.Services.Marketplace;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// Implementation of IMarketplaceAdapterRegistry that uses plugins.
@@ -117,7 +117,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
         }
     }
 
-    private static Marketplace.CredentialsSchema ConvertCredentialsSchema(PrintO.Marketplace.SDK.CredentialsSchema schema)
+    private static Marketplace.CredentialsSchema ConvertCredentialsSchema(Delegat.Marketplace.SDK.CredentialsSchema schema)
     {
         return new Marketplace.CredentialsSchema
         {

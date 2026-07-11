@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
-using PrintO.Infrastructure.Storage;
+using Delegat.Infrastructure.Storage;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public class ThumbnailService
 {

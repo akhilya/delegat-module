@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
-namespace PrintO.Hubs;
+namespace Delegat.Hubs;
 
 [Authorize]
 public class OperationHub : Hub

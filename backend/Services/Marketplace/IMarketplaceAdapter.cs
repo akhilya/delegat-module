@@ -1,8 +1,8 @@
-using PrintO.Marketplace.SDK.RateLimit;
-using PrintO.Models.Marketplace;
-using PrintO.Models.Marketplace.DTOs;
+using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
 
-namespace PrintO.Services.Marketplace;
+namespace Delegat.Services.Marketplace;
 
 /// <summary>
 /// Marketplace adapter interface.
@@ -96,6 +96,14 @@ public interface IMarketplaceAdapter
     /// Get all fields for a category (required + optional)
     /// </summary>
     Task<List<ExternalField>> GetCategoryFieldsAsync(
+        MarketplaceConnection connection,
+        string externalCategoryId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Get price-API fields for dedicated price sync (separate from card/category fields).
+    /// </summary>
+    Task<List<ExternalField>> GetPriceFieldsAsync(
         MarketplaceConnection connection,
         string externalCategoryId,
         CancellationToken ct = default);

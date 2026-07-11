@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Hubs;
-using PrintO.Models;
+using Delegat.Hubs;
+using Delegat.Models;
 
-namespace PrintO.Services;
+namespace Delegat.Services;
 
 public class OperationLogger : IOperationLogger
 {

@@ -1,10 +1,10 @@
-using PrintO.Enums;
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Infrastructure.Storage;
+using Delegat.Enums;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Storage;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models;
+namespace Delegat.Models;
 
 public class StoreFile : IEntity, IMapToDTO<object>
 {

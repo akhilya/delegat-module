@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using PrintO.Marketplace.SDK;
+using Delegat.Marketplace.SDK;
 
-namespace PrintO.Services.Plugins;
+namespace Delegat.Services.Plugins;
 
 /// <summary>
 /// Manages plugin lifecycle: loading, unloading, and access.

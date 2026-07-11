@@ -1,4 +1,4 @@
-namespace PrintO.Models.Marketplace.DTOs;
+namespace Delegat.Models.Marketplace.DTOs;
 
 /// <summary>
 /// Request to create or update a marketplace category from a local category definition.

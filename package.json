@@ -1,9 +1,9 @@
 {
-  "name": "printo-dashboard",
+  "name": "delegat-dashboard",
   "private": true,
   "scripts": {
     "dev": "concurrently -n docker,api,web -c blue,green,cyan \"npm run dev:docker\" \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:docker": "docker compose up",
+    "dev:docker": "docker compose --env-file .env.dev up",
     "dev:api": "cd backend && dotenv -e ../.env.dev -- dotnet watch run",
     "dev:web": "cd frontend && npm run dev",
     "dev:stop": "docker compose down"

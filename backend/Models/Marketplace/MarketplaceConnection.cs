@@ -1,9 +1,9 @@
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Infrastructure.Security;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Security;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models.Marketplace;
+namespace Delegat.Models.Marketplace;
 
 /// <summary>
 /// Represents a connection to an external marketplace (e.g., Ozon, Wildberries).
@@ -145,8 +145,6 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
             isActive = isActive,
             lastSyncAt = lastSyncAt,
             createdAt = createdAt,
-            categoryMappingsCount = categoryMappings?.Count ?? 0,
-            productLinksCount = productLinks?.Count ?? 0
         };
     }
 
@@ -367,16 +365,6 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
         /// Timestamp when the connection was created.
         /// </summary>
         public DateTime createdAt { get; set; }
-
-        /// <summary>
-        /// Number of category mappings configured.
-        /// </summary>
-        public int categoryMappingsCount { get; set; }
-
-        /// <summary>
-        /// Number of linked products.
-        /// </summary>
-        public int productLinksCount { get; set; }
     }
 
     #endregion

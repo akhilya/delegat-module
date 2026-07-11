@@ -1,8 +1,8 @@
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PrintO.Models.Products;
+namespace Delegat.Models.Products;
 
 /// <summary>
 /// Represents a product variant (size) — a product-level concept.

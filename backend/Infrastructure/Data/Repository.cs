@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Interfaces;
 using System.Linq.Expressions;
 
-namespace PrintO.Infrastructure.Data;
+namespace Delegat.Infrastructure.Data;
 
 /// <summary>
 /// Generic repository providing CRUD and query operations for entities.

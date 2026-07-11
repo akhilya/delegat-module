@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PrintO.Infrastructure.Auth;
-using PrintO.Infrastructure.Data;
-using PrintO.Infrastructure.Interfaces;
-using PrintO.Infrastructure.Middleware;
-using PrintO.Models;
+using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Interfaces;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Models;
 
-namespace PrintO.Controllers;
+namespace Delegat.Controllers;
 
 /// <summary>
 /// Controller for managing product categories and their attributes.
@@ -221,13 +221,15 @@ public class CategoryController : ControllerBase
         if (category == null)
             throw ApiException.NotFound("Категория не найдена");
 
-        // Check if category has products without loading them
-        var hasProducts = await _context.products.AnyAsync(p => p.categoryId == categoryId);
-        if (hasProducts)
-        {
-            var productCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
-            throw ApiException.BadRequest($"Невозможно удалить категорию с {productCount} товарами. Сначала переместите или удалите товары.");
-        }
+        var activeCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
+        if (activeCount > 0)
+            throw ApiException.BadRequest($"Невозможно удалить категорию с {activeCount} товарами. Сначала переместите или удалите товары.");
+
+        // Trashed products are hidden by the global query filter, but their FK rows still
+        // block the DELETE — detach them from the category (they stay in the trash)
+        await _context.products.IgnoreQueryFilters()
+            .Where(p => p.categoryId == categoryId && p.deletedAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.categoryId, (int?)null));
 
         // Delete attributes and category in a single save
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
@@ -296,6 +298,10 @@ public class CategoryController : ControllerBase
         // Check key uniqueness
         if (category.attributes.Any(a => a.key == input.key))
             throw ApiException.BadRequest("Атрибут с таким ключом уже существует");
+
+        if (category.attributes.Any(a =>
+                string.Equals(a.name, input.name, StringComparison.OrdinalIgnoreCase)))
+            throw ApiException.BadRequest("Атрибут с таким названием уже существует");
 
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
 

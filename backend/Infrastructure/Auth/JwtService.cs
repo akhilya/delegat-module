@@ -1,11 +1,11 @@
 using Microsoft.IdentityModel.Tokens;
-using PrintO.Infrastructure.Configuration;
+using Delegat.Infrastructure.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace PrintO.Infrastructure.Auth;
+namespace Delegat.Infrastructure.Auth;
 
 /// <summary>
 /// Interface for JWT token operations
