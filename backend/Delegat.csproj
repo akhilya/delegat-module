@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Delegat</RootNamespace>
-    <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,7 +28,7 @@
     <PackageReference Include="Minio" Version="6.0.5" />
 
     <!-- Image Processing -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
 
     <!-- Health Checks -->
     <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.1" />
