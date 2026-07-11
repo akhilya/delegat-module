@@ -1,5 +1,6 @@
 <script>
-// FormNumberInput - A numeric input field with increment/decrement controls and formatting options.
+// @deprecated Prefer NumberField from @/components/ui/number-field with Form wrappers.
+// A numeric input field with increment/decrement controls and formatting options.
 import { Label } from "@/components/ui/label";
 import {
   NumberField,

@@ -22,7 +22,7 @@ import {
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { toast } from "vue-sonner";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   Search,
   ChevronLeft,

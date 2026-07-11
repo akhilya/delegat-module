@@ -3,7 +3,7 @@ import { computed, ref, watch, nextTick } from "vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,

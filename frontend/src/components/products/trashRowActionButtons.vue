@@ -1,6 +1,6 @@
 <script>
 // TrashRowActionButtons - Dropdown menu with confirm dialogs for trashed product row actions.
-import Button from "../ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,

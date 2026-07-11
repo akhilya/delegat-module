@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import Button from "./ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { ArrowDownToLine, Trash2 } from "lucide-vue-next";
 import Badge from "./ui/badge/Badge.vue";
 

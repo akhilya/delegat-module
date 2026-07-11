@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useStore } from "vuex";
 import { Sparkles, Loader2, Activity } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 
 const store = useStore();
 
@@ -27,11 +28,9 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
         v-if="!isAiOpen"
         class="fixed bottom-6 right-4 z-[9996] flex flex-col-reverse gap-2.5"
       >
-        <!-- AI Assistant — bottom (closest to corner) -->
-        <button
-          type="button"
-          class="relative size-12 rounded-full bg-foreground text-background shadow-lg
-                 flex items-center justify-center hover:opacity-80 transition-opacity shrink-0"
+        <Button
+          size="icon"
+          class="relative size-12 rounded-full bg-foreground text-background shadow-lg hover:opacity-80 shrink-0"
           title="AI Ассистент"
           @click="toggleAi"
         >
@@ -41,13 +40,11 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
             v-if="isAiLoading"
             class="absolute inset-0 rounded-full bg-white/10 animate-pulse pointer-events-none"
           />
-        </button>
+        </Button>
 
-        <!-- Background operations — above AI -->
-        <button
-          type="button"
-          class="relative size-12 rounded-full bg-foreground text-background shadow-lg
-                 flex items-center justify-center hover:opacity-80 transition-opacity shrink-0"
+        <Button
+          size="icon"
+          class="relative size-12 rounded-full bg-foreground text-background shadow-lg hover:opacity-80 shrink-0"
           title="Фоновые процессы"
           @click="toggleOps"
         >
@@ -60,7 +57,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
           >
             {{ activeCount > 9 ? "9+" : activeCount }}
           </span>
-        </button>
+        </Button>
       </div>
     </Transition>
   </Teleport>

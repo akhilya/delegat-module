@@ -1,6 +1,6 @@
 <script>
 // ProductRowActionButtons - Dropdown menu with actions for a single product table row.
-import Button from "../ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,

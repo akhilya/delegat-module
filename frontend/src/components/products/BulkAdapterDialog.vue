@@ -2,7 +2,7 @@
 import { ref, watch, computed } from "vue";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,

@@ -1,50 +1,66 @@
-<script>
-// Breadcrumbs - Renders a navigation breadcrumb trail with clickable links and a home icon.
+<script setup>
+import { useRouter } from "vue-router";
 import { ChevronRight, Home } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
-export default {
-  components: {
-    ChevronRight,
-    Home,
+defineProps({
+  items: {
+    type: Array,
+    required: true,
+    // Each item: { label: string, to?: string }
   },
-  props: {
-    items: {
-      type: Array,
-      required: true,
-      // Each item: { label: string, to?: string }
-    },
-  },
-  methods: {
-    navigate(to) {
-      if (to) {
-        this.$router.push(to);
-      }
-    },
-  },
-};
+});
+
+const router = useRouter();
+
+function navigate(to) {
+  if (to) router.push(to);
+}
 </script>
 
 <template>
-  <nav class="flex items-center gap-1 text-sm text-muted-foreground mb-4">
-    <button
-      @click="navigate('/')"
-      aria-label="Главная"
-      class="flex items-center hover:text-foreground transition-colors"
-    >
-      <Home class="w-4 h-4" />
-    </button>
-    <template v-for="(item, index) in items" :key="index">
-      <ChevronRight class="w-4 h-4" />
-      <button
-        v-if="item.to && index < items.length - 1"
-        @click="navigate(item.to)"
-        class="hover:text-foreground transition-colors"
-      >
-        {{ item.label }}
-      </button>
-      <span v-else class="text-foreground font-medium">
-        {{ item.label }}
-      </span>
-    </template>
-  </nav>
+  <Breadcrumb class="mb-4">
+    <BreadcrumbList>
+      <BreadcrumbItem>
+        <BreadcrumbLink as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7"
+            aria-label="Главная"
+            @click="navigate('/')"
+          >
+            <Home class="size-4" />
+          </Button>
+        </BreadcrumbLink>
+      </BreadcrumbItem>
+      <template v-for="(item, index) in items" :key="index">
+        <BreadcrumbSeparator>
+          <ChevronRight class="size-4" />
+        </BreadcrumbSeparator>
+        <BreadcrumbItem>
+          <BreadcrumbLink v-if="item.to && index < items.length - 1" as-child>
+            <Button
+              variant="link"
+              class="h-auto px-0 text-muted-foreground font-normal"
+              @click="navigate(item.to)"
+            >
+              {{ item.label }}
+            </Button>
+          </BreadcrumbLink>
+          <BreadcrumbPage v-else>
+            {{ item.label }}
+          </BreadcrumbPage>
+        </BreadcrumbItem>
+      </template>
+    </BreadcrumbList>
+  </Breadcrumb>
 </template>

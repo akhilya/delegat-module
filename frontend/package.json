@@ -8,10 +8,14 @@
     "build": "vite build --mode production",
     "preview": "vite preview --host",
     "lint": "eslint . --ext .js,.vue",
-    "lint:fix": "eslint . --ext .js,.vue --fix"
+    "lint:fix": "eslint . --ext .js,.vue --fix",
+    "ui:diff": "npx shadcn-vue@latest diff",
+    "ui:add": "npx shadcn-vue@latest add",
+    "ui:audit": "node scripts/ui-audit.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@lucide/vue": "^1.24.0",
     "@microsoft/signalr": "^10.0.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tanstack/vue-table": "^8.21.3",

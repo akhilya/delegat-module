@@ -12,7 +12,7 @@ import { VueFlow, useVueFlow } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Save,

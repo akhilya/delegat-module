@@ -1,6 +1,6 @@
 <script>
 // ProductMarketplaceIntegrations - Manages marketplace connections for a product: export, import, and sync status.
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import {

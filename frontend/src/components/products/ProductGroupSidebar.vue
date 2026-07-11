@@ -2,7 +2,7 @@
 import { ref, nextTick, watch } from 'vue';
 import { Layers, ExternalLink, Plus, Copy, ArrowRightLeft } from 'lucide-vue-next';
 import { Loader2 } from 'lucide-vue-next';
-import Button from '@/components/ui/button/Button.vue';
+import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,

@@ -1,6 +1,6 @@
 <script>
 import { House } from "lucide-vue-next";
-import Button from "./ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { PAGE_PRODUCTS } from "@/router";
 
 export default {

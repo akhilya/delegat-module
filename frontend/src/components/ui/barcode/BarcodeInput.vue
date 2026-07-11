@@ -1,6 +1,6 @@
 <script>
 import Input from "@/components/ui/input/Input.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,

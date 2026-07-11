@@ -22,6 +22,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const store = useStore();
 const messagesEl = ref(null);
@@ -451,39 +455,42 @@ function renderMarkdown(text) {
       >
         <!-- Left: history + new + tools -->
         <div class="flex items-center gap-0.5 z-10">
-          <button
-            type="button"
-            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7"
             title="История диалогов"
             @click="openHistory"
           >
             <History class="size-3.5" />
-          </button>
-          <button
-            type="button"
-            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7"
             title="Новый диалог"
             @click="newConversation"
           >
             <Plus class="size-3.5" />
-          </button>
-          <button
-            type="button"
-            class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7"
             title="Инструменты ассистента"
             @click="openTools"
           >
             <Wrench class="size-3.5" />
-          </button>
+          </Button>
         </div>
 
         <!-- Center: title -->
         <div class="absolute inset-x-0 flex items-center justify-center px-24 pointer-events-none">
           <template v-if="isEditingTitle">
-            <input
+            <Input
               ref="titleInputEl"
               v-model="editingTitleValue"
-              class="pointer-events-auto text-sm font-medium text-center bg-transparent border-b border-primary/60 outline-none w-full max-w-[180px] leading-tight py-px"
+              class="pointer-events-auto h-auto text-sm font-medium text-center bg-transparent border-0 border-b border-primary/60 rounded-none shadow-none focus-visible:ring-0 w-full max-w-[180px] leading-tight py-px px-0"
               placeholder="Название диалога"
               maxlength="100"
               @blur="saveTitle"
@@ -492,10 +499,9 @@ function renderMarkdown(text) {
             />
           </template>
           <template v-else>
-            <button
+            <Button
               v-if="messages.length > 0"
-              type="button"
-              class="pointer-events-auto group/title flex items-center gap-1 max-w-[180px]"
+                class="pointer-events-auto group/title flex items-center gap-1 max-w-[180px]"
               :title="conversationTitle ? 'Переименовать' : undefined"
               @click="conversationTitle ? startEditTitle() : undefined"
             >
@@ -503,19 +509,18 @@ function renderMarkdown(text) {
                 {{ conversationTitle || "Новый диалог" }}
               </span>
               <Pencil v-if="conversationTitle" class="size-3 opacity-0 group-hover/title:opacity-40 transition-opacity shrink-0" />
-            </button>
+            </Button>
           </template>
         </div>
 
         <!-- Right: close -->
-        <button
-          type="button"
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-auto z-10"
           title="Закрыть"
           @click="close"
         >
           <X class="size-4" />
-        </button>
+        </Button>
       </div>
 
       <!-- ── Header: History view ── -->
@@ -523,31 +528,28 @@ function renderMarkdown(text) {
         v-else-if="activeView === 'history'"
         class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
       >
-        <button
-          type="button"
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Назад к чату"
           @click="backToChat"
         >
           <ChevronLeft class="size-4" />
-        </button>
+        </Button>
         <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">История диалогов</span>
-        <button
-          type="button"
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Новый диалог"
           @click="newConversation"
         >
           <Plus class="size-3.5" />
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Закрыть"
           @click="close"
         >
           <X class="size-4" />
-        </button>
+        </Button>
       </div>
 
       <!-- ── Header: Tools view ── -->
@@ -555,23 +557,21 @@ function renderMarkdown(text) {
         v-else
         class="flex items-center h-11 px-2 shrink-0 border-b border-border/40 gap-1"
       >
-        <button
-          type="button"
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Назад к чату"
           @click="backToChat"
         >
           <ChevronLeft class="size-4" />
-        </button>
+        </Button>
         <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">Инструменты</span>
-        <button
-          type="button"
+        <Button
           class="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Закрыть"
           @click="close"
         >
           <X class="size-4" />
-        </button>
+        </Button>
       </div>
 
       <!-- ── Content: History view ── -->
@@ -585,13 +585,12 @@ function renderMarkdown(text) {
         <div v-else-if="!conversations.length" class="flex flex-col items-center justify-center py-10 gap-2 text-center px-6">
           <MessageSquare class="size-8 text-muted-foreground/30" />
           <p class="text-sm text-muted-foreground">Нет сохранённых диалогов</p>
-          <button
-            type="button"
+          <Button
             class="mt-1 flex items-center gap-1.5 text-xs text-primary hover:underline"
             @click="newConversation"
           >
             <Plus class="size-3.5" /> Начать новый
-          </button>
+          </Button>
         </div>
 
         <!-- Conversation groups -->
@@ -614,14 +613,13 @@ function renderMarkdown(text) {
                   {{ formatRelativeDate(c.lastMessageAt) }} · {{ c.messageCount }} сообщ.
                 </p>
               </div>
-              <button
-                type="button"
-                class="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+              <Button
+                    class="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                 title="Удалить диалог"
                 @click="openConfirmDelete($event, c.sessionId)"
               >
                 <Trash2 class="size-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
         </template>
@@ -637,9 +635,8 @@ function renderMarkdown(text) {
         <div class="px-2 pb-3 space-y-0.5">
           <div v-for="cat in toolCategories" :key="cat.name" class="rounded-md overflow-hidden">
             <!-- Category header -->
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-accent transition-colors rounded-md"
+            <Button
+                class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-accent transition-colors rounded-md"
               @click="toggleCategory(cat.name)"
             >
               <component :is="cat.icon" class="size-3.5 shrink-0 text-muted-foreground" />
@@ -649,7 +646,7 @@ function renderMarkdown(text) {
                 class="size-3 text-muted-foreground/60 transition-transform duration-150"
                 :class="{ 'rotate-180': expandedCategories.has(cat.name) }"
               />
-            </button>
+            </Button>
             <!-- Tool rows -->
             <div
               v-show="expandedCategories.has(cat.name)"
@@ -711,19 +708,17 @@ function renderMarkdown(text) {
             v-if="hasEnabledModels"
             class="flex max-w-[280px] flex-wrap justify-center gap-1.5"
           >
-            <button
-              v-for="example in [
+            <Button v-for="example in [
                 'Покажи статистику магазина',
                 'Заполни незаполненные поля маппинга',
                 'Найди товары без цены',
               ]"
               :key="example"
-              type="button"
-              class="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                class="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               @click="inputText = example; submit()"
             >
               {{ example }}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -734,15 +729,14 @@ function renderMarkdown(text) {
             <div class="bg-muted text-foreground rounded-2xl rounded-br-none px-4 py-2.5 text-sm max-w-[80%] break-words">
               {{ msg.content }}
             </div>
-            <button
-              type="button"
-              class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+            <Button
+                class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
               :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
               @click="copyText(msg.id, msg.content)"
             >
               <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
               <Copy v-else class="size-3.5" />
-            </button>
+            </Button>
           </div>
 
           <!-- Assistant message: full width -->
@@ -804,31 +798,28 @@ function renderMarkdown(text) {
               v-if="msg.done && (msg.content || msg.toolCalls?.length)"
               class="flex items-center gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
             >
-              <button
-                type="button"
-                class="text-muted-foreground hover:text-foreground transition-colors"
+              <Button
+                    class="text-muted-foreground hover:text-foreground transition-colors"
                 :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
                 @click="copyText(msg.id, messageClipboard(msg))"
               >
                 <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
                 <Copy v-else class="size-3.5" />
-              </button>
-              <button
-                type="button"
-                :class="['transition-colors', msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600']"
+              </Button>
+              <Button
+                    :class="['transition-colors', msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600']"
                 title="Хороший ответ"
                 @click="sendFeedback(msg, 1)"
               >
                 <ThumbsUp class="size-3.5" />
-              </button>
-              <button
-                type="button"
-                :class="['transition-colors', msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500']"
+              </Button>
+              <Button
+                    :class="['transition-colors', msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500']"
                 title="Плохой ответ"
                 @click="sendFeedback(msg, -1)"
               >
                 <ThumbsDown class="size-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
         </template>
@@ -837,11 +828,10 @@ function renderMarkdown(text) {
       <!-- ── Input area — only in chat view ── -->
       <div v-if="activeView === 'chat'" class="px-3 pb-3 pt-1.5 shrink-0">
         <div class="rounded-2xl border border-border/60 bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring/40 transition-shadow overflow-hidden">
-          <textarea
+          <Textarea
             ref="inputEl"
             v-model="inputText"
-            class="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-50 font-[inherit] leading-relaxed"
-            style="min-height: 44px; max-height: 120px;"
+            class="min-h-[44px] max-h-[120px] resize-none border-0 bg-transparent px-4 pt-3 pb-1 shadow-none focus-visible:ring-0 font-[inherit] leading-relaxed"
             :placeholder="hasEnabledModels ? 'Введите запрос...' : 'Нет включённых AI-моделей'"
             rows="1"
             :disabled="isLoading || !hasEnabledModels"
@@ -879,19 +869,17 @@ function renderMarkdown(text) {
             >
               нет включённых моделей
             </span>
-            <button
+            <Button
               v-if="isLoading"
-              type="button"
-              class="size-7 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-foreground/80 transition-colors shrink-0"
+                class="size-7 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-foreground/80 transition-colors shrink-0"
               title="Остановить генерацию"
               @click="stopGeneration"
             >
               <Square class="size-3" />
-            </button>
-            <button
+            </Button>
+            <Button
               v-else
-              type="button"
-              class="size-7 rounded-full flex items-center justify-center transition-colors shrink-0 disabled:pointer-events-none"
+                class="size-7 rounded-full flex items-center justify-center transition-colors shrink-0 disabled:pointer-events-none"
               :class="inputText.trim()
                 ? 'bg-foreground text-background hover:bg-foreground/80'
                 : 'bg-muted text-muted-foreground'"
@@ -900,7 +888,7 @@ function renderMarkdown(text) {
               @click="submit"
             >
               <ArrowUp class="size-4" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 <script>
+// @deprecated Prefer Form + Combobox from @/components/ui/combobox directly.
 // FormCombobox - A searchable dropdown (combobox) form control with item selection.
 import {
   Combobox,
@@ -11,7 +12,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
 } from "@/components/ui/combobox";
-import Button from "./ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { Check, ChevronsUpDown } from "lucide-vue-next";
 import FormControl from "./ui/form/FormControl.vue";
 

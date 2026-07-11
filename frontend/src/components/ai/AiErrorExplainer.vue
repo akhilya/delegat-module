@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { http } from "@/main";
 import { Loader2, Sparkles, X } from "lucide-vue-next";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 
 const props = defineProps({
   errorMessage: { type: String, required: true },

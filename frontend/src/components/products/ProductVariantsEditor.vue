@@ -1,5 +1,5 @@
 <script>
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import BarcodeInput from "@/components/ui/barcode/BarcodeInput.vue";
 import {

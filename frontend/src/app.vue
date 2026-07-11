@@ -8,7 +8,7 @@ import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-vue-next";
 import { computed, ref } from "vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { Monitor } from "lucide-vue-next";
 import AiChatPanel from "@/components/ai/AiChatPanel.vue";
 import FabGroup from "@/components/FabGroup.vue";

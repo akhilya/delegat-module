@@ -1,6 +1,6 @@
 <script setup>
 import { AlertTriangle, CheckCircle2, X } from "lucide-vue-next";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 
 defineProps({
   plan: { type: Object, required: true },

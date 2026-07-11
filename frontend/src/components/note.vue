@@ -6,7 +6,7 @@ import {
   Loader2,
   Loader,
 } from "lucide-vue-next";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import {

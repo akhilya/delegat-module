@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import { useStore } from "vuex";
 import { X, Trash2, Activity, Loader2 } from "lucide-vue-next";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,

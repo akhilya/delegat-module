@@ -25,7 +25,14 @@ import {
   Trash2,
   Sparkles,
 } from "lucide-vue-next";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import Progress from "@/components/ui/progress/Progress.vue";
 import {
   AlertDialog,
@@ -55,7 +62,6 @@ let timer = null;
 watch(expanded, async (isExpanded) => {
   if (isExpanded && props.operation._fromHistory && !props.operation._logsLoaded) {
     loadingLogs.value = true;
-    // Safety timeout: if dispatch hangs beyond 15s, force-clear spinner.
     const safety = setTimeout(() => { loadingLogs.value = false; }, 15000);
     try {
       await store.dispatch("operations/loadOperationLogs", props.operation.id);
@@ -141,6 +147,22 @@ const statusClass = computed(() => {
   }
 });
 
+const statusBadgeClass = computed(() => {
+  switch (props.operation.status) {
+    case "running":
+      return "bg-primary/10 text-primary border-transparent text-[10px] px-1.5 py-0";
+    case "paused":
+    case "partial":
+      return "bg-warning/10 text-warning border-transparent text-[10px] px-1.5 py-0";
+    case "completed":
+      return "bg-success/10 text-success border-transparent text-[10px] px-1.5 py-0";
+    case "failed":
+      return "bg-error/10 text-error border-transparent text-[10px] px-1.5 py-0";
+    default:
+      return "bg-muted text-muted-foreground border-transparent text-[10px] px-1.5 py-0";
+  }
+});
+
 const progressPercent = computed(() => {
   const p = props.operation.progress;
   if (!p || p.total === 0) return 0;
@@ -153,14 +175,10 @@ const isFinished = computed(() =>
 
 const isRunning = computed(() => props.operation.status === "running");
 const isPaused = computed(() => props.operation.status === "paused");
-// Pause/resume only for server-side operations; file-upload has no backend to pause.
 const supportsPause = computed(() =>
-  props.operation.type !== 'file-upload' && props.operation.type !== 'file-delete'
+  props.operation.type !== "file-upload" && props.operation.type !== "file-delete",
 );
-// Stop is available for ALL running operations (server-side via API, client-side via cancel callback).
 const canStop = computed(() => isRunning.value || isPaused.value);
-const canPauseStop = canStop; // alias for the legacy Stop button v-if
-
 const canExpand = computed(() => !props.operation._fromHistory || props.operation._canExpand !== false);
 
 function formatDuration(ms) {
@@ -194,174 +212,157 @@ const statusLabel = computed(() => {
 </script>
 
 <template>
-  <div class="border rounded-lg bg-background">
-    <!-- Header (collapsed view) -->
-    <button
-      type="button"
-      class="w-full flex items-center gap-2 p-3 text-left rounded-lg transition-colors"
-      :class="canExpand ? 'cursor-pointer hover:bg-muted/30' : ''"
-      @click="canExpand && (expanded = !expanded)"
-    >
-      <component :is="typeIcon" class="size-4 text-muted-foreground shrink-0" />
-      <span class="text-sm font-medium truncate flex-1">
-        {{ operation.title }}
-      </span>
-      <!-- Elapsed time -->
-      <span class="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
-        <Clock class="size-3" />
-        {{ elapsed }}
-      </span>
-      <!-- Status -->
-      <span
-        class="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
-        :class="{
-          'bg-primary/10 text-primary': operation.status === 'running',
-          'bg-warning/10 text-warning': operation.status === 'paused' || operation.status === 'partial',
-          'bg-success/10 text-success': operation.status === 'completed',
-          'bg-error/10 text-error': operation.status === 'failed',
-          'bg-muted text-muted-foreground': operation.status === 'cancelled',
-        }"
-      >
-        {{ statusLabel }}
-      </span>
-      <component
-        :is="statusIcon"
-        class="size-4 shrink-0"
-        :class="[
-          statusClass,
-          operation.status === 'running' ? 'animate-spin' : '',
-        ]"
-      />
-      <component
-        v-if="canExpand"
-        :is="expanded ? ChevronUp : ChevronDown"
-        class="size-3.5 text-muted-foreground shrink-0"
-      />
-    </button>
+  <Collapsible v-model:open="expanded" :disabled="!canExpand">
+    <Card class="gap-0 overflow-hidden py-0">
+      <CollapsibleTrigger as-child :disabled="!canExpand">
+        <Button
+          variant="ghost"
+          class="w-full h-auto justify-start gap-2 rounded-none p-3 text-left font-normal hover:bg-muted/30"
+          :class="!canExpand ? 'cursor-default hover:bg-transparent' : ''"
+        >
+          <component :is="typeIcon" class="size-4 text-muted-foreground shrink-0" />
+          <span class="text-sm font-medium truncate flex-1">
+            {{ operation.title }}
+          </span>
+          <span class="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
+            <Clock class="size-3" />
+            {{ elapsed }}
+          </span>
+          <Badge :class="statusBadgeClass">
+            {{ statusLabel }}
+          </Badge>
+          <component
+            :is="statusIcon"
+            class="size-4 shrink-0"
+            :class="[
+              statusClass,
+              operation.status === 'running' ? 'animate-spin' : '',
+            ]"
+          />
+          <component
+            v-if="canExpand"
+            :is="expanded ? ChevronUp : ChevronDown"
+            class="size-3.5 text-muted-foreground shrink-0"
+          />
+        </Button>
+      </CollapsibleTrigger>
 
-    <!-- Progress bar — only while operation is active (running/paused) -->
-    <div v-if="!isFinished && operation.progress && operation.progress.total > 0" class="px-3 pb-1.5">
-      <div class="flex items-center gap-2">
-        <Progress :model-value="progressPercent" class="h-1.5 flex-1" />
-        <span class="text-[10px] text-muted-foreground tabular-nums shrink-0">
-          {{ Math.round(progressPercent) }}%
-        </span>
-      </div>
-    </div>
-
-    <!-- Expanded content -->
-    <div v-if="expanded" class="px-3 pb-3 space-y-2">
-      <!-- Stats grid (batch ops) — only while active -->
-      <div v-if="!isFinished && operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
-        <div class="bg-muted/50 rounded p-1.5">
-          <div class="font-medium">{{ operation.progress.total }}</div>
-          <div class="text-muted-foreground">Всего</div>
+      <div v-if="!isFinished && operation.progress && operation.progress.total > 0" class="px-3 pb-1.5">
+        <div class="flex items-center gap-2">
+          <Progress :model-value="progressPercent" class="h-1.5 flex-1" />
+          <span class="text-[10px] text-muted-foreground tabular-nums shrink-0">
+            {{ Math.round(progressPercent) }}%
+          </span>
         </div>
-        <div class="bg-warning/10 rounded p-1.5">
-          <div class="font-medium text-warning-foreground">
-            {{ operation.progress.pending }}
+      </div>
+
+      <CollapsibleContent>
+        <div class="px-3 pb-3 space-y-2">
+          <div v-if="!isFinished && operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
+            <div class="bg-muted/50 rounded p-1.5">
+              <div class="font-medium">{{ operation.progress.total }}</div>
+              <div class="text-muted-foreground">Всего</div>
+            </div>
+            <div class="bg-warning/10 rounded p-1.5">
+              <div class="font-medium text-warning-foreground">
+                {{ operation.progress.pending }}
+              </div>
+              <div class="text-muted-foreground">В очереди</div>
+            </div>
+            <div class="bg-success/10 rounded p-1.5">
+              <div class="font-medium text-success-foreground">
+                {{ operation.progress.completed }}
+              </div>
+              <div class="text-muted-foreground">Готово</div>
+            </div>
+            <div class="bg-error/10 rounded p-1.5">
+              <div class="font-medium text-error-foreground">
+                {{ operation.progress.failed }}
+              </div>
+              <div class="text-muted-foreground">Ошибки</div>
+            </div>
           </div>
-          <div class="text-muted-foreground">В очереди</div>
-        </div>
-        <div class="bg-success/10 rounded p-1.5">
-          <div class="font-medium text-success-foreground">
-            {{ operation.progress.completed }}
+
+          <div v-if="loadingLogs" class="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 class="size-3 animate-spin" />
+            Загрузка логов...
           </div>
-          <div class="text-muted-foreground">Готово</div>
-        </div>
-        <div class="bg-error/10 rounded p-1.5">
-          <div class="font-medium text-error-foreground">
-            {{ operation.progress.failed }}
+          <OperationLogTimeline v-else :logs="operation.logs" />
+
+          <div v-if="operation.authorUserName" class="text-xs text-muted-foreground">
+            Запустил: {{ operation.authorUserName }}
           </div>
-          <div class="text-muted-foreground">Ошибки</div>
-        </div>
-      </div>
 
-      <!-- Log timeline -->
-      <div v-if="loadingLogs" class="flex items-center gap-2 text-xs text-muted-foreground py-2">
-        <Loader2 class="size-3 animate-spin" />
-        Загрузка логов...
-      </div>
-      <OperationLogTimeline v-else :logs="operation.logs" />
-
-      <!-- Author -->
-      <div v-if="operation.authorUserName" class="text-xs text-muted-foreground">
-        Запустил: {{ operation.authorUserName }}
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-1.5 pt-1.5 border-t">
-        <Button
-          v-if="isRunning && supportsPause"
-          variant="outline"
-          size="sm"
-          class="h-7 text-xs"
-          @click="emit('pause', operation.id)"
-        >
-          <Pause class="size-3 mr-1" />
-          Пауза
-        </Button>
-        <Button
-          v-if="isPaused && supportsPause"
-          variant="outline"
-          size="sm"
-          class="h-7 text-xs"
-          @click="emit('resume', operation.id)"
-        >
-          <Play class="size-3 mr-1" />
-          Продолжить
-        </Button>
-        <Button
-          v-if="canPauseStop"
-          variant="outline"
-          size="sm"
-          class="h-7 text-xs text-error hover:text-error"
-          @click="emit('stop', operation.id)"
-        >
-          <Square class="size-3 mr-1" />
-          Остановить
-        </Button>
-        <Button
-          v-if="isFinished && operation.canRetry && operation.progress?.failed > 0"
-          variant="outline"
-          size="sm"
-          class="h-7 text-xs"
-          @click="emit('retry', operation.id)"
-        >
-          <RefreshCw class="size-3 mr-1" />
-          Повторить ({{ operation.progress.failed }})
-        </Button>
-        <div class="flex-1" />
-        <span class="text-[10px] text-muted-foreground">
-          {{ new Date(operation.startedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
-          <template v-if="operation.finishedAt">
-            → {{ new Date(operation.finishedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
-          </template>
-        </span>
-        <AlertDialog>
-          <AlertDialogTrigger as-child>
+          <div class="flex items-center gap-1.5 pt-1.5 border-t">
             <Button
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7"
+              v-if="isRunning && supportsPause"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              @click="emit('pause', operation.id)"
             >
-              <X class="size-3.5" />
+              <Pause class="size-3 mr-1" />
+              Пауза
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Удалить операцию?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {{ operation.title }}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Отмена</AlertDialogCancel>
-              <AlertDialogAction @click="emit('remove', operation.id)">Удалить</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </div>
-  </div>
+            <Button
+              v-if="isPaused && supportsPause"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              @click="emit('resume', operation.id)"
+            >
+              <Play class="size-3 mr-1" />
+              Продолжить
+            </Button>
+            <Button
+              v-if="canStop"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs text-error hover:text-error"
+              @click="emit('stop', operation.id)"
+            >
+              <Square class="size-3 mr-1" />
+              Остановить
+            </Button>
+            <Button
+              v-if="isFinished && operation.canRetry && operation.progress?.failed > 0"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              @click="emit('retry', operation.id)"
+            >
+              <RefreshCw class="size-3 mr-1" />
+              Повторить ({{ operation.progress.failed }})
+            </Button>
+            <div class="flex-1" />
+            <span class="text-[10px] text-muted-foreground">
+              {{ new Date(operation.startedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
+              <template v-if="operation.finishedAt">
+                → {{ new Date(operation.finishedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
+              </template>
+            </span>
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-7 w-7">
+                  <X class="size-3.5" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Удалить операцию?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {{ operation.title }}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction @click="emit('remove', operation.id)">Удалить</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Card>
+  </Collapsible>
 </template>

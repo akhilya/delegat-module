@@ -7,7 +7,7 @@ import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
 import { PageHeader } from "@/components/ui/page-header";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";

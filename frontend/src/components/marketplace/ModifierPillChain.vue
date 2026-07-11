@@ -6,7 +6,7 @@ import {
   getModifierLabel,
 } from "./modifierCatalog.js";
 import ModifierEditor from "./ModifierEditor.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Popover,

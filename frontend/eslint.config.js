@@ -26,4 +26,20 @@ export default defineConfig([
       "vue/no-reserved-component-names": "off",
     },
   },
+  {
+    files: ["src/**/*.vue"],
+    ignores: [
+      "src/components/marketplace/graph/**",
+      "src/components/ui/**",
+    ],
+    rules: {
+      "vue/no-restricted-html-elements": [
+        "warn",
+        {
+          element: "button",
+          message: "Use <Button> from @/components/ui/button instead of raw <button>.",
+        },
+      ],
+    },
+  },
 ]);

@@ -6,7 +6,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 
 
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Plus, Key, Copy, Check, Loader2, UserCheck } from "lucide-vue-next";

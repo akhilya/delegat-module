@@ -1,7 +1,7 @@
 <script>
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import { Plus, Trash2, ArrowRight, AlertTriangle } from "lucide-vue-next";
 

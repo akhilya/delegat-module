@@ -2,7 +2,7 @@
 import { MODIFIER_CATALOG } from "./modifierCatalog.js";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import ValueMapEditor from "./ValueMapEditor.vue";
 import { Check, X } from "lucide-vue-next";
 

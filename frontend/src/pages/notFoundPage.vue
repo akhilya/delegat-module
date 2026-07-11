@@ -1,6 +1,6 @@
 <script>
 import Page from "@/components/page.vue";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import { PAGE_PRODUCTS, PAGE_SIGN_IN } from "@/router";
 
 export default {

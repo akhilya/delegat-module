@@ -4,7 +4,7 @@ import { useStore } from "vuex";
 import { useRoute, useRouter } from "vue-router";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useFileDialog, useDebounceFn } from "@vueuse/core";
-import Button from "@/components/ui/button/Button.vue";
+import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
 import {
