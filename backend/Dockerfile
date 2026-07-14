@@ -7,9 +7,13 @@ WORKDIR /source
 COPY backend/Delegat.csproj backend/
 COPY sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj sdk/Delegat.Marketplace.SDK/
 COPY plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj plugins/Delegat.Marketplace.Ozon/
+COPY plugins/Delegat.Marketplace.Ozon/sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj plugins/Delegat.Marketplace.Ozon/sdk/Delegat.Marketplace.SDK/
 COPY plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj plugins/Delegat.Marketplace.Wildberries/
+COPY plugins/Delegat.Marketplace.Wildberries/sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj plugins/Delegat.Marketplace.Wildberries/sdk/Delegat.Marketplace.SDK/
 COPY plugins/Delegat.Marketplace.OpenCart/Delegat.Marketplace.OpenCart.csproj plugins/Delegat.Marketplace.OpenCart/
+COPY plugins/Delegat.Marketplace.OpenCart/sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj plugins/Delegat.Marketplace.OpenCart/sdk/Delegat.Marketplace.SDK/
 COPY plugins/Delegat.Marketplace.YandexMarket/Delegat.Marketplace.YandexMarket.csproj plugins/Delegat.Marketplace.YandexMarket/
+COPY plugins/Delegat.Marketplace.YandexMarket/sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj plugins/Delegat.Marketplace.YandexMarket/sdk/Delegat.Marketplace.SDK/
 RUN dotnet restore backend/Delegat.csproj -a $TARGETARCH
 RUN dotnet restore plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH
 RUN dotnet restore plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj -a $TARGETARCH
@@ -22,11 +26,11 @@ COPY sdk/ sdk/
 COPY plugins/ plugins/
 
 # Do not let host build artifacts overwrite Linux restore outputs.
-RUN find backend sdk plugins -type d \( -name bin -o -name obj -o -name .vs \) -prune -exec rm -rf {} +
+RUN find backend sdk plugins -depth -type d \( -name bin -o -name obj -o -name .vs \) -exec rm -rf {} +
 
-# Publish backend app
+# Publish backend app (plugins are built separately for target arch below)
 ARG APP_VERSION=dev
-RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:InformationalVersion=$APP_VERSION
+RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:InformationalVersion=$APP_VERSION /p:BuildPlugins=false
 
 # Build plugins and copy DLLs to app
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon

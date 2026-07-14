@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Delegat</RootNamespace>
+    <BuildPlugins Condition="'$(BuildPlugins)' == ''">true</BuildPlugins>
   </PropertyGroup>
 
   <ItemGroup>
@@ -65,7 +66,7 @@
   </ItemGroup>
 
   <!-- Build plugins and copy their output to backend output directory -->
-  <Target Name="CopyPlugins" AfterTargets="Build">
+  <Target Name="CopyPlugins" AfterTargets="Build" Condition="'$(BuildPlugins)' != 'false'">
     <MSBuild Projects="..\plugins\Delegat.Marketplace.Ozon\Delegat.Marketplace.Ozon.csproj"
              Targets="Restore;Build"
              Properties="Configuration=$(Configuration)" />
