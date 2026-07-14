@@ -4,7 +4,6 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
-using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.RateLimit;
 using Delegat.Services.Plugins;
 using Delegat.Models.Marketplace;
