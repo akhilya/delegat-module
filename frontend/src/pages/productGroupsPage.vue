@@ -224,11 +224,11 @@ export default {
       </template>
 
       <Card class="p-0 gap-0 overflow-hidden">
-        <ul>
+        <ul class="divide-y divide-border/60">
           <li
             v-for="group in groups"
             :key="group.id"
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors first:rounded-t-lg last:rounded-b-lg"
+            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
             @click="openGroup(group.id)"
           >
             <Layers class="size-5 text-muted-foreground shrink-0" />
