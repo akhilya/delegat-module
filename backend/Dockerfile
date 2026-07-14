@@ -9,10 +9,12 @@ COPY sdk/Delegat.Marketplace.SDK/Delegat.Marketplace.SDK.csproj sdk/Delegat.Mark
 COPY plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj plugins/Delegat.Marketplace.Ozon/
 COPY plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj plugins/Delegat.Marketplace.Wildberries/
 COPY plugins/Delegat.Marketplace.OpenCart/Delegat.Marketplace.OpenCart.csproj plugins/Delegat.Marketplace.OpenCart/
+COPY plugins/Delegat.Marketplace.YandexMarket/Delegat.Marketplace.YandexMarket.csproj plugins/Delegat.Marketplace.YandexMarket/
 RUN dotnet restore backend/Delegat.csproj -a $TARGETARCH
 RUN dotnet restore plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH
 RUN dotnet restore plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj -a $TARGETARCH
 RUN dotnet restore plugins/Delegat.Marketplace.OpenCart/Delegat.Marketplace.OpenCart.csproj -a $TARGETARCH
+RUN dotnet restore plugins/Delegat.Marketplace.YandexMarket/Delegat.Marketplace.YandexMarket.csproj -a $TARGETARCH
 
 # Copy all source files
 COPY backend/ backend/
@@ -30,7 +32,8 @@ RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:I
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon
 RUN dotnet publish plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj -a $TARGETARCH -c Release -o /plugins-out/wb
 RUN dotnet publish plugins/Delegat.Marketplace.OpenCart/Delegat.Marketplace.OpenCart.csproj -a $TARGETARCH -c Release -o /plugins-out/opencart
-RUN mkdir -p /app/plugins && cp /plugins-out/ozon/Delegat.Marketplace.Ozon.dll /app/plugins/ && cp /plugins-out/wb/Delegat.Marketplace.Wildberries.dll /app/plugins/ && cp /plugins-out/opencart/Delegat.Marketplace.OpenCart.dll /app/plugins/
+RUN dotnet publish plugins/Delegat.Marketplace.YandexMarket/Delegat.Marketplace.YandexMarket.csproj -a $TARGETARCH -c Release -o /plugins-out/yandex
+RUN mkdir -p /app/plugins && cp /plugins-out/ozon/Delegat.Marketplace.Ozon.dll /app/plugins/ && cp /plugins-out/wb/Delegat.Marketplace.Wildberries.dll /app/plugins/ && cp /plugins-out/opencart/Delegat.Marketplace.OpenCart.dll /app/plugins/ && cp /plugins-out/yandex/Delegat.Marketplace.YandexMarket.dll /app/plugins/
 
 # Stage 2: Final image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0

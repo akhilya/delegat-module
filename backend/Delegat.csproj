@@ -75,6 +75,9 @@
     <MSBuild Projects="..\plugins\Delegat.Marketplace.OpenCart\Delegat.Marketplace.OpenCart.csproj"
              Targets="Restore;Build"
              Properties="Configuration=$(Configuration)" />
+    <MSBuild Projects="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj"
+             Targets="Restore;Build"
+             Properties="Configuration=$(Configuration)" />
     <ItemGroup>
       <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.*.dll"
                   Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.SDK.dll" />
