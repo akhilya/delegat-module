@@ -1,0 +1,8 @@
+<Project>
+  <!-- delegat-module monorepo: adapters use the top-level sdk submodule -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj')">
+    <DelegatSdkProject>$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj</DelegatSdkProject>
+    <!-- Nested sdk/ submodule is for standalone adapter repos only -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);sdk/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

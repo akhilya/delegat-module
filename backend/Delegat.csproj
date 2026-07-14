@@ -69,16 +69,16 @@
   <Target Name="CopyPlugins" AfterTargets="Build" Condition="'$(BuildPlugins)' != 'false'">
     <MSBuild Projects="..\plugins\Delegat.Marketplace.Ozon\Delegat.Marketplace.Ozon.csproj"
              Targets="Restore;Build"
-             Properties="Configuration=$(Configuration)" />
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=true" />
     <MSBuild Projects="..\plugins\Delegat.Marketplace.Wildberries\Delegat.Marketplace.Wildberries.csproj"
              Targets="Restore;Build"
-             Properties="Configuration=$(Configuration)" />
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=true" />
     <MSBuild Projects="..\plugins\Delegat.Marketplace.OpenCart\Delegat.Marketplace.OpenCart.csproj"
              Targets="Restore;Build"
-             Properties="Configuration=$(Configuration)" />
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=true" />
     <MSBuild Projects="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj"
              Targets="Restore;Build"
-             Properties="Configuration=$(Configuration)" />
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=true" />
     <ItemGroup>
       <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.*.dll"
                   Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.SDK.dll" />
