@@ -43,6 +43,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -104,6 +110,10 @@ export default {
     CardContent,
     CardHeader,
     CardTitle,
+    TableHeader,
+    TableHead,
+    TableRow,
+    TableCell,
     Checkbox,
     Loader2,
     Save,
@@ -488,78 +498,110 @@ export default {
 
             <div
               v-else
-              class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar pr-1 -mr-1"
+              class="overflow-hidden rounded-lg border bg-card"
             >
-            <draggable
-              v-model="members"
-              item-key="id"
-              handle=".drag-handle"
-              ghost-class="opacity-50"
-              class="space-y-2"
-              @end="handleReorder"
-            >
-              <template #item="{ element: member }">
-                <Card class="group">
-                  <CardContent class="flex items-center gap-4">
-                    <GripVertical class="drag-handle size-5 min-w-5 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
-
-                    <!-- Product Image -->
-                    <div class="w-12 h-12 rounded-md overflow-hidden bg-muted shrink-0">
-                      <img
-                        v-if="getProductImageUrl(member.product)"
-                        :src="getProductImageUrl(member.product)"
-                        :alt="member.product.name"
-                        class="w-full h-full object-cover"
-                      />
-                      <div v-else class="w-full h-full flex items-center justify-center">
-                        <Package class="size-6 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    <!-- Product Info -->
-                    <div class="grow min-w-0">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium truncate">{{ member.product.name }}</span>
-                      </div>
-                      <div class="text-sm text-muted-foreground flex items-center gap-2">
-                        <span v-if="member.product.sku">SKU: {{ member.product.sku }}</span>
-                        <span v-if="member.product.category">{{ member.product.category.name }}</span>
-                      </div>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <AlertDialog>
-                        <AlertDialogTrigger as-child>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 class="size-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Удалить товар из группы?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Товар останется в каталоге, но будет исключён из группы.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Отмена</AlertDialogCancel>
-                            <AlertDialogAction
-                              @click="handleRemoveProduct(member.product.id)"
-                              :disabled="isRemovingProduct"
-                              class="bg-destructive text-white hover:bg-destructive/90"
+              <div class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar">
+                <table class="w-full caption-bottom text-sm">
+                  <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
+                    <TableRow class="hover:bg-transparent">
+                      <TableHead class="w-9 px-2" />
+                      <TableHead class="w-9 px-2 text-center">#</TableHead>
+                      <TableHead class="w-14 px-2" />
+                      <TableHead>Название</TableHead>
+                      <TableHead class="w-36 hidden sm:table-cell">SKU</TableHead>
+                      <TableHead class="hidden md:table-cell">Категория</TableHead>
+                      <TableHead class="w-12 px-2" />
+                    </TableRow>
+                  </TableHeader>
+                  <draggable
+                    v-model="members"
+                    tag="tbody"
+                    item-key="id"
+                    handle=".drag-handle"
+                    ghost-class="opacity-50"
+                    @end="handleReorder"
+                  >
+                    <template #item="{ element: member, index }">
+                      <TableRow class="group">
+                        <TableCell class="w-9 px-2">
+                          <GripVertical
+                            class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
+                          />
+                        </TableCell>
+                        <TableCell class="w-9 px-2 text-center text-xs text-muted-foreground tabular-nums">
+                          {{ index + 1 }}
+                        </TableCell>
+                        <TableCell class="w-14 px-2">
+                          <div class="size-10 rounded-md overflow-hidden bg-muted">
+                            <img
+                              v-if="getProductImageUrl(member.product)"
+                              :src="getProductImageUrl(member.product)"
+                              :alt="member.product.name"
+                              class="size-full object-cover"
+                            />
+                            <div
+                              v-else
+                              class="size-full flex items-center justify-center"
                             >
-                              <Loader2 v-if="isRemovingProduct" class="size-4 mr-2 animate-spin" />
-                              Удалить
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              </template>
-            </draggable>
+                              <Package class="size-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell class="max-w-0">
+                          <router-link
+                            :to="`/products/${member.product.id}/edit`"
+                            class="font-medium truncate block hover:underline"
+                          >
+                            {{ member.product.name }}
+                          </router-link>
+                          <div class="text-xs text-muted-foreground truncate sm:hidden">
+                            <span v-if="member.product.sku">{{ member.product.sku }}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell class="hidden sm:table-cell font-mono text-xs text-muted-foreground">
+                          {{ member.product.sku || "—" }}
+                        </TableCell>
+                        <TableCell class="hidden md:table-cell text-muted-foreground">
+                          {{ member.product.category?.name || "—" }}
+                        </TableCell>
+                        <TableCell class="w-12 px-2">
+                          <div class="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <AlertDialog>
+                              <AlertDialogTrigger as-child>
+                                <Button variant="ghost" size="icon" class="size-8">
+                                  <Trash2 class="size-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Удалить товар из группы?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Товар останется в каталоге, но будет исключён из группы.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    @click="handleRemoveProduct(member.product.id)"
+                                    :disabled="isRemovingProduct"
+                                    class="bg-destructive text-white hover:bg-destructive/90"
+                                  >
+                                    <Loader2
+                                      v-if="isRemovingProduct"
+                                      class="size-4 mr-2 animate-spin"
+                                    />
+                                    Удалить
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </template>
+                  </draggable>
+                </table>
+              </div>
             </div>
           </div>
 
