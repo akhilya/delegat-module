@@ -8,7 +8,9 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Label from "@/components/ui/label/Label.vue";
-import Separator from "@/components/ui/separator/Separator.vue";
+import Badge from "@/components/ui/badge/Badge.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Select,
   SelectContent,
@@ -38,10 +40,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Card,
+  CardAction,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -97,7 +107,9 @@ export default {
     Textarea,
     Switch,
     Label,
-    Separator,
+    Badge,
+    SettingsFormField,
+    PageHeader,
     Select,
     SelectContent,
     SelectItem,
@@ -120,9 +132,15 @@ export default {
     AlertDialogTitle,
     AlertDialogTrigger,
     Card,
+    CardAction,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
+    TableHead,
+    TableHeader,
+    TableRow,
+    TableCell,
     Loader2,
     Save,
     Plus,
@@ -205,6 +223,21 @@ export default {
     },
     parsedFormOptions() {
       return this.parseOptions(this.attributeForm.options);
+    },
+    pageHeaderTitle() {
+      return this.category?.name || "Редактирование категории";
+    },
+    pageHeaderDescription() {
+      return "Основные данные и атрибуты товаров в этой категории";
+    },
+    attributesCountLabel() {
+      const n = this.attributes.length;
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod100 >= 11 && mod100 <= 14) return "атрибутов";
+      if (mod10 === 1) return "атрибут";
+      if (mod10 >= 2 && mod10 <= 4) return "атрибута";
+      return "атрибутов";
     },
   },
   methods: {
@@ -497,147 +530,214 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading" class="flex flex-col">
-      <div v-if="category" class="grow flex flex-col">
-        <!-- Category Info Section -->
-        <div class="space-y-4">
-          <h2 class="text-lg font-semibold">Основные данные</h2>
-          <div class="grid gap-4 max-w-xl">
-            <div class="space-y-2">
-              <Label>Название категории</Label>
-              <Input v-model="category.name" placeholder="Введите название" />
-            </div>
-            <div class="space-y-2">
-              <Label>Описание</Label>
-              <Textarea
-                v-model="category.description"
-                placeholder="Описание категории (необязательно)"
-                class="h-24"
+    <PageHeader
+      :title="pageHeaderTitle"
+      :description="pageHeaderDescription"
+    >
+      <Button
+        v-if="category"
+        @click="handleSaveCategory"
+        :disabled="isSaving"
+      >
+        <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+        <Save v-else class="size-4 mr-2" />
+        Сохранить
+      </Button>
+    </PageHeader>
+
+    <PageSection :loading="isLoading" class="!min-h-0">
+      <div v-if="category" class="space-y-6">
+        <!-- Block 1: Settings -->
+        <Card class="max-w-2xl border-0 shadow-none">
+          <CardHeader>
+            <CardTitle class="text-base">
+              Основные данные
+            </CardTitle>
+            <CardDescription>
+              Название, описание и настройки размерной сетки для товаров категории.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-5">
+            <SettingsFormField label="Название" label-for="category-name">
+              <Input
+                id="category-name"
+                v-model="category.name"
+                placeholder="Введите название"
               />
-            </div>
-            <div class="flex items-center gap-2">
-              <Switch :model-value="category.hasSizes" @update:model-value="category.hasSizes = $event" />
-              <Label>Товары имеют размеры</Label>
-            </div>
-            <Button
-              @click="handleSaveCategory"
-              :disabled="isSaving"
-              class="w-fit"
-            >
-              <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-              <Save v-else class="size-4 mr-2" />
-              Сохранить
-            </Button>
-          </div>
-        </div>
+            </SettingsFormField>
+            <SettingsFormField label="Описание" label-for="category-description">
+              <Textarea
+                id="category-description"
+                v-model="category.description"
+                placeholder="Необязательно"
+                class="min-h-24 resize-none"
+              />
+            </SettingsFormField>
+            <SettingsFormField label="Размерная сетка">
+              <div class="flex items-center gap-2 h-9">
+                <Switch
+                  id="category-has-sizes"
+                  :model-value="category.hasSizes"
+                  @update:model-value="category.hasSizes = $event"
+                />
+                <Label for="category-has-sizes" class="font-normal text-muted-foreground">
+                  Товары имеют размеры
+                </Label>
+              </div>
+            </SettingsFormField>
+          </CardContent>
+        </Card>
 
-        <Separator />
-
-        <!-- Attributes Section -->
-        <div class="pt-4 space-y-4 grow">
-          <div class="flex justify-between items-center">
-            <h2 class="text-lg font-semibold flex items-center gap-2">
-              <Settings2 class="size-5" />
+        <!-- Block 2: Attributes -->
+        <Card class="overflow-hidden border-0 shadow-none">
+          <CardHeader>
+            <CardTitle class="text-base">
               Атрибуты категории
-            </h2>
-            <Button @click="openAddAttributeDialog" variant="outline">
-              <Plus class="size-4 mr-2" />
-              Добавить атрибут
-            </Button>
-          </div>
+            </CardTitle>
+            <CardDescription>
+              {{ attributes.length }} {{ attributesCountLabel }}.
+              Порядок строк определяет порядок полей на странице товара —
+              перетащите строки, чтобы изменить порядок.
+            </CardDescription>
+            <CardAction>
+              <Button
+                variant="outline"
+                size="sm"
+                @click="openAddAttributeDialog"
+              >
+                <Plus class="size-4 mr-2" />
+                Добавить
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent class="px-6 pb-6 pt-0">
+            <EmptyState
+              v-if="attributes.length === 0"
+              title="Нет атрибутов"
+              description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
+              class="py-10"
+            >
+              <template #icon>
+                <Settings2 />
+              </template>
+              <Button variant="outline" @click="openAddAttributeDialog">
+                <Plus class="size-4 mr-2" />
+                Добавить атрибут
+              </Button>
+            </EmptyState>
 
-          <EmptyState
-            v-if="attributes.length === 0"
-            title="Нет атрибутов"
-            description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
-          >
-            <template #icon>
-              <Settings2 />
-            </template>
-          </EmptyState>
-
-          <draggable
-            v-else
-            v-model="attributes"
-            item-key="id"
-            handle=".drag-handle"
-            ghost-class="opacity-50"
-            class="space-y-2"
-            @end="handleReorder"
-          >
-            <template #item="{ element: attribute }">
-              <Card class="group">
-                <CardContent class="flex items-center gap-4">
-                  <GripVertical class="drag-handle size-5 min-w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
-                  <div class="grow">
-                    <div class="flex items-center gap-2">
-                      <span class="font-medium">{{ attribute.name }}</span>
-                      <span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                        {{ attribute.key }}
-                      </span>
-                      <span
-                        v-if="attribute.group"
-                        class="text-xs text-primary/80 bg-primary/10 px-2 py-0.5 rounded"
-                      >
-                        {{ attribute.group }}
-                      </span>
-                      <span
-                        v-if="attribute.isRequired"
-                        class="text-xs text-destructive"
-                      >
-                        *
-                      </span>
-                    </div>
-                    <div class="text-sm text-muted-foreground">
-                      {{ getAttributeTypeLabel(attribute.type) }}
-                      <span v-if="attribute.options" class="ml-2">
-                        ({{ getOptionsCount(attribute.options) }} опций)
-                      </span>
-                    </div>
-                    <div v-if="attribute.description" class="text-xs text-muted-foreground mt-1 line-clamp-1">
-                      {{ attribute.description }}
-                    </div>
-                  </div>
-                  <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      @click="openEditAttributeDialog(attribute)"
-                    >
-                      <Pencil class="size-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger as-child>
-                        <Button variant="ghost" size="icon">
-                          <Trash2 class="size-4 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
-                            Все значения этого атрибута у товаров будут удалены.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Отмена</AlertDialogCancel>
-                          <AlertDialogAction
-                            @click="handleDeleteAttribute(attribute.id)"
-                            :disabled="isDeletingAttribute"
+            <div
+              v-else
+              class="overflow-hidden rounded-lg border"
+            >
+              <div class="overflow-x-auto">
+                <table class="w-full caption-bottom text-sm">
+                  <TableHeader>
+                    <TableRow class="hover:bg-transparent">
+                      <TableHead class="w-9 px-3" />
+                      <TableHead class="px-3">Название</TableHead>
+                      <TableHead class="hidden sm:table-cell px-3">Ключ</TableHead>
+                      <TableHead class="hidden md:table-cell px-3">Группа</TableHead>
+                      <TableHead class="px-3">Тип</TableHead>
+                      <TableHead class="hidden lg:table-cell w-28 text-right px-3">Опции</TableHead>
+                      <TableHead class="w-16 text-center px-2">Обяз.</TableHead>
+                      <TableHead class="hidden xl:table-cell px-3">Описание</TableHead>
+                      <TableHead class="w-24 px-2" />
+                    </TableRow>
+                  </TableHeader>
+                  <draggable
+                    v-model="attributes"
+                    tag="tbody"
+                    item-key="id"
+                    handle=".drag-handle"
+                    ghost-class="opacity-50"
+                    @end="handleReorder"
+                  >
+                    <template #item="{ element: attribute }">
+                      <TableRow class="group">
+                        <TableCell class="w-9 px-3">
+                          <GripVertical
+                            class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
+                          />
+                        </TableCell>
+                        <TableCell class="px-3 font-medium max-w-0">
+                          <span class="truncate block">{{ attribute.name }}</span>
+                          <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
+                            {{ attribute.key }}
+                          </span>
+                        </TableCell>
+                        <TableCell class="hidden sm:table-cell px-3 font-mono text-xs text-muted-foreground">
+                          {{ attribute.key }}
+                        </TableCell>
+                        <TableCell class="hidden md:table-cell px-3">
+                          <Badge
+                            v-if="attribute.group"
+                            variant="secondary"
+                            class="font-normal text-xs"
                           >
-                            <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
-                            Удалить
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
-            </template>
-          </draggable>
-        </div>
+                            {{ attribute.group }}
+                          </Badge>
+                          <span v-else class="text-muted-foreground">—</span>
+                        </TableCell>
+                        <TableCell class="px-3 text-muted-foreground">
+                          {{ getAttributeTypeLabel(attribute.type) }}
+                        </TableCell>
+                        <TableCell class="hidden lg:table-cell px-3 text-right tabular-nums text-muted-foreground">
+                          {{ attribute.options ? getOptionsCount(attribute.options) : "—" }}
+                        </TableCell>
+                        <TableCell class="px-2 text-center text-muted-foreground">
+                          <span v-if="attribute.isRequired" class="text-destructive">*</span>
+                          <span v-else>—</span>
+                        </TableCell>
+                        <TableCell class="hidden xl:table-cell px-3 text-muted-foreground max-w-xs truncate">
+                          {{ attribute.description || "—" }}
+                        </TableCell>
+                        <TableCell class="px-2">
+                          <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="size-8"
+                              @click="openEditAttributeDialog(attribute)"
+                            >
+                              <Pencil class="size-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger as-child>
+                                <Button variant="ghost" size="icon" class="size-8">
+                                  <Trash2 class="size-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
+                                    Все значения этого атрибута у товаров будут удалены.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    @click="handleDeleteAttribute(attribute.id)"
+                                    :disabled="isDeletingAttribute"
+                                  >
+                                    <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
+                                    Удалить
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </template>
+                  </draggable>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </PageSection>
 
