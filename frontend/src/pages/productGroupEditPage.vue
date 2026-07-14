@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -57,8 +58,6 @@ import {
   Search,
   X,
   ExternalLink,
-  Settings2,
-  Link2,
   Ban,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -94,6 +93,7 @@ export default {
     AlertDialogTitle,
     AlertDialogTrigger,
     Card,
+    CardAction,
     CardContent,
     CardDescription,
     CardHeader,
@@ -114,8 +114,6 @@ export default {
     Search,
     X,
     ExternalLink,
-    Settings2,
-    Link2,
     Ban,
     draggable,
     EmptyState,
@@ -180,6 +178,15 @@ export default {
         return "Задайте название и описание — затем добавьте товары для объединения на маркетплейсе";
       }
       return "Основные данные, состав товаров и объединение на подключённых адаптерах";
+    },
+    membersCountLabel() {
+      const n = this.members.length;
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod100 >= 11 && mod100 <= 14) return "товаров";
+      if (mod10 === 1) return "товар";
+      if (mod10 >= 2 && mod10 <= 4) return "товара";
+      return "товаров";
     },
   },
   methods: {
@@ -538,8 +545,7 @@ export default {
         <!-- Block 1: Settings -->
         <Card class="max-w-2xl border-0 shadow-none">
           <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <Settings2 class="size-4 text-muted-foreground" />
+            <CardTitle class="text-base">
               Основные данные
             </CardTitle>
             <CardDescription>
@@ -578,29 +584,25 @@ export default {
         <template v-if="!isCreateMode">
           <!-- Block 2: Products -->
           <Card class="overflow-hidden border-0 shadow-none">
-            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
-              <div class="space-y-1.5">
-                <CardTitle class="text-base flex items-center gap-2">
-                  <Package class="size-4 text-muted-foreground" />
-                  Товары в группе
-                  <Badge variant="secondary" class="font-normal">
-                    {{ members.length }}
-                  </Badge>
-                </CardTitle>
-                <CardDescription>
-                  Порядок строк определяет порядок вариантов в объединённой карточке.
-                  Перетащите строки, чтобы изменить порядок.
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                class="shrink-0"
-                @click="openProductSearchDialog"
-              >
-                <Plus class="size-4 mr-2" />
-                Добавить
-              </Button>
+            <CardHeader>
+              <CardTitle class="text-base">
+                Товары в группе
+              </CardTitle>
+              <CardDescription>
+                {{ members.length }} {{ membersCountLabel }}.
+                Порядок строк определяет порядок вариантов в объединённой карточке —
+                перетащите строки, чтобы изменить порядок.
+              </CardDescription>
+              <CardAction>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  @click="openProductSearchDialog"
+                >
+                  <Plus class="size-4 mr-2" />
+                  Добавить
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent class="px-6 pb-6 pt-0">
               <EmptyState
@@ -730,27 +732,26 @@ export default {
 
           <!-- Block 3: Marketplace merge -->
           <Card class="border-0 shadow-none">
-            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
-              <div class="space-y-1.5">
-                <CardTitle class="text-base flex items-center gap-2">
-                  <Link2 class="size-4 text-muted-foreground" />
-                  Объединение на маркетплейсах
-                </CardTitle>
-                <CardDescription class="max-w-2xl">
-                  Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары.
-                  Wildberries — через API слияния, если товары уже экспортированы.
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                class="size-8 shrink-0"
-                title="Обновить статусы"
-                @click="fetchSyncStatus"
-                :disabled="isLoadingSyncStatus"
-              >
-                <RefreshCw :class="['size-4', isLoadingSyncStatus && 'animate-spin']" />
-              </Button>
+            <CardHeader>
+              <CardTitle class="text-base">
+                Объединение на маркетплейсах
+              </CardTitle>
+              <CardDescription>
+                Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары.
+                Wildberries — через API слияния, если товары уже экспортированы.
+              </CardDescription>
+              <CardAction>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  class="size-8"
+                  title="Обновить статусы"
+                  @click="fetchSyncStatus"
+                  :disabled="isLoadingSyncStatus"
+                >
+                  <RefreshCw :class="['size-4', isLoadingSyncStatus && 'animate-spin']" />
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent class="space-y-6">
               <p
@@ -770,12 +771,12 @@ export default {
 
               <template v-else>
                 <section v-if="supportedConnections.length" class="space-y-2">
-                  <h3 class="text-sm font-medium">
+                  <p class="text-sm font-medium">
                     Поддерживают объединение
                     <span class="font-normal text-muted-foreground">
                       · {{ supportedConnections.length }}
                     </span>
-                  </h3>
+                  </p>
                   <div class="rounded-lg border overflow-hidden">
                     <ul class="divide-y divide-border/60">
                       <li
@@ -873,12 +874,12 @@ export default {
                 </section>
 
                 <section v-if="unsupportedConnections.length" class="space-y-2">
-                  <h3 class="text-sm font-medium text-muted-foreground">
+                  <p class="text-sm font-medium text-muted-foreground">
                     Без поддержки объединения
                     <span class="font-normal">
                       · {{ unsupportedConnections.length }}
                     </span>
-                  </h3>
+                  </p>
                   <div class="rounded-lg border border-dashed bg-muted/20 overflow-hidden">
                     <ul class="divide-y divide-border/40">
                       <li
