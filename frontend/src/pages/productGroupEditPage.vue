@@ -536,7 +536,7 @@ export default {
     <PageSection :loading="isLoading" class="!min-h-0">
       <div v-if="group" class="space-y-6">
         <!-- Block 1: Settings -->
-        <Card class="max-w-2xl">
+        <Card class="max-w-2xl border-0 shadow-none">
           <CardHeader>
             <CardTitle class="text-base flex items-center gap-2">
               <Settings2 class="size-4 text-muted-foreground" />
@@ -577,7 +577,7 @@ export default {
 
         <template v-if="!isCreateMode">
           <!-- Block 2: Products -->
-          <Card class="overflow-hidden">
+          <Card class="overflow-hidden border-0 shadow-none">
             <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
               <div class="space-y-1.5">
                 <CardTitle class="text-base flex items-center gap-2">
@@ -620,7 +620,7 @@ export default {
 
               <div
                 v-else
-                class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar border-t"
+                class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar"
               >
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
@@ -727,7 +727,7 @@ export default {
           </Card>
 
           <!-- Block 3: Marketplace merge -->
-          <Card>
+          <Card class="border-0 shadow-none">
             <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
               <div class="space-y-1.5">
                 <CardTitle class="text-base flex items-center gap-2">
@@ -774,8 +774,7 @@ export default {
                       · {{ supportedConnections.length }}
                     </span>
                   </h3>
-                  <div class="rounded-lg border overflow-hidden">
-                    <ul class="divide-y divide-border/60">
+                  <ul class="divide-y divide-border/60">
                       <li
                         v-for="connection in supportedConnections"
                         :key="connection.id"
@@ -866,8 +865,7 @@ export default {
                           }}
                         </p>
                       </li>
-                    </ul>
-                  </div>
+                  </ul>
                 </section>
 
                 <section v-if="unsupportedConnections.length" class="space-y-2">
@@ -877,8 +875,7 @@ export default {
                       · {{ unsupportedConnections.length }}
                     </span>
                   </h3>
-                  <div class="rounded-lg border border-dashed bg-muted/20 overflow-hidden">
-                    <ul class="divide-y divide-border/40">
+                  <ul class="divide-y divide-border/40 rounded-lg bg-muted/20">
                       <li
                         v-for="connection in unsupportedConnections"
                         :key="connection.id"
@@ -913,8 +910,7 @@ export default {
                           Не поддерживается
                         </Badge>
                       </li>
-                    </ul>
-                  </div>
+                  </ul>
                 </section>
               </template>
             </CardContent>
