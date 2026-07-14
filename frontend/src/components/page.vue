@@ -7,7 +7,7 @@ const props = defineProps({
 </script>
 
 <template>
-  <div :class="cn('bg-background min-h-screen adaptive-padding', props.class)">
+  <div :class="cn('bg-background adaptive-padding', props.class)">
     <slot />
   </div>
 </template>

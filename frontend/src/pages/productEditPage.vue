@@ -1035,7 +1035,7 @@ export default {
             :tab="tab"
             :get-duplicate-url="getDuplicateUrl"
           />
-          <div class="relative min-w-0 flex-1 overflow-hidden">
+          <div class="relative min-w-0 flex-1">
             <div v-if="isProductLoading && productSKU" class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]">
               <Loader2 class="size-6 animate-spin text-muted-foreground" />
             </div>
@@ -1045,7 +1045,7 @@ export default {
             id="product-edit-form"
             novalidate
             @submit.prevent="onSubmit"
-            class="flex min-w-0 flex-col overflow-hidden"
+            class="flex min-w-0 flex-col"
           >
             <ProductGallerySidebar
               v-model:images="sortedImages"
@@ -1059,7 +1059,7 @@ export default {
               @preview="openLightbox"
             />
 
-            <div class="flex w-full min-w-0 flex-col gap-6 overflow-hidden">
+            <div class="flex w-full min-w-0 flex-col gap-6">
             <!-- Main fields -->
             <Card class="border-0 shadow-none">
               <CardHeader>

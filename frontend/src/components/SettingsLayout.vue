@@ -40,7 +40,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div class="flex flex-col">
     <Breadcrumbs :items="breadcrumbs" />
     <slot />
   </div>

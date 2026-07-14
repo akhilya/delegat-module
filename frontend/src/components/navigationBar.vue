@@ -122,7 +122,7 @@ export default {
 </script>
 
 <template>
-  <div :class="['w-full bg-background', sticky && 'sticky top-0 z-30']">
+  <div :class="['w-full bg-background', sticky && 'sticky top-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm']">
     <template v-if="!isLoading">
       <div class="flex items-center h-14 gap-2">
         <div class="md:hidden shrink-0">

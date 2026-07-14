@@ -14,7 +14,7 @@ const props = defineProps({
 </script>
 
 <template>
-  <section :class="cn('w-full grow min-h-[calc(100vh-8.5rem)] mb-4', props.class)">
+  <section :class="cn('w-full min-h-[calc(100vh-8.5rem)] mb-4', props.class)">
     <div v-if="loading" class="flex min-h-[inherit] grow items-center justify-center">
       <EmptyState loading />
     </div>

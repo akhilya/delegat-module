@@ -612,12 +612,12 @@ export default {
             :add-url="duplicateProductUrl"
             :get-duplicate-url="getDuplicateUrl"
           />
-          <div class="relative min-w-0 flex-1 overflow-hidden">
+          <div class="relative min-w-0 flex-1">
             <form
               id="product-create-form"
               novalidate
               @submit.prevent="onSubmit"
-              class="flex min-w-0 flex-col overflow-hidden"
+              class="flex min-w-0 flex-col"
             >
               <ProductGallerySidebar
                 v-model:images="sortedImages"
@@ -631,7 +631,7 @@ export default {
                 @preview="openGalleryPreview"
               />
 
-              <div class="flex w-full min-w-0 flex-col gap-6 overflow-hidden">
+              <div class="flex w-full min-w-0 flex-col gap-6">
                 <Card class="border-0 shadow-none">
                   <CardHeader>
                     <CardTitle class="text-base">Основные данные</CardTitle>
