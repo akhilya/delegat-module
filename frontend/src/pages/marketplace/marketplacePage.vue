@@ -321,6 +321,12 @@ export default {
                       :value="adapter.key"
                     >
                       {{ adapter.displayName }}
+                      <span v-if="adapter.version" class="text-muted-foreground">
+                        · v{{ adapter.version }}
+                      </span>
+                      <span v-if="adapter.stability" class="text-muted-foreground">
+                        · {{ adapter.stability }}
+                      </span>
                     </SelectItem>
                   </SelectContent>
                 </Select>

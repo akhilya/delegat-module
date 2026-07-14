@@ -4,7 +4,9 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Services.Plugins;
 using Delegat.Models.Marketplace;
 using Delegat.Services;
 using Delegat.Services.Marketplace;
@@ -19,6 +21,7 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
+    private readonly PluginManager _pluginManager;
     private readonly ILogger<MarketplaceConnectionController> _logger;
     private readonly EncryptionService? _encryptionService;
     private readonly QuotaService _quotaService;
@@ -29,6 +32,7 @@ public class MarketplaceConnectionController : ControllerBase
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
+        PluginManager pluginManager,
         ILogger<MarketplaceConnectionController> logger,
         QuotaService quotaService,
         DataContext db,
@@ -38,6 +42,7 @@ public class MarketplaceConnectionController : ControllerBase
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
+        _pluginManager = pluginManager;
         _logger = logger;
         _quotaService = quotaService;
         _encryptionService = encryptionService;
@@ -52,13 +57,19 @@ public class MarketplaceConnectionController : ControllerBase
     public IActionResult GetAvailableAdapters()
     {
         var adapters = _adapterRegistry.GetAll()
-            .Select(a => new
+            .Select(a =>
             {
-                key = a.Key,
-                displayName = a.DisplayName,
-                description = a.Description,
-                capabilities = a.Capabilities.ToString(),
-                credentialsSchema = a.GetCredentialsSchema()
+                var plugin = _pluginManager.GetPlugin(a.Key);
+                return new
+                {
+                    key = a.Key,
+                    displayName = a.DisplayName,
+                    description = a.Description,
+                    version = plugin?.Version,
+                    stability = plugin?.Stability.ToString(),
+                    capabilities = a.Capabilities.ToString(),
+                    credentialsSchema = a.GetCredentialsSchema()
+                };
             })
             .ToList();
 

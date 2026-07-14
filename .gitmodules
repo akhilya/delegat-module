@@ -1,0 +1,15 @@
+[submodule "sdk"]
+	path = sdk
+	url = https://github.com/akhilya/delegat-marketplace-sdk.git
+[submodule "plugins/Delegat.Marketplace.Ozon"]
+	path = plugins/Delegat.Marketplace.Ozon
+	url = https://github.com/akhilya/delegat-adapter-ozon.git
+[submodule "plugins/Delegat.Marketplace.Wildberries"]
+	path = plugins/Delegat.Marketplace.Wildberries
+	url = https://github.com/akhilya/delegat-adapter-wildberries.git
+[submodule "plugins/Delegat.Marketplace.OpenCart"]
+	path = plugins/Delegat.Marketplace.OpenCart
+	url = https://github.com/akhilya/delegat-adapter-opencart.git
+[submodule "plugins/Delegat.Marketplace.YandexMarket"]
+	path = plugins/Delegat.Marketplace.YandexMarket
+	url = https://github.com/akhilya/delegat-adapter-yandex-market.git

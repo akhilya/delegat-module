@@ -203,6 +203,21 @@ export default {
       }
     },
 
+    stabilityLabel(stability) {
+      const labels = {
+        Stable: "Stable",
+        Beta: "Beta",
+        Experimental: "Experimental",
+      };
+      return labels[stability] || stability || "Experimental";
+    },
+
+    stabilityVariant(stability) {
+      if (stability === "Stable") return "default";
+      if (stability === "Beta") return "secondary";
+      return "outline";
+    },
+
     formatLoadedAt(value) {
       if (!value) return "—";
       const date = new Date(value);
@@ -328,6 +343,7 @@ export default {
                 <TableHead class="px-3">Плагин</TableHead>
                 <TableHead class="hidden md:table-cell px-3">Ключ</TableHead>
                 <TableHead class="w-24 px-3">Версия</TableHead>
+                <TableHead class="w-32 px-3">Статус</TableHead>
                 <TableHead class="hidden lg:table-cell px-3">Файл</TableHead>
                 <TableHead class="hidden xl:table-cell px-3">Загружен</TableHead>
                 <TableHead class="w-28 px-3">Тип</TableHead>
@@ -363,6 +379,11 @@ export default {
                 <TableCell class="px-3 align-top">
                   <Badge variant="outline" class="text-xs tabular-nums">
                     v{{ plugin.version }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="px-3 align-top">
+                  <Badge :variant="stabilityVariant(plugin.stability)" class="text-xs">
+                    {{ stabilityLabel(plugin.stability) }}
                   </Badge>
                 </TableCell>
                 <TableCell class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate">

@@ -13,6 +13,8 @@ Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCar
 ## Quick Start
 
 ```bash
+git clone --recurse-submodules https://github.com/akhilya/delegat-module.git
+cd delegat-module
 cp .env.example .env
 # Fill in the values in .env
 docker compose -f docker-compose.prod.yml up -d
@@ -23,12 +25,12 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 backend/          — ASP.NET Core API
 frontend/         — Vue 3 SPA
-plugins/          — Marketplace plugins (DLL)
-  Delegat.Marketplace.Ozon/
-  Delegat.Marketplace.Wildberries/
-  Delegat.Marketplace.OpenCart/
-sdk/              — SDK for plugin development
-  Delegat.Marketplace.SDK/
+plugins/          — Marketplace adapter submodules (DLL)
+  Delegat.Marketplace.Ozon/        → delegat-adapter-ozon
+  Delegat.Marketplace.Wildberries/ → delegat-adapter-wildberries
+  Delegat.Marketplace.OpenCart/    → delegat-adapter-opencart
+  Delegat.Marketplace.YandexMarket/→ delegat-adapter-yandex-market
+sdk/              — SDK submodule → delegat-marketplace-sdk
 docs/             — Documentation
 ```
 
