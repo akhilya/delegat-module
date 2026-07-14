@@ -1038,7 +1038,7 @@ export default {
                 <div class="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     :disabled="!editingOptionsCount"
                     @click="exportAttributeOptions"
@@ -1048,7 +1048,7 @@ export default {
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     @click="triggerOptionsImport"
                   >
