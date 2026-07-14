@@ -32,12 +32,15 @@ import {
   PAGE_PRODUCT_CREATION,
   PAGE_PRODUCT_GROUPS,
   PAGE_PRODUCTS,
+  PAGE_ADMIN_STORES,
   PAGE_SETTINGS,
-  PAGE_SETTINGS_STORE,
   PAGE_SETTINGS_USER,
 } from "@/router";
 
 export default {
+  props: {
+    sticky: { type: Boolean, default: true },
+  },
   components: {
     DropdownMenu,
     DropdownMenuContent,
@@ -89,7 +92,7 @@ export default {
       this.$router.push(PAGE_SETTINGS_USER);
     },
     goToStoreSettings() {
-      this.$router.push(PAGE_SETTINGS_STORE);
+      this.$router.push(PAGE_ADMIN_STORES);
     },
     goToAdminSettings() {
       this.$router.push(PAGE_SETTINGS);
@@ -119,7 +122,7 @@ export default {
 </script>
 
 <template>
-  <div class="w-full sticky top-0 z-30 bg-background">
+  <div :class="['w-full bg-background', sticky && 'sticky top-0 z-30']">
     <template v-if="!isLoading">
       <div class="flex items-center h-14 gap-2">
         <div class="md:hidden shrink-0">
@@ -132,6 +135,10 @@ export default {
 
         <div class="hidden sm:flex flex-1 items-center justify-center">
           <slot name="center" />
+        </div>
+
+        <div v-if="$slots.right" class="hidden md:flex items-center gap-2 shrink-0 mr-1">
+          <slot name="right" />
         </div>
 
         <div class="ml-auto shrink-0">
@@ -171,7 +178,7 @@ export default {
               <template v-if="me?.isAdmin">
                 <DropdownMenuItem @select="goToStoreSettings">
                   <Settings2 class="size-4 mr-2" />
-                  Настройки магазина
+                  Магазины
                 </DropdownMenuItem>
                 <DropdownMenuItem @select="goToAdminSettings">
                   <Settings2 class="size-4 mr-2" />

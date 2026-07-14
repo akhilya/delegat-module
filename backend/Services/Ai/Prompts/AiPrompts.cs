@@ -133,7 +133,7 @@ public static class AiPrompts
           Хранилище файлов:        /storage
           Адаптеры/маркетплейсы:  /adapter
           Инструменты:             /tools
-          Настройки магазина:      /settings/store
+          Магазины:                /settings/admin/stores
           Настройки профиля:       /settings/user
 
         URL patterns — entity pages (require ID from tool result):

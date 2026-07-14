@@ -176,6 +176,8 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isMultiline: false,
+        showOnProductPage: true,
         options: "",
         defaultValue: "",
         description: "",
@@ -210,6 +212,10 @@ export default {
     showOptionsField() {
       const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
       return typeValue === 3 || typeValue === 4;
+    },
+    isTextAttributeType() {
+      const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
+      return typeValue === 0;
     },
     /**
      * Проверяет, содержит ли текущий атрибут большой список опций
@@ -354,6 +360,8 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isMultiline: false,
+        showOnProductPage: true,
         options: "",
         defaultValue: "",
         description: "",
@@ -382,6 +390,8 @@ export default {
         key: attribute.key,
         type: normalizedType,
         isRequired: attribute.isRequired,
+        isMultiline: attribute.isMultiline ?? false,
+        showOnProductPage: attribute.showOnProductPage !== false,
         options: this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
           ? ""
           : this.formatOptionsForEdit(optionsRaw),
@@ -429,6 +439,8 @@ export default {
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
         isRequired: this.attributeForm.isRequired,
+        isMultiline: this.isTextAttributeType ? this.attributeForm.isMultiline : false,
+        showOnProductPage: this.attributeForm.showOnProductPage,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
@@ -1191,6 +1203,35 @@ export default {
                     {{ customGroupMode ? "Выбрать из списка" : "Своя группа" }}
                   </Button>
                 </template>
+              </SettingsFormField>
+
+              <SettingsFormField
+                v-if="isTextAttributeType"
+                label="Многострочный текст"
+              >
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="attr-multiline"
+                    :model-value="attributeForm.isMultiline"
+                    @update:model-value="attributeForm.isMultiline = $event"
+                  />
+                  <Label for="attr-multiline" class="font-normal text-muted-foreground">
+                    Поле с переносами строк на странице товара
+                  </Label>
+                </div>
+              </SettingsFormField>
+
+              <SettingsFormField label="На странице товара">
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="attr-visible"
+                    :model-value="attributeForm.showOnProductPage"
+                    @update:model-value="attributeForm.showOnProductPage = $event"
+                  />
+                  <Label for="attr-visible" class="font-normal text-muted-foreground">
+                    Показывать при редактировании товара
+                  </Label>
+                </div>
               </SettingsFormField>
 
               <SettingsFormField label="Обязательное поле">

@@ -317,9 +317,13 @@ public class CategoryController : ControllerBase
             key = input.key,
             type = input.type,
             isRequired = input.isRequired,
+            isMultiline = input.isMultiline,
+            showOnProductPage = input.showOnProductPage,
             sortOrder = maxSortOrder + 1,
             options = input.options,
             defaultValue = input.defaultValue,
+            description = input.description,
+            group = input.group,
             categoryId = categoryId
         });
 

@@ -39,6 +39,16 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     public bool isRequired { get; set; } = false;
 
     /// <summary>
+    /// For text attributes: render as multiline textarea on the product page.
+    /// </summary>
+    public bool isMultiline { get; set; } = false;
+
+    /// <summary>
+    /// Whether this attribute is shown on the product edit page.
+    /// </summary>
+    public bool showOnProductPage { get; set; } = true;
+
+    /// <summary>
     /// Display order within the category.
     /// </summary>
     public int sortOrder { get; set; } = 0;
@@ -89,6 +99,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         key = form.key;
         type = form.type;
         isRequired = form.isRequired;
+        isMultiline = form.isMultiline;
+        showOnProductPage = form.showOnProductPage;
         sortOrder = form.sortOrder;
         options = form.options;
         defaultValue = form.defaultValue;
@@ -108,6 +120,10 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             type = form.type.Value;
         if (form.isRequired.HasValue)
             isRequired = form.isRequired.Value;
+        if (form.isMultiline.HasValue)
+            isMultiline = form.isMultiline.Value;
+        if (form.showOnProductPage.HasValue)
+            showOnProductPage = form.showOnProductPage.Value;
         if (form.sortOrder.HasValue)
             sortOrder = form.sortOrder.Value;
         options = form.options;
@@ -127,6 +143,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             key = key,
             type = type,
             isRequired = isRequired,
+            isMultiline = isMultiline,
+            showOnProductPage = showOnProductPage,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
@@ -193,6 +211,16 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isRequired { get; set; }
 
         /// <summary>
+        /// For text attributes: render as multiline textarea on the product page.
+        /// </summary>
+        public bool isMultiline { get; set; }
+
+        /// <summary>
+        /// Whether this attribute is shown on the product edit page.
+        /// </summary>
+        public bool showOnProductPage { get; set; }
+
+        /// <summary>
         /// Display order within the category.
         /// </summary>
         public int sortOrder { get; set; }
@@ -254,6 +282,16 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isRequired { get; set; }
 
         /// <summary>
+        /// For text attributes: render as multiline textarea on the product page.
+        /// </summary>
+        public bool isMultiline { get; set; }
+
+        /// <summary>
+        /// Whether this attribute is shown on the product edit page.
+        /// </summary>
+        public bool showOnProductPage { get; set; }
+
+        /// <summary>
         /// JSON-serialized list of allowed options.
         /// </summary>
         public string? options { get; set; }
@@ -303,6 +341,16 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Updated required flag.
         /// </summary>
         public bool? isRequired { get; set; }
+
+        /// <summary>
+        /// Updated multiline flag for text attributes.
+        /// </summary>
+        public bool? isMultiline { get; set; }
+
+        /// <summary>
+        /// Updated product page visibility flag.
+        /// </summary>
+        public bool? showOnProductPage { get; set; }
 
         /// <summary>
         /// Updated display order.
@@ -362,6 +410,16 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Whether a value is required.
         /// </summary>
         public bool isRequired { get; set; }
+
+        /// <summary>
+        /// For text attributes: render as multiline textarea on the product page.
+        /// </summary>
+        public bool isMultiline { get; set; }
+
+        /// <summary>
+        /// Whether this attribute is shown on the product edit page.
+        /// </summary>
+        public bool showOnProductPage { get; set; }
 
         /// <summary>
         /// Display order within the category.

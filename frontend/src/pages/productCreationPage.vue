@@ -99,6 +99,12 @@ export default {
     const storeAttributes = ref([]);
     const storeAttributeValues = ref([]);
     const isLoadingStoreAttributes = ref(false);
+    const visibleCategoryAttributes = computed(() =>
+      selectedCategory.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
+    );
+    const visibleStoreAttributes = computed(() =>
+      storeAttributes.value.filter((a) => a.showOnProductPage !== false),
+    );
     const productGroups = ref([]);
     const selectedGroupId = ref(null);
     const isLoadingGroups = ref(false);
@@ -336,7 +342,9 @@ export default {
 
       // Validate required category attributes
       if (selectedCategory.value?.attributes) {
-        const requiredAttrs = selectedCategory.value.attributes.filter((a) => a.isRequired);
+        const requiredAttrs = selectedCategory.value.attributes.filter(
+          (a) => a.isRequired && a.showOnProductPage !== false,
+        );
         for (const attr of requiredAttrs) {
           const attrValue = attributeValues.value.find((av) => av.attributeId === attr.id);
           if (!attrValue || !attrValue.value) {
@@ -347,7 +355,9 @@ export default {
       }
 
       // Validate required store attributes
-      const requiredStoreAttrs = storeAttributes.value.filter((a) => a.isRequired);
+      const requiredStoreAttrs = storeAttributes.value.filter(
+        (a) => a.isRequired && a.showOnProductPage !== false,
+      );
       for (const attr of requiredStoreAttrs) {
         const attrValue = storeAttributeValues.value.find((av) => av.storeAttributeId === attr.id);
         if (!attrValue || !attrValue.value) {
@@ -417,6 +427,8 @@ export default {
       categories,
       selectedCategoryId,
       selectedCategory,
+      visibleCategoryAttributes,
+      visibleStoreAttributes,
       attributeValues,
       storeAttributes,
       storeAttributeValues,
@@ -585,22 +597,18 @@ export default {
         </Card>
 
         <!-- Card 2: Category Attributes -->
-        <Card v-if="selectedCategory">
+        <Card v-if="selectedCategory && visibleCategoryAttributes.length > 0">
           <CardHeader>
             <CardTitle class="text-base flex items-center gap-2">
               <Layers class="size-4" />
               Атрибуты категории
-              <span v-if="selectedCategory.attributes?.length" class="text-muted-foreground text-sm font-normal">
-                ({{ selectedCategory.attributes.length }})
+              <span class="text-muted-foreground text-sm font-normal">
+                ({{ visibleCategoryAttributes.length }})
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p v-if="!selectedCategory.attributes || selectedCategory.attributes.length === 0" class="text-sm text-muted-foreground py-2">
-              У этой категории нет атрибутов
-            </p>
             <ProductAttributeForm
-              v-else
               :attributes="selectedCategory.attributes"
               :model-value="attributeValues"
               @update:model-value="updateAttributeValues"
@@ -609,13 +617,13 @@ export default {
         </Card>
 
         <!-- Card 3: Store Attributes -->
-        <Card v-if="storeAttributes.length > 0">
+        <Card v-if="visibleStoreAttributes.length > 0">
           <CardHeader>
             <CardTitle class="text-base flex items-center gap-2">
               <Globe class="size-4" />
               Глобальные атрибуты
               <span class="text-muted-foreground text-sm font-normal">
-                ({{ storeAttributes.length }})
+                ({{ visibleStoreAttributes.length }})
               </span>
             </CardTitle>
           </CardHeader>

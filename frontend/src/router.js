@@ -15,7 +15,6 @@ const storeStoragePage = () => import("./pages/storeStoragePage.vue");
 const SettingsShell = () => import("./layouts/SettingsShell.vue");
 const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
 const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
-const SettingsStorePage = () => import("./pages/settings/settingsStorePage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
@@ -45,7 +44,6 @@ export const PAGE_STORE_STORAGE = "/storage";
 export const PAGE_SETTINGS = "/settings";
 export const PAGE_SETTINGS_OPERATIONS = "/settings/operations";
 export const PAGE_SETTINGS_USER = "/settings/user";
-export const PAGE_SETTINGS_STORE = "/settings/store";
 export const PAGE_NOT_FOUND = "/:pathMatch(.*)*";
 export const PAGE_TOOLS = "/tools";
 export const PAGE_ADMIN_STORES = "/settings/admin/stores";
@@ -85,7 +83,7 @@ export const routes = [
       { path: "", component: SettingsOverviewPage, meta: { title: "Общие настройки" } },
       { path: "operations", redirect: "" },
       { path: "user", component: SettingsUserPage, meta: { title: "Настройки пользователя" } },
-      { path: "store", component: SettingsStorePage, meta: { title: "Настройки магазина" } },
+      { path: "store", redirect: "/settings/admin/stores" },
       { path: "admin/stores", component: AdminStoresPage, meta: { title: "Магазины" } },
       { path: "admin/stores/:id", component: AdminStoreDetailPage, meta: { title: "Магазин" } },
       { path: "admin/users", component: AdminUsersPage, meta: { title: "Пользователи" } },

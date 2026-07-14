@@ -1,18 +1,14 @@
 <script>
 // StoreAttributeForm - Renders a dynamic form for store-level (global) attribute values with type-aware inputs.
 import Input from "@/components/ui/input/Input.vue";
+import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Label from "@/components/ui/label/Label.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Info } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
 const TYPE_TEXT = [0, "Text", "text"];
@@ -25,16 +21,14 @@ const TYPE_BARCODE = [5, "Barcode", "barcode"];
 export default {
   components: {
     Input,
+    Textarea,
     Switch,
     Label,
     SearchableSelect,
     MultiSelectDropdown,
     BarcodeInput,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-    Info,
+    SettingsFormField,
+    EmptyState,
   },
   props: {
     attributes: {
@@ -53,7 +47,9 @@ export default {
   emits: ["update:modelValue"],
   computed: {
     sortedAttributes() {
-      return [...this.attributes].sort((a, b) => a.sortOrder - b.sortOrder);
+      return [...this.attributes]
+        .filter((attr) => attr.showOnProductPage !== false)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
     },
   },
   methods: {
@@ -185,74 +181,82 @@ export default {
     hasError(attributeId) {
       return !!this.errors[attributeId];
     },
+
+    attributeLabel(attribute) {
+      return attribute.isRequired ? `${attribute.name} *` : attribute.name;
+    },
+
+    isFullWidthField(attribute) {
+      return this.isType(attribute.type, "text") && attribute.isMultiline;
+    },
   },
 };
 </script>
 
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
     <div
       v-for="attribute in sortedAttributes"
       :key="attribute.id"
-      :class="isType(attribute.type, 'boolean') ? 'flex flex-col justify-end' : 'space-y-2'"
+      :class="isFullWidthField(attribute) ? 'md:col-span-2' : ''"
     >
-      <!-- Boolean (type 2): compact switch + inline label, no top label -->
       <div
         v-if="isType(attribute.type, 'boolean')"
-        class="flex items-center gap-3 h-9"
+        class="flex flex-col gap-1.5 self-end"
       >
-        <Switch
-          :id="'store-attr-' + attribute.id"
-          :model-value="getValue(attribute.id) === 'true'"
-          @update:model-value="setValue(attribute.id, $event ? 'true' : 'false')"
-        />
-        <Label :for="'store-attr-' + attribute.id" class="leading-none cursor-pointer">
-          {{ attribute.name }}
-          <span v-if="attribute.isRequired" class="text-destructive">*</span>
-        </Label>
-        <TooltipProvider v-if="attribute.description">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Info class="size-3.5 text-muted-foreground cursor-help shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="top" class="max-w-xs">
-              <p>{{ attribute.description }}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div class="flex items-center gap-3 h-9">
+          <Switch
+            :id="'store-attr-' + attribute.id"
+            :model-value="getValue(attribute.id) === 'true'"
+            @update:model-value="setValue(attribute.id, $event ? 'true' : 'false')"
+          />
+          <Label
+            :for="'store-attr-' + attribute.id"
+            class="text-sm font-medium leading-none cursor-pointer"
+          >
+            {{ attribute.name }}
+            <span v-if="attribute.isRequired" class="text-destructive">*</span>
+          </Label>
+        </div>
+        <p
+          v-if="attribute.description"
+          class="text-xs text-muted-foreground pl-[calc(2.25rem+0.75rem)]"
+        >
+          {{ attribute.description }}
+        </p>
+        <p v-if="getError(attribute.id)" class="text-sm text-destructive">
+          {{ getError(attribute.id) }}
+        </p>
       </div>
 
-      <template v-else>
-      <div class="flex items-center gap-1.5">
-        <Label class="leading-none">
-          {{ attribute.name }}
-          <span v-if="attribute.isRequired" class="text-destructive">*</span>
-        </Label>
-        <TooltipProvider v-if="attribute.description">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Info class="size-3.5 text-muted-foreground cursor-help shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="top" class="max-w-xs">
-              <p>{{ attribute.description }}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      <!-- Text (type 0) -->
+      <SettingsFormField
+        v-else
+        :label="attributeLabel(attribute)"
+        :label-for="'store-attr-' + attribute.id"
+        :description="attribute.description"
+      >
+      <Textarea
+        v-if="isType(attribute.type, 'text') && attribute.isMultiline"
+        :id="'store-attr-' + attribute.id"
+        :model-value="getValue(attribute.id)"
+        @update:model-value="setValue(attribute.id, $event)"
+        :placeholder="attribute.defaultValue || ''"
+        :required="attribute.isRequired"
+        class="min-h-24 resize-y"
+        :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
+      />
       <Input
-        v-if="isType(attribute.type, 'text')"
+        v-else-if="isType(attribute.type, 'text')"
+        :id="'store-attr-' + attribute.id"
         :model-value="getValue(attribute.id)"
         @update:model-value="setValue(attribute.id, $event)"
         :placeholder="attribute.defaultValue || ''"
         :required="attribute.isRequired"
         :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
       />
-
-      <!-- Number (type 1) -->
       <Input
         v-else-if="isType(attribute.type, 'number')"
+        :id="'store-attr-' + attribute.id"
         type="number"
         :model-value="getValue(attribute.id)"
         @update:model-value="setValue(attribute.id, $event)"
@@ -260,8 +264,6 @@ export default {
         :required="attribute.isRequired"
         :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
       />
-
-      <!-- Select (type 3) - with search for large option lists -->
       <SearchableSelect
         v-else-if="isType(attribute.type, 'select')"
         :model-value="getValue(attribute.id)"
@@ -270,8 +272,6 @@ export default {
         :placeholder="attribute.defaultValue || 'Выберите...'"
         :class="{ 'border-destructive': hasError(attribute.id) }"
       />
-
-      <!-- MultiSelect (type 4) -->
       <MultiSelectDropdown
         v-else-if="isType(attribute.type, 'multiselect')"
         :options="getSelectOptions(attribute).map(o => o.label)"
@@ -280,15 +280,11 @@ export default {
         placeholder="Выберите..."
         :class="{ 'border-destructive': hasError(attribute.id) }"
       />
-
-      <!-- Barcode (type 5) -->
       <BarcodeInput
         v-else-if="isType(attribute.type, 'barcode')"
         :model-value="getValue(attribute.id)"
         @update:model-value="setValue(attribute.id, $event)"
       />
-
-      <!-- Fallback for unknown types -->
       <Input
         v-else
         :model-value="getValue(attribute.id)"
@@ -296,19 +292,19 @@ export default {
         :placeholder="`Неизвестный тип: ${attribute.type}`"
         :class="{ 'border-destructive focus-visible:ring-destructive': hasError(attribute.id) }"
       />
-      </template>
 
-      <!-- Error message -->
-      <p v-if="getError(attribute.id)" class="text-sm text-destructive mt-1">
+      <p v-if="getError(attribute.id)" class="text-sm text-destructive">
         {{ getError(attribute.id) }}
       </p>
+      </SettingsFormField>
     </div>
 
-    <p
+    <EmptyState
       v-if="sortedAttributes.length === 0"
-      class="text-sm text-muted-foreground text-center py-4"
-    >
-      Нет глобальных атрибутов для заполнения
-    </p>
+      size="sm"
+      title="Нет глобальных атрибутов"
+      description="Добавьте глобальные атрибуты в настройках магазина — они появятся здесь."
+      class="md:col-span-2 py-8"
+    />
   </div>
 </template>

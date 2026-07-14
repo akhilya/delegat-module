@@ -174,9 +174,9 @@
             value="category"
             class="space-y-4 mt-0"
           >
-            <template v-if="categoryAttributes.length > 0">
+            <template v-if="visibleCategoryAttributes.length > 0">
               <div
-                v-for="attr in categoryAttributes"
+                v-for="attr in visibleCategoryAttributes"
                 :key="attr.id"
                 class="flex items-start gap-3"
               >
@@ -240,7 +240,15 @@
                     :disabled="!enabledCategoryAttributes[attr.id]"
                   />
 
-                  <!-- Text (default) -->
+                  <!-- Text -->
+                  <Textarea
+                    v-else-if="isType(attr.type, 'text') && attr.isMultiline"
+                    :id="`cat-${attr.id}`"
+                    v-model="categoryAttributeValues[attr.id]"
+                    :disabled="!enabledCategoryAttributes[attr.id]"
+                    :placeholder="attr.name"
+                    class="min-h-24 resize-y"
+                  />
                   <Input
                     v-else
                     :id="`cat-${attr.id}`"
@@ -258,9 +266,9 @@
 
           <!-- Global Fields Tab -->
           <TabsContent value="global" class="space-y-4 mt-0">
-            <template v-if="storeAttributes.length > 0">
+            <template v-if="visibleStoreAttributes.length > 0">
               <div
-                v-for="attr in storeAttributes"
+                v-for="attr in visibleStoreAttributes"
                 :key="attr.id"
                 class="flex items-start gap-3"
               >
@@ -323,7 +331,15 @@
                     :disabled="!enabledStoreAttributes[attr.id]"
                   />
 
-                  <!-- Text (default) -->
+                  <!-- Text -->
+                  <Textarea
+                    v-else-if="isType(attr.type, 'text') && attr.isMultiline"
+                    :id="`store-${attr.id}`"
+                    v-model="storeAttributeValues[attr.id]"
+                    :disabled="!enabledStoreAttributes[attr.id]"
+                    :placeholder="attr.name"
+                    class="min-h-24 resize-y"
+                  />
                   <Input
                     v-else
                     :id="`store-${attr.id}`"
@@ -453,6 +469,13 @@ const isOpen = computed({
   get: () => props.modelValue,
   set: (value) => emit("update:modelValue", value),
 });
+
+const visibleCategoryAttributes = computed(() =>
+  props.categoryAttributes.filter((a) => a.showOnProductPage !== false),
+);
+const visibleStoreAttributes = computed(() =>
+  props.storeAttributes.filter((a) => a.showOnProductPage !== false),
+);
 
 const activeTab = ref("product");
 const isSubmitting = ref(false);

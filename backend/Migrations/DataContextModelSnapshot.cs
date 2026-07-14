@@ -345,6 +345,9 @@ namespace Delegat.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<bool>("isMultiline")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
 
@@ -360,6 +363,9 @@ namespace Delegat.Migrations
 
                     b.Property<string>("options")
                         .HasColumnType("longtext");
+
+                    b.Property<bool>("showOnProductPage")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<int>("sortOrder")
                         .HasColumnType("int");
@@ -1666,6 +1672,9 @@ namespace Delegat.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
+                    b.Property<bool>("isMultiline")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
 
@@ -1682,6 +1691,9 @@ namespace Delegat.Migrations
                     b.Property<string>("options")
                         .HasMaxLength(5000)
                         .HasColumnType("varchar(5000)");
+
+                    b.Property<bool>("showOnProductPage")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<int>("sortOrder")
                         .HasColumnType("int");

@@ -2638,12 +2638,7 @@ export default {
           <!-- Mappings Tab -->
           <TabsContent value="mappings" class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-base font-semibold">Маппинги категорий</h2>
-                <Badge v-if="categoryMappings.length" variant="secondary">
-                  {{ categoryMappings.length }}
-                </Badge>
-              </div>
+              <h2 class="text-base font-semibold">Маппинги категорий</h2>
               <div class="flex shrink-0 flex-wrap gap-2">
                 <Dialog
                   v-model:open="showCreateMappingDialog"
@@ -2856,72 +2851,81 @@ export default {
             </EmptyState>
 
             <div v-else class="rounded-lg border overflow-hidden">
-              <ul class="divide-y divide-border">
-                <li
-                  v-for="mapping in categoryMappings"
-                  :key="mapping.id"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="`Открыть маппинг: ${mapping.localCategoryName}`"
-                  class="group flex items-center gap-4 px-5 py-4 hover:bg-accent/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  @click="openFieldMapping(mapping.id)"
-                  @keydown.enter.prevent="openFieldMapping(mapping.id)"
-                  @keydown.space.prevent="openFieldMapping(mapping.id)"
-                >
-                  <!-- Main content -->
-                  <div class="flex-1 min-w-0">
-                    <!-- Categories row -->
-                    <div class="flex items-baseline gap-2 min-w-0">
-                      <span class="font-semibold truncate">{{ mapping.localCategoryName }}</span>
-                      <span class="text-muted-foreground shrink-0 text-sm">→</span>
-                      <span class="font-semibold truncate text-muted-foreground">{{ mapping.externalCategoryName || mapping.externalCategoryId }}</span>
-                    </div>
-                    <!-- Mapping name -->
-                    <div v-if="mapping.name" class="mt-0.5 text-sm text-muted-foreground truncate">
-                      {{ mapping.name }}
-                    </div>
-                  </div>
-
-                  <!-- Right side: products count + open hint + menu -->
-                  <div class="flex items-center gap-4 shrink-0">
-                    <span v-if="mapping.linkedProductsCount" class="text-sm text-muted-foreground">
-                      {{ mapping.linkedProductsCount }} товаров
-                    </span>
-                    <span class="text-sm text-muted-foreground/60 group-hover:text-foreground transition-colors">
-                      Открыть →
-                    </span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger as-child>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="shrink-0 text-muted-foreground"
-                          aria-label="Действия с маппингом"
-                          @click.stop
+              <div class="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow class="hover:bg-transparent">
+                      <TableHead>Локальная категория</TableHead>
+                      <TableHead class="hidden sm:table-cell">
+                        Категория {{ adapterDisplayName }}
+                      </TableHead>
+                      <TableHead class="hidden md:table-cell">Название</TableHead>
+                      <TableHead class="w-24 text-right">Товары</TableHead>
+                      <TableHead class="w-12" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow
+                      v-for="mapping in categoryMappings"
+                      :key="mapping.id"
+                      class="group cursor-pointer"
+                      @click="openFieldMapping(mapping.id)"
+                    >
+                      <TableCell class="font-medium max-w-0">
+                        <span class="truncate block">{{ mapping.localCategoryName }}</span>
+                        <span class="text-xs text-muted-foreground truncate block sm:hidden">
+                          {{ mapping.externalCategoryName || mapping.externalCategoryId }}
+                        </span>
+                        <span
+                          v-if="mapping.name"
+                          class="text-xs text-muted-foreground truncate block md:hidden"
                         >
-                          <EllipsisVertical class="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
-                          Переименовать
-                        </DropdownMenuItem>
-                        <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
-                          Дублировать
-                        </DropdownMenuItem>
-                        <!-- Кнопка 'Анализ совместимости' убрана из списка по требованию -->
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          class="text-destructive"
-                          @click.stop="handleDeleteMapping(mapping)"
-                        >
-                          Удалить
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </li>
-              </ul>
+                          {{ mapping.name }}
+                        </span>
+                      </TableCell>
+                      <TableCell class="hidden sm:table-cell text-muted-foreground max-w-xs truncate">
+                        {{ mapping.externalCategoryName || mapping.externalCategoryId }}
+                      </TableCell>
+                      <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
+                        {{ mapping.name || "—" }}
+                      </TableCell>
+                      <TableCell class="text-right tabular-nums text-muted-foreground">
+                        {{ mapping.linkedProductsCount || 0 }}
+                      </TableCell>
+                      <TableCell class="px-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger as-child>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              aria-label="Действия с маппингом"
+                              @click.stop
+                            >
+                              <EllipsisVertical class="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
+                              Переименовать
+                            </DropdownMenuItem>
+                            <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
+                              Дублировать
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              class="text-destructive"
+                              @click.stop="handleDeleteMapping(mapping)"
+                            >
+                              Удалить
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </TabsContent>
 

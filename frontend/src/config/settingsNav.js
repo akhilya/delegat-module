@@ -1,7 +1,6 @@
 import {
   PAGE_SETTINGS,
   PAGE_SETTINGS_USER,
-  PAGE_SETTINGS_STORE,
   PAGE_ADMIN_STORES,
   PAGE_ADMIN_USERS,
   PAGE_ADMIN_TOKENS,
@@ -26,7 +25,6 @@ import {
 export const SETTINGS_ROUTE_LABELS = {
   [PAGE_SETTINGS]: "Общие",
   [PAGE_SETTINGS_USER]: "Пользователь",
-  [PAGE_SETTINGS_STORE]: "Магазин",
   [PAGE_ADMIN_STORES]: "Магазины",
   [PAGE_ADMIN_USERS]: "Пользователи",
   [PAGE_ADMIN_TOKENS]: "Токены",
@@ -45,8 +43,8 @@ export function getPersonalSettingsItems(ctx) {
   const items = [
     { id: "user", label: "Пользователь", to: PAGE_SETTINGS_USER, icon: User },
   ];
-  if (ctx.canManageStore) {
-    items.push({ id: "store", label: "Магазин", to: PAGE_SETTINGS_STORE, icon: Store });
+  if (ctx.canManageStore && !ctx.isAdmin) {
+    items.push({ id: "stores", label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store });
   }
   return items;
 }

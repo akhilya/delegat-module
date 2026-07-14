@@ -140,6 +140,14 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .Property(a => a.options)
             .HasColumnType("longtext");
 
+        builder.Entity<CategoryAttribute>()
+            .Property(a => a.isMultiline)
+            .HasDefaultValue(false);
+
+        builder.Entity<CategoryAttribute>()
+            .Property(a => a.showOnProductPage)
+            .HasDefaultValue(true);
+
         // CategoryMapping graphJson - LONGTEXT for the whole-category visual node graph
         builder.Entity<CategoryMapping>()
             .Property(m => m.graphJson)
@@ -211,6 +219,14 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<StoreAttribute>()
             .HasIndex(sa => sa.storeId);
+
+        builder.Entity<StoreAttribute>()
+            .Property(a => a.isMultiline)
+            .HasDefaultValue(false);
+
+        builder.Entity<StoreAttribute>()
+            .Property(a => a.showOnProductPage)
+            .HasDefaultValue(true);
 
         builder.Entity<ProductAttributeValue>()
             .HasIndex(pav => pav.productId);
