@@ -62,6 +62,8 @@ import {
   GripVertical,
   Settings2,
   Pencil,
+  Download,
+  Upload,
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -148,6 +150,8 @@ export default {
     GripVertical,
     Settings2,
     Pencil,
+    Download,
+    Upload,
     draggable,
     SearchableSelect,
     EmptyState,
@@ -176,6 +180,7 @@ export default {
         group: "",
       },
       customGroupMode: false,
+      attributeOptionsJson: null,
       PAGE_CATEGORIES,
       ATTRIBUTE_TYPES,
       ATTRIBUTE_TYPE_OPTIONS,
@@ -205,15 +210,13 @@ export default {
      * (для таких списков показываем только count, не весь текст)
      */
     hasLargeOptions() {
-      if (!this.editingAttribute?.options) return false;
-      return this.getOptionsCount(this.editingAttribute.options) > LARGE_OPTIONS_THRESHOLD;
+      const raw = this.getOptionsRaw();
+      if (!raw) return false;
+      return this.getOptionsCount(raw) > LARGE_OPTIONS_THRESHOLD;
     },
-    /**
-     * Количество опций в редактируемом атрибуте
-     */
     editingOptionsCount() {
-      if (!this.editingAttribute?.options) return 0;
-      return this.getOptionsCount(this.editingAttribute.options);
+      const raw = this.getOptionsRaw();
+      return raw ? this.getOptionsCount(raw) : 0;
     },
     groupSelectOptions() {
       return [
@@ -222,7 +225,8 @@ export default {
       ];
     },
     parsedFormOptions() {
-      return this.parseOptions(this.attributeForm.options);
+      const raw = this.getOptionsRaw();
+      return raw ? this.parseOptions(raw) : [];
     },
     pageHeaderTitle() {
       return this.category?.name || "Редактирование категории";
@@ -292,6 +296,7 @@ export default {
     openAddAttributeDialog() {
       this.editingAttribute = null;
       this.customGroupMode = false;
+      this.attributeOptionsJson = null;
       this.attributeForm = {
         name: "",
         key: "",
@@ -307,6 +312,7 @@ export default {
 
     openEditAttributeDialog(attribute) {
       this.editingAttribute = attribute;
+      this.attributeOptionsJson = null;
       // Нормализуем тип (может прийти как строка "Select" или число 3)
       const normalizedType = ATTRIBUTE_TYPES[attribute.type]?.value ?? attribute.type;
       const group = attribute.group || "";
@@ -361,11 +367,7 @@ export default {
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
         isRequired: this.attributeForm.isRequired,
-        options: this.showOptionsField
-          ? (this.hasLargeOptions && !this.attributeForm.options.trim()
-              ? this.editingAttribute.options
-              : this.serializeOptionsForSave())
-          : null,
+        options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
         group: this.attributeForm.group.trim() || null,
@@ -437,6 +439,158 @@ export default {
 
     getAttributeTypeLabel(type) {
       return ATTRIBUTE_TYPES[type]?.label || "Неизвестный тип";
+    },
+
+    getOptionsRaw() {
+      if (this.attributeOptionsJson) return this.attributeOptionsJson;
+      if (this.attributeForm.options?.trim()) return this.attributeForm.options;
+      return this.editingAttribute?.options || "";
+    },
+
+    resolveOptionsForSave() {
+      if (this.attributeOptionsJson) return this.attributeOptionsJson;
+      if (this.attributeForm.options?.trim()) return this.serializeOptionsForSave();
+      if (this.editingAttribute?.options) return this.editingAttribute.options;
+      return null;
+    },
+
+    formatOptionsForTextarea(options) {
+      return this.parseOptions(options)
+        .map((option) =>
+          option.value !== option.label
+            ? `${option.value}:${option.label}`
+            : option.label,
+        )
+        .join(", ");
+    },
+
+    applyImportedOptions(parsed) {
+      if (!parsed.length) {
+        displaySonnerError("Файл не содержит вариантов");
+        return;
+      }
+
+      const json = JSON.stringify(parsed);
+      if (parsed.length > LARGE_OPTIONS_THRESHOLD) {
+        this.attributeOptionsJson = json;
+        this.attributeForm.options = "";
+      } else {
+        this.attributeOptionsJson = null;
+        this.attributeForm.options = this.formatOptionsForTextarea(json);
+      }
+
+      if (this.editingAttribute) {
+        this.editingAttribute = { ...this.editingAttribute, options: json };
+      }
+
+      displaySonnerSuccess(`Импортировано вариантов: ${parsed.length.toLocaleString()}`);
+    },
+
+    parseImportedOptionsText(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return [];
+
+      try {
+        const json = JSON.parse(trimmed);
+        if (Array.isArray(json)) {
+          return json
+            .map((item) => {
+              if (typeof item === "string") {
+                return { value: item, label: item };
+              }
+              const value = item.value ?? item.label ?? "";
+              const label = item.label ?? item.value ?? "";
+              return { value: String(value), label: String(label) };
+            })
+            .filter((option) => option.value);
+        }
+        if (Array.isArray(json.options)) {
+          return this.parseImportedOptionsText(JSON.stringify(json.options));
+        }
+      } catch {
+        // plain text / csv
+      }
+
+      const items = trimmed.includes("\n")
+        ? trimmed.split(/\r?\n/)
+        : trimmed.split(",");
+
+      return items
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => {
+          if (item.includes(":")) {
+            const [value, ...labelParts] = item.split(":");
+            return {
+              value: value.trim(),
+              label: labelParts.join(":").trim(),
+            };
+          }
+          return { value: item, label: item };
+        });
+    },
+
+    exportAttributeOptions() {
+      const raw = this.getOptionsRaw();
+      if (!raw) {
+        displaySonnerError("Нет вариантов для экспорта");
+        return;
+      }
+
+      const parsed = this.parseOptions(raw);
+      if (!parsed.length) {
+        displaySonnerError("Нет вариантов для экспорта");
+        return;
+      }
+
+      const json = JSON.stringify(parsed, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const key = this.attributeForm.key?.trim() || "attribute";
+      anchor.href = url;
+      anchor.download = `${key}-options.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      displaySonnerSuccess(`Экспортировано вариантов: ${parsed.length.toLocaleString()}`);
+    },
+
+    triggerOptionsImport() {
+      this.$refs.optionsFileInput?.click();
+    },
+
+    handleOptionsImport(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        try {
+          const text = loadEvent.target?.result;
+          if (typeof text !== "string") {
+            displaySonnerError("Не удалось прочитать файл");
+            return;
+          }
+          const parsed = this.parseImportedOptionsText(text);
+          this.applyImportedOptions(parsed);
+        } catch {
+          displaySonnerError("Ошибка чтения файла");
+        }
+      };
+      reader.onerror = () => {
+        displaySonnerError("Ошибка чтения файла");
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    },
+
+    clearAttributeOptions() {
+      this.attributeOptionsJson = null;
+      this.attributeForm.options = "";
+      this.attributeForm.defaultValue = "";
+      if (this.editingAttribute) {
+        this.editingAttribute = { ...this.editingAttribute, options: null };
+      }
     },
 
     /**
@@ -774,7 +928,7 @@ export default {
           <div class="space-y-2">
             <Label>Тип значения</Label>
             <Select v-model="attributeForm.type">
-              <SelectTrigger>
+              <SelectTrigger class="w-full">
                 <SelectValue :placeholder="attributeTypeLabel" />
               </SelectTrigger>
               <SelectContent>
@@ -790,30 +944,63 @@ export default {
           </div>
 
           <div v-if="showOptionsField" class="space-y-2">
-            <Label>Варианты</Label>
-            <!-- Большой список опций - информация + кнопка очистки -->
+            <div class="flex items-center justify-between gap-3">
+              <Label>Варианты</Label>
+              <div class="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  :disabled="!editingOptionsCount"
+                  @click="exportAttributeOptions"
+                >
+                  <Download class="size-3.5 mr-1.5" />
+                  Экспорт
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  @click="triggerOptionsImport"
+                >
+                  <Upload class="size-3.5 mr-1.5" />
+                  Импорт
+                </Button>
+              </div>
+            </div>
+            <input
+              ref="optionsFileInput"
+              type="file"
+              accept=".json,.csv,.txt,application/json,text/plain,text/csv"
+              class="hidden"
+              @change="handleOptionsImport"
+            />
+            <p class="text-xs text-muted-foreground -mt-1">
+              JSON, CSV или текст: по одному варианту на строку или через запятую. Формат «значение:подпись» поддерживается.
+            </p>
             <div v-if="hasLargeOptions" class="rounded-md border bg-muted/50 p-3">
-              <div class="flex items-center justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div class="flex items-center gap-2 text-sm">
                     <span class="font-medium">{{ editingOptionsCount.toLocaleString() }}</span>
-                    <span class="text-muted-foreground">вариантов (импортировано с адаптера)</span>
+                    <span class="text-muted-foreground">вариантов</span>
                   </div>
                   <p class="text-xs text-muted-foreground mt-1">
-                    Редактирование большого списка недоступно вручную.
+                    Список слишком большой для ручного редактирования — используйте импорт и экспорт.
                   </p>
                 </div>
                 <Button
+                  type="button"
                   variant="destructive"
                   size="sm"
-                  @click="attributeForm.options = ''; editingAttribute = { ...editingAttribute, options: null }"
+                  class="shrink-0"
+                  @click="clearAttributeOptions"
                 >
                   <Trash2 class="size-3.5 mr-1.5" />
                   Очистить
                 </Button>
               </div>
             </div>
-            <!-- Небольшой список - редактируемое поле -->
             <Textarea
               v-else
               v-model="attributeForm.options"
@@ -837,11 +1024,11 @@ export default {
             </div>
             <!-- Select type (3) - Dropdown -->
             <Select
-              v-else-if="attributeForm.type === 3 && attributeForm.options"
+              v-else-if="attributeForm.type === 3 && editingOptionsCount"
               :model-value="attributeForm.defaultValue || '__none__'"
               @update:model-value="attributeForm.defaultValue = $event === '__none__' ? '' : $event"
             >
-              <SelectTrigger>
+              <SelectTrigger class="w-full">
                 <SelectValue placeholder="Выберите значение..." />
               </SelectTrigger>
               <SelectContent>
