@@ -786,7 +786,7 @@ export default {
                 <Filter class="size-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" class="w-56 p-1">
+            <PopoverContent align="end" class="w-64 min-w-56 p-1">
               <div class="max-h-64 overflow-y-auto">
                 <Button
                   variant="ghost"
@@ -815,7 +815,7 @@ export default {
                   :class="filterCategoryId === cat.id ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = cat.id"
                 >
-                  <span class="truncate">{{ cat.name }}</span>
+                  <span class="min-w-0 break-words text-left">{{ cat.name }}</span>
                   <Check v-if="filterCategoryId === cat.id" class="size-4 shrink-0" />
                 </Button>
               </div>

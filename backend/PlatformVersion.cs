@@ -2,5 +2,5 @@ namespace Delegat;
 
 public static class PlatformVersion
 {
-    public const string Current = "1.2.0";
+    public const string Current = "1.2.1";
 }

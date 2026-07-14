@@ -202,34 +202,34 @@ export default {
         Добавить
       </Button>
     </div>
-    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div class="flex-1 min-h-0 overflow-y-auto">
+      <div v-if="isLoading" class="flex justify-center py-12">
+        <Loader2 class="size-8 animate-spin text-muted-foreground" />
+      </div>
 
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="size-8 animate-spin text-muted-foreground" />
-    </div>
+      <EmptyState
+        v-else-if="variants.length === 0"
+        title="Нет размеров"
+        description="Добавьте размеры, чтобы управлять ценой, штрихкодом и остатками по каждому из них."
+        class="py-10"
+      >
+        <template #icon>
+          <Layers />
+        </template>
+      </EmptyState>
 
-    <EmptyState
-      v-else-if="variants.length === 0"
-      title="Нет размеров"
-      description="Добавьте размеры, чтобы управлять ценой, штрихкодом и остатками по каждому из них."
-    >
-      <template #icon>
-        <Layers />
-      </template>
-    </EmptyState>
-
-    <Table v-else>
-      <TableHeader>
-        <TableRow>
-          <TableHead class="w-[40px]"></TableHead>
-          <TableHead>Размер</TableHead>
-          <TableHead>Артикул (SKU)</TableHead>
-          <TableHead>Штрихкод</TableHead>
-          <TableHead class="w-[120px]">Цена</TableHead>
-          <TableHead class="w-[100px]">Остаток</TableHead>
-          <TableHead class="w-[60px]"></TableHead>
-        </TableRow>
-      </TableHeader>
+      <Table v-else>
+        <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
+          <TableRow class="hover:bg-transparent">
+            <TableHead class="w-10 pl-4 pr-2" />
+            <TableHead class="px-3">Размер</TableHead>
+            <TableHead class="px-3">Артикул (SKU)</TableHead>
+            <TableHead class="px-3">Штрихкод</TableHead>
+            <TableHead class="w-28 px-3">Цена</TableHead>
+            <TableHead class="w-24 px-3">Остаток</TableHead>
+            <TableHead class="w-12 pl-2 pr-4" />
+          </TableRow>
+        </TableHeader>
       <draggable
         v-model="variants"
         tag="tbody"
@@ -240,10 +240,10 @@ export default {
       >
         <template #item="{ element: variant }">
           <TableRow>
-            <TableCell class="py-1">
+            <TableCell class="pl-4 pr-2 py-1.5">
               <GripVertical class="drag-handle size-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="px-3 py-1.5">
               <Input
                 v-model="variant.size"
                 placeholder="XS, S, M..."
@@ -251,7 +251,7 @@ export default {
                 @input="onFieldChange(variant)"
               />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="px-3 py-1.5">
               <Input
                 v-model="variant.sku"
                 placeholder="SKU"
@@ -259,13 +259,13 @@ export default {
                 @input="onFieldChange(variant)"
               />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="px-3 py-1.5">
               <BarcodeInput
                 :model-value="variant.barcode || ''"
                 @update:model-value="variant.barcode = $event; onFieldChange(variant)"
               />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="px-3 py-1.5">
               <Input
                 type="number"
                 step="0.01"
@@ -276,7 +276,7 @@ export default {
                 class="h-8"
               />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="px-3 py-1.5">
               <Input
                 type="number"
                 min="0"
@@ -286,7 +286,7 @@ export default {
                 class="h-8"
               />
             </TableCell>
-            <TableCell class="py-1">
+            <TableCell class="pl-2 pr-4 py-1.5">
               <AlertDialog>
                 <AlertDialogTrigger as-child>
                   <Button
@@ -318,13 +318,15 @@ export default {
           </TableRow>
         </template>
       </draggable>
-    </Table>
+      </Table>
 
-    <!-- Saving indicator -->
-    <div v-if="Object.keys(pendingSaves).length > 0" class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Loader2 class="size-3 animate-spin" />
-      <span>Сохранение...</span>
-    </div>
+      <div
+        v-if="Object.keys(pendingSaves).length > 0"
+        class="flex items-center gap-2 border-t px-4 py-2 text-sm text-muted-foreground"
+      >
+        <Loader2 class="size-3 animate-spin" />
+        <span>Сохранение...</span>
+      </div>
     </div>
   </div>
 </template>
