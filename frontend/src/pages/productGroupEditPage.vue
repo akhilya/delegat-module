@@ -602,7 +602,7 @@ export default {
                 Добавить
               </Button>
             </CardHeader>
-            <CardContent class="p-0">
+            <CardContent class="px-6 pb-6 pt-0">
               <EmptyState
                 v-if="members.length === 0"
                 title="Нет товаров"
@@ -620,8 +620,9 @@ export default {
 
               <div
                 v-else
-                class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar"
+                class="overflow-hidden rounded-lg border"
               >
+                <div class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
                     <TableRow class="hover:bg-transparent">
@@ -722,6 +723,7 @@ export default {
                     </template>
                   </draggable>
                 </table>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -774,7 +776,8 @@ export default {
                       · {{ supportedConnections.length }}
                     </span>
                   </h3>
-                  <ul class="divide-y divide-border/60">
+                  <div class="rounded-lg border overflow-hidden">
+                    <ul class="divide-y divide-border/60">
                       <li
                         v-for="connection in supportedConnections"
                         :key="connection.id"
@@ -865,7 +868,8 @@ export default {
                           }}
                         </p>
                       </li>
-                  </ul>
+                    </ul>
+                  </div>
                 </section>
 
                 <section v-if="unsupportedConnections.length" class="space-y-2">
@@ -875,7 +879,8 @@ export default {
                       · {{ unsupportedConnections.length }}
                     </span>
                   </h3>
-                  <ul class="divide-y divide-border/40 rounded-lg bg-muted/20">
+                  <div class="rounded-lg border border-dashed bg-muted/20 overflow-hidden">
+                    <ul class="divide-y divide-border/40">
                       <li
                         v-for="connection in unsupportedConnections"
                         :key="connection.id"
@@ -910,7 +915,8 @@ export default {
                           Не поддерживается
                         </Badge>
                       </li>
-                  </ul>
+                    </ul>
+                  </div>
                 </section>
               </template>
             </CardContent>
