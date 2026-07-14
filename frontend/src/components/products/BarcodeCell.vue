@@ -1,11 +1,14 @@
 <script>
 import JsBarcode from "jsbarcode";
 import { ref, onMounted, nextTick, watch } from "vue";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Download } from "lucide-vue-next";
+import { downloadBarcodePng } from "@/lib/barcodeDownload.js";
 
 function getLineColor() {
   const raw = getComputedStyle(document.documentElement)
@@ -15,7 +18,7 @@ function getLineColor() {
 }
 
 export default {
-  components: { Popover, PopoverContent, PopoverTrigger },
+  components: { Popover, PopoverContent, PopoverTrigger, Button, Download },
   props: {
     barcode: { type: String, required: true },
   },
@@ -54,6 +57,10 @@ export default {
       } catch {}
     }
 
+    function downloadBarcode() {
+      downloadBarcodePng(props.barcode, format);
+    }
+
     onMounted(() => {
       nextTick(renderSmall);
     });
@@ -73,7 +80,7 @@ export default {
       }
     });
 
-    return { smallSvg, largeSvg, isOpen };
+    return { smallSvg, largeSvg, isOpen, downloadBarcode };
   },
 };
 </script>
@@ -92,9 +99,19 @@ export default {
         </span>
       </button>
     </PopoverTrigger>
-    <PopoverContent class="w-auto p-2" align="center">
-      <div class="rounded bg-background p-1">
-        <svg ref="largeSvg"></svg>
+    <PopoverContent class="!max-w-none !w-max p-2" align="center">
+      <div class="flex flex-col items-stretch gap-2">
+        <svg ref="largeSvg" class="block"></svg>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          class="w-full shrink-0"
+          @click="downloadBarcode"
+        >
+          <Download class="size-3.5 mr-1.5" />
+          Скачать PNG
+        </Button>
       </div>
     </PopoverContent>
   </Popover>

@@ -71,7 +71,7 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
             @click="emit('preview', index)"
           >
             <img
-              :src="`/api/files/${element.fileId}/thumbnail?w=256`"
+              :src="element.previewUrl || `/api/files/${element.fileId}/thumbnail?w=256`"
               :alt="element.displayName || 'Фото товара'"
               :class="[
                 'size-full pointer-events-none',

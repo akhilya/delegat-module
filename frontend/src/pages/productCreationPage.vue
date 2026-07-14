@@ -6,38 +6,38 @@ import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import Label from "@/components/ui/label/Label.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
+import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
+import ProductGallerySidebar from "@/components/products/ProductGallerySidebar.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import {
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
-  FormLabel,
-  FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import Separator from "@/components/ui/separator/Separator.vue";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
-import { Loader2, FolderOpen, Globe, Layers, ExternalLink, Plus, Copy } from "lucide-vue-next";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Plus } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
 import { useRouter, useRoute } from "vue-router";
-import { ref, watch, computed, nextTick } from "vue";
+import { ref, watch, computed, nextTick, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
+import {
+  attributesToFormRecord,
+  buildAttributesSchema,
+  formRecordToAttributeValues,
+} from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { http } from "@/main";
+import { confirm } from "@/composables/useConfirm";
+
+const GROUP_NONE = "__none__";
 
 export default {
   components: {
@@ -47,35 +47,26 @@ export default {
     Breadcrumbs,
     Button,
     FormControl,
-    FormDescription,
     FormField,
     FormItem,
-    FormLabel,
-    FormMessage,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+
     Input,
     Textarea,
-    Label,
     ProductAttributeForm,
     StoreAttributeForm,
+    ProductGroupSidebar,
+    ProductGallerySidebar,
     BarcodeInput,
-    Loader2,
-    FolderOpen,
-    Globe,
-    Layers,
-    ExternalLink,
-    Plus,
-    Copy,
-    Separator,
+    SearchableSelect,
+    SettingsFormField,
+    FieldGroup,
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
-    ProductGroupSidebar,
+    Loader2,
+    Plus,
   },
   data() {
     return {
@@ -95,45 +86,224 @@ export default {
     const categories = ref([]);
     const selectedCategoryId = ref(null);
     const selectedCategory = ref(null);
-    const attributeValues = ref([]);
     const storeAttributes = ref([]);
-    const storeAttributeValues = ref([]);
     const isLoadingStoreAttributes = ref(false);
-    const visibleCategoryAttributes = computed(() =>
-      selectedCategory.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
+    const categoryError = ref("");
+    const visibleCategoryAttributes = computed(
+      () => selectedCategory.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
     );
     const visibleStoreAttributes = computed(() =>
       storeAttributes.value.filter((a) => a.showOnProductPage !== false),
     );
+
+    const formSchema = computed(() => toTypedSchema(
+      z.object({
+        product: z.object({
+          sku: z.string().min(1, "Артикул обязателен").max(20),
+          barcode: z.string().max(13).optional().nullable(),
+          name: z.string().min(1, "Название обязательно").max(100),
+          description: z.string().max(5000).default(""),
+          storageQuantity: z
+            .number()
+            .int()
+            .min(0, "Количество не может быть отрицательным")
+            .optional()
+            .nullable(),
+          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
+        }),
+        categoryAttributes: buildAttributesSchema(visibleCategoryAttributes.value),
+        storeAttributes: buildAttributesSchema(visibleStoreAttributes.value),
+      }),
+    ));
+
+    const form = useForm({
+      validationSchema: formSchema,
+      initialValues: {
+        product: {
+          sku: "",
+          barcode: "",
+          name: "",
+          description: "",
+          storageQuantity: null,
+          price: null,
+        },
+        categoryAttributes: {},
+        storeAttributes: {},
+      },
+    });
+
     const productGroups = ref([]);
     const selectedGroupId = ref(null);
     const isLoadingGroups = ref(false);
     const descriptionRef = ref(null);
+    const sortedImages = ref([]);
+    const galleryFileInput = ref(null);
+    const isUploadingGallery = ref(false);
+    const groupDetail = ref(null);
+    let pendingImageId = 0;
 
-    function autoResizeDescription() {
-      const ref = descriptionRef.value;
-      const el = ref?.$el ?? ref;
-      if (!el || el.tagName !== 'TEXTAREA') return;
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
+    function revokeImagePreview(img) {
+      if (img?.previewUrl) URL.revokeObjectURL(img.previewUrl);
     }
 
-    // Fetch store attributes on mount
+    function reindexGalleryImages() {
+      sortedImages.value.forEach((img, idx) => {
+        img.index = idx;
+      });
+    }
+
+    function triggerGalleryUpload() {
+      galleryFileInput.value?.click();
+    }
+
+    function handleGalleryUpload(event) {
+      const fileList = event.target.files;
+      if (!fileList?.length) return;
+
+      for (const file of fileList) {
+        pendingImageId += 1;
+        sortedImages.value.push({
+          fileId: `pending-${pendingImageId}`,
+          localFile: file,
+          previewUrl: URL.createObjectURL(file),
+          index: sortedImages.value.length,
+        });
+      }
+      reindexGalleryImages();
+
+      if (galleryFileInput.value) galleryFileInput.value.value = "";
+    }
+
+    function onGalleryDragChange() {
+      reindexGalleryImages();
+    }
+
+    async function removeGalleryImage(index) {
+      const ok = await confirm({
+        title: "Убрать фото из списка?",
+        description: "Изображение не будет добавлено к товару.",
+        confirmLabel: "Убрать",
+      });
+      if (!ok) return;
+
+      const [removed] = sortedImages.value.splice(index, 1);
+      revokeImagePreview(removed);
+      reindexGalleryImages();
+    }
+
+    function openGalleryPreview(index) {
+      const img = sortedImages.value[index];
+      if (!img?.previewUrl) return;
+      window.open(img.previewUrl, "_blank", "noopener,noreferrer");
+    }
+
+    async function persistPendingImages(productId) {
+      if (!sortedImages.value.length) return true;
+
+      try {
+        const fileIds = [];
+        for (const img of sortedImages.value) {
+          if (!img.localFile) continue;
+
+          const formData = new FormData();
+          formData.append("files", img.localFile);
+          const response = await http({
+            url: `/products/${productId}/files`,
+            method: "PUT",
+            data: formData,
+            headers: { "Content-Type": "multipart/form-data" },
+            timeout: 60 * 60 * 1000,
+          });
+
+          const uploaded = Array.isArray(response.data) ? response.data : [response.data];
+          fileIds.push(...uploaded.map((f) => f.id));
+        }
+
+        if (!fileIds.length) return true;
+
+        let ok = false;
+        await store.dispatch("postProductImages", {
+          productId,
+          files: fileIds,
+          onSuccess: () => {
+            ok = true;
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+          },
+        });
+        return ok;
+      } catch (error) {
+        displaySonnerError(error);
+        return false;
+      }
+    }
+
+    onUnmounted(() => {
+      sortedImages.value.forEach(revokeImagePreview);
+    });
+
+    function attributeCountLabel(n) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod100 >= 11 && mod100 <= 14) return "атрибутов";
+      if (mod10 === 1) return "атрибут";
+      if (mod10 >= 2 && mod10 <= 4) return "атрибута";
+      return "атрибутов";
+    }
+
+    function autoResizeDescription() {
+      const el = descriptionRef.value?.$el ?? descriptionRef.value;
+      if (!el || el.tagName !== "TEXTAREA") return;
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+
+    const categorySelectOptions = computed(() =>
+      categories.value.map((c) => ({
+        value: String(c.id),
+        label: c.name,
+      })),
+    );
+
+    const currentCategorySelectValue = computed(() =>
+      selectedCategoryId.value ? String(selectedCategoryId.value) : "",
+    );
+
+    const groupSelectOptions = computed(() => [
+      { value: GROUP_NONE, label: "Без группы" },
+      ...productGroups.value.map((g) => ({
+        value: String(g.id),
+        label: g.name,
+      })),
+    ]);
+
+    const currentGroupSelectValue = computed(() =>
+      selectedGroupId.value ? String(selectedGroupId.value) : GROUP_NONE,
+    );
+
+    function onCategorySelectChange(value) {
+      selectedCategoryId.value = value ? parseInt(value) : null;
+      categoryError.value = "";
+    }
+
+    function onGroupSelectChange(value) {
+      selectedGroupId.value = value && value !== GROUP_NONE ? parseInt(value) : null;
+    }
+
     async function fetchStoreAttributes() {
       isLoadingStoreAttributes.value = true;
       await store.dispatch("getAllStoreAttributes", {
         onSuccess: (response) => {
           storeAttributes.value = response.data.value || [];
-          // Initialize default values for store attributes
-          storeAttributeValues.value = [];
-          storeAttributes.value.forEach((attr) => {
-            if (attr.defaultValue) {
-              storeAttributeValues.value.push({
-                storeAttributeId: attr.id,
-                value: attr.defaultValue,
-              });
-            }
-          });
+          form.setFieldValue(
+            "storeAttributes",
+            attributesToFormRecord(
+              storeAttributes.value,
+              form.values.storeAttributes,
+              "storeAttributeId",
+            ),
+          );
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -142,9 +312,6 @@ export default {
       isLoadingStoreAttributes.value = false;
     }
 
-    fetchStoreAttributes();
-
-    // Fetch product groups on mount
     async function fetchProductGroups() {
       isLoadingGroups.value = true;
       await store.dispatch("getAllGroups", {
@@ -152,21 +319,12 @@ export default {
           productGroups.value = response.data.value || [];
         },
         onError: (error) => {
-          console.error("Failed to load product groups:", error);
+          displaySonnerError(error);
         },
       });
       isLoadingGroups.value = false;
     }
 
-    fetchProductGroups();
-
-    // Pre-fill from existing product (via query params)
-    const fromProductId = route.query.fromProduct;
-    const fromGroupId = route.query.groupId;
-    const isPreFilling = ref(false);
-    const groupDetail = ref(null);
-
-    // Fetch group detail for sidebar
     async function fetchGroupDetail(groupId) {
       if (!groupId) {
         groupDetail.value = null;
@@ -179,41 +337,49 @@ export default {
           groupDetail.value = {
             id: group.id,
             name: group.name,
-            members: group.members?.map(m => ({
-              productId: m.product.id,
-              productName: m.product.name || "",
-              productSku: m.product.sku || "",
-              imageUrl: m.product.images?.[0]?.url,
-              imageThumbnailUrl: m.product.images?.[0]?.thumbnailUrl,
-            })) || [],
+            members:
+              group.members?.map((m) => ({
+                productId: m.product.id,
+                productName: m.product.name || "",
+                productSku: m.product.sku || "",
+                imageUrl: m.product.images?.[0]?.url,
+                imageThumbnailUrl: m.product.images?.[0]?.thumbnailUrl,
+              })) || [],
           };
         },
-        onError: () => {},
+        onError: () => {
+          groupDetail.value = null;
+        },
       });
     }
-    if (fromGroupId) fetchGroupDetail(parseInt(fromGroupId));
 
-    // Update sidebar when selected group changes
+    const fromProductId = route.query.fromProduct;
+    const fromGroupId = route.query.groupId;
+
+    function getDuplicateUrl(sourceProductId) {
+      const params = new URLSearchParams();
+      params.set("fromProduct", String(sourceProductId));
+      if (fromGroupId) params.set("groupId", String(fromGroupId));
+      else if (selectedGroupId.value) params.set("groupId", String(selectedGroupId.value));
+      return `/products/create?${params.toString()}`;
+    }
+
+    const duplicateProductUrl = computed(() => {
+      if (!fromProductId) return null;
+      return getDuplicateUrl(fromProductId);
+    });
+
     watch(selectedGroupId, (newId) => {
       fetchGroupDetail(newId);
     });
 
-    function getDuplicateUrl(sourceProductId) {
-      const params = new URLSearchParams();
-      params.set('fromProduct', String(sourceProductId));
-      if (fromGroupId) params.set('groupId', String(fromGroupId));
-      return `/products/create?${params.toString()}`;
-    }
-
     async function prefillFromProduct() {
       if (!fromProductId) return;
-      isPreFilling.value = true;
       await store.dispatch("getProduct", {
         productId: parseInt(fromProductId),
         onSuccess: async (response) => {
           const product = response.data.value;
 
-          // Set form values (skip SKU and barcode)
           form.setValues({
             product: {
               sku: "",
@@ -225,30 +391,38 @@ export default {
             },
           });
 
-          // Set category — the watcher will load category details
           const catId = product.category?.id || product.categoryId;
           if (catId) {
             selectedCategoryId.value = catId;
 
-            // Wait for category watcher to finish loading, then overwrite attribute values
             const unwatchCategory = watch(selectedCategory, (cat) => {
               if (cat) {
                 nextTick(() => {
-                  if (product.attributeValues?.length) {
-                    attributeValues.value = product.attributeValues.map((av) => ({ ...av }));
-                  }
+                  form.setFieldValue(
+                    "categoryAttributes",
+                    attributesToFormRecord(
+                      cat.attributes,
+                      product.attributeValues || [],
+                      "attributeId",
+                    ),
+                  );
                   unwatchCategory();
                 });
               }
             });
           }
 
-          // Set store attribute values
           if (product.storeAttributeValues?.length) {
-            storeAttributeValues.value = product.storeAttributeValues.map((av) => ({ ...av }));
+            form.setFieldValue(
+              "storeAttributes",
+              attributesToFormRecord(
+                storeAttributes.value,
+                product.storeAttributeValues,
+                "storeAttributeId",
+              ),
+            );
           }
 
-          // Set group
           if (fromGroupId) {
             selectedGroupId.value = parseInt(fromGroupId);
           }
@@ -259,10 +433,8 @@ export default {
           displaySonnerError(error);
         },
       });
-      isPreFilling.value = false;
     }
 
-    // Fetch categories on mount
     async function fetchCategories() {
       isLoadingCategories.value = true;
       await store.dispatch("getAllCategories", {
@@ -276,27 +448,25 @@ export default {
       isLoadingCategories.value = false;
     }
 
+    fetchStoreAttributes();
+    fetchProductGroups();
+    if (fromGroupId) fetchGroupDetail(parseInt(fromGroupId));
     fetchCategories().then(() => prefillFromProduct());
 
-    // Watch for category selection change
     watch(selectedCategoryId, async (newVal) => {
       if (newVal) {
         await store.dispatch("getCategory", {
           id: newVal,
           onSuccess: (response) => {
             selectedCategory.value = response.data.value;
-            // Initialize default values for attributes
-            attributeValues.value = [];
-            if (selectedCategory.value.attributes) {
-              selectedCategory.value.attributes.forEach((attr) => {
-                if (attr.defaultValue) {
-                  attributeValues.value.push({
-                    attributeId: attr.id,
-                    value: attr.defaultValue,
-                  });
-                }
-              });
-            }
+            form.setFieldValue(
+              "categoryAttributes",
+              attributesToFormRecord(
+                selectedCategory.value.attributes,
+                [],
+                "attributeId",
+              ),
+            );
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -305,65 +475,15 @@ export default {
         });
       } else {
         selectedCategory.value = null;
-        attributeValues.value = [];
+        form.setFieldValue("categoryAttributes", {});
       }
-    });
-
-    const formSchema = toTypedSchema(
-      z.object({
-        product: z.object({
-          sku: z.string().min(1, "Артикул обязателен").max(20),
-          barcode: z.string().max(13).optional().nullable(),
-          name: z.string().min(1, "Название обязательно").max(100),
-          description: z.string().max(5000).default(""),
-          storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
-          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
-        }),
-      }),
-    );
-
-    const form = useForm({
-      validationSchema: formSchema,
-      initialValues: {
-        product: {
-          sku: "",
-          barcode: "",
-          name: "",
-          description: "",
-        },
-      },
     });
 
     const onSubmit = form.handleSubmit(async (values) => {
       if (!selectedCategoryId.value) {
+        categoryError.value = "Выберите категорию";
         displaySonnerError("Выберите категорию товара");
         return;
-      }
-
-      // Validate required category attributes
-      if (selectedCategory.value?.attributes) {
-        const requiredAttrs = selectedCategory.value.attributes.filter(
-          (a) => a.isRequired && a.showOnProductPage !== false,
-        );
-        for (const attr of requiredAttrs) {
-          const attrValue = attributeValues.value.find((av) => av.attributeId === attr.id);
-          if (!attrValue || !attrValue.value) {
-            displaySonnerError(`Заполните обязательное поле категории: ${attr.name}`);
-            return;
-          }
-        }
-      }
-
-      // Validate required store attributes
-      const requiredStoreAttrs = storeAttributes.value.filter(
-        (a) => a.isRequired && a.showOnProductPage !== false,
-      );
-      for (const attr of requiredStoreAttrs) {
-        const attrValue = storeAttributeValues.value.find((av) => av.storeAttributeId === attr.id);
-        if (!attrValue || !attrValue.value) {
-          displaySonnerError(`Заполните обязательное глобальное поле: ${attr.name}`);
-          return;
-        }
       }
 
       isSubmitting.value = true;
@@ -371,30 +491,47 @@ export default {
       const input = {
         ...values.product,
         categoryId: selectedCategoryId.value,
-        attributeValues: attributeValues.value,
-        storeAttributeValues: storeAttributeValues.value,
+        attributeValues: formRecordToAttributeValues(values.categoryAttributes, "attributeId"),
+        storeAttributeValues: formRecordToAttributeValues(values.storeAttributes, "storeAttributeId"),
       };
 
       try {
+        if (sortedImages.value.length > 0) {
+          isUploadingGallery.value = true;
+        }
+
         await store.dispatch("createProduct", {
           input,
           onSuccess: async (response) => {
             const createdProduct = response.data.value;
+            let successMessage = "Товар успешно создан.";
 
-            // Add to group if selected
+            if (sortedImages.value.length > 0) {
+              const imagesOk = await persistPendingImages(createdProduct.id);
+              sortedImages.value.forEach(revokeImagePreview);
+              sortedImages.value = [];
+              if (!imagesOk) {
+                successMessage = "Товар создан, но не удалось загрузить фотографии.";
+              }
+            }
+
             if (selectedGroupId.value && createdProduct.id) {
               await store.dispatch("addProductsToGroup", {
                 groupId: selectedGroupId.value,
                 productIds: [createdProduct.id],
                 onSuccess: () => {
-                  displaySonnerSuccess("Товар создан и добавлен в группу.");
+                  if (successMessage === "Товар успешно создан.") {
+                    displaySonnerSuccess("Товар создан и добавлен в группу.");
+                  } else {
+                    displaySonnerSuccess(`${successMessage} Товар добавлен в группу.`);
+                  }
                 },
                 onError: () => {
-                  displaySonnerSuccess("Товар создан, но не удалось добавить в группу.");
+                  displaySonnerSuccess(`${successMessage} Не удалось добавить в группу.`);
                 },
               });
             } else {
-              displaySonnerSuccess("Товар успешно создан.");
+              displaySonnerSuccess(successMessage);
             }
 
             router.push(createdProduct.next);
@@ -408,16 +545,9 @@ export default {
         displaySonnerError(error);
       } finally {
         isSubmitting.value = false;
+        isUploadingGallery.value = false;
       }
     });
-
-    function updateAttributeValues(newValues) {
-      attributeValues.value = newValues;
-    }
-
-    function updateStoreAttributeValues(newValues) {
-      storeAttributeValues.value = newValues;
-    }
 
     return {
       form,
@@ -429,225 +559,312 @@ export default {
       selectedCategory,
       visibleCategoryAttributes,
       visibleStoreAttributes,
-      attributeValues,
+      attributeCountLabel,
       storeAttributes,
-      storeAttributeValues,
       isLoadingStoreAttributes,
-      updateAttributeValues,
-      updateStoreAttributeValues,
+      categoryError,
+
       productGroups,
       selectedGroupId,
       isLoadingGroups,
       descriptionRef,
       autoResizeDescription,
       groupDetail,
-      fromProductId,
       getDuplicateUrl,
+      duplicateProductUrl,
+      categorySelectOptions,
+      currentCategorySelectValue,
+      onCategorySelectChange,
+      groupSelectOptions,
+      currentGroupSelectValue,
+      onGroupSelectChange,
+      sortedImages,
+      galleryFileInput,
+      isUploadingGallery,
+      triggerGalleryUpload,
+      handleGalleryUpload,
+      onGalleryDragChange,
+      removeGalleryImage,
+      openGalleryPreview,
     };
   },
 };
 </script>
 
 <template>
-  <Page>
-    <NavigationBar />
+  <Page class="!min-h-0">
+    <div class="fixed top-0 z-30 bg-background/95 backdrop-blur-sm left-0 right-0 md:left-[var(--sidebar-width)]">
+      <div class="adaptive-padding">
+        <NavigationBar :sticky="false" />
+      </div>
+    </div>
+    <div class="h-[7rem] sm:h-14 shrink-0" aria-hidden="true" />
     <Breadcrumbs :items="breadcrumbs" />
-    <PageSection class="flex gap-6" style="min-height: calc(100vh - 8.5rem)">
-      <!-- Left: Product Group sidebar -->
-      <ProductGroupSidebar
-        v-if="groupDetail"
-        :group="groupDetail"
-        :disabled="isSubmitting"
-        :get-duplicate-url="getDuplicateUrl"
+    <PageSection :loading="isLoadingCategories && categories.length === 0" class="!min-h-0 !grow-0 mb-0">
+      <input
+        ref="galleryFileInput"
+        type="file"
+        accept="image/*"
+        multiple
+        class="hidden"
+        @change="handleGalleryUpload"
       />
-      <!-- Main content -->
-      <div class="grow flex flex-col min-w-0">
-      <form @submit.prevent="onSubmit" class="space-y-4 flex flex-col">
-        <!-- Card 1: Main fields -->
-        <Card>
-          <CardContent class="pt-0 space-y-4">
-            <!-- Category Selection -->
-            <div class="space-y-2">
-              <Label>Категория <span class="text-destructive">*</span></Label>
-              <Select v-model="selectedCategoryId" :disabled="isLoadingCategories">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Выберите категорию товара..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="category in categories"
-                    :key="category.id"
-                    :value="category.id"
-                  >
-                    <span class="flex items-center gap-2">
-                      <FolderOpen class="size-4" />
-                      {{ category.name }}
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p v-if="categories.length === 0 && !isLoadingCategories" class="text-sm text-muted-foreground">
-                Сначала создайте категорию товаров
-              </p>
-            </div>
+      <div class="w-full max-w-[90rem]">
+        <div class="flex items-start gap-4 lg:gap-5">
+          <ProductGroupSidebar
+            :group="groupDetail"
+            :disabled="isSubmitting"
+            :add-url="duplicateProductUrl"
+            :get-duplicate-url="getDuplicateUrl"
+          />
+          <div class="relative min-w-0 flex-1 overflow-hidden">
+            <form
+              id="product-create-form"
+              novalidate
+              @submit.prevent="onSubmit"
+              class="flex min-w-0 flex-col overflow-hidden"
+            >
+              <ProductGallerySidebar
+                v-model:images="sortedImages"
+                layout="inline"
+                class="lg:hidden mb-4"
+                :is-uploading="isUploadingGallery"
+                :disabled="isSubmitting"
+                @drag-change="onGalleryDragChange"
+                @remove="removeGalleryImage"
+                @upload="triggerGalleryUpload"
+                @preview="openGalleryPreview"
+              />
 
-            <FormField v-slot="{ componentField }" name="product.sku">
-              <FormItem>
-                <FormLabel>Артикул <span class="text-destructive">*</span></FormLabel>
-                <FormControl>
-                  <Input type="text" v-bind="componentField" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
+              <div class="flex w-full min-w-0 flex-col gap-6 overflow-hidden">
+                <Card class="border-0 shadow-none">
+                  <CardHeader>
+                    <CardTitle class="text-base">Основные данные</CardTitle>
+                    <CardDescription>
+                      Категория, артикул, штрихкод, название и цена. Количество и цена по размерам — если у категории
+                      включены размеры.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FieldGroup class="gap-5">
+                      <SettingsFormField
+                        label="Категория"
+                        :error="categoryError"
+                        required
+                      >
+                        <SearchableSelect
+                          :model-value="currentCategorySelectValue"
+                          :options="categorySelectOptions"
+                          placeholder="Выберите категорию..."
+                          :disabled="isLoadingCategories || isSubmitting"
+                          :invalid="!!categoryError"
+                          @update:model-value="onCategorySelectChange"
+                        />
+                        <p
+                          v-if="categories.length === 0 && !isLoadingCategories"
+                          class="text-xs text-muted-foreground mt-1.5"
+                        >
+                          Сначала создайте категорию товаров
+                        </p>
+                      </SettingsFormField>
 
-            <FormField v-slot="{ value, setValue }" name="product.barcode">
-              <FormItem>
-                <FormLabel>Штрихкод (EAN)</FormLabel>
-                <FormControl>
-                  <BarcodeInput
-                    :model-value="value || ''"
-                    @update:model-value="setValue($event)"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
+                      <SettingsFormField
+                        v-if="productGroups.length > 0"
+                        label="Группа товаров"
+                      >
+                        <div class="space-y-1.5">
+                          <SearchableSelect
+                            :model-value="currentGroupSelectValue"
+                            :options="groupSelectOptions"
+                            placeholder="Выберите группу..."
+                            :disabled="isLoadingGroups || isSubmitting"
+                            @update:model-value="onGroupSelectChange"
+                          />
+                          <router-link
+                            v-if="groupDetail"
+                            :to="`/product-groups/${groupDetail.id}/edit`"
+                            class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Редактировать группу
+                          </router-link>
+                        </div>
+                      </SettingsFormField>
 
-            <FormField v-slot="{ componentField }" name="product.name">
-              <FormItem>
-                <FormLabel>Название <span class="text-destructive">*</span></FormLabel>
-                <FormControl>
-                  <Input type="text" v-bind="componentField" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
+                      <FormField v-slot="{ componentField, errorMessage }" name="product.sku">
+                        <FormItem class="gap-0">
+                          <SettingsFormField label="Артикул" label-for="product-sku" :error="errorMessage">
+                            <FormControl>
+                              <Input
+                                id="product-sku"
+                                type="text"
+                                class="font-mono"
+                                v-bind="componentField"
+                              />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
 
-            <FormField v-slot="{ componentField }" name="product.description">
-              <FormItem>
-                <FormLabel>Описание</FormLabel>
-                <FormControl>
-                  <Textarea ref="descriptionRef" v-bind="componentField" @input="autoResizeDescription" class="overflow-hidden resize-none" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            </FormField>
+                      <FormField v-slot="{ value, setValue, errorMessage }" name="product.barcode">
+                        <FormItem class="gap-0">
+                          <SettingsFormField label="Штрихкод (EAN)" label-for="product-barcode" :error="errorMessage">
+                            <FormControl>
+                              <BarcodeInput
+                                id="product-barcode"
+                                :model-value="value || ''"
+                                @update:model-value="setValue($event)"
+                              />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
 
-            <!-- Quantity + Price -->
-            <div class="grid grid-cols-2 gap-4">
-              <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
-                <FormItem>
-                  <FormLabel>Количество на складе</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      :model-value="value"
-                      @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                      <FormField v-slot="{ componentField, errorMessage }" name="product.name">
+                        <FormItem class="gap-0">
+                          <SettingsFormField label="Название" label-for="product-name" :error="errorMessage" required>
+                            <FormControl>
+                              <Input id="product-name" type="text" v-bind="componentField" />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
+
+                      <FormField v-slot="{ componentField, errorMessage }" name="product.description">
+                        <FormItem class="gap-0">
+                          <SettingsFormField label="Описание" label-for="product-description" :error="errorMessage">
+                            <FormControl>
+                              <Textarea
+                                id="product-description"
+                                ref="descriptionRef"
+                                v-bind="componentField"
+                                @input="autoResizeDescription"
+                                class="min-h-24 overflow-hidden resize-none"
+                              />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
+
+                      <div
+                        v-if="!selectedCategory?.hasSizes"
+                        class="grid grid-cols-1 sm:grid-cols-2 gap-5"
+                      >
+                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              label="Количество на складе"
+                              label-for="product-quantity"
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  id="product-quantity"
+                                  type="number"
+                                  :model-value="value"
+                                  @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+
+                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
+                          <FormItem class="gap-0">
+                            <SettingsFormField label="Цена (₽)" label-for="product-price" :error="errorMessage">
+                              <FormControl>
+                                <Input
+                                  id="product-price"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  :model-value="value"
+                                  @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </FieldGroup>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  v-if="selectedCategory && visibleCategoryAttributes.length > 0"
+                  class="border-0 shadow-none"
+                >
+                  <CardHeader>
+                    <CardTitle class="text-base">Атрибуты категории</CardTitle>
+                    <CardDescription>
+                      {{ visibleCategoryAttributes.length }}
+                      {{ attributeCountLabel(visibleCategoryAttributes.length) }}.
+                      Значения из настроек категории «{{ selectedCategory.name }}».
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent class="pt-0">
+                    <ProductAttributeForm
+                      :attributes="selectedCategory.attributes"
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
+                  </CardContent>
+                </Card>
 
-              <FormField v-slot="{ value, setValue }" name="product.price">
-                <FormItem>
-                  <FormLabel>Цена</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      :model-value="value"
-                      @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                <Card
+                  v-if="visibleStoreAttributes.length > 0"
+                  class="border-0 shadow-none"
+                >
+                  <CardHeader>
+                    <CardTitle class="text-base">Глобальные атрибуты</CardTitle>
+                    <CardDescription>
+                      {{ visibleStoreAttributes.length }}
+                      {{ attributeCountLabel(visibleStoreAttributes.length) }}.
+                      Общие для всех товаров магазина.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent class="pt-0">
+                    <StoreAttributeForm
+                      :attributes="storeAttributes"
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
-            </div>
+                  </CardContent>
+                </Card>
 
-            <!-- Product Group Selection -->
-            <div v-if="productGroups.length > 0" class="space-y-2">
-              <Label>Группа товара</Label>
-              <Select v-model="selectedGroupId" :disabled="isLoadingGroups">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Не выбрана" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="null">
-                    <span class="text-muted-foreground">Без группы</span>
-                  </SelectItem>
-                  <SelectItem
-                    v-for="group in productGroups"
-                    :key="group.id"
-                    :value="group.id"
-                  >
-                    <span class="flex items-center gap-2">
-                      <Layers class="size-4" />
-                      {{ group.name }}
-                      <span v-if="group.memberCount" class="text-muted-foreground text-xs">
-                        ({{ group.memberCount }})
-                      </span>
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+                <div class="h-[4.75rem] shrink-0" aria-hidden="true" />
+              </div>
+            </form>
+          </div>
 
-        <!-- Card 2: Category Attributes -->
-        <Card v-if="selectedCategory && visibleCategoryAttributes.length > 0">
-          <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <Layers class="size-4" />
-              Атрибуты категории
-              <span class="text-muted-foreground text-sm font-normal">
-                ({{ visibleCategoryAttributes.length }})
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProductAttributeForm
-              :attributes="selectedCategory.attributes"
-              :model-value="attributeValues"
-              @update:model-value="updateAttributeValues"
-            />
-          </CardContent>
-        </Card>
-
-        <!-- Card 3: Store Attributes -->
-        <Card v-if="visibleStoreAttributes.length > 0">
-          <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <Globe class="size-4" />
-              Глобальные атрибуты
-              <span class="text-muted-foreground text-sm font-normal">
-                ({{ visibleStoreAttributes.length }})
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StoreAttributeForm
-              :attributes="storeAttributes"
-              :model-value="storeAttributeValues"
-              @update:model-value="updateStoreAttributeValues"
-            />
-          </CardContent>
-        </Card>
-
-        <div class="flex justify-end">
-          <Button
-            type="submit"
-            size="lg"
-            :disabled="isSubmitting || !selectedCategoryId"
-          >
-            <Loader2 v-if="isSubmitting" class="animate-spin mr-2" />
-            Создать товар
-          </Button>
+          <ProductGallerySidebar
+            v-model:images="sortedImages"
+            :is-uploading="isUploadingGallery"
+            :disabled="isSubmitting"
+            @drag-change="onGalleryDragChange"
+            @remove="removeGalleryImage"
+            @upload="triggerGalleryUpload"
+            @preview="openGalleryPreview"
+          />
         </div>
-      </form>
       </div>
     </PageSection>
+
+    <div class="fixed bottom-0 z-20 left-0 right-0 md:left-[var(--sidebar-width)] pointer-events-none pb-3">
+      <div class="adaptive-padding pointer-events-none">
+        <div class="w-full max-w-[90rem] flex items-stretch gap-4 lg:gap-5 pointer-events-none">
+          <div class="w-96 shrink-0 hidden lg:block" aria-hidden="true" />
+          <div class="flex-1 min-w-0 pointer-events-auto flex items-center justify-end gap-3">
+              <Button
+                type="submit"
+                form="product-create-form"
+                size="sm"
+                :disabled="isSubmitting || !selectedCategoryId"
+              >
+                <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
+                <Plus v-else class="size-4 mr-2" />
+                Создать товар
+              </Button>
+          </div>
+          <div class="w-64 shrink-0 hidden lg:block" aria-hidden="true" />
+        </div>
+      </div>
+    </div>
   </Page>
 </template>

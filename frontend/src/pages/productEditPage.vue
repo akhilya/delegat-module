@@ -10,7 +10,6 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormMessage,
 } from "@/components/ui/form";
 import {
   AlertDialog,
@@ -74,6 +73,13 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
+import {
+  attributesToFormRecord,
+  buildAttributesSchema,
+  categoryAttributeCacheToValues,
+  formRecordToAttributeValues,
+  mergeCategoryAttributesIntoCache,
+} from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { http, router } from "@/main";
 import { confirm } from "@/composables/useConfirm";
@@ -90,7 +96,6 @@ export default {
     FormControl,
     FormField,
     FormItem,
-    FormMessage,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -182,20 +187,117 @@ export default {
     const images = ref(undefined);
     const notes = ref([]);
     const category = ref(null);
-    const attributeValues = ref([]);
+    const categories = ref([]);
+    const selectedCategoryId = ref(null);
+    const savedCategoryId = ref(null);
+    const allCategoryAttributeValues = ref({});
+    const isLoadingCategories = ref(false);
+    const isChangingCategory = ref(false);
     const storeAttributes = ref([]);
-    const storeAttributeValues = ref([]);
+    const loadedStoreAttributeValues = ref([]);
     const isLoadingStoreAttributes = ref(false);
     const productGroup = ref(null);
     const isLoadingGroup = ref(false);
-    const categoryAttributeErrors = ref({});
-    const storeAttributeErrors = ref({});
     const visibleCategoryAttributes = computed(() =>
       category.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
     );
     const visibleStoreAttributes = computed(() =>
       storeAttributes.value.filter((a) => a.showOnProductPage !== false),
     );
+
+    const formSchema = computed(() => toTypedSchema(
+      z.object({
+        product: z.object({
+          name: z.string().min(1, "Название обязательно").max(100),
+          description: z.string().max(5000).optional(),
+          barcode: z.string().max(13).optional().nullable(),
+          storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
+          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
+        }),
+        categoryAttributes: buildAttributesSchema(visibleCategoryAttributes.value),
+        storeAttributes: buildAttributesSchema(visibleStoreAttributes.value),
+      }),
+    ));
+
+    const form = useForm({
+      validationSchema: formSchema,
+      initialValues: {
+        product: {
+          name: "",
+          description: "",
+          barcode: "",
+          storageQuantity: null,
+          price: null,
+        },
+        categoryAttributes: {},
+        storeAttributes: {},
+      },
+    });
+    const categorySelectOptions = computed(() =>
+      categories.value.map((item) => ({
+        value: String(item.id),
+        label: item.name,
+      })),
+    );
+
+    const currentCategorySelectValue = computed(() =>
+      selectedCategoryId.value ? String(selectedCategoryId.value) : "",
+    );
+
+    function syncCategoryAttributesCacheFromForm() {
+      allCategoryAttributeValues.value = mergeCategoryAttributesIntoCache(
+        allCategoryAttributeValues.value,
+        form.values.categoryAttributes,
+      );
+    }
+
+    function applyCategoryAttributesToForm() {
+      form.setFieldValue(
+        "categoryAttributes",
+        attributesToFormRecord(
+          category.value?.attributes,
+          categoryAttributeCacheToValues(allCategoryAttributeValues.value),
+          "attributeId",
+        ),
+      );
+    }
+
+    async function fetchCategories() {
+      isLoadingCategories.value = true;
+      await store.dispatch("getAllCategories", {
+        onSuccess: (response) => {
+          categories.value = response.data.value || [];
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      isLoadingCategories.value = false;
+    }
+
+    async function onCategorySelectChange(value) {
+      const nextCategoryId = value ? parseInt(value, 10) : null;
+      if (!nextCategoryId || nextCategoryId === selectedCategoryId.value) return;
+
+      syncCategoryAttributesCacheFromForm();
+      isChangingCategory.value = true;
+
+      await store.dispatch("getCategory", {
+        id: nextCategoryId,
+        onSuccess: (response) => {
+          selectedCategoryId.value = nextCategoryId;
+          category.value = response.data.value;
+          applyCategoryAttributesToForm();
+          markDirty();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+
+      isChangingCategory.value = false;
+    }
+
     function attributeCountLabel(n) {
       const mod10 = n % 10;
       const mod100 = n % 100;
@@ -285,6 +387,16 @@ export default {
       await store.dispatch("getAllStoreAttributes", {
         onSuccess: (response) => {
           storeAttributes.value = response.data.value || [];
+          form.setFieldValue(
+            "storeAttributes",
+            attributesToFormRecord(
+              storeAttributes.value,
+              Object.keys(form.values.storeAttributes || {}).length
+                ? form.values.storeAttributes
+                : loadedStoreAttributeValues.value,
+              "storeAttributeId",
+            ),
+          );
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -304,6 +416,7 @@ export default {
       });
     }
 
+    fetchCategories();
     fetchStoreAttributes();
     fetchAllGroups();
     fetchProduct();
@@ -332,8 +445,12 @@ export default {
           });
           images.value = product.images;
           category.value = product.category;
-          attributeValues.value = product.attributeValues || [];
-          storeAttributeValues.value = product.storeAttributeValues || [];
+          selectedCategoryId.value = product.category?.id ?? null;
+          savedCategoryId.value = selectedCategoryId.value;
+          allCategoryAttributeValues.value = Object.fromEntries(
+            (product.attributeValues || []).map((item) => [item.attributeId, item.value]),
+          );
+          loadedStoreAttributeValues.value = product.storeAttributeValues || [];
 
           form.setValues({
             product: {
@@ -343,6 +460,16 @@ export default {
               storageQuantity: product.storageQuantity,
               price: product.price,
             },
+            categoryAttributes: attributesToFormRecord(
+              product.category?.attributes,
+              product.attributeValues || [],
+              "attributeId",
+            ),
+            storeAttributes: attributesToFormRecord(
+              storeAttributes.value,
+              product.storeAttributeValues || [],
+              "storeAttributeId",
+            ),
           });
 
           store.commit("aiChat/setPageContext", {
@@ -370,69 +497,6 @@ export default {
       isProductLoading.value = false;
     }
 
-    const formSchema = toTypedSchema(
-      z.object({
-        product: z.object({
-          name: z.string().min(1, "Название обязательно").max(100),
-          description: z.string().max(5000).optional(),
-          barcode: z.string().max(13).optional().nullable(),
-          storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
-          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
-        }),
-      }),
-    );
-
-    const form = useForm({
-      validationSchema: formSchema,
-      initialValues: {
-        product: {
-          name: "",
-          description: "",
-          barcode: "",
-          storageQuantity: null,
-          price: null,
-        },
-      },
-    });
-
-    // Validate attributes and return true if valid
-    function validateAttributes() {
-      let isValid = true;
-      const catErrors = {};
-      const storeErrors = {};
-
-      // Validate required category attributes
-      if (category.value?.attributes) {
-        const requiredAttrs = category.value.attributes.filter(
-          (a) => a.isRequired && a.showOnProductPage !== false,
-        );
-        for (const attr of requiredAttrs) {
-          const attrValue = attributeValues.value.find((av) => av.attributeId === attr.id);
-          if (!attrValue || !attrValue.value) {
-            catErrors[attr.id] = "Обязательное поле";
-            isValid = false;
-          }
-        }
-      }
-
-      // Validate required store attributes
-      const requiredStoreAttrs = storeAttributes.value.filter(
-        (a) => a.isRequired && a.showOnProductPage !== false,
-      );
-      for (const attr of requiredStoreAttrs) {
-        const attrValue = storeAttributeValues.value.find((av) => av.storeAttributeId === attr.id);
-        if (!attrValue || !attrValue.value) {
-          storeErrors[attr.id] = "Обязательное поле";
-          isValid = false;
-        }
-      }
-
-      categoryAttributeErrors.value = catErrors;
-      storeAttributeErrors.value = storeErrors;
-
-      return isValid;
-    }
-
     function markDirty() {
       if (isInitialLoad.value) return;
       hasUnsavedChanges.value = true;
@@ -454,6 +518,28 @@ export default {
       return ok;
     }
 
+    async function syncProductAfterSave() {
+      const targetProductId = productId.value;
+      await store.dispatch("getProduct", {
+        productId: targetProductId,
+        onSuccess: (response) => {
+          if (targetProductId !== productId.value) return;
+
+          const product = response.data.value;
+          category.value = product.category;
+          selectedCategoryId.value = product.category?.id ?? null;
+          savedCategoryId.value = selectedCategoryId.value;
+          allCategoryAttributeValues.value = Object.fromEntries(
+            (product.attributeValues || []).map((item) => [item.attributeId, item.value]),
+          );
+          applyCategoryAttributesToForm();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+    }
+
     async function confirmDiscardChanges() {
       if (!hasUnsavedChanges.value) return true;
       return confirm({
@@ -473,21 +559,16 @@ export default {
         return false;
       }
 
-      // Then validate attributes
-      if (!validateAttributes()) {
-        if (showSuccessToast) {
-          displaySonnerError("Заполните все обязательные поля");
-        }
-        return false;
-      }
+      syncCategoryAttributesCacheFromForm();
 
       isSubmitting.value = true;
 
       const values = form.values;
       const input = {
         ...values.product,
-        attributeValues: attributeValues.value,
-        storeAttributeValues: storeAttributeValues.value,
+        ...(selectedCategoryId.value != null ? { categoryId: Number(selectedCategoryId.value) } : {}),
+        attributeValues: categoryAttributeCacheToValues(allCategoryAttributeValues.value),
+        storeAttributeValues: formRecordToAttributeValues(values.storeAttributes, "storeAttributeId"),
       };
 
       try {
@@ -509,6 +590,7 @@ export default {
         const imagesOk = await persistImages();
         if (!imagesOk) return false;
 
+        await syncProductAfterSave();
         hasUnsavedChanges.value = false;
         if (showSuccessToast) {
           displaySonnerSuccess("Товар успешно обновлён.");
@@ -529,17 +611,6 @@ export default {
     watch(
       () => form.values,
       () => {
-        markDirty();
-      },
-      { deep: true },
-    );
-
-    watch(
-      [attributeValues, storeAttributeValues],
-      () => {
-        if (isInitialLoad.value) return;
-        categoryAttributeErrors.value = {};
-        storeAttributeErrors.value = {};
         markDirty();
       },
       { deep: true },
@@ -597,14 +668,6 @@ export default {
           displaySonnerError(error);
         },
       });
-    }
-
-    function updateAttributeValues(newValues) {
-      attributeValues.value = newValues;
-    }
-
-    function updateStoreAttributeValues(newValues) {
-      storeAttributeValues.value = newValues;
     }
 
     function openSkuDialog() {
@@ -883,19 +946,21 @@ export default {
       notes,
       addNote,
       category,
+      categories,
+      selectedCategoryId,
+      isLoadingCategories,
+      isChangingCategory,
+      categorySelectOptions,
+      currentCategorySelectValue,
+      onCategorySelectChange,
       visibleCategoryAttributes,
       visibleStoreAttributes,
       attributeCountLabel,
-      attributeValues,
       storeAttributes,
-      storeAttributeValues,
       isLoadingStoreAttributes,
-      updateAttributeValues,
-      updateStoreAttributeValues,
+
       productGroup,
       isLoadingGroup,
-      categoryAttributeErrors,
-      storeAttributeErrors,
       hasUnsavedChanges,
       goToDuplicate,
       fetchProduct,
@@ -964,16 +1029,9 @@ export default {
         class="hidden"
         @change="handleGalleryUpload"
       />
-      <div
-        class="w-full"
-        :class="tab === 'properties' ? 'max-w-[90rem]' : 'max-w-4xl mx-auto'"
-      >
-        <div
-          class="flex items-start gap-4 lg:gap-5"
-          :class="tab === 'properties' ? '' : 'justify-center'"
-        >
+      <div class="w-full max-w-[90rem]">
+        <div class="flex items-start gap-4 lg:gap-5">
           <ProductGroupSidebar
-            v-if="tab === 'properties'"
             ref="groupSidebarRef"
             :group="productGroup"
             :loading="isLoadingGroup"
@@ -982,7 +1040,7 @@ export default {
             :tab="tab"
             :get-duplicate-url="getDuplicateUrl"
           />
-          <div class="flex-1 min-w-0 relative">
+          <div class="relative min-w-0 flex-1 overflow-hidden">
             <div v-if="isProductLoading && productSKU" class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]">
               <Loader2 class="size-6 animate-spin text-muted-foreground" />
             </div>
@@ -990,8 +1048,9 @@ export default {
             v-if="form"
             v-show="tab == 'properties'"
             id="product-edit-form"
+            novalidate
             @submit.prevent="onSubmit"
-            class="flex flex-col"
+            class="flex min-w-0 flex-col overflow-hidden"
           >
             <ProductGallerySidebar
               v-model:images="sortedImages"
@@ -1005,7 +1064,7 @@ export default {
               @preview="openLightbox"
             />
 
-            <div class="w-full flex flex-col gap-6">
+            <div class="flex w-full min-w-0 flex-col gap-6 overflow-hidden">
             <!-- Main fields -->
             <Card class="border-0 shadow-none">
               <CardHeader>
@@ -1018,13 +1077,23 @@ export default {
               </CardHeader>
               <CardContent>
                 <FieldGroup class="gap-5">
-                  <SettingsFormField v-if="category" label="Категория">
-                    <router-link
-                      :to="`/categories/${category.id}/edit`"
-                      class="flex h-9 items-center px-3 rounded-md border bg-muted/30 text-sm hover:bg-muted/50 transition-colors w-fit max-w-full"
-                    >
-                      <span class="truncate">{{ category.name }}</span>
-                    </router-link>
+                  <SettingsFormField label="Категория">
+                    <div class="space-y-1.5 w-full">
+                      <SearchableSelect
+                        :model-value="currentCategorySelectValue"
+                        :options="categorySelectOptions"
+                        placeholder="Выберите категорию..."
+                        :disabled="isProductLoading || isChangingCategory || isLoadingCategories"
+                        @update:model-value="onCategorySelectChange"
+                      />
+                      <router-link
+                        v-if="category"
+                        :to="`/categories/${category.id}/edit`"
+                        class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Редактировать категорию
+                      </router-link>
+                    </div>
                   </SettingsFormField>
 
                   <SettingsFormField label="Группа товаров">
@@ -1069,9 +1138,9 @@ export default {
                     </div>
                   </SettingsFormField>
 
-                  <SettingsFormField label="Штрихкод (EAN)" label-for="product-barcode">
-                    <FormField v-slot="{ value, setValue }" name="product.barcode">
-                      <FormItem class="gap-1.5">
+                  <FormField v-slot="{ value, setValue, errorMessage }" name="product.barcode">
+                    <FormItem class="gap-0">
+                      <SettingsFormField label="Штрихкод (EAN)" label-for="product-barcode" :error="errorMessage">
                         <FormControl>
                           <BarcodeInput
                             id="product-barcode"
@@ -1079,25 +1148,23 @@ export default {
                             @update:model-value="setValue($event)"
                           />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    </FormField>
-                  </SettingsFormField>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
 
-                  <SettingsFormField label="Название" label-for="product-name">
-                    <FormField v-slot="{ componentField }" name="product.name">
-                      <FormItem class="gap-1.5">
+                  <FormField v-slot="{ componentField, errorMessage }" name="product.name">
+                    <FormItem class="gap-0">
+                      <SettingsFormField label="Название" label-for="product-name" :error="errorMessage" required>
                         <FormControl>
                           <Input id="product-name" type="text" v-bind="componentField" />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    </FormField>
-                  </SettingsFormField>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
 
-                  <SettingsFormField label="Описание" label-for="product-description">
-                    <FormField v-slot="{ componentField }" name="product.description">
-                      <FormItem class="gap-1.5">
+                  <FormField v-slot="{ componentField, errorMessage }" name="product.description">
+                    <FormItem class="gap-0">
+                      <SettingsFormField label="Описание" label-for="product-description" :error="errorMessage">
                         <FormControl>
                           <Textarea
                             id="product-description"
@@ -1107,15 +1174,18 @@ export default {
                             class="min-h-24 overflow-hidden resize-none"
                           />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    </FormField>
-                  </SettingsFormField>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
 
                   <div v-if="!category?.hasSizes" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <SettingsFormField label="Количество на складе" label-for="product-quantity">
-                      <FormField v-slot="{ value, setValue }" name="product.storageQuantity">
-                        <FormItem class="gap-1.5">
+                    <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
+                      <FormItem class="gap-0">
+                        <SettingsFormField
+                          label="Количество на складе"
+                          label-for="product-quantity"
+                          :error="errorMessage"
+                        >
                           <FormControl>
                             <Input
                               id="product-quantity"
@@ -1124,14 +1194,13 @@ export default {
                               @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
                             />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      </FormField>
-                    </SettingsFormField>
+                        </SettingsFormField>
+                      </FormItem>
+                    </FormField>
 
-                    <SettingsFormField label="Цена (₽)" label-for="product-price">
-                      <FormField v-slot="{ value, setValue }" name="product.price">
-                        <FormItem class="gap-1.5">
+                    <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
+                      <FormItem class="gap-0">
+                        <SettingsFormField label="Цена (₽)" label-for="product-price" :error="errorMessage">
                           <FormControl>
                             <Input
                               id="product-price"
@@ -1143,10 +1212,9 @@ export default {
                               @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
                             />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      </FormField>
-                    </SettingsFormField>
+                        </SettingsFormField>
+                      </FormItem>
+                    </FormField>
                   </div>
                 </FieldGroup>
               </CardContent>
@@ -1207,9 +1275,6 @@ export default {
               <CardContent class="pt-0">
                 <ProductAttributeForm
                   :attributes="category.attributes"
-                  :model-value="attributeValues"
-                  :errors="categoryAttributeErrors"
-                  @update:model-value="updateAttributeValues"
                 />
               </CardContent>
             </Card>
@@ -1231,9 +1296,6 @@ export default {
               <CardContent class="pt-0">
                 <StoreAttributeForm
                   :attributes="storeAttributes"
-                  :model-value="storeAttributeValues"
-                  :errors="storeAttributeErrors"
-                  @update:model-value="updateStoreAttributeValues"
                 />
               </CardContent>
             </Card>

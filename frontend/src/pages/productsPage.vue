@@ -113,6 +113,7 @@ export default {
     Check,
     FileSpreadsheet,
     Undo2,
+    RefreshCw,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -145,6 +146,7 @@ export default {
     ...mapActions([
       "getAllProducts",
       "bulkDeleteProducts",
+      "deleteProduct",
       "getAllStoreAttributes",
       "getCategoryAttributes",
       "getAllCategories",
@@ -358,6 +360,22 @@ export default {
           this.fetchTrashCount();
         },
         onError: (error) => displaySonnerError(error),
+      });
+    },
+
+    async handleDeleteOne(productId) {
+      await this.deleteProduct({
+        productId,
+        onSuccess: () => {
+          toast.success("Товар перемещён в корзину");
+          this.fetchProducts();
+          this.fetchTrashCount();
+        },
+        onError: (error) => {
+          toast.error(
+            error.response?.data?.message || "Не удалось переместить товар в корзину",
+          );
+        },
       });
     },
 
@@ -845,6 +863,7 @@ export default {
             :name="row.original.name"
             :sku="row.original.sku"
             @transfer="onTransferRequest"
+            @delete="handleDeleteOne"
           />
           <TrashRowActionButtons v-else :id="row.original.id" @restore="handleRestoreOne" @permanent-delete="handlePermanentDeleteOne" />
         </template>

@@ -7,8 +7,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PAGE_PRODUCT_EDIT } from "@/router";
-import { EllipsisVertical, Pencil, HardDrive, ExternalLink, StickyNote, Image, ArrowRightLeft } from "lucide-vue-next";
+import { EllipsisVertical, ArrowRight, ArrowRightLeft, Trash2 } from "lucide-vue-next";
 
 export default {
   components: {
@@ -17,13 +27,18 @@ export default {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
     EllipsisVertical,
-    Pencil,
-    HardDrive,
-    ExternalLink,
-    StickyNote,
-    Image,
+    ArrowRight,
     ArrowRightLeft,
+    Trash2,
   },
   props: {
     id: {
@@ -39,17 +54,25 @@ export default {
       default: "",
     },
   },
-  emits: ["transfer"],
+  emits: ["transfer", "delete"],
+  data() {
+    return {
+      showDeleteDialog: false,
+    };
+  },
   methods: {
-    navigate(tab) {
+    navigate() {
       this.$router.push({
         name: PAGE_PRODUCT_EDIT,
         params: { id: this.id },
-        query: { tab },
       });
     },
     openTransfer() {
       this.$emit("transfer", { id: this.id, name: this.name, sku: this.sku });
+    },
+    confirmDelete() {
+      this.$emit("delete", this.id);
+      this.showDeleteDialog = false;
     },
   },
 };
@@ -63,30 +86,41 @@ export default {
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
-      <DropdownMenuItem @click.stop="navigate('properties')">
-        <Pencil class="size-4 mr-2" />
-        Редактировать
-      </DropdownMenuItem>
-      <DropdownMenuItem @click.stop="navigate('files')">
-        <HardDrive class="size-4 mr-2" />
-        Файлы
-      </DropdownMenuItem>
-      <DropdownMenuItem @click.stop="navigate('images')">
-        <Image class="size-4 mr-2" />
-        Изображения
-      </DropdownMenuItem>
-      <DropdownMenuItem @click.stop="navigate('marketplaces')">
-        <ExternalLink class="size-4 mr-2" />
-        Адаптеры
-      </DropdownMenuItem>
-      <DropdownMenuItem @click.stop="navigate('notes')">
-        <StickyNote class="size-4 mr-2" />
-        Заметки
+      <DropdownMenuItem @click.stop="navigate">
+        <ArrowRight class="size-4 mr-2" />
+        Перейти
       </DropdownMenuItem>
       <DropdownMenuItem @click.stop="openTransfer">
         <ArrowRightLeft class="size-4 mr-2" />
-        Перенести в магазин…
+        Переместить в магазин
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        class="text-destructive focus:text-destructive"
+        @click.stop="showDeleteDialog = true"
+      >
+        <Trash2 class="size-4 mr-2" />
+        Переместить в корзину
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
+
+  <AlertDialog v-model:open="showDeleteDialog">
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Отправить в корзину?</AlertDialogTitle>
+        <AlertDialogDescription>
+          Товар будет перемещён в корзину. Его можно будет восстановить.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Отмена</AlertDialogCancel>
+        <AlertDialogAction
+          class="bg-destructive text-white hover:bg-destructive/90"
+          @click="confirmDelete"
+        >
+          В корзину
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

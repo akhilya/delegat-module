@@ -162,6 +162,8 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             storageQuantity = form.storageQuantity.Value;
         if (form.price.HasValue)
             price = form.price.Value;
+        if (form.categoryId.HasValue)
+            categoryId = form.categoryId.Value;
 
         updatedAt = DateTime.UtcNow;
         return true;
@@ -366,6 +368,11 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Updated product price.
         /// </summary>
         public decimal? price { get; set; }
+
+        /// <summary>
+        /// Updated category identifier.
+        /// </summary>
+        public int? categoryId { get; set; }
 
         /// <summary>
         /// Updated category attribute values.

@@ -340,8 +340,20 @@ public class ProductController : ControllerBase
         if (input.barcode != null && input.barcode != "" && !IsValidEanBarcode(input.barcode))
             throw ApiException.BadRequest("Невалидный штрихкод. Допустимы EAN-8 (8 цифр) или EAN-13 (13 цифр)");
 
+        if (input.categoryId.HasValue)
+        {
+            var categoryRepo = _unitOfWork.Repository<Category>();
+            var category = await categoryRepo.FindAsync(
+                c => c.Id == input.categoryId.Value && c.storeId == selectedStoreId.Value);
+            if (category == null)
+                throw ApiException.BadRequest("Категория не найдена");
+        }
+
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
+            if (input.categoryId.HasValue)
+                product.categoryId = input.categoryId.Value;
+
             product.UpdateFill(input);
 
             // Update attribute values if provided

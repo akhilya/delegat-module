@@ -145,12 +145,16 @@ public class FileController : ControllerBase
             throw ApiException.BadRequest("Магазин не выбран");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
-        var file = await fileRepo.GetByIdWithIncludesAsync(id, includes: f => f.product);
+        var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
 
-        if (file.product.storeId != selectedStoreId.Value)
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == file.productId);
+        if (product == null || product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
 
         // Verify the file exists in storage before committing response headers
@@ -527,12 +531,16 @@ public class FileController : ControllerBase
             throw ApiException.BadRequest("Магазин не выбран");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
-        var file = await fileRepo.GetByIdWithIncludesAsync(id, includes: f => f.product);
+        var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
 
-        if (file.product.storeId != selectedStoreId.Value)
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == file.productId);
+        if (product == null || product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
 
         var user = await _currentUserService.GetUserAsync();

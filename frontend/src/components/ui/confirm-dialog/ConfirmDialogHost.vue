@@ -15,9 +15,9 @@ import { confirmState, resolveConfirm } from "@/composables/useConfirm";
 <template>
   <AlertDialog
     :open="confirmState.open"
-    @update:open="(v) => { if (!v) resolveConfirm(false); }"
+    @update:open="(v) => { confirmState.open = v; }"
   >
-    <AlertDialogContent>
+    <AlertDialogContent @escape-key-down="resolveConfirm(false)">
       <AlertDialogHeader>
         <AlertDialogTitle>{{ confirmState.title }}</AlertDialogTitle>
         <AlertDialogDescription v-if="confirmState.description">

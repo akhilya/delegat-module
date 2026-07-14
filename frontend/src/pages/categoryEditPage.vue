@@ -11,7 +11,7 @@ import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/page-header";
+
 import {
   Select,
   SelectContent,
@@ -113,7 +113,7 @@ export default {
     Badge,
     SettingsFormField,
     FieldGroup,
-    PageHeader,
+
     Select,
     SelectContent,
     SelectItem,
@@ -236,12 +236,6 @@ export default {
     defaultValueSelectOptions() {
       if (!this.defaultValueOptionsReady) return [];
       return this.defaultValueOptions;
-    },
-    pageHeaderTitle() {
-      return this.category?.name || "Редактирование категории";
-    },
-    pageHeaderDescription() {
-      return "Основные данные и атрибуты товаров в этой категории";
     },
     attributesCountLabel() {
       const n = this.attributes.length;
@@ -777,34 +771,30 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageHeader
-      :title="pageHeaderTitle"
-      :description="pageHeaderDescription"
-    >
-      <Button
-        v-if="category"
-        @click="handleSaveCategory"
-        :disabled="isSaving"
-      >
-        <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-        <Save v-else class="size-4 mr-2" />
-        Сохранить
-      </Button>
-    </PageHeader>
-
     <PageSection :loading="isLoading" class="!min-h-0">
-      <div v-if="category" class="space-y-6">
-        <!-- Block 1: Settings -->
-        <Card class="max-w-2xl border-0 shadow-none">
-          <CardHeader>
-            <CardTitle class="text-base">
-              Основные данные
-            </CardTitle>
-            <CardDescription>
+      <div v-if="category" class="space-y-3">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0 flex-1 space-y-1">
+            <h1 class="text-lg font-semibold">
+              {{ category.name || "Редактирование категории" }}
+            </h1>
+            <p class="text-sm text-muted-foreground">
               Название, описание и настройки размерной сетки для товаров категории.
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-5">
+            </p>
+          </div>
+          <Button
+            class="shrink-0"
+            @click="handleSaveCategory"
+            :disabled="isSaving"
+          >
+            <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+            <Save v-else class="size-4 mr-2" />
+            Сохранить
+          </Button>
+        </div>
+
+        <!-- Block 1: Settings -->
+        <div class="max-w-2xl space-y-4">
             <SettingsFormField label="Название" label-for="category-name">
               <Input
                 id="category-name"
@@ -832,12 +822,11 @@ export default {
                 </Label>
               </div>
             </SettingsFormField>
-          </CardContent>
-        </Card>
+        </div>
 
         <!-- Block 2: Attributes -->
-        <Card class="overflow-hidden border-0 shadow-none">
-          <CardHeader>
+        <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">
+          <CardHeader class="!px-0">
             <CardTitle class="text-base">
               Атрибуты категории
             </CardTitle>
@@ -857,7 +846,7 @@ export default {
               </Button>
             </CardAction>
           </CardHeader>
-          <CardContent class="px-6 pb-6 pt-0">
+          <CardContent class="!px-0 pb-6 pt-0">
             <EmptyState
               v-if="attributes.length === 0"
               title="Нет атрибутов"
@@ -882,12 +871,11 @@ export default {
                   <TableHeader>
                     <TableRow class="hover:bg-transparent">
                       <TableHead class="w-9 px-3" />
-                      <TableHead class="px-3">Название</TableHead>
+                      <TableHead class="min-w-[11rem] px-3 sm:min-w-[16rem]">Название</TableHead>
                       <TableHead class="hidden sm:table-cell px-3">Ключ</TableHead>
                       <TableHead class="hidden md:table-cell px-3">Группа</TableHead>
                       <TableHead class="px-3">Тип</TableHead>
                       <TableHead class="hidden lg:table-cell w-28 text-right px-3">Опции</TableHead>
-                      <TableHead class="w-16 text-center px-2">Обяз.</TableHead>
                       <TableHead class="hidden xl:table-cell px-3">Описание</TableHead>
                       <TableHead class="w-24 px-2" />
                     </TableRow>
@@ -907,8 +895,15 @@ export default {
                             class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
                           />
                         </TableCell>
-                        <TableCell class="px-3 font-medium max-w-0">
-                          <span class="truncate block">{{ attribute.name }}</span>
+                        <TableCell class="min-w-[11rem] px-3 font-medium sm:min-w-[16rem]">
+                          <div class="flex min-w-0 items-center gap-0.5">
+                            <span class="truncate">{{ attribute.name }}</span>
+                            <span
+                              v-if="attribute.isRequired"
+                              class="shrink-0 text-destructive"
+                              title="Обязательное поле"
+                            >*</span>
+                          </div>
                           <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
                             {{ attribute.key }}
                           </span>
@@ -931,10 +926,6 @@ export default {
                         </TableCell>
                         <TableCell class="hidden lg:table-cell px-3 text-right tabular-nums text-muted-foreground">
                           {{ attribute.options ? getOptionsCount(attribute.options) : "—" }}
-                        </TableCell>
-                        <TableCell class="px-2 text-center text-muted-foreground">
-                          <span v-if="attribute.isRequired" class="text-destructive">*</span>
-                          <span v-else>—</span>
                         </TableCell>
                         <TableCell class="hidden xl:table-cell px-3 text-muted-foreground max-w-xs truncate">
                           {{ attribute.description || "—" }}

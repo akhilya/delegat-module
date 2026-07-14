@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
@@ -14,15 +15,18 @@ public class ThumbnailController : ControllerBase
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ThumbnailService _thumbnailService;
+    private readonly DataContext _context;
 
     public ThumbnailController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
-        ThumbnailService thumbnailService)
+        ThumbnailService thumbnailService,
+        DataContext context)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _thumbnailService = thumbnailService;
+        _context = context;
     }
 
     [HttpGet]
@@ -44,9 +48,11 @@ public class ThumbnailController : ControllerBase
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
 
-        // Check store ownership via product
-        var productRepo = _unitOfWork.Repository<Models.Products.Product>();
-        var product = await productRepo.GetByIdAsync(file.productId);
+        // Include soft-deleted products — files remain accessible in trash views
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == file.productId, ct);
         if (product == null || product.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
 

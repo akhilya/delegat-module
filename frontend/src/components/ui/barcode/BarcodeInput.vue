@@ -19,6 +19,7 @@ import {
 import { Dices, Download } from "lucide-vue-next";
 import JsBarcode from "jsbarcode";
 import { ref, computed, watch, nextTick } from "vue";
+import { downloadBarcodePng } from "@/lib/barcodeDownload.js";
 
 export default {
   components: {
@@ -175,48 +176,7 @@ export default {
 
     function downloadBarcode() {
       if (!isValid.value || !barcodeFormat.value) return;
-
-      // Render a high-res barcode into a temporary SVG
-      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      try {
-        JsBarcode(tempSvg, props.modelValue, {
-          format: barcodeFormat.value,
-          height: 150,
-          displayValue: true,
-          margin: 10,
-          fontSize: 28,
-          width: 3,
-        });
-      } catch {
-        return;
-      }
-
-      // Serialize SVG and convert to PNG via canvas
-      const svgData = new XMLSerializer().serializeToString(tempSvg);
-      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(svgBlob);
-
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width * 2;
-        canvas.height = img.height * 2;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob((blob) => {
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `barcode-${props.modelValue}.png`;
-          a.click();
-          URL.revokeObjectURL(a.href);
-        }, "image/png");
-
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
+      downloadBarcodePng(props.modelValue, barcodeFormat.value);
     }
 
     return {
@@ -237,9 +197,10 @@ export default {
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center gap-1.5">
+  <div class="w-full min-w-0">
+    <div class="flex min-w-0 items-center gap-1.5">
       <Input
+        class="min-w-0 flex-1"
         type="text"
         inputmode="numeric"
         pattern="\d*"
@@ -265,14 +226,14 @@ export default {
             <svg ref="svgRef" class="h-6 block"></svg>
           </button>
         </PopoverTrigger>
-        <PopoverContent class="w-auto p-2" align="end">
-          <div class="bg-background rounded flex flex-col items-center gap-2">
-            <svg ref="largeSvgRef"></svg>
+        <PopoverContent class="!max-w-none !w-max p-2" align="end">
+          <div class="flex flex-col items-stretch gap-2">
+            <svg ref="largeSvgRef" class="block"></svg>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              class="w-full"
+              class="w-full shrink-0"
               @click="downloadBarcode"
             >
               <Download class="size-3.5 mr-1.5" />

@@ -32,7 +32,9 @@ export function confirm(options) {
 }
 
 export function resolveConfirm(accepted) {
-  confirmState._resolve?.(accepted);
-  confirmState.open = false;
+  if (!confirmState._resolve) return;
+  const resolve = confirmState._resolve;
   confirmState._resolve = null;
+  confirmState.open = false;
+  resolve(accepted);
 }

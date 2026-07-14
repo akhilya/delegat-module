@@ -8,7 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { PageHeader } from "@/components/ui/page-header";
+
 import {
   Dialog,
   DialogContent,
@@ -59,6 +59,10 @@ import {
   X,
   ExternalLink,
   Ban,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
@@ -75,7 +79,6 @@ export default {
     Textarea,
     Badge,
     SettingsFormField,
-    PageHeader,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -115,6 +118,10 @@ export default {
     X,
     ExternalLink,
     Ban,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     draggable,
     EmptyState,
   },
@@ -137,6 +144,9 @@ export default {
       isLoadingSyncStatus: false,
       showProductSearch: false,
       productSearchQuery: "",
+      productSearchStartIndex: 0,
+      productSearchPageSize: 25,
+      productSearchTotalCount: 0,
       availableProducts: [],
       isSearchingProducts: false,
       selectedProductsToAdd: [],
@@ -169,16 +179,6 @@ export default {
         (c) => !this.connectionGrouping[c.id]?.supported,
       );
     },
-    pageHeaderTitle() {
-      if (this.isCreateMode) return "Новая группа";
-      return this.group?.name || "Редактирование группы";
-    },
-    pageHeaderDescription() {
-      if (this.isCreateMode) {
-        return "Задайте название и описание — затем добавьте товары для объединения на маркетплейсе";
-      }
-      return "Основные данные, состав товаров и объединение на подключённых адаптерах";
-    },
     membersCountLabel() {
       const n = this.members.length;
       const mod10 = n % 10;
@@ -187,6 +187,37 @@ export default {
       if (mod10 === 1) return "товар";
       if (mod10 >= 2 && mod10 <= 4) return "товара";
       return "товаров";
+    },
+    allVisibleProductsSelected() {
+      const visible = this.availableProductsFiltered;
+      return visible.length > 0
+        && visible.every((product) => this.isProductSelected(product.id));
+    },
+    someVisibleProductsSelected() {
+      const visible = this.availableProductsFiltered;
+      const selectedCount = visible.filter((product) => this.isProductSelected(product.id)).length;
+      return selectedCount > 0 && selectedCount < visible.length;
+    },
+    selectedProductsCountLabel() {
+      const n = this.selectedProductsToAdd.length;
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod100 >= 11 && mod100 <= 14) return "товаров";
+      if (mod10 === 1) return "товар";
+      if (mod10 >= 2 && mod10 <= 4) return "товара";
+      return "товаров";
+    },
+    productSearchLastPage() {
+      return Math.max(1, Math.ceil(this.productSearchTotalCount / this.productSearchPageSize));
+    },
+    productSearchPage() {
+      return Math.floor(this.productSearchStartIndex / this.productSearchPageSize) + 1;
+    },
+    productSearchIsFirstPage() {
+      return this.productSearchPage <= 1;
+    },
+    productSearchIsLastPage() {
+      return this.productSearchPage >= this.productSearchLastPage;
     },
   },
   methods: {
@@ -357,20 +388,32 @@ export default {
       this.isSaving = false;
     },
 
-    async searchProducts() {
+    async searchProducts(resetPage = true) {
+      if (resetPage) {
+        this.productSearchStartIndex = 0;
+      }
+
       this.isSearchingProducts = true;
       await this.getAllProducts({
         searchQuery: this.productSearchQuery,
-        startIndex: 0,
-        pageSize: 50,
+        startIndex: this.productSearchStartIndex,
+        pageSize: this.productSearchPageSize,
         onSuccess: (response) => {
-          this.availableProducts = response.data.value.items || [];
+          const data = response.data.value;
+          this.availableProducts = data.items || [];
+          this.productSearchTotalCount = data.totalCount || 0;
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isSearchingProducts = false;
+    },
+
+    goToProductSearchPage(page) {
+      const nextPage = Math.min(Math.max(1, page), this.productSearchLastPage);
+      this.productSearchStartIndex = (nextPage - 1) * this.productSearchPageSize;
+      this.searchProducts(false);
     },
 
     toggleProductSelection(product, checked) {
@@ -384,6 +427,30 @@ export default {
 
     isProductSelected(productId) {
       return this.selectedProductsToAdd.some((p) => p.id === productId);
+    },
+
+    toggleSelectAllVisible(checked) {
+      if (checked) {
+        for (const product of this.availableProductsFiltered) {
+          if (!this.isProductSelected(product.id)) {
+            this.selectedProductsToAdd.push(product);
+          }
+        }
+        return;
+      }
+
+      const visibleIds = new Set(this.availableProductsFiltered.map((product) => product.id));
+      this.selectedProductsToAdd = this.selectedProductsToAdd.filter(
+        (product) => !visibleIds.has(product.id),
+      );
+    },
+
+    clearSelectedProducts() {
+      this.selectedProductsToAdd = [];
+    },
+
+    getProductCategoryName(product) {
+      return product.category?.name || product.categoryName || "—";
     },
 
     async handleAddSelectedProducts() {
@@ -506,8 +573,10 @@ export default {
     openProductSearchDialog() {
       this.showProductSearch = true;
       this.productSearchQuery = "";
+      this.productSearchStartIndex = 0;
+      this.productSearchTotalCount = 0;
       this.selectedProductsToAdd = [];
-      this.searchProducts();
+      this.searchProducts(true);
     },
   },
   mounted() {
@@ -525,34 +594,36 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageHeader
-      :title="pageHeaderTitle"
-      :description="pageHeaderDescription"
-    >
-      <Button
-        v-if="group"
-        @click="handleSaveGroup"
-        :disabled="isSaving"
-      >
-        <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-        <Save v-else class="size-4 mr-2" />
-        {{ isCreateMode ? "Создать группу" : "Сохранить" }}
-      </Button>
-    </PageHeader>
-
     <PageSection :loading="isLoading" class="!min-h-0">
-      <div v-if="group" class="space-y-6">
+      <div v-if="group" class="space-y-3">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0 flex-1 space-y-1">
+            <h1 class="text-lg font-semibold">
+              {{ isCreateMode ? "Новая группа" : group.name }}
+            </h1>
+            <p class="text-sm text-muted-foreground">
+              <template v-if="isCreateMode">
+                Задайте название и описание — затем добавьте товары для объединения на маркетплейсе
+              </template>
+              <template v-else>
+                Название и описание группы в каталоге. Описание видно только внутри системы.
+              </template>
+            </p>
+          </div>
+          <Button
+            class="shrink-0"
+            @click="handleSaveGroup"
+            :disabled="isSaving"
+          >
+            <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+            <Save v-else class="size-4 mr-2" />
+            {{ isCreateMode ? "Создать группу" : "Сохранить" }}
+          </Button>
+        </div>
+
         <!-- Block 1: Settings -->
-        <Card class="max-w-2xl border-0 shadow-none">
-          <CardHeader>
-            <CardTitle class="text-base">
-              Основные данные
-            </CardTitle>
-            <CardDescription>
-              Название и описание группы в каталоге. Описание видно только внутри системы.
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-5">
+        <div class="max-w-2xl space-y-4">
+          <div class="space-y-4">
             <SettingsFormField label="Название" label-for="group-name">
               <Input
                 id="group-name"
@@ -568,13 +639,13 @@ export default {
                 class="min-h-24 resize-none"
               />
             </SettingsFormField>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         <template v-if="!isCreateMode">
           <!-- Block 2: Products -->
-          <Card class="overflow-hidden border-0 shadow-none">
-            <CardHeader>
+          <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">
+            <CardHeader class="!px-0">
               <CardTitle class="text-base">
                 Товары в группе
               </CardTitle>
@@ -594,7 +665,7 @@ export default {
                 </Button>
               </CardAction>
             </CardHeader>
-            <CardContent class="px-6 pb-6 pt-0">
+            <CardContent class="!px-0 pb-6 pt-0">
               <EmptyState
                 v-if="members.length === 0"
                 title="Нет товаров"
@@ -614,15 +685,15 @@ export default {
                 v-else
                 class="overflow-hidden rounded-lg border"
               >
-                <div class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar">
+                <div class="max-h-[min(42rem,70vh)] overflow-y-auto thin-scrollbar">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
                     <TableRow class="hover:bg-transparent">
                       <TableHead class="w-9 px-3" />
                       <TableHead class="w-9 px-2 text-center">#</TableHead>
+                      <TableHead class="w-36 px-3">Артикул</TableHead>
                       <TableHead class="w-14 px-2" />
                       <TableHead class="px-3">Название</TableHead>
-                      <TableHead class="w-36 hidden sm:table-cell px-3">SKU</TableHead>
                       <TableHead class="hidden md:table-cell px-3">Категория</TableHead>
                       <TableHead class="w-12 px-2" />
                     </TableRow>
@@ -645,6 +716,9 @@ export default {
                         <TableCell class="w-9 px-2 text-center text-xs text-muted-foreground tabular-nums">
                           {{ index + 1 }}
                         </TableCell>
+                        <TableCell class="w-36 px-3 font-mono text-xs text-muted-foreground">
+                          {{ member.product.sku || "—" }}
+                        </TableCell>
                         <TableCell class="w-14 px-2">
                           <div class="size-10 rounded-md overflow-hidden bg-muted">
                             <img
@@ -661,19 +735,13 @@ export default {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell class="max-w-0 px-3">
+                        <TableCell class="min-w-0 px-3">
                           <router-link
                             :to="`/products/${member.product.id}/edit`"
                             class="font-medium truncate block hover:underline"
                           >
                             {{ member.product.name }}
                           </router-link>
-                          <div class="text-xs text-muted-foreground truncate sm:hidden">
-                            <span v-if="member.product.sku">{{ member.product.sku }}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell class="hidden sm:table-cell px-3 font-mono text-xs text-muted-foreground">
-                          {{ member.product.sku || "—" }}
                         </TableCell>
                         <TableCell class="hidden md:table-cell px-3 text-muted-foreground">
                           {{ member.product.category?.name || "—" }}
@@ -721,8 +789,8 @@ export default {
           </Card>
 
           <!-- Block 3: Marketplace merge -->
-          <Card class="border-0 shadow-none">
-            <CardHeader>
+          <Card class="border-0 shadow-none !gap-3 !py-0">
+            <CardHeader class="!px-0">
               <CardTitle class="text-base">
                 Объединение на маркетплейсах
               </CardTitle>
@@ -743,7 +811,7 @@ export default {
                 </Button>
               </CardAction>
             </CardHeader>
-            <CardContent class="space-y-6">
+            <CardContent class="!px-0 space-y-4">
               <p
                 v-if="connections.length === 0"
                 class="text-sm text-muted-foreground"
@@ -918,85 +986,224 @@ export default {
 
     <!-- Product Search Dialog -->
     <Dialog v-model:open="showProductSearch">
-      <DialogContent size="2xl" class="max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Добавить товары</DialogTitle>
+      <DialogContent
+        size="4xl"
+        class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+      >
+        <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
+          <DialogTitle class="flex items-center gap-2">
+            <Plus class="size-5" />
+            Добавить товары в группу
+          </DialogTitle>
+          <DialogDescription>
+            Найдите товары в каталоге и отметьте те, что войдут в группу «{{ group?.name }}».
+            Уже добавленные здесь не показываются.
+          </DialogDescription>
         </DialogHeader>
 
-        <div class="flex flex-col gap-4 grow overflow-hidden">
+        <div class="space-y-3 px-6 pb-4">
           <div class="flex gap-2">
-            <Input
-              v-model="productSearchQuery"
-              placeholder="Поиск по названию или SKU..."
-              @keyup.enter="searchProducts"
-              class="grow"
-            />
-            <Button @click="searchProducts" :disabled="isSearchingProducts" variant="outline" size="icon">
-              <Loader2 v-if="isSearchingProducts" class="size-4 animate-spin" />
-              <Search v-else class="size-4" />
+            <div class="relative min-w-0 flex-1">
+              <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                v-model="productSearchQuery"
+                placeholder="Поиск по названию или артикулу..."
+                class="pl-9"
+                @keyup.enter="searchProducts(true)"
+              />
+            </div>
+            <Button
+              variant="outline"
+              :disabled="isSearchingProducts"
+              @click="searchProducts(true)"
+            >
+              <Loader2 v-if="isSearchingProducts" class="size-4 mr-2 animate-spin" />
+              <Search v-else class="size-4 mr-2" />
+              Найти
             </Button>
           </div>
 
-          <div class="grow overflow-auto border rounded-lg">
-            <div v-if="isSearchingProducts" class="flex justify-center py-8">
-              <Loader2 class="size-6 animate-spin text-muted-foreground" />
+          <div
+            v-if="selectedProductsToAdd.length > 0"
+            class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+          >
+            <div class="flex items-center gap-2 text-sm">
+              <Badge variant="secondary" class="font-normal tabular-nums">
+                {{ selectedProductsToAdd.length }}
+              </Badge>
+              <span>
+                {{ selectedProductsCountLabel }} к добавлению
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-7 text-muted-foreground"
+              @click="clearSelectedProducts"
+            >
+              Сбросить выбор
+            </Button>
+          </div>
+        </div>
+
+        <div class="flex min-h-0 flex-1 flex-col border-y">
+          <div
+            v-if="!isSearchingProducts && availableProductsFiltered.length > 0"
+            class="grid shrink-0 grid-cols-[2.5rem_7.5rem_3.5rem_minmax(0,1fr)] items-center gap-3 border-b bg-muted/30 px-6 py-2 text-xs font-medium text-muted-foreground sm:grid-cols-[2.5rem_7.5rem_3.5rem_minmax(0,1fr)_9rem]"
+          >
+            <div class="flex justify-center">
+              <Checkbox
+                :model-value="allVisibleProductsSelected"
+                :indeterminate="someVisibleProductsSelected"
+                aria-label="Выбрать все на странице"
+                @update:model-value="toggleSelectAllVisible"
+              />
+            </div>
+            <span>Артикул</span>
+            <span />
+            <span>Название</span>
+            <span class="hidden sm:block">Категория</span>
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto thin-scrollbar">
+            <div v-if="isSearchingProducts" class="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+              <Loader2 class="size-5 animate-spin" />
+              Ищем товары…
             </div>
 
             <EmptyState
               v-else-if="availableProductsFiltered.length === 0"
               size="sm"
               title="Нет доступных товаров"
-              description="Все товары уже в группе, или поиск не дал результатов."
+              description="Все товары уже в группе или поиск не дал результатов. Попробуйте другой запрос."
+              class="py-12"
             >
               <template #icon>
                 <Package />
               </template>
             </EmptyState>
 
-            <div v-else class="divide-y">
+            <div v-else class="divide-y divide-border/60">
               <label
                 v-for="product in availableProductsFiltered"
                 :key="product.id"
-                class="p-3 flex items-center gap-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                class="grid cursor-pointer grid-cols-[2.5rem_7.5rem_3.5rem_minmax(0,1fr)] items-center gap-3 px-6 py-2.5 transition-colors hover:bg-accent/40 sm:grid-cols-[2.5rem_7.5rem_3.5rem_minmax(0,1fr)_9rem]"
+                :class="isProductSelected(product.id) ? 'bg-primary/5' : ''"
               >
-                <Checkbox
-                  :model-value="isProductSelected(product.id)"
-                  @update:model-value="toggleProductSelection(product, $event)"
-                />
-                <div class="w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0">
+                <div class="flex justify-center">
+                  <Checkbox
+                    :model-value="isProductSelected(product.id)"
+                    @update:model-value="toggleProductSelection(product, $event)"
+                    @click.stop
+                  />
+                </div>
+                <span class="truncate font-mono text-xs text-muted-foreground">
+                  {{ product.sku || "—" }}
+                </span>
+                <div class="size-10 overflow-hidden rounded-md bg-muted">
                   <img
                     v-if="getProductImageUrl(product)"
                     :src="getProductImageUrl(product)"
                     :alt="product.name"
-                    class="w-full h-full object-cover"
+                    class="size-full object-cover"
                   />
-                  <div v-else class="w-full h-full flex items-center justify-center">
-                    <Package class="size-5 text-muted-foreground" />
+                  <div
+                    v-else
+                    class="flex size-full items-center justify-center"
+                  >
+                    <Package class="size-4 text-muted-foreground" />
                   </div>
                 </div>
-                <div class="grow min-w-0">
-                  <div class="font-medium truncate">{{ product.name }}</div>
-                  <div class="text-sm text-muted-foreground">{{ product.sku }}</div>
-                </div>
+                <span class="min-w-0 truncate text-sm font-medium">
+                  {{ product.name }}
+                </span>
+                <span class="hidden truncate text-sm text-muted-foreground sm:block">
+                  {{ getProductCategoryName(product) }}
+                </span>
               </label>
             </div>
           </div>
         </div>
 
-        <DialogFooter>
-          <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
-          </DialogClose>
-          <Button
-            @click="handleAddSelectedProducts"
-            :disabled="isAddingProducts || selectedProductsToAdd.length === 0"
-          >
-            <Loader2 v-if="isAddingProducts" class="size-4 mr-2 animate-spin" />
-            <template v-else>
-              Добавить
-              <span v-if="selectedProductsToAdd.length > 0" class="ml-1">({{ selectedProductsToAdd.length }})</span>
-            </template>
-          </Button>
+        <div
+          v-if="!isSearchingProducts && productSearchTotalCount > 0"
+          class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/20 px-6 py-2.5"
+        >
+          <p class="text-xs text-muted-foreground">
+            {{ productSearchTotalCount }} в каталоге
+            <span v-if="availableProductsFiltered.length !== availableProducts.length">
+              · {{ availableProductsFiltered.length }} доступно на странице
+            </span>
+          </p>
+          <div class="flex items-center gap-1.5">
+            <span class="mr-1 text-sm tabular-nums text-muted-foreground">
+              {{ productSearchPage }} / {{ productSearchLastPage }}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              class="size-8 p-0"
+              :disabled="productSearchIsFirstPage || isSearchingProducts"
+              aria-label="Первая страница"
+              @click="goToProductSearchPage(1)"
+            >
+              <ChevronsLeft class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="size-8 p-0"
+              :disabled="productSearchIsFirstPage || isSearchingProducts"
+              aria-label="Предыдущая страница"
+              @click="goToProductSearchPage(productSearchPage - 1)"
+            >
+              <ChevronLeft class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="size-8 p-0"
+              :disabled="productSearchIsLastPage || isSearchingProducts"
+              aria-label="Следующая страница"
+              @click="goToProductSearchPage(productSearchPage + 1)"
+            >
+              <ChevronRight class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="size-8 p-0"
+              :disabled="productSearchIsLastPage || isSearchingProducts"
+              aria-label="Последняя страница"
+              @click="goToProductSearchPage(productSearchLastPage)"
+            >
+              <ChevronsRight class="size-4" />
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter class="gap-2 border-t px-6 py-4 sm:justify-between">
+          <p class="hidden text-xs text-muted-foreground sm:block">
+            Порядок в группе можно изменить перетаскиванием строк после добавления.
+          </p>
+          <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:justify-end">
+            <DialogClose as-child>
+              <Button variant="outline">Отмена</Button>
+            </DialogClose>
+            <Button
+              :disabled="isAddingProducts || selectedProductsToAdd.length === 0"
+              @click="handleAddSelectedProducts"
+            >
+              <Loader2 v-if="isAddingProducts" class="size-4 mr-2 animate-spin" />
+              <Plus v-else class="size-4 mr-2" />
+              <template v-if="selectedProductsToAdd.length > 0">
+                Добавить {{ selectedProductsToAdd.length }} {{ selectedProductsCountLabel }}
+              </template>
+              <template v-else>
+                Добавить в группу
+              </template>
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
