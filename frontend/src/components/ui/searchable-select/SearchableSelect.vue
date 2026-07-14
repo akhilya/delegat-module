@@ -39,7 +39,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "open"]);
 
 const open = ref(false);
 const searchQuery = ref("");
@@ -49,7 +49,10 @@ const searchInputRef = ref(null);
 watch(open, (isOpen) => {
   if (!isOpen) {
     searchQuery.value = "";
-  } else if (isLargeList.value) {
+  } else {
+    emit("open");
+  }
+  if (isOpen && isLargeList.value) {
     // Auto-focus search input for large lists
     nextTick(() => {
       searchInputRef.value?.focus();
@@ -100,7 +103,9 @@ const selectedOption = computed(() => {
 });
 
 const displayText = computed(() => {
-  return selectedOption.value?.label || props.placeholder;
+  if (selectedOption.value?.label) return selectedOption.value.label;
+  if (props.modelValue) return props.modelValue;
+  return props.placeholder;
 });
 
 const isSelected = (option) => {
