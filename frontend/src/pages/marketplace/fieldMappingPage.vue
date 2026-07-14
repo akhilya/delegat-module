@@ -20,7 +20,7 @@ import {
   Download,
   LayoutGrid,
   Loader2,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
   RefreshCw,
   Upload,
@@ -115,7 +115,7 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    MoreHorizontal,
+    MoreVertical,
     LayoutGrid,
     RefreshCw,
     Download,
@@ -1072,12 +1072,12 @@ export default {
       <DropdownMenu v-if="connectionId && mappingId && !isLoading">
         <DropdownMenuTrigger as-child>
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
             class="size-8 shrink-0"
             aria-label="Дополнительные действия"
           >
-            <MoreHorizontal class="size-4" />
+            <MoreVertical class="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-56">
