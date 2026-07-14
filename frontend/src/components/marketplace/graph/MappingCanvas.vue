@@ -16,15 +16,10 @@ import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Save,
-  LayoutGrid,
   AlertTriangle,
   EyeOff,
   Loader2,
   Activity,
-  Download,
-  Upload,
-
-  RefreshCw,
 } from "lucide-vue-next";
 import {
   SplitterGroup,
@@ -39,7 +34,7 @@ import {
 import NodeContextMenu from "./NodeContextMenu.vue";
 import NodeInspector from "./NodeInspector.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
-import ConfirmDialog from "@/components/ui/confirm-dialog/ConfirmDialog.vue";
+
 import SourceNode from "./nodes/SourceNode.vue";
 import ModifierNode from "./nodes/ModifierNode.vue";
 import OpNode from "./nodes/OpNode.vue";
@@ -1118,6 +1113,10 @@ async function syncAdapterFieldSchema() {
 defineExpose({
   reload: requestLoad,
   reloadAfterFieldSync: () => requestLoad({ preserveLayout: true }),
+  autoArrange,
+  syncAdapterFieldSchema,
+  exportMappingFile,
+  triggerImportFile,
 });
 
 // ---- Context menu (ПКМ / Tab) ----
@@ -1668,40 +1667,6 @@ async function importMappingFile(event) {
         >
           <EyeOff class="mr-1.5 size-4" />
           Сбросить
-        </Button>
-        <ConfirmDialog
-          title="Переставить блоки?"
-          description="Все блоки будут автоматически перестроены — текущее расположение будет потеряно."
-          confirm-label="Переставить"
-          :destructive="false"
-          @confirm="autoArrange"
-        >
-          <template #trigger>
-            <Button size="sm" variant="ghost" title="Авторасстановка блоков">
-              <LayoutGrid class="mr-1.5 size-4" />
-              Авто расстановка
-            </Button>
-          </template>
-        </ConfirmDialog>
-        <span class="mx-0.5 h-5 w-px bg-border" />
-        <Button
-          size="sm"
-          variant="ghost"
-          title="Запросить актуальную схему полей у маркетплейса и добавить новые (существующие связи сохраняются)"
-          :disabled="syncingFields || loading"
-          @click="syncAdapterFieldSchema"
-        >
-          <Loader2 v-if="syncingFields" class="mr-1.5 size-4 animate-spin" />
-          <RefreshCw v-else class="mr-1.5 size-4" />
-          Проверь актуальность полей
-        </Button>
-        <Button size="sm" variant="ghost" title="Экспорт маппинга в JSON" @click="exportMappingFile">
-          <Download class="mr-1.5 size-4" />
-          Экспорт
-        </Button>
-        <Button size="sm" variant="ghost" title="Импорт маппинга из JSON" @click="triggerImportFile">
-          <Upload class="mr-1.5 size-4" />
-          Импорт
         </Button>
         <input
           ref="importFileInput"

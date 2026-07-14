@@ -15,7 +15,33 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { setPageTitle } from "@/router";
-import { ArrowLeft, Loader2, Plus } from "lucide-vue-next";
+import {
+  ArrowLeft,
+  Download,
+  LayoutGrid,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Upload,
+} from "lucide-vue-next";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
@@ -76,6 +102,24 @@ export default {
     SheetHeader,
     SheetTitle,
     SheetDescription,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    MoreHorizontal,
+    LayoutGrid,
+    RefreshCw,
+    Download,
+    Upload,
   },
   data() {
     return {
@@ -113,6 +157,7 @@ export default {
       // Preview summary sheet
       showPreviewSheet: false,
       previewVisualMode: false,
+      showAutoArrangeConfirm: false,
       // Mapping settings dialog
       showMappingSettings: false,
       settingsName: "",
@@ -734,6 +779,23 @@ export default {
       await this.$refs.mappingCanvas?.reloadAfterFieldSync?.();
     },
 
+    onSyncAdapterFields() {
+      this.$refs.mappingCanvas?.syncAdapterFieldSchema?.();
+    },
+
+    onExportMapping() {
+      this.$refs.mappingCanvas?.exportMappingFile?.();
+    },
+
+    onImportMapping() {
+      this.$refs.mappingCanvas?.triggerImportFile?.();
+    },
+
+    confirmAutoArrange() {
+      this.showAutoArrangeConfirm = false;
+      this.$refs.mappingCanvas?.autoArrange?.();
+    },
+
     onPreviewProductChange(productId) {
       this.previewProductId = productId ? parseInt(productId) : null;
       const query = { ...this.$route.query };
@@ -1003,7 +1065,65 @@ export default {
 <template>
   <Page class="flex flex-col">
     <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
+
+    <div class="mb-4 flex items-center gap-3">
+      <Breadcrumbs :items="breadcrumbs" class="mb-0 min-w-0 flex-1" />
+
+      <DropdownMenu v-if="connectionId && mappingId && !isLoading">
+        <DropdownMenuTrigger as-child>
+          <Button
+            variant="outline"
+            size="icon"
+            class="size-8 shrink-0"
+            aria-label="Дополнительные действия"
+          >
+            <MoreHorizontal class="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-56">
+          <DropdownMenuItem @select="showAutoArrangeConfirm = true">
+            <LayoutGrid class="size-4 mr-2" />
+            Авторасстановка
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="onSyncAdapterFields">
+            <RefreshCw class="size-4 mr-2" />
+            Проверить актуальность полей
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem @select="onExportMapping">
+            <Download class="size-4 mr-2" />
+            Экспорт
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="onImportMapping">
+            <Upload class="size-4 mr-2" />
+            Импорт
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+
+    <AlertDialog
+      :open="showAutoArrangeConfirm"
+      @update:open="showAutoArrangeConfirm = $event"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Переставить блоки?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Все блоки будут автоматически перестроены — текущее расположение будет потеряно.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogAction
+            class="bg-primary text-primary-foreground hover:bg-primary/90"
+            @click="confirmAutoArrange"
+          >
+            Переставить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <PageSection :loading="isLoading">
       <template v-if="!isLoading">

@@ -2,6 +2,7 @@
 import { useRouter } from "vue-router";
 import { ChevronRight, Home } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,12 +12,13 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 
-defineProps({
+const props = defineProps({
   items: {
     type: Array,
     required: true,
     // Each item: { label: string, to?: string }
   },
+  class: { type: null, required: false },
 });
 
 const router = useRouter();
@@ -27,7 +29,7 @@ function navigate(to) {
 </script>
 
 <template>
-  <Breadcrumb class="mb-4">
+  <Breadcrumb :class="cn('mb-4', props.class)">
     <BreadcrumbList>
       <BreadcrumbItem>
         <BreadcrumbLink as-child>
