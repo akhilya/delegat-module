@@ -593,12 +593,7 @@ export default {
 
 <template>
   <Page class="!min-h-0">
-    <div class="fixed top-0 z-30 bg-background/95 backdrop-blur-sm left-0 right-0 md:left-[var(--sidebar-width)]">
-      <div class="adaptive-padding">
-        <NavigationBar :sticky="false" />
-      </div>
-    </div>
-    <div class="h-[7rem] sm:h-14 shrink-0" aria-hidden="true" />
+    <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
     <PageSection :loading="isLoadingCategories && categories.length === 0" class="!min-h-0 !grow-0 mb-0">
       <input

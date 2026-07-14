@@ -117,6 +117,9 @@ import {
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import Progress from "@/components/ui/progress/Progress.vue";
 
 export default {
   components: {
@@ -219,6 +222,9 @@ export default {
     Unlink,
     FieldChangesTable,
     PasswordInput,
+    SettingsFormField,
+    SettingsFormSection,
+    Progress,
   },
   data() {
     const validTabs = ["settings", "mappings", "products"];
@@ -475,6 +481,14 @@ export default {
         (a) => a.key === this.connection.adapterKey,
       );
       return adapter?.displayName || this.connection.adapterKey;
+    },
+    rpsUsagePercent() {
+      const limits = this.limitsData;
+      if (!limits?.supported || !limits.maxRequestsPerSecond) return 0;
+      return Math.min(
+        100,
+        (limits.currentWindowRequests / limits.maxRequestsPerSecond) * 100,
+      );
     },
     selectedLocalCategory() {
       if (!this.newMapping.localCategoryId) return null;
@@ -755,19 +769,18 @@ export default {
       }
     },
 
-    getRpsColor(current, max) {
-      const ratio = current / max;
-      if (ratio < 0.5) return "bg-success";
-      if (ratio < 0.8) return "bg-warning";
-      return "bg-error";
+    getUsagePercent(usage, limit) {
+      if (limit <= 0) return 0;
+      return Math.min(100, (usage / limit) * 100);
     },
 
-    getQuotaColor(usage, limit) {
-      if (limit <= 0) return "bg-success";
+    getUsageLoadLabel(usage, limit) {
+      if (limit < 0) return "Безлимит";
+      if (limit <= 0) return "—";
       const ratio = usage / limit;
-      if (ratio < 0.5) return "bg-success";
-      if (ratio < 0.8) return "bg-warning";
-      return "bg-error";
+      if (ratio < 0.5) return "Норма";
+      if (ratio < 0.8) return "Высокая";
+      return "Критическая";
     },
 
     formatQuotaResetTime(resetsAt) {
@@ -2352,270 +2365,218 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
+  <Page class="!min-h-0 flex flex-col">
     <NavigationBar>
       <template v-if="connection" #center>
         <Tabs v-model="activeTab">
           <TabsList>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
             <TabsTrigger value="mappings">Маппинги</TabsTrigger>
-            <TabsTrigger value="products" @click="onProductsTabActivated"
-              >Товары</TabsTrigger
-            >
+            <TabsTrigger value="products" @click="onProductsTabActivated">
+              Товары
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </template>
     </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading" class="flex flex-col">
-      <div v-if="connection" class="flex flex-col flex-1">
-        <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col">
-          <!-- Settings Tab -->
-          <TabsContent value="settings" class="space-y-4">
-            <h2 class="sr-only">Настройки подключения</h2>
-            <Card>
-              <CardHeader>
-                <CardTitle class="flex items-center gap-2">
-                  <Settings class="size-5" />
-                  Настройки подключения
-                </CardTitle>
-              </CardHeader>
-              <CardContent class="space-y-4">
-                <div class="space-y-2">
-                  <Label>Название</Label>
-                  <Input v-model="connection.name" />
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <Switch
-                    :model-value="connection.isActive"
-                    @update:model-value="connection.isActive = $event"
-                    id="active"
-                  />
-                  <Label for="active">Активное подключение</Label>
-                </div>
-
-                <template v-if="credentialFields?.length">
-                  <div class="border-t pt-4">
-                    <h3 class="font-medium mb-4">Данные для подключения</h3>
-                    <div
-                      v-for="field in credentialFields"
-                      :key="field.key"
-                      class="space-y-2 mb-4"
-                    >
-                      <Label>
-                        {{ field.displayName }}
-                        <span v-if="field.isRequired" class="text-destructive"
-                          >*</span
-                        >
-                      </Label>
-                      <PasswordInput
-                        v-if="field.isSecret"
-                        v-model="credentialValues[field.key]"
-                        :placeholder="field.placeholder || field.description"
-                      />
-                      <Input
-                        v-else
-                        v-model="credentialValues[field.key]"
-                        type="text"
-                        :placeholder="field.placeholder || field.description"
-                      />
-                    </div>
-                  </div>
-                </template>
-
-                <div class="flex gap-2 pt-4">
-                  <Button @click="handleSave" :disabled="isSaving">
-                    <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-                    <Save v-else class="size-4 mr-2" />
-                    Сохранить
-                  </Button>
-                  <Button
-                    variant="outline"
-                    @click="handleTest"
-                    :disabled="isTesting"
-                  >
-                    <Loader2
-                      v-if="isTesting"
-                      class="size-4 mr-2 animate-spin"
-                    />
-                    <TestTube v-else class="size-4 mr-2" />
-                    Тест соединения
-                  </Button>
-                  <Dialog v-model:open="showLimitsDialog">
-                    <DialogTrigger as-child>
-                      <Button variant="outline" :disabled="!limitsData">
-                        <Activity class="size-4 mr-2" />
-                        API Лимиты
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent size="lg">
+    <PageSection :loading="isLoading" class="!min-h-0 flex flex-col">
+      <div v-if="connection" class="flex flex-col flex-1 min-h-0 gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0 space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-lg font-semibold break-words">{{ connection.name }}</h1>
+              <Badge variant="outline">{{ adapterDisplayName }}</Badge>
+              <Badge :variant="connection.isActive ? 'secondary' : 'outline'">
+                {{ connection.isActive ? "Активно" : "Неактивно" }}
+              </Badge>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Подключение к адаптеру: настройки, маппинги категорий и синхронизация товаров.
+            </p>
+          </div>
+          <div v-if="activeTab === 'settings'" class="flex flex-wrap gap-2 shrink-0">
+            <Button @click="handleSave" :disabled="isSaving">
+              <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+              <Save v-else class="size-4 mr-2" />
+              Сохранить
+            </Button>
+            <Button variant="outline" @click="handleTest" :disabled="isTesting">
+              <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
+              <TestTube v-else class="size-4 mr-2" />
+              Тест
+            </Button>
+            <Dialog v-model:open="showLimitsDialog">
+              <DialogTrigger as-child>
+                <Button variant="outline" :disabled="!limitsData">
+                  <Activity class="size-4 mr-2" />
+                  API лимиты
+                </Button>
+              </DialogTrigger>
+                    <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>API Лимиты</DialogTitle>
+                        <DialogTitle class="flex items-center gap-2">
+                          <Activity class="size-5" />
+                          API лимиты
+                        </DialogTitle>
                         <DialogDescription>
-                          {{
-                            limitsData && !limitsData.supported
-                              ? "Адаптер не поддерживает отслеживание лимитов"
-                              : "Текущие лимиты API адаптера"
-                          }}
+                          Текущая нагрузка и квоты запросов к API адаптера
                         </DialogDescription>
                       </DialogHeader>
-                      <div
-                        v-if="limitsData && limitsData.supported"
-                        class="space-y-6"
-                      >
-                        <!-- RPS Gauge -->
-                        <div class="space-y-2">
-                          <div
-                            class="flex items-center justify-between text-sm"
-                          >
-                            <div class="flex items-center gap-2">
-                              <Gauge class="size-4 text-muted-foreground" />
-                              <span class="font-medium"
-                                >Запросов в секунду</span
-                              >
-                            </div>
-                            <span class="text-muted-foreground">
-                              {{ limitsData.currentWindowRequests }} /
-                              {{ limitsData.maxRequestsPerSecond }} RPS
-                            </span>
-                          </div>
-                          <div
-                            class="h-2 bg-muted rounded-full overflow-hidden"
-                          >
-                            <div
-                              class="h-full rounded-full transition-all duration-300"
-                              :class="
-                                getRpsColor(
-                                  limitsData.currentWindowRequests,
-                                  limitsData.maxRequestsPerSecond,
-                                )
-                              "
-                              :style="{
-                                width:
-                                  Math.min(
-                                    100,
-                                    (limitsData.currentWindowRequests /
-                                      limitsData.maxRequestsPerSecond) *
-                                      100,
-                                  ) + '%',
-                              }"
-                            />
-                          </div>
-                          <div class="text-xs text-muted-foreground">
-                            Всего запросов с момента запуска:
-                            {{
-                              limitsData.totalRequestsSinceStart.toLocaleString(
-                                "ru-RU",
-                              )
-                            }}
-                          </div>
-                        </div>
 
-                        <!-- Quota Bars -->
+                      <div
+                        v-if="isLoadingLimits"
+                        class="flex justify-center py-10"
+                      >
+                        <Loader2 class="size-8 animate-spin text-muted-foreground" />
+                      </div>
+
+                      <EmptyState
+                        v-else-if="limitsData && !limitsData.supported"
+                        size="sm"
+                        class="py-6"
+                        title="Лимиты недоступны"
+                        description="Этот адаптер не поддерживает отслеживание API-лимитов."
+                      >
+                        <template #icon>
+                          <Activity />
+                        </template>
+                      </EmptyState>
+
+                      <div
+                        v-else-if="limitsData?.supported"
+                        class="space-y-4"
+                      >
+                        <Card>
+                          <CardHeader class="pb-2">
+                            <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
+                              <span class="flex items-center gap-2">
+                                <Gauge class="size-4 text-muted-foreground" />
+                                Запросов в секунду
+                              </span>
+                              <Badge variant="secondary" class="font-normal tabular-nums">
+                                {{ limitsData.currentWindowRequests }} /
+                                {{ limitsData.maxRequestsPerSecond }} RPS
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent class="space-y-3">
+                            <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                              <span>Текущее окно</span>
+                              <span>{{ getUsageLoadLabel(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond) }}</span>
+                            </div>
+                            <Progress :model-value="rpsUsagePercent" :max="100" />
+                            <p class="text-xs text-muted-foreground">
+                              Всего запросов с момента запуска:
+                              {{ limitsData.totalRequestsSinceStart.toLocaleString("ru-RU") }}
+                            </p>
+                          </CardContent>
+                        </Card>
+
                         <div
                           v-if="limitsData.quotas?.length > 0"
-                          class="space-y-4"
+                          class="grid gap-3"
                         >
-                          <Separator />
-                          <div
+                          <Card
                             v-for="quota in limitsData.quotas"
                             :key="quota.key"
-                            class="space-y-2"
                           >
-                            <div
-                              class="flex items-center justify-between text-sm"
-                            >
-                              <span class="font-medium">{{
-                                quota.displayName
-                              }}</span>
-                              <span
-                                v-if="quota.limit < 0"
-                                class="text-muted-foreground"
-                              >
-                                {{ quota.usage.toLocaleString("ru-RU") }}
-                                (безлимитный)
-                              </span>
-                              <span v-else class="text-muted-foreground">
-                                {{ quota.usage.toLocaleString("ru-RU") }} /
-                                {{ quota.limit.toLocaleString("ru-RU") }}
-                              </span>
-                            </div>
-                            <div
-                              v-if="quota.limit > 0"
-                              class="h-2 bg-muted rounded-full overflow-hidden"
-                            >
+                            <CardHeader class="pb-2">
+                              <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
+                                <span class="truncate">{{ quota.displayName }}</span>
+                                <Badge variant="secondary" class="shrink-0 font-normal tabular-nums">
+                                  <template v-if="quota.limit < 0">
+                                    {{ quota.usage.toLocaleString("ru-RU") }} · безлимит
+                                  </template>
+                                  <template v-else>
+                                    {{ quota.usage.toLocaleString("ru-RU") }} /
+                                    {{ quota.limit.toLocaleString("ru-RU") }}
+                                  </template>
+                                </Badge>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent class="space-y-3">
                               <div
-                                class="h-full rounded-full transition-all duration-300"
-                                :class="getQuotaColor(quota.usage, quota.limit)"
-                                :style="{
-                                  width:
-                                    Math.min(
-                                      100,
-                                      (quota.usage / quota.limit) * 100,
-                                    ) + '%',
-                                }"
-                              />
-                            </div>
-                            <div
-                              v-if="quota.resetsAt"
-                              class="text-xs text-muted-foreground"
-                            >
-                              Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
-                            </div>
-                          </div>
+                                v-if="quota.limit > 0"
+                                class="space-y-2"
+                              >
+                                <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                                  <span>Использование</span>
+                                  <span>{{ getUsageLoadLabel(quota.usage, quota.limit) }}</span>
+                                </div>
+                                <Progress
+                                  :model-value="getUsagePercent(quota.usage, quota.limit)"
+                                  :max="100"
+                                />
+                              </div>
+                              <p
+                                v-if="quota.resetsAt"
+                                class="text-xs text-muted-foreground"
+                              >
+                                Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                              </p>
+                            </CardContent>
+                          </Card>
                         </div>
                       </div>
                     </DialogContent>
-                  </Dialog>
-                </div>
+            </Dialog>
+          </div>
+        </div>
 
-                <div
-                  v-if="testResult"
-                  class="mt-4 p-4 rounded-lg border"
-                  :class="
-                    testResult.success
-                      ? 'bg-success-muted border-success/30'
-                      : 'bg-error-muted border-error/30'
-                  "
+        <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col min-h-0">
+          <TabsContent value="settings" class="mt-0">
+            <div class="max-w-2xl">
+              <SettingsFormSection title="Подключение">
+                <SettingsFormField label="Название" label-for="connection-name">
+                  <Input id="connection-name" v-model="connection.name" />
+                </SettingsFormField>
+
+                <SettingsFormField label="Активное подключение" label-for="active" inline>
+                  <Switch
+                    id="active"
+                    :model-value="connection.isActive"
+                    @update:model-value="connection.isActive = $event"
+                  />
+                </SettingsFormField>
+              </SettingsFormSection>
+
+              <SettingsFormSection
+                v-if="credentialFields?.length"
+                title="Данные для подключения"
+              >
+                <SettingsFormField
+                  v-for="field in credentialFields"
+                  :key="field.key"
+                  :label="field.displayName"
+                  :label-for="`cred-${field.key}`"
+                  :required="field.isRequired"
                 >
-                  <div class="flex items-center gap-2">
-                    <CheckCircle
-                      v-if="testResult.success"
-                      class="size-5 text-success-foreground"
-                    />
-                    <XCircle v-else class="size-5 text-error-foreground" />
-                    <span
-                      :class="
-                        testResult.success
-                          ? 'text-success-foreground'
-                          : 'text-error-foreground'
-                      "
-                    >
-                      {{
-                        testResult.success
-                          ? testResult.message || "Подключение успешно"
-                          : testResult.errorMessage || "Ошибка подключения"
-                      }}
-                    </span>
-                    <AiErrorExplainer
-                      v-if="!testResult.success && (testResult.errorMessage || 'Ошибка подключения')"
-                      :error-message="testResult.errorMessage || 'Ошибка подключения'"
-                      :context="`test_connection`"
-                      :connection-id="connection?.id"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <PasswordInput
+                    v-if="field.isSecret"
+                    :id="`cred-${field.key}`"
+                    v-model="credentialValues[field.key]"
+                    :placeholder="field.placeholder || field.description"
+                  />
+                  <Input
+                    v-else
+                    :id="`cred-${field.key}`"
+                    v-model="credentialValues[field.key]"
+                    type="text"
+                    :placeholder="field.placeholder || field.description"
+                  />
+                  <template v-if="field.description" #description>
+                    {{ field.description }}
+                  </template>
+                </SettingsFormField>
+              </SettingsFormSection>
 
-            <Card v-if="capabilities">
-              <CardHeader>
-                <CardTitle>Возможности адаптера</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <SettingsFormSection
+                v-if="capabilities"
+                title="Возможности адаптера"
+              >
+                <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
                   <div
                     v-for="(value, key) in capabilities.capabilities"
                     :key="key"
@@ -2623,23 +2584,62 @@ export default {
                   >
                     <CheckCircle
                       v-if="value"
-                      class="size-4 text-success-foreground"
+                      class="size-4 shrink-0 text-success-foreground"
                     />
-                    <XCircle v-else class="size-4 text-muted-foreground" />
-                    <span class="text-sm">{{
-                      capabilityLabels[key] || key
-                    }}</span>
+                    <XCircle v-else class="size-4 shrink-0 text-muted-foreground" />
+                    <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </SettingsFormSection>
+
+              <div
+                v-if="testResult"
+                class="mt-8 p-4 rounded-lg"
+                :class="
+                  testResult.success ? 'bg-success-muted' : 'bg-error-muted'
+                "
+              >
+                <div class="flex items-center gap-2 flex-wrap">
+                  <CheckCircle
+                    v-if="testResult.success"
+                    class="size-5 text-success-foreground shrink-0"
+                  />
+                  <XCircle v-else class="size-5 text-error-foreground shrink-0" />
+                  <span
+                    :class="
+                      testResult.success
+                        ? 'text-success-foreground'
+                        : 'text-error-foreground'
+                    "
+                  >
+                    {{
+                      testResult.success
+                        ? testResult.message || "Подключение успешно"
+                        : testResult.errorMessage || "Ошибка подключения"
+                    }}
+                  </span>
+                  <AiErrorExplainer
+                    v-if="!testResult.success && (testResult.errorMessage || 'Ошибка подключения')"
+                    :error-message="testResult.errorMessage || 'Ошибка подключения'"
+                    :context="`test_connection`"
+                    :connection-id="connection?.id"
+                  />
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           <!-- Mappings Tab -->
-          <TabsContent value="mappings" class="space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-base font-semibold">Маппинги категорий</h2>
-              <div class="flex shrink-0 flex-wrap gap-2">
+          <TabsContent value="mappings" class="mt-0 flex flex-col min-h-0 gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <p class="text-sm font-medium flex items-center gap-2">
+                  <FolderTree class="size-4" />
+                  Маппинги категорий
+                  <span class="text-muted-foreground font-normal tabular-nums">
+                    ({{ categoryMappings.length }})
+                  </span>
+                </p>
+                <div class="flex shrink-0 flex-wrap gap-2">
                 <Dialog
                   v-model:open="showCreateMappingDialog"
                   @update:open="$event && onCategoryDialogOpen()"
@@ -2650,56 +2650,92 @@ export default {
                       Создать маппинг
                     </Button>
                   </DialogTrigger>
-                  <DialogContent class="sm:max-w-5xl">
-                    <DialogHeader>
-                      <DialogTitle>Создать маппинг</DialogTitle>
+                  <DialogContent
+                    size="4xl"
+                    class="flex min-h-[36rem] max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                  >
+                    <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
+                      <DialogTitle class="flex items-center gap-2">
+                        <Link class="size-5" />
+                        Создать маппинг
+                      </DialogTitle>
+                      <DialogDescription>
+                        Свяжите локальную категорию с категорией {{ adapterDisplayName }} для экспорта и импорта товаров.
+                      </DialogDescription>
                     </DialogHeader>
 
-                    <!-- Название -->
-                    <div class="space-y-1.5">
-                      <Label>Название маппинга <span class="text-muted-foreground text-xs">(необязательно)</span></Label>
-                      <Input
-                        v-model="newMapping.name"
-                        placeholder="Например: Стандарт, Премиум..."
-                      />
+                    <div class="px-6 pb-4">
+                      <SettingsFormField label="Название маппинга">
+                        <Input
+                          v-model="newMapping.name"
+                          placeholder="Например: Стандарт, Премиум..."
+                        />
+                        <template #description>
+                          Необязательно. Помогает различать несколько маппингов одной категории.
+                        </template>
+                      </SettingsFormField>
                     </div>
 
-                    <!-- Двуколоночный выбор категорий -->
-                    <div class="grid grid-cols-2 gap-5 min-h-[320px]">
-                      <!-- Левая: локальная категория -->
-                      <div class="flex flex-col gap-2 min-h-0">
-                        <Label>Локальная категория</Label>
-                        <div class="border rounded-lg overflow-y-auto flex-1 max-h-[320px]">
+                    <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-y px-6">
+                      <div class="flex min-h-0 flex-col gap-2 py-4">
+                        <p class="text-sm font-medium">Локальная категория</p>
+                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
                           <div
-                            v-for="cat in localCategories"
-                            :key="cat.id"
-                            class="p-2.5 cursor-pointer border-b last:border-b-0 flex items-center justify-between hover:bg-accent transition-colors"
-                            :class="{ 'bg-accent': newMapping.localCategoryId === cat.id }"
-                            @click="newMapping.localCategoryId = cat.id"
+                            v-if="!localCategories.length"
+                            class="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground"
                           >
-                            <span class="text-sm font-medium truncate">{{ cat.name }}</span>
-                            <span v-if="cat.attributesCount" class="text-xs text-muted-foreground ml-2 shrink-0">{{ cat.attributesCount }} атр.</span>
-                          </div>
-                          <div v-if="!localCategories.length" class="text-center py-8 text-muted-foreground text-sm">
                             Нет категорий
                           </div>
+                          <div
+                            v-else
+                            class="min-h-0 flex-1 overflow-y-auto p-1.5"
+                          >
+                            <button
+                              v-for="cat in localCategories"
+                              :key="cat.id"
+                              type="button"
+                              class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent"
+                              :class="{ 'bg-accent': newMapping.localCategoryId === cat.id }"
+                              @click="newMapping.localCategoryId = cat.id"
+                            >
+                              <span class="truncate font-medium">{{ cat.name }}</span>
+                              <Badge
+                                v-if="cat.attributesCount"
+                                variant="secondary"
+                                class="ml-2 shrink-0 font-normal tabular-nums"
+                              >
+                                {{ cat.attributesCount }} атр.
+                              </Badge>
+                            </button>
+                          </div>
                         </div>
-                        <p v-if="selectedLocalCategory" class="text-xs text-muted-foreground">
-                          Выбрано: <strong>{{ selectedLocalCategory.name }}</strong> ({{ selectedLocalCategory.attributesCount || 0 }} атр.)
+                        <p
+                          v-if="selectedLocalCategory"
+                          class="text-xs text-muted-foreground"
+                        >
+                          Выбрано:
+                          <span class="font-medium text-foreground">{{ selectedLocalCategory.name }}</span>
+                          <span v-if="selectedLocalCategory.attributesCount">
+                            · {{ selectedLocalCategory.attributesCount }} атр.
+                          </span>
                         </p>
                       </div>
 
-                      <!-- Правая: категория адаптера -->
-                      <div class="flex flex-col gap-2 min-h-0">
-                        <Label>Категория {{ adapterDisplayName }}</Label>
+                      <div class="flex min-h-0 flex-col gap-2 py-4">
+                        <p class="text-sm font-medium">Категория {{ adapterDisplayName }}</p>
 
-                        <!-- Поиск -->
                         <div class="flex gap-2">
-                          <Input
-                            v-model="externalCategorySearch"
-                            placeholder="Поиск по названию..."
-                            @keyup.enter="searchExternalCategories"
-                          />
+                          <div class="relative min-w-0 flex-1">
+                            <Search
+                              class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                            />
+                            <Input
+                              v-model="externalCategorySearch"
+                              placeholder="Поиск по названию..."
+                              class="pl-9"
+                              @keyup.enter="searchExternalCategories"
+                            />
+                          </div>
                           <Button
                             variant="outline"
                             size="icon"
@@ -2710,10 +2746,9 @@ export default {
                           </Button>
                         </div>
 
-                        <!-- Breadcrumb path -->
                         <div
                           v-if="categoryPath.length > 0 && !externalCategorySearch"
-                          class="flex items-center gap-1 text-sm flex-wrap"
+                          class="flex flex-wrap items-center gap-1 text-sm"
                         >
                           <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
                             <Home class="size-3" />
@@ -2721,76 +2756,110 @@ export default {
                           <ChevronRight class="size-3 text-muted-foreground" />
                           <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
                             <Button
-                              variant="ghost" size="sm" class="h-7 px-2 text-xs"
+                              variant="ghost"
+                              size="sm"
+                              class="h-7 px-2 text-xs"
                               :disabled="index === categoryPath.length - 1"
                               @click="navigateToPathIndex(index)"
-                            >{{ pathItem.name }}</Button>
-                            <ChevronRight v-if="index < categoryPath.length - 1" class="size-3 text-muted-foreground" />
+                            >
+                              {{ pathItem.name }}
+                            </Button>
+                            <ChevronRight
+                              v-if="index < categoryPath.length - 1"
+                              class="size-3 text-muted-foreground"
+                            />
                           </template>
                         </div>
 
-                        <!-- Кнопка Назад -->
                         <Button
                           v-if="categoryPath.length > 0 && !externalCategorySearch"
-                          variant="outline" size="sm" class="w-full justify-start"
+                          variant="outline"
+                          size="sm"
+                          class="justify-start"
                           @click="navigateBack"
                         >
                           <ChevronLeft class="size-4 mr-2" />
                           Назад
                         </Button>
 
-                        <!-- Список категорий адаптера -->
-                        <div class="border rounded-lg overflow-y-auto flex-1 max-h-[240px]">
-                          <div v-if="isLoadingCategories" class="flex justify-center py-8">
+                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+                          <div
+                            v-if="isLoadingCategories"
+                            class="flex flex-1 items-center justify-center py-10"
+                          >
                             <Loader2 class="size-6 animate-spin text-muted-foreground" />
                           </div>
-                          <EmptyState
+                          <div
                             v-else-if="externalCategories.length === 0"
-                            size="sm"
-                            title="Категории не найдены"
-                            :description="
-                              capabilities?.capabilities?.createCategory && selectedLocalCategory
-                                ? `Измените запрос или создайте категорию в ${adapterDisplayName}.`
-                                : 'Измените поисковый запрос.'
-                            "
+                            class="flex flex-1 items-center justify-center p-4"
                           >
-                            <template #icon>
-                              <Search />
-                            </template>
-                            <Button
-                              v-if="capabilities?.capabilities?.createCategory"
-                              size="sm" variant="outline"
-                              :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
-                              @click="handleCreateExternalCategoryMapping"
+                            <EmptyState
+                              size="sm"
+                              title="Категории не найдены"
+                              :description="
+                                capabilities?.capabilities?.createCategory && selectedLocalCategory
+                                  ? `Измените запрос или создайте категорию в ${adapterDisplayName}.`
+                                  : 'Измените поисковый запрос.'
+                              "
                             >
-                              <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
-                              <FolderTree v-else class="size-4 mr-2" />
-                              {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
-                            </Button>
-                          </EmptyState>
+                              <template #icon>
+                                <Search />
+                              </template>
+                              <Button
+                                v-if="capabilities?.capabilities?.createCategory"
+                                size="sm"
+                                variant="outline"
+                                :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                                @click="handleCreateExternalCategoryMapping"
+                              >
+                                <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                                <FolderTree v-else class="size-4 mr-2" />
+                                {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
+                              </Button>
+                            </EmptyState>
+                          </div>
                           <div
                             v-else
-                            v-for="cat in externalCategories"
-                            :key="cat.id"
-                            class="p-2 hover:bg-accent cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
-                            :class="{ 'bg-accent': newMapping.externalCategoryId === cat.id }"
-                            @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
+                            class="min-h-0 flex-1 overflow-y-auto p-1.5"
                           >
-                            <div class="flex-1 min-w-0">
-                              <div class="text-sm font-medium truncate">{{ cat.name }}</div>
-                              <div v-if="cat.fullPath" class="text-xs text-muted-foreground truncate">{{ cat.fullPath }}</div>
-                            </div>
-                            <ChevronRight v-if="cat.hasChildren && !externalCategorySearch" class="size-4 text-muted-foreground flex-shrink-0 ml-2" />
+                            <button
+                              v-for="cat in externalCategories"
+                              :key="cat.id"
+                              type="button"
+                              class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
+                              :class="{ 'bg-accent': newMapping.externalCategoryId === cat.id }"
+                              @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
+                            >
+                              <div class="min-w-0 flex-1">
+                                <div class="truncate text-sm font-medium">{{ cat.name }}</div>
+                                <div
+                                  v-if="cat.fullPath"
+                                  class="truncate text-xs text-muted-foreground"
+                                >
+                                  {{ cat.fullPath }}
+                                </div>
+                              </div>
+                              <ChevronRight
+                                v-if="cat.hasChildren && !externalCategorySearch"
+                                class="ml-2 size-4 shrink-0 text-muted-foreground"
+                              />
+                            </button>
                           </div>
                         </div>
 
-                        <p v-if="newMapping.externalCategoryId" class="text-xs text-muted-foreground">
-                          Выбрано: <strong>{{ newMapping.externalCategoryName || newMapping.externalCategoryId }}</strong>
+                        <p
+                          v-if="newMapping.externalCategoryId"
+                          class="text-xs text-muted-foreground"
+                        >
+                          Выбрано:
+                          <span class="font-medium text-foreground">
+                            {{ newMapping.externalCategoryName || newMapping.externalCategoryId }}
+                          </span>
                         </p>
                       </div>
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter class="gap-2 px-6 py-4">
                       <DialogClose as-child>
                         <Button variant="outline">Отмена</Button>
                       </DialogClose>
@@ -2831,8 +2900,8 @@ export default {
 
             <EmptyState
               v-if="categoryMappings.length === 0"
-              class="border border-dashed"
-              title="Пока нет маппингов"
+              class="py-10"
+                title="Пока нет маппингов"
               :description="`Маппинг связывает локальную категорию с категорией ${adapterDisplayName} и управляет полями при экспорте и импорте.`"
             >
               <template #icon>
@@ -2850,18 +2919,18 @@ export default {
               </Button>
             </EmptyState>
 
-            <div v-else class="rounded-lg border overflow-hidden">
+            <div v-else class="border rounded-xl overflow-hidden">
               <div class="overflow-x-auto">
-                <Table>
+                <table class="w-full caption-bottom text-sm">
                   <TableHeader>
                     <TableRow class="hover:bg-transparent">
-                      <TableHead>Локальная категория</TableHead>
-                      <TableHead class="hidden sm:table-cell">
+                      <TableHead class="px-3">Локальная категория</TableHead>
+                      <TableHead class="hidden sm:table-cell px-3">
                         Категория {{ adapterDisplayName }}
                       </TableHead>
-                      <TableHead class="hidden md:table-cell">Название</TableHead>
-                      <TableHead class="w-24 text-right">Товары</TableHead>
-                      <TableHead class="w-12" />
+                      <TableHead class="hidden md:table-cell px-3">Название</TableHead>
+                      <TableHead class="w-24 text-right px-3">Товары</TableHead>
+                      <TableHead class="w-12 px-2" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2924,31 +2993,29 @@ export default {
                       </TableCell>
                     </TableRow>
                   </TableBody>
-                </Table>
+                </table>
               </div>
             </div>
           </TabsContent>
 
           <!-- Products Tab -->
-          <TabsContent value="products" class="flex-1 flex flex-col space-y-4">
-            <h2 class="sr-only">Товары адаптера</h2>
-            <!-- View toggle + Search -->
-            <div class="flex items-center gap-2">
-              <Button
-                :variant="
-                  productsViewMode === 'external' ? 'default' : 'outline'
-                "
-                @click="switchProductsView('external')"
-              >
-                Товары адаптера
-              </Button>
-              <Button
-                :variant="productsViewMode === 'local' ? 'default' : 'outline'"
-                @click="switchProductsView('local')"
-              >
-                Локальные для экспорта
-              </Button>
-              <div class="relative flex-1">
+          <TabsContent value="products" class="flex-1 flex flex-col mt-0 min-h-0 gap-3">
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  :variant="productsViewMode === 'external' ? 'default' : 'outline'"
+                  @click="switchProductsView('external')"
+                >
+                  Товары адаптера
+                </Button>
+                <Button
+                  size="sm"
+                  :variant="productsViewMode === 'local' ? 'default' : 'outline'"
+                  @click="switchProductsView('local')"
+                >
+                  Локальные для экспорта
+                </Button>
+                <div class="relative flex-1 min-w-[12rem]">
                 <Search
                   class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
                 />
@@ -2973,6 +3040,11 @@ export default {
               </div>
             </div>
 
+            <div
+              class="flex flex-col border rounded-xl overflow-hidden flex-1 min-h-0"
+              style="height: calc(100vh - 14rem)"
+            >
+              <div class="flex-1 min-h-0 flex flex-col">
             <!-- ==================== EXTERNAL VIEW ==================== -->
             <template v-if="productsViewMode === 'external'">
               <!-- Loading state -->
@@ -2981,10 +3053,10 @@ export default {
               </div>
 
               <!-- Products table -->
-              <div v-else class="border rounded-lg flex-1 overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+              <div v-else class="flex-1 min-h-0 overflow-auto">
+                <table class="w-full caption-bottom text-sm">
+                  <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
+                    <TableRow class="hover:bg-transparent">
                       <TableHead class="w-[50px]">
                         <Checkbox
                           :model-value="allSelected"
@@ -3181,29 +3253,28 @@ export default {
                       </TableCell>
                     </TableRow>
                   </TableBody>
-                </Table>
-              </div>
+                </table>
 
-              <!-- Load more -->
-              <div v-if="canLoadMore" class="flex justify-center py-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="isLoadingMore"
-                  @click="loadMoreProducts"
-                >
-                  <Loader2
-                    v-if="isLoadingMore"
-                    class="size-4 mr-2 animate-spin"
-                  />
-                  {{ isLoadingMore ? "Загрузка..." : "Загрузить ещё" }}
-                </Button>
+                <div v-if="canLoadMore" class="flex justify-center py-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="isLoadingMore"
+                    @click="loadMoreProducts"
+                  >
+                    <Loader2
+                      v-if="isLoadingMore"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    {{ isLoadingMore ? "Загрузка..." : "Загрузить ещё" }}
+                  </Button>
+                </div>
               </div>
 
               <!-- Bulk actions bar -->
               <div
                 v-if="hasAnySelected"
-                class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+                class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
               >
                 <div class="text-sm text-muted-foreground">
                   Выбрано: {{ selectedItems.length }}
@@ -3307,10 +3378,10 @@ export default {
               </div>
 
               <!-- Local products table -->
-              <div v-else class="border rounded-lg flex-1 overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+              <div v-else class="flex-1 min-h-0 overflow-auto">
+                <table class="w-full caption-bottom text-sm">
+                  <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
+                    <TableRow class="hover:bg-transparent">
                       <TableHead class="w-[50px]">
                         <Checkbox
                           :model-value="allLocalSelected"
@@ -3380,13 +3451,13 @@ export default {
                       </TableCell>
                     </TableRow>
                   </TableBody>
-                </Table>
+                </table>
               </div>
 
               <!-- Pagination -->
               <div
                 v-if="localTotalCount > 0"
-                class="flex items-center justify-between py-3"
+                class="shrink-0 flex items-center justify-between px-4 py-3"
               >
                 <div class="flex items-center gap-2">
                   <p class="text-sm text-muted-foreground">по</p>
@@ -3475,7 +3546,7 @@ export default {
               <!-- Bulk export bar -->
               <div
                 v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
-                class="sticky bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between -mx-4 -mb-4"
+                class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
               >
                 <div class="text-sm text-muted-foreground">
                   Выбрано: {{ selectedLocalIds.length }}
@@ -3493,6 +3564,8 @@ export default {
                 </Button>
               </div>
             </template>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

@@ -23,7 +23,7 @@ const emit = defineEmits(["select-store"]);
 
 <template>
   <SidebarMenu v-if="memberships.length > 0">
-    <SidebarMenuItem class="px-2 pb-2">
+    <SidebarMenuItem class="p-0">
       <Select
         :model-value="selectedStoreId != null ? String(selectedStoreId) : ''"
         @update:model-value="emit('select-store', Number($event))"

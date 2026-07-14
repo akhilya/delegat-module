@@ -41,6 +41,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default {
   components: {
@@ -50,6 +58,12 @@ export default {
     Input,
     Label,
     Badge,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     Plus,
     Puzzle,
     Loader2,
@@ -75,14 +89,6 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-  },
-  computed: {
-    pluginsWithCapabilities() {
-      return this.plugins.map((plugin) => ({
-        ...plugin,
-        formattedCapabilities: this.formatCapabilities(plugin.capabilities),
-      }));
-    },
   },
   data() {
     return {
@@ -197,24 +203,17 @@ export default {
       }
     },
 
-    formatCapabilities(capabilities) {
-      if (!capabilities) return [];
-
-      const capMap = {
-        getCategories: "Категории",
-        getCategoryFields: "Поля категорий",
-        exportProduct: "Экспорт товаров",
-        importProduct: "Импорт товаров",
-        importAllProducts: "Массовый импорт",
-        updateSku: "Обновление SKU",
-        importPrices: "Импорт цен",
-        exportPrices: "Экспорт цен",
-        exportStocks: "Экспорт остатков",
-      };
-
-      return Object.entries(capabilities)
-        .filter(([_, value]) => value === true)
-        .map(([key]) => capMap[key] || key);
+    formatLoadedAt(value) {
+      if (!value) return "—";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "—";
+      return date.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     },
   },
   mounted() {
@@ -322,84 +321,116 @@ export default {
       </template>
 
       <div class="rounded-lg border overflow-hidden">
-        <ul class="divide-y divide-border/60">
-          <li
-            v-for="plugin in pluginsWithCapabilities"
-            :key="plugin.key"
-            class="flex items-start gap-4 px-5 py-3.5 hover:bg-muted/40 group transition-colors"
-          >
-            <Puzzle class="size-5 text-muted-foreground shrink-0 mt-0.5" />
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-medium truncate">{{ plugin.displayName }}</span>
-                <Badge variant="outline" class="text-xs tabular-nums">v{{ plugin.version }}</Badge>
-                <code class="text-xs text-muted-foreground font-mono">{{ plugin.key }}</code>
-              </div>
-              <div v-if="plugin.description" class="text-sm text-muted-foreground mt-0.5">
-                {{ plugin.description }}
-              </div>
-              <div v-if="plugin.formattedCapabilities.length > 0" class="flex flex-wrap gap-1 mt-2">
-                <Badge
-                  v-for="cap in plugin.formattedCapabilities"
-                  :key="cap"
-                  variant="secondary"
-                  class="text-[11px] font-normal"
-                >
-                  {{ cap }}
-                </Badge>
-              </div>
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                @click="handleReload(plugin.key)"
-                :disabled="isReloading === plugin.key"
-                title="Перезагрузить"
-                class="opacity-0 group-hover:opacity-100 transition-opacity"
+        <div class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="hover:bg-transparent">
+                <TableHead class="px-3">Плагин</TableHead>
+                <TableHead class="hidden md:table-cell px-3">Ключ</TableHead>
+                <TableHead class="w-24 px-3">Версия</TableHead>
+                <TableHead class="hidden lg:table-cell px-3">Файл</TableHead>
+                <TableHead class="hidden xl:table-cell px-3">Загружен</TableHead>
+                <TableHead class="w-28 px-3">Тип</TableHead>
+                <TableHead class="w-24 px-2" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="plugin in plugins"
+                :key="plugin.key"
+                class="group"
               >
-                <Loader2
-                  v-if="isReloading === plugin.key"
-                  class="size-4 animate-spin"
-                />
-                <RefreshCw v-else class="size-4" />
-              </Button>
-              <AlertDialog v-if="!plugin.isSystem">
-                <AlertDialogTrigger as-child>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Удалить"
-                    class="opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 class="size-4 text-destructive" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Удалить плагин?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Вы уверены что хотите удалить плагин "{{
-                        plugin.displayName
-                      }}"? Подключения использующие этот плагин перестанут
-                      работать.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Отмена</AlertDialogCancel>
-                    <AlertDialogAction
-                      @click="handleDelete(plugin.key)"
-                      :disabled="isDeleting"
+                <TableCell class="px-3 align-top">
+                  <div class="flex items-start gap-2.5 min-w-0">
+                    <Puzzle class="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <div class="min-w-0">
+                      <div class="font-medium break-words">{{ plugin.displayName }}</div>
+                      <div
+                        v-if="plugin.description"
+                        class="text-xs text-muted-foreground mt-0.5 line-clamp-2"
+                      >
+                        {{ plugin.description }}
+                      </div>
+                      <code class="text-xs text-muted-foreground font-mono mt-1 block md:hidden">
+                        {{ plugin.key }}
+                      </code>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell class="hidden md:table-cell px-3 align-top font-mono text-xs text-muted-foreground">
+                  {{ plugin.key }}
+                </TableCell>
+                <TableCell class="px-3 align-top">
+                  <Badge variant="outline" class="text-xs tabular-nums">
+                    v{{ plugin.version }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate">
+                  {{ plugin.filePath || "—" }}
+                </TableCell>
+                <TableCell class="hidden xl:table-cell px-3 align-top text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                  {{ formatLoadedAt(plugin.loadedAt) }}
+                </TableCell>
+                <TableCell class="px-3 align-top">
+                  <Badge :variant="plugin.isSystem ? 'secondary' : 'outline'">
+                    {{ plugin.isSystem ? "Системный" : "Пользовательский" }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="px-2 align-top">
+                  <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      @click="handleReload(plugin.key)"
+                      :disabled="isReloading === plugin.key"
+                      title="Перезагрузить"
                     >
-                      <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                      Удалить
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </li>
-        </ul>
+                      <Loader2
+                        v-if="isReloading === plugin.key"
+                        class="size-4 animate-spin"
+                      />
+                      <RefreshCw v-else class="size-4" />
+                    </Button>
+                    <AlertDialog v-if="!plugin.isSystem">
+                      <AlertDialogTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          title="Удалить"
+                        >
+                          <Trash2 class="size-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Удалить плагин?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Вы уверены что хотите удалить плагин "{{
+                              plugin.displayName
+                            }}"? Подключения, использующие этот плагин, перестанут
+                            работать.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Отмена</AlertDialogCancel>
+                          <AlertDialogAction
+                            @click="handleDelete(plugin.key)"
+                            :disabled="isDeleting"
+                          >
+                            <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
+                            Удалить
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </PageSection>
   </div>

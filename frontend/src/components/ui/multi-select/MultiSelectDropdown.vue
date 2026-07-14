@@ -175,7 +175,7 @@ const clearAll = () => {
     <PopoverContent
       align="start"
       :collision-padding="8"
-      class="w-[--reka-popover-trigger-width] max-w-[--reka-popover-trigger-width] p-0 max-h-72 overflow-hidden flex flex-col"
+      class="w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col"
     >
       <!-- Search input (only shown if many options) -->
       <div v-if="showSearch" class="p-2 border-b">

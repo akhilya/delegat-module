@@ -162,7 +162,7 @@ export default {
         {{ group.name }}
       </p>
 
-      <div class="grid min-w-0 grid-cols-1 md:grid-cols-2 gap-5">
+      <div class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]">
         <div
           v-for="attribute in group.attributes"
           :key="attribute.id"

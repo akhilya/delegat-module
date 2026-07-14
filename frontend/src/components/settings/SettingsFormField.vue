@@ -54,7 +54,8 @@ const hasError = computed(() => !!props.error);
     <template v-else>
       <FieldLabel
         :for="labelFor"
-        :class="cn('min-w-0 max-w-full break-words text-sm font-medium', hasError && 'text-destructive')"
+        :title="label"
+        :class="cn('min-w-0 max-w-full line-clamp-2 break-all text-sm font-medium', hasError && 'text-destructive')"
       >
         {{ label }}<span v-if="required" class="text-destructive"> *</span>
       </FieldLabel>

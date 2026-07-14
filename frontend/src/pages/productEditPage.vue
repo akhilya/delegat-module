@@ -1000,25 +1000,20 @@ export default {
 
 <template>
   <Page class="!min-h-0">
-    <div class="fixed top-0 z-30 bg-background/95 backdrop-blur-sm left-0 right-0 md:left-[var(--sidebar-width)]">
-      <div class="adaptive-padding">
-        <NavigationBar :sticky="false">
-          <template #center>
-            <Tabs v-model="tab">
-              <TabsList>
-                <TabsTrigger value="properties">Свойства</TabsTrigger>
-                <TabsTrigger value="notes">Заметки</TabsTrigger>
-                <TabsTrigger value="files">Файлы</TabsTrigger>
-                <TabsTrigger value="images"><span class="sm:hidden">Фото</span><span class="hidden sm:inline">Изображения</span></TabsTrigger>
-                <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
-                <TabsTrigger value="marketplaces"><span class="sm:hidden">АД</span><span class="hidden sm:inline">Адаптеры</span></TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </template>
-        </NavigationBar>
-      </div>
-    </div>
-    <div class="h-[7rem] sm:h-14 shrink-0" aria-hidden="true" />
+    <NavigationBar>
+      <template #center>
+        <Tabs v-model="tab">
+          <TabsList>
+            <TabsTrigger value="properties">Свойства</TabsTrigger>
+            <TabsTrigger value="notes">Заметки</TabsTrigger>
+            <TabsTrigger value="files">Файлы</TabsTrigger>
+            <TabsTrigger value="images"><span class="sm:hidden">Фото</span><span class="hidden sm:inline">Изображения</span></TabsTrigger>
+            <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
+            <TabsTrigger value="marketplaces"><span class="sm:hidden">АД</span><span class="hidden sm:inline">Адаптеры</span></TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </template>
+    </NavigationBar>
     <Breadcrumbs :items="breadcrumbs" />
     <PageSection :loading="isProductLoading && !productSKU" class="!min-h-0 !grow-0 mb-0">
       <input

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useStore } from "vuex";
 import { ChevronRight } from "lucide-vue-next";
@@ -18,9 +18,14 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { isActiveRoute } from "@/lib/isActiveRoute";
+import { resolveActiveNavItemId } from "@/lib/isActiveRoute";
+import {
+  getSidebarGroupOpen,
+  setSidebarGroupOpen,
+} from "@/lib/sidebarNavState.js";
 
 const props = defineProps({
+  groupId: { type: String, required: true },
   label: { type: String, required: true },
   icon: { type: [Object, Function], required: true },
   items: { type: Array, required: true },
@@ -29,11 +34,14 @@ const props = defineProps({
 
 const route = useRoute();
 const store = useStore();
-const open = ref(props.defaultOpen);
+const savedOpen = getSidebarGroupOpen(props.groupId);
+const open = ref(savedOpen ?? props.defaultOpen);
+
+const activeItemId = computed(() => resolveActiveNavItemId(route, props.items));
 
 function isItemActive(item) {
   if (item.type === "action" || !item.to) return false;
-  return isActiveRoute(route, item.to);
+  return item.id === activeItemId.value;
 }
 
 function handleAction(action) {
@@ -41,9 +49,14 @@ function handleAction(action) {
   if (action === "toggleOps") store.dispatch("operations/togglePanel");
 }
 
+watch(open, (isOpen) => {
+  setSidebarGroupOpen(props.groupId, isOpen);
+});
+
 watch(
   () => route.path,
   () => {
+    if (getSidebarGroupOpen(props.groupId) !== undefined) return;
     if (props.items.some((item) => isItemActive(item))) {
       open.value = true;
     }
