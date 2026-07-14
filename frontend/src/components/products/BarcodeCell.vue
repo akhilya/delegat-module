@@ -6,10 +6,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+
+function getLineColor() {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue("--foreground")
+    .trim();
+  return raw || "#000000";
+}
 
 export default {
-  components: { Popover, PopoverContent, PopoverTrigger, Button },
+  components: { Popover, PopoverContent, PopoverTrigger },
   props: {
     barcode: { type: String, required: true },
   },
@@ -25,10 +31,11 @@ export default {
       try {
         JsBarcode(smallSvg.value, props.barcode, {
           format,
-          height: 28,
+          height: 32,
           displayValue: false,
           margin: 0,
-          width: 1,
+          width: 1.2,
+          lineColor: getLineColor(),
         });
       } catch {}
     }
@@ -42,6 +49,7 @@ export default {
           displayValue: true,
           margin: 8,
           fontSize: 16,
+          lineColor: getLineColor(),
         });
       } catch {}
     }
@@ -50,6 +58,14 @@ export default {
       nextTick(renderSmall);
     });
 
+    watch(
+      () => props.barcode,
+      async () => {
+        await nextTick();
+        renderSmall();
+      },
+    );
+
     watch(isOpen, async (val) => {
       if (val) {
         await nextTick();
@@ -57,7 +73,7 @@ export default {
       }
     });
 
-    return { smallSvg, largeSvg, isOpen, renderSmall, renderLarge };
+    return { smallSvg, largeSvg, isOpen };
   },
 };
 </script>
@@ -65,18 +81,19 @@ export default {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <Button
+      <button
         type="button"
-        variant="ghost"
-        class="h-auto flex flex-col items-center gap-0.5 p-0 hover:opacity-80"
+        class="flex flex-col items-center gap-0.5 rounded-md px-1 py-0.5 cursor-pointer transition-colors hover:bg-muted/60"
         title="Нажмите для увеличения"
       >
-        <svg ref="smallSvg" class="h-7"></svg>
-        <span class="text-[10px] text-muted-foreground font-mono leading-none">{{ barcode }}</span>
-      </Button>
+        <svg ref="smallSvg" class="block h-8 w-[96px] max-w-full"></svg>
+        <span class="text-[10px] font-mono leading-none tabular-nums text-foreground/80">
+          {{ barcode }}
+        </span>
+      </button>
     </PopoverTrigger>
     <PopoverContent class="w-auto p-2" align="center">
-      <div class="bg-background rounded p-1">
+      <div class="rounded bg-background p-1">
         <svg ref="largeSvg"></svg>
       </div>
     </PopoverContent>
