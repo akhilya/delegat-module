@@ -8,7 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Label from "@/components/ui/label/Label.vue";
-import Separator from "@/components/ui/separator/Separator.vue";
+
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Select,
@@ -77,7 +77,7 @@ export default {
     Textarea,
     Switch,
     Label,
-    Separator,
+
     Badge,
     Select,
     SelectContent,
@@ -356,10 +356,11 @@ export default {
         connectionId,
         onSuccess: (response) => {
           const data = response.data.value;
+          const msg = data.message || data.externalGroupId || "Готово";
           if (data.isFieldBased) {
-            displaySonnerSuccess(`Группа экспортирована (field-based): ${data.externalGroupId || 'ID назначен'}`);
+            displaySonnerSuccess(`Привязка создана. ${msg}`);
           } else {
-            displaySonnerSuccess(`Группа экспортирована: ${data.externalGroupId || 'ID назначен'}`);
+            displaySonnerSuccess(`Карточки объединены на маркетплейсе. ${msg}`);
           }
           this.fetchSyncStatus();
         },
@@ -461,10 +462,8 @@ export default {
         </div>
 
         <template v-if="!isCreateMode">
-          <Separator />
-
           <!-- Products Section -->
-          <div class="pt-4 space-y-4">
+          <div class="mt-8 space-y-4">
             <div class="flex justify-between items-center">
               <h2 class="text-lg font-semibold flex items-center gap-2">
                 <Package class="size-5" />
@@ -480,7 +479,7 @@ export default {
             <EmptyState
               v-if="members.length === 0"
               title="Нет товаров"
-              description="Товары в группе синхронизируются на адаптеры как единое предложение"
+              description="Добавьте товары, которые должны объединяться на маркетплейсе в одну карточку"
             >
               <template #icon>
                 <Package />
@@ -560,18 +559,25 @@ export default {
             </draggable>
           </div>
 
-          <Separator />
-
-          <!-- Marketplace Sync Section -->
-          <div class="pt-4 space-y-4">
-            <div class="flex justify-between items-center">
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                <Upload class="size-5" />
-                Синхронизация с адаптерами
-              </h2>
+          <!-- Marketplace links -->
+          <div class="mt-8 space-y-4">
+            <div class="flex justify-between items-start gap-3">
+              <div class="space-y-1">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                  <Upload class="size-5" />
+                  Объединение на маркетплейсах
+                </h2>
+                <p class="text-sm text-muted-foreground max-w-2xl">
+                  Группа в каталоге — список товаров для одной карточки. Ozon объединяет через поле в
+                  карточке (после привязки переэкспортируйте товары). Wildberries — через API слияния
+                  карточек, если товары уже экспортированы.
+                </p>
+              </div>
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
+                class="size-8 shrink-0"
+                title="Обновить статусы"
                 @click="fetchSyncStatus"
                 :disabled="isLoadingSyncStatus"
               >
@@ -580,7 +586,7 @@ export default {
             </div>
 
             <div v-if="connections.length === 0" class="text-sm text-muted-foreground">
-              Нет подключенных адаптеров
+              Нет подключённых адаптеров
             </div>
 
             <div v-else class="space-y-3">
@@ -623,7 +629,13 @@ export default {
                       >
                         <Loader2 v-if="isExporting" class="size-4 mr-2 animate-spin" />
                         <Upload v-else class="size-4 mr-2" />
-                        {{ syncStatuses.find(s => s.connectionId === connection.id) ? 'Обновить' : 'Экспортировать' }}
+                        {{
+                          syncStatuses.find(s => s.connectionId === connection.id)
+                            ? 'Обновить привязку'
+                            : connection.adapterKey === 'ozon'
+                              ? 'Привязать группу'
+                              : 'Объединить карточки'
+                        }}
                       </Button>
                     </div>
                   </div>
