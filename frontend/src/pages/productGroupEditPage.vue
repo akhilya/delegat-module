@@ -431,8 +431,8 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading" class="flex flex-col overflow-hidden">
-      <div v-if="group" class="grow flex flex-col overflow-auto">
+    <PageSection :loading="isLoading" class="flex flex-col">
+      <div v-if="group" class="grow flex flex-col">
         <!-- Group Info Section -->
         <div class="space-y-4">
           <h2 class="text-lg font-semibold">Основные данные</h2>
