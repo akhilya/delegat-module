@@ -486,8 +486,11 @@ export default {
               </template>
             </EmptyState>
 
-            <draggable
+            <div
               v-else
+              class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar pr-1 -mr-1"
+            >
+            <draggable
               v-model="members"
               item-key="id"
               handle=".drag-handle"
@@ -557,6 +560,7 @@ export default {
                 </Card>
               </template>
             </draggable>
+            </div>
           </div>
 
           <!-- Marketplace links -->
