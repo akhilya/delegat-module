@@ -32,6 +32,11 @@ RUN find backend sdk plugins -depth -type d \( -name bin -o -name obj -o -name .
 ARG APP_VERSION=dev
 RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:InformationalVersion=$APP_VERSION /p:BuildPlugins=false
 
+# Build adapter plugins against the unified top-level SDK (not nested submodule copies)
+RUN for csproj in plugins/Delegat.Marketplace.*/Delegat.Marketplace.*.csproj; do \
+      sed -i 's|sdk\\Delegat.Marketplace.SDK|../../sdk/Delegat.Marketplace.SDK|g' "$csproj"; \
+    done
+
 # Build plugins and copy DLLs to app
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon
 RUN dotnet publish plugins/Delegat.Marketplace.Wildberries/Delegat.Marketplace.Wildberries.csproj -a $TARGETARCH -c Release -o /plugins-out/wb

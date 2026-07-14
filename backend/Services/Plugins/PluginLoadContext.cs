@@ -38,6 +38,14 @@ public class PluginLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
+        // Always share the host SDK assembly so plugin types implement the same
+        // IMarketplacePlugin contract the backend was compiled against.
+        if (assemblyName.Name == "Delegat.Marketplace.SDK")
+        {
+            return AssemblyLoadContext.Default.Assemblies
+                .FirstOrDefault(a => a.GetName().Name == assemblyName.Name);
+        }
+
         // First try to resolve from plugin dependencies
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
         if (assemblyPath != null)
@@ -46,7 +54,7 @@ public class PluginLoadContext : AssemblyLoadContext
             return LoadFromFileWithoutLock(assemblyPath);
         }
 
-        // Fall back to default context (for SDK types)
+        // Fall back to default context for other shared dependencies
         return null;
     }
 

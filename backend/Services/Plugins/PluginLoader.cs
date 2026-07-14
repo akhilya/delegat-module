@@ -28,12 +28,11 @@ public static class PluginLoader
             // Load the assembly from memory (doesn't lock the file)
             var assembly = loadContext.LoadFromFileWithoutLock(pluginPath);
 
-            // Find all types implementing IMarketplacePlugin
-            var pluginType = assembly.GetTypes()
-                .FirstOrDefault(t =>
-                    typeof(IMarketplacePlugin).IsAssignableFrom(t) &&
-                    !t.IsInterface &&
-                    !t.IsAbstract);
+            // Find plugin entry type (MarketplacePluginBase subclass).
+            // Use base-type name matching instead of IsAssignableFrom because plugins
+            // may be compiled against a different SDK copy than the host assembly.
+            var pluginType = GetLoadableTypes(assembly)
+                .FirstOrDefault(IsMarketplacePluginType);
 
             if (pluginType == null)
             {
@@ -106,6 +105,35 @@ public static class PluginLoader
         }
 
         return plugins;
+    }
+
+    private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(t => t != null)!;
+        }
+    }
+
+    private static bool IsMarketplacePluginType(Type type)
+    {
+        if (type.IsInterface || type.IsAbstract)
+            return false;
+
+        if (typeof(IMarketplacePlugin).IsAssignableFrom(type))
+            return true;
+
+        for (var current = type.BaseType; current != null; current = current.BaseType)
+        {
+            if (current.FullName == typeof(MarketplacePluginBase).FullName)
+                return true;
+        }
+
+        return false;
     }
 }
 
