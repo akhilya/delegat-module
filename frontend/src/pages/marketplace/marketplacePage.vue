@@ -13,12 +13,8 @@ import {
   Plus,
   Store,
   Loader2,
-  ChevronRight,
   Package,
   Trash2,
-  FolderTree,
-  CheckCircle,
-  XCircle,
   Settings,
 } from "lucide-vue-next";
 import {
@@ -43,8 +39,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Card,
-} from "@/components/ui/card";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -70,13 +71,15 @@ export default {
     Plus,
     Store,
     Loader2,
-    ChevronRight,
     Package,
     Trash2,
-    FolderTree,
-    CheckCircle,
-    XCircle,
     Settings,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -94,7 +97,6 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Card,
     Select,
     SelectContent,
     SelectItem,
@@ -381,79 +383,97 @@ export default {
       empty-description="Добавьте первое подключение для синхронизации товаров"
     >
 
-      <Card class="p-0 gap-0 overflow-hidden">
-        <ul class="divide-y divide-border/60">
-          <li
-            v-for="conn in connections"
-            :key="conn.id"
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
-            @click="openConnection(conn.id)"
-          >
-            <!-- Status dot left of icon — green=active, neutral=inactive. Subtler than a Badge. -->
-            <span
-              class="size-2 rounded-full shrink-0"
-              :class="conn.isActive ? 'bg-success' : 'bg-muted-foreground/40'"
-              :title="conn.isActive ? 'Активен' : 'Неактивен'"
-            />
-            <Store class="size-5 text-muted-foreground shrink-0" />
-            <div class="min-w-0 flex-1">
-              <div class="font-medium truncate">{{ conn.name }}</div>
-              <div class="text-sm text-muted-foreground truncate">{{ getAdapterName(conn.adapterKey) }}</div>
-            </div>
-            <div class="flex items-center gap-4 text-sm text-muted-foreground shrink-0 tabular-nums">
-              <span class="flex items-center gap-1.5" title="Маппингов категорий">
-                <FolderTree class="size-4" />
-                {{ conn.categoryMappingsCount || 0 }}
-              </span>
-              <span class="flex items-center gap-1.5" title="Связанных товаров">
-                <Package class="size-4" />
-                {{ conn.productLinksCount || 0 }}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              @click.stop="openConnection(conn.id)"
-              title="Настройка"
-            >
-              <Settings class="size-4" />
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                  @click.stop
-                >
-                  <Trash2 class="size-4 text-destructive" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Удалить подключение?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Вы уверены что хотите удалить подключение "{{ conn.name }}"? Это
-                    удалит все маппинги категорий и связи товаров.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction
-                    @click="handleDeleteConnection(conn.id)"
-                    :disabled="isDeleting"
-                  >
-                    <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                    Удалить
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
-          </li>
-        </ul>
-      </Card>
+      <div class="rounded-lg border overflow-hidden">
+        <div class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="hover:bg-transparent">
+                <TableHead class="w-10" />
+                <TableHead>Название</TableHead>
+                <TableHead class="hidden sm:table-cell">Адаптер</TableHead>
+                <TableHead class="w-32 text-right">Маппинги</TableHead>
+                <TableHead class="w-28 text-right">Товары</TableHead>
+                <TableHead class="w-24" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="conn in connections"
+                :key="conn.id"
+                class="group cursor-pointer"
+                @click="openConnection(conn.id)"
+              >
+                <TableCell class="px-3">
+                  <span
+                    class="size-2 rounded-full block"
+                    :class="conn.isActive ? 'bg-success' : 'bg-muted-foreground/40'"
+                    :title="conn.isActive ? 'Активен' : 'Неактивен'"
+                  />
+                </TableCell>
+                <TableCell class="font-medium max-w-0">
+                  <span class="truncate block">{{ conn.name }}</span>
+                  <span class="text-xs text-muted-foreground truncate block sm:hidden">
+                    {{ getAdapterName(conn.adapterKey) }}
+                  </span>
+                </TableCell>
+                <TableCell class="hidden sm:table-cell text-muted-foreground max-w-xs truncate">
+                  {{ getAdapterName(conn.adapterKey) }}
+                </TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ conn.categoryMappingsCount || 0 }}
+                </TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ conn.productLinksCount || 0 }}
+                </TableCell>
+                <TableCell class="px-2">
+                  <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      title="Настройка"
+                      @click.stop="openConnection(conn.id)"
+                    >
+                      <Settings class="size-4" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          @click.stop
+                        >
+                          <Trash2 class="size-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Удалить подключение?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Вы уверены что хотите удалить подключение "{{ conn.name }}"? Это
+                            удалит все маппинги категорий и связи товаров.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Отмена</AlertDialogCancel>
+                          <AlertDialogAction
+                            @click="handleDeleteConnection(conn.id)"
+                            :disabled="isDeleting"
+                          >
+                            <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
+                            Удалить
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </PageSection>
   </Page>
 </template>

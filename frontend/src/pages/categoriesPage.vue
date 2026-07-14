@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Plus, FolderOpen, Loader2, ChevronRight, Package, Trash2, ShoppingBag } from "lucide-vue-next";
+import { Plus, FolderOpen, Loader2, Trash2 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import {
   Dialog,
@@ -22,9 +22,13 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  Card,
-} from "@/components/ui/card";
-import { PAGE_CATEGORY_EDIT } from "@/router";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default {
   components: {
@@ -37,10 +41,13 @@ export default {
     Plus,
     FolderOpen,
     Loader2,
-    ChevronRight,
-    Package,
     Trash2,
-    ShoppingBag,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -51,7 +58,6 @@ export default {
     DialogClose,
     PageHeader,
     ConfirmDialog,
-    Card,
   },
   data() {
     return {
@@ -192,45 +198,68 @@ export default {
         </Button>
       </template>
 
-      <Card class="p-0 gap-0 overflow-hidden">
-        <ul class="divide-y divide-border/60">
-          <li
-            v-for="category in categories"
-            :key="category.id"
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
-            @click="openCategory(category.id)"
-          >
-            <FolderOpen class="size-5 text-muted-foreground shrink-0" />
-            <div class="min-w-0 flex-1">
-              <div class="font-medium truncate">{{ category.name }}</div>
-              <div v-if="category.description" class="text-sm text-muted-foreground truncate">{{ category.description }}</div>
-            </div>
-            <div class="flex items-center gap-4 text-sm text-muted-foreground shrink-0 tabular-nums">
-              <span class="flex items-center gap-1.5" title="Товаров в категории">
-                <Package class="size-4" />
-                {{ category.productsCount || 0 }}
-              </span>
-              <span :title="`${category.attributesCount || 0} атрибутов`">
-                {{ category.attributesCount || 0 }} атр.
-              </span>
-            </div>
-            <ConfirmDialog
-              title="Удалить категорию?"
-              :description="`Вы уверены что хотите удалить категорию &quot;${category.name}&quot;? Это действие нельзя отменить.`"
-              confirm-label="Удалить"
-              :loading="isDeleting"
-              @confirm="handleDeleteCategory(category.id)"
-            >
-              <template #trigger>
-                <Button variant="ghost" size="icon" class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" @click.stop>
-                  <Trash2 class="size-4 text-destructive" />
-                </Button>
-              </template>
-            </ConfirmDialog>
-            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
-          </li>
-        </ul>
-      </Card>
+      <div class="rounded-lg border overflow-hidden">
+        <div class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="hover:bg-transparent">
+                <TableHead>Название</TableHead>
+                <TableHead class="hidden md:table-cell">Описание</TableHead>
+                <TableHead class="w-28 text-right">Товары</TableHead>
+                <TableHead class="w-32 text-right">Атрибуты</TableHead>
+                <TableHead class="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="category in categories"
+                :key="category.id"
+                class="group cursor-pointer"
+                @click="openCategory(category.id)"
+              >
+                <TableCell class="font-medium max-w-0">
+                  <span class="truncate block">{{ category.name }}</span>
+                  <span
+                    v-if="category.description"
+                    class="text-xs text-muted-foreground truncate block md:hidden"
+                  >
+                    {{ category.description }}
+                  </span>
+                </TableCell>
+                <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
+                  {{ category.description || "—" }}
+                </TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ category.productsCount || 0 }}
+                </TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ category.attributesCount || 0 }}
+                </TableCell>
+                <TableCell class="px-2">
+                  <ConfirmDialog
+                    title="Удалить категорию?"
+                    :description="`Вы уверены что хотите удалить категорию &quot;${category.name}&quot;? Это действие нельзя отменить.`"
+                    confirm-label="Удалить"
+                    :loading="isDeleting"
+                    @confirm="handleDeleteCategory(category.id)"
+                  >
+                    <template #trigger>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        @click.stop
+                      >
+                        <Trash2 class="size-4 text-destructive" />
+                      </Button>
+                    </template>
+                  </ConfirmDialog>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </PageSection>
   </Page>
 </template>

@@ -8,7 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Plus, Layers, Loader2, ChevronRight, Package, Trash2, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-vue-next";
+import { Plus, Layers, Loader2, Trash2 } from "lucide-vue-next";
 import { PAGE_PRODUCT_GROUP_CREATE, PAGE_PRODUCTS } from "@/router";
 import {
   Dialog,
@@ -23,8 +23,13 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  Card,
-} from "@/components/ui/card";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default {
   components: {
@@ -38,13 +43,13 @@ export default {
     Plus,
     Layers,
     Loader2,
-    ChevronRight,
-    Package,
     Trash2,
-    RefreshCw,
-    CheckCircle,
-    XCircle,
-    Clock,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -55,7 +60,6 @@ export default {
     DialogClose,
     PageHeader,
     ConfirmDialog,
-    Card,
   },
   data() {
     return {
@@ -223,55 +227,81 @@ export default {
         </Button>
       </template>
 
-      <Card class="p-0 gap-0 overflow-hidden">
-        <ul class="divide-y divide-border/60">
-          <li
-            v-for="group in groups"
-            :key="group.id"
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/40 cursor-pointer group transition-colors"
-            @click="openGroup(group.id)"
-          >
-            <Layers class="size-5 text-muted-foreground shrink-0" />
-            <div class="min-w-0 flex-1">
-              <div class="font-medium truncate">{{ group.name }}</div>
-              <div v-if="group.description" class="text-sm text-muted-foreground truncate">{{ group.description }}</div>
-            </div>
-            <span class="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0 tabular-nums" title="Товаров в группе">
-              <Package class="size-4" />
-              {{ group.membersCount || 0 }}
-            </span>
-            <div v-if="group.marketplaceLinks && group.marketplaceLinks.length > 0" class="flex flex-wrap gap-1 shrink-0 max-w-[40%]">
-              <Badge
-                v-for="link in group.marketplaceLinks"
-                :key="link.connectionId"
-                :variant="getSyncStatusVariant(link.status)"
-                class="text-[11px] font-normal"
+      <div class="rounded-lg border overflow-hidden">
+        <div class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="hover:bg-transparent">
+                <TableHead>Название</TableHead>
+                <TableHead class="hidden md:table-cell">Описание</TableHead>
+                <TableHead class="w-28 text-right">Товары</TableHead>
+                <TableHead class="hidden sm:table-cell">Маркетплейсы</TableHead>
+                <TableHead class="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="group in groups"
+                :key="group.id"
+                class="group cursor-pointer"
+                @click="openGroup(group.id)"
               >
-                {{ link.connectionName }}
-              </Badge>
-            </div>
-            <ConfirmDialog
-              title="Удалить группу?"
-              :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с адаптерами также будут удалены.`"
-              confirm-label="Удалить"
-              :loading="isDeleting"
-              @confirm="handleDeleteGroup(group.id)"
-            >
-              <template #trigger>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                  @click.stop
-                >
-                  <Trash2 class="size-4 text-destructive" />
-                </Button>
-              </template>
-            </ConfirmDialog>
-            <ChevronRight class="size-4 text-muted-foreground/60 shrink-0" />
-          </li>
-        </ul>
-      </Card>
+                <TableCell class="font-medium max-w-0">
+                  <span class="truncate block">{{ group.name }}</span>
+                  <span
+                    v-if="group.description"
+                    class="text-xs text-muted-foreground truncate block md:hidden"
+                  >
+                    {{ group.description }}
+                  </span>
+                </TableCell>
+                <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
+                  {{ group.description || "—" }}
+                </TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ group.membersCount || 0 }}
+                </TableCell>
+                <TableCell class="hidden sm:table-cell">
+                  <div
+                    v-if="group.marketplaceLinks && group.marketplaceLinks.length > 0"
+                    class="flex flex-wrap gap-1"
+                  >
+                    <Badge
+                      v-for="link in group.marketplaceLinks"
+                      :key="link.connectionId"
+                      :variant="getSyncStatusVariant(link.status)"
+                      class="text-[11px] font-normal"
+                    >
+                      {{ link.connectionName }}
+                    </Badge>
+                  </div>
+                  <span v-else class="text-muted-foreground">—</span>
+                </TableCell>
+                <TableCell class="px-2">
+                  <ConfirmDialog
+                    title="Удалить группу?"
+                    :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с адаптерами также будут удалены.`"
+                    confirm-label="Удалить"
+                    :loading="isDeleting"
+                    @confirm="handleDeleteGroup(group.id)"
+                  >
+                    <template #trigger>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        @click.stop
+                      >
+                        <Trash2 class="size-4 text-destructive" />
+                      </Button>
+                    </template>
+                  </ConfirmDialog>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </PageSection>
   </Page>
 </template>

@@ -37,9 +37,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -49,7 +51,6 @@ import {
   GripVertical,
   Settings2,
   Pencil,
-  Globe,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import draggable from "vuedraggable";
@@ -112,15 +113,16 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Card,
-    CardContent,
+    TableHead,
+    TableHeader,
+    TableRow,
+    TableCell,
     Loader2,
     Plus,
     Trash2,
     GripVertical,
     Settings2,
     Pencil,
-    Globe,
     draggable,
   },
   data() {
@@ -389,80 +391,102 @@ export default {
           </Button>
       </template>
 
-        <draggable
-            v-model="attributes"
-            item-key="id"
-            handle=".drag-handle"
-            ghost-class="opacity-50"
-            class="space-y-2"
-            @end="handleReorder"
-          >
-            <template #item="{ element: attribute }">
-              <Card class="group">
-                <CardContent class="flex items-center gap-4">
-                  <GripVertical class="drag-handle size-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
-                  <div class="grow">
-                    <div class="flex items-center gap-2">
-                      <span class="font-medium">{{ attribute.name }}</span>
-                      <span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+        <div class="rounded-lg border overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full caption-bottom text-sm">
+              <TableHeader>
+                <TableRow class="hover:bg-transparent">
+                  <TableHead class="w-9 px-3" />
+                  <TableHead class="px-3">Название</TableHead>
+                  <TableHead class="hidden sm:table-cell px-3">Ключ</TableHead>
+                  <TableHead class="px-3">Тип</TableHead>
+                  <TableHead class="hidden md:table-cell w-28 text-right px-3">Опции</TableHead>
+                  <TableHead class="w-16 text-center px-2">Обяз.</TableHead>
+                  <TableHead class="hidden lg:table-cell px-3">Описание</TableHead>
+                  <TableHead class="w-24 px-2" />
+                </TableRow>
+              </TableHeader>
+              <draggable
+                v-model="attributes"
+                tag="tbody"
+                item-key="id"
+                handle=".drag-handle"
+                ghost-class="opacity-50"
+                @end="handleReorder"
+              >
+                <template #item="{ element: attribute }">
+                  <TableRow class="group">
+                    <TableCell class="w-9 px-3">
+                      <GripVertical
+                        class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
+                      />
+                    </TableCell>
+                    <TableCell class="px-3 font-medium max-w-0">
+                      <span class="truncate block">{{ attribute.name }}</span>
+                      <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
                         {{ attribute.key }}
                       </span>
-                      <span
-                        v-if="attribute.isRequired"
-                        class="text-xs text-destructive"
-                      >
-                        *
-                      </span>
-                    </div>
-                    <div class="text-sm text-muted-foreground">
+                    </TableCell>
+                    <TableCell class="hidden sm:table-cell px-3 font-mono text-xs text-muted-foreground">
+                      {{ attribute.key }}
+                    </TableCell>
+                    <TableCell class="px-3 text-muted-foreground">
                       {{ getAttributeTypeLabel(attribute.type) }}
-                      <span v-if="attribute.options" class="ml-2">
-                        ({{ getOptionsCount(attribute.options) }} опций)
-                      </span>
-                    </div>
-                    <div v-if="attribute.description" class="text-xs text-muted-foreground mt-1 line-clamp-1">
-                      {{ attribute.description }}
-                    </div>
-                  </div>
-                  <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      @click="openEditAttributeDialog(attribute)"
-                    >
-                      <Pencil class="size-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger as-child>
-                        <Button variant="ghost" size="icon">
-                          <Trash2 class="size-4 text-destructive" />
+                    </TableCell>
+                    <TableCell class="hidden md:table-cell px-3 text-right tabular-nums text-muted-foreground">
+                      {{ attribute.options ? getOptionsCount(attribute.options) : "—" }}
+                    </TableCell>
+                    <TableCell class="px-2 text-center text-muted-foreground">
+                      <span v-if="attribute.isRequired" class="text-destructive">*</span>
+                      <span v-else>—</span>
+                    </TableCell>
+                    <TableCell class="hidden lg:table-cell px-3 text-muted-foreground max-w-xs truncate">
+                      {{ attribute.description || "—" }}
+                    </TableCell>
+                    <TableCell class="px-2">
+                      <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          @click="openEditAttributeDialog(attribute)"
+                        >
+                          <Pencil class="size-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
-                            Все значения этого атрибута у товаров будут удалены.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Отмена</AlertDialogCancel>
-                          <AlertDialogAction
-                            @click="handleDeleteAttribute(attribute.id)"
-                            :disabled="isDeletingAttribute"
-                          >
-                            <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
-                            Удалить
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
-            </template>
-          </draggable>
+                        <AlertDialog>
+                          <AlertDialogTrigger as-child>
+                            <Button variant="ghost" size="icon" class="size-8">
+                              <Trash2 class="size-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
+                                Все значения этого атрибута у товаров будут удалены.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Отмена</AlertDialogCancel>
+                              <AlertDialogAction
+                                @click="handleDeleteAttribute(attribute.id)"
+                                :disabled="isDeletingAttribute"
+                              >
+                                <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
+                                Удалить
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </template>
+              </draggable>
+            </table>
+          </div>
+        </div>
     </PageSection>
 
     <!-- Attribute Dialog -->
