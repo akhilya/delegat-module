@@ -6,17 +6,9 @@ import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import Switch from "@/components/ui/switch/Switch.vue";
-import Label from "@/components/ui/label/Label.vue";
-
 import Badge from "@/components/ui/badge/Badge.vue";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +32,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -61,12 +54,12 @@ import {
   Package,
   Upload,
   RefreshCw,
-  CheckCircle,
-  XCircle,
-  Clock,
   Search,
   X,
   ExternalLink,
+  Settings2,
+  Link2,
+  Ban,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
@@ -81,15 +74,9 @@ export default {
     Button,
     Input,
     Textarea,
-    Switch,
-    Label,
-
     Badge,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    SettingsFormField,
+    PageHeader,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -108,6 +95,7 @@ export default {
     AlertDialogTrigger,
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
     TableHeader,
@@ -123,12 +111,12 @@ export default {
     Package,
     Upload,
     RefreshCw,
-    CheckCircle,
-    XCircle,
-    Clock,
     Search,
     X,
     ExternalLink,
+    Settings2,
+    Link2,
+    Ban,
     draggable,
     EmptyState,
   },
@@ -182,6 +170,16 @@ export default {
       return this.connections.filter(
         (c) => !this.connectionGrouping[c.id]?.supported,
       );
+    },
+    pageHeaderTitle() {
+      if (this.isCreateMode) return "Новая группа";
+      return this.group?.name || "Редактирование группы";
+    },
+    pageHeaderDescription() {
+      if (this.isCreateMode) {
+        return "Задайте название и описание — затем добавьте товары для объединения на маркетплейсе";
+      }
+      return "Основные данные, состав товаров и объединение на подключённых адаптерах";
     },
   },
   methods: {
@@ -520,75 +518,119 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading" class="flex flex-col">
-      <div v-if="group" class="grow flex flex-col">
-        <!-- Group Info Section -->
-        <div class="space-y-4">
-          <h2 class="text-lg font-semibold">Основные данные</h2>
-          <div class="grid gap-4 max-w-xl">
-            <div class="space-y-2">
-              <Label>Название группы</Label>
-              <Input v-model="group.name" placeholder="Введите название" />
-            </div>
-            <div class="space-y-2">
-              <Label>Описание</Label>
-              <Textarea
-                v-model="group.description"
-                placeholder="Описание группы (необязательно)"
-                class="h-24"
-              />
-            </div>
-            <Button
-              @click="handleSaveGroup"
-              :disabled="isSaving"
-              class="w-fit"
-            >
-              <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-              <Save v-else class="size-4 mr-2" />
-              {{ isCreateMode ? 'Создать группу' : 'Сохранить' }}
-            </Button>
-          </div>
-        </div>
+    <PageHeader
+      :title="pageHeaderTitle"
+      :description="pageHeaderDescription"
+    >
+      <Button
+        v-if="group"
+        @click="handleSaveGroup"
+        :disabled="isSaving"
+      >
+        <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+        <Save v-else class="size-4 mr-2" />
+        {{ isCreateMode ? "Создать группу" : "Сохранить" }}
+      </Button>
+    </PageHeader>
 
-        <template v-if="!isCreateMode">
-          <!-- Products Section -->
-          <div class="mt-8 space-y-4">
-            <div class="flex justify-between items-center">
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                <Package class="size-5" />
-                Товары в группе
-                <span class="text-sm font-normal text-muted-foreground">({{ members.length }})</span>
-              </h2>
-              <Button @click="openProductSearchDialog" variant="outline">
-                <Plus class="size-4 mr-2" />
-                Добавить товары
+    <PageSection :loading="isLoading" class="!min-h-0">
+      <div v-if="group" class="space-y-6">
+        <!-- Block 1: Settings -->
+        <Card class="max-w-2xl">
+          <CardHeader>
+            <CardTitle class="text-base flex items-center gap-2">
+              <Settings2 class="size-4 text-muted-foreground" />
+              Основные данные
+            </CardTitle>
+            <CardDescription>
+              Название и описание группы в каталоге. Описание видно только внутри системы.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-5">
+            <SettingsFormField label="Название" label-for="group-name">
+              <Input
+                id="group-name"
+                v-model="group.name"
+                placeholder="Введите название"
+              />
+            </SettingsFormField>
+            <SettingsFormField label="Описание" label-for="group-description">
+              <Textarea
+                id="group-description"
+                v-model="group.description"
+                placeholder="Необязательно"
+                class="min-h-24 resize-none"
+              />
+            </SettingsFormField>
+            <div class="flex flex-wrap items-center gap-3 pt-1">
+              <Button
+                @click="handleSaveGroup"
+                :disabled="isSaving"
+              >
+                <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+                <Save v-else class="size-4 mr-2" />
+                {{ isCreateMode ? "Создать группу" : "Сохранить" }}
               </Button>
             </div>
+          </CardContent>
+        </Card>
 
-            <EmptyState
-              v-if="members.length === 0"
-              title="Нет товаров"
-              description="Добавьте товары, которые должны объединяться на маркетплейсе в одну карточку"
-            >
-              <template #icon>
-                <Package />
-              </template>
-            </EmptyState>
+        <template v-if="!isCreateMode">
+          <!-- Block 2: Products -->
+          <Card class="overflow-hidden">
+            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div class="space-y-1.5">
+                <CardTitle class="text-base flex items-center gap-2">
+                  <Package class="size-4 text-muted-foreground" />
+                  Товары в группе
+                  <Badge variant="secondary" class="font-normal">
+                    {{ members.length }}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Порядок строк определяет порядок вариантов в объединённой карточке.
+                  Перетащите строки, чтобы изменить порядок.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                @click="openProductSearchDialog"
+              >
+                <Plus class="size-4 mr-2" />
+                Добавить
+              </Button>
+            </CardHeader>
+            <CardContent class="p-0">
+              <EmptyState
+                v-if="members.length === 0"
+                title="Нет товаров"
+                description="Добавьте товары, которые должны объединяться на маркетплейсе в одну карточку"
+                class="py-10"
+              >
+                <template #icon>
+                  <Package />
+                </template>
+                <Button variant="outline" @click="openProductSearchDialog">
+                  <Plus class="size-4 mr-2" />
+                  Добавить товары
+                </Button>
+              </EmptyState>
 
-            <div
-              v-else
-              class="overflow-hidden rounded-lg border bg-card"
-            >
-              <div class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar">
+              <div
+                v-else
+                class="max-h-[min(28rem,50vh)] overflow-y-auto thin-scrollbar border-t"
+              >
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
                     <TableRow class="hover:bg-transparent">
-                      <TableHead class="w-9 px-2" />
+                      <TableHead class="w-9 px-3" />
                       <TableHead class="w-9 px-2 text-center">#</TableHead>
                       <TableHead class="w-14 px-2" />
-                      <TableHead>Название</TableHead>
-                      <TableHead class="w-36 hidden sm:table-cell">SKU</TableHead>
-                      <TableHead class="hidden md:table-cell">Категория</TableHead>
+                      <TableHead class="px-3">Название</TableHead>
+                      <TableHead class="w-36 hidden sm:table-cell px-3">SKU</TableHead>
+                      <TableHead class="hidden md:table-cell px-3">Категория</TableHead>
                       <TableHead class="w-12 px-2" />
                     </TableRow>
                   </TableHeader>
@@ -602,7 +644,7 @@ export default {
                   >
                     <template #item="{ element: member, index }">
                       <TableRow class="group">
-                        <TableCell class="w-9 px-2">
+                        <TableCell class="w-9 px-3">
                           <GripVertical
                             class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
                           />
@@ -626,7 +668,7 @@ export default {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell class="max-w-0">
+                        <TableCell class="max-w-0 px-3">
                           <router-link
                             :to="`/products/${member.product.id}/edit`"
                             class="font-medium truncate block hover:underline"
@@ -637,10 +679,10 @@ export default {
                             <span v-if="member.product.sku">{{ member.product.sku }}</span>
                           </div>
                         </TableCell>
-                        <TableCell class="hidden sm:table-cell font-mono text-xs text-muted-foreground">
+                        <TableCell class="hidden sm:table-cell px-3 font-mono text-xs text-muted-foreground">
                           {{ member.product.sku || "—" }}
                         </TableCell>
-                        <TableCell class="hidden md:table-cell text-muted-foreground">
+                        <TableCell class="hidden md:table-cell px-3 text-muted-foreground">
                           {{ member.product.category?.name || "—" }}
                         </TableCell>
                         <TableCell class="w-12 px-2">
@@ -681,25 +723,24 @@ export default {
                   </draggable>
                 </table>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <!-- Marketplace links -->
-          <div class="mt-8 space-y-4">
-            <div class="flex justify-between items-start gap-3">
-              <div class="space-y-1">
-                <h2 class="text-lg font-semibold flex items-center gap-2">
-                  <Upload class="size-5" />
+          <!-- Block 3: Marketplace merge -->
+          <Card>
+            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div class="space-y-1.5">
+                <CardTitle class="text-base flex items-center gap-2">
+                  <Link2 class="size-4 text-muted-foreground" />
                   Объединение на маркетплейсах
-                </h2>
-                <p class="text-sm text-muted-foreground max-w-2xl">
-                  Группа в каталоге — список товаров для одной карточки. Ozon объединяет через поле в
-                  карточке (после привязки переэкспортируйте товары). Wildberries — через API слияния
-                  карточек, если товары уже экспортированы.
-                </p>
+                </CardTitle>
+                <CardDescription class="max-w-2xl">
+                  Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары.
+                  Wildberries — через API слияния, если товары уже экспортированы.
+                </CardDescription>
               </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 class="size-8 shrink-0"
                 title="Обновить статусы"
@@ -708,136 +749,141 @@ export default {
               >
                 <RefreshCw :class="['size-4', isLoadingSyncStatus && 'animate-spin']" />
               </Button>
-            </div>
+            </CardHeader>
+            <CardContent class="space-y-6">
+              <p
+                v-if="connections.length === 0"
+                class="text-sm text-muted-foreground"
+              >
+                Нет подключённых адаптеров. Подключите маркетплейс в разделе «Адаптеры».
+              </p>
 
-            <div v-if="connections.length === 0" class="text-sm text-muted-foreground">
-              Нет подключённых адаптеров
-            </div>
+              <div
+                v-else-if="isLoadingConnectionGrouping"
+                class="flex items-center gap-2 text-sm text-muted-foreground py-2"
+              >
+                <Loader2 class="size-4 animate-spin" />
+                Проверка возможностей адаптеров…
+              </div>
 
-            <div
-              v-else-if="isLoadingConnectionGrouping"
-              class="flex items-center gap-2 text-sm text-muted-foreground"
-            >
-              <Loader2 class="size-4 animate-spin" />
-              Проверка возможностей адаптеров…
-            </div>
-
-            <div v-else class="space-y-6">
-              <section v-if="supportedConnections.length" class="space-y-3">
-                <h3 class="text-sm font-medium">
-                  Поддерживают объединение
-                  <span class="font-normal text-muted-foreground">
-                    ({{ supportedConnections.length }})
-                  </span>
-                </h3>
-                <Card
-                  v-for="connection in supportedConnections"
-                  :key="connection.id"
-                >
-                  <CardContent class="py-4">
-                    <div class="flex items-start justify-between gap-4">
-                      <div class="flex items-start gap-3 min-w-0">
-                        <div
-                          class="size-10 rounded-lg bg-muted flex items-center justify-center shrink-0"
-                        >
-                          <img
-                            v-if="connection.logoUrl"
-                            :src="connection.logoUrl"
-                            :alt="connection.name"
-                            class="size-6"
-                          />
-                          <ExternalLink
-                            v-else
-                            class="size-5 text-muted-foreground"
-                          />
-                        </div>
-                        <div class="min-w-0 space-y-1">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{{ connection.name }}</span>
-                            <Badge variant="secondary" class="font-normal">
-                              {{ getGroupingTypeLabel(connection.id) }}
-                            </Badge>
-                          </div>
-                          <div class="text-sm text-muted-foreground">
-                            {{ connection.adapterKey }}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="flex items-center gap-3 shrink-0">
-                        <template v-if="getSyncStatusForConnection(connection.id)">
-                          <div class="text-right">
-                            <Badge
-                              :variant="
-                                getSyncStatusVariant(
-                                  getSyncStatusForConnection(connection.id).status,
-                                )
-                              "
-                            >
-                              {{
-                                getSyncStatusLabel(
-                                  getSyncStatusForConnection(connection.id).status,
-                                )
-                              }}
-                            </Badge>
+              <template v-else>
+                <section v-if="supportedConnections.length" class="space-y-2">
+                  <h3 class="text-sm font-medium">
+                    Поддерживают объединение
+                    <span class="font-normal text-muted-foreground">
+                      · {{ supportedConnections.length }}
+                    </span>
+                  </h3>
+                  <div class="rounded-lg border overflow-hidden">
+                    <ul class="divide-y divide-border/60">
+                      <li
+                        v-for="connection in supportedConnections"
+                        :key="connection.id"
+                        class="px-5 py-4 space-y-3"
+                      >
+                        <div class="flex items-start justify-between gap-4">
+                          <div class="flex items-start gap-3 min-w-0">
                             <div
-                              v-if="
-                                getSyncStatusForConnection(connection.id).externalGroupId
-                              "
-                              class="text-xs text-muted-foreground mt-1"
+                              class="size-10 rounded-lg bg-muted flex items-center justify-center shrink-0"
                             >
-                              ID:
-                              {{
-                                getSyncStatusForConnection(connection.id).externalGroupId
-                              }}
+                              <img
+                                v-if="connection.logoUrl"
+                                :src="connection.logoUrl"
+                                :alt="connection.name"
+                                class="size-6"
+                              />
+                              <ExternalLink
+                                v-else
+                                class="size-5 text-muted-foreground"
+                              />
+                            </div>
+                            <div class="min-w-0 space-y-1">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-medium">{{ connection.name }}</span>
+                                <Badge variant="secondary" class="font-normal text-xs">
+                                  {{ getGroupingTypeLabel(connection.id) }}
+                                </Badge>
+                              </div>
+                              <p class="text-sm text-muted-foreground">
+                                {{ connection.adapterKey }}
+                              </p>
                             </div>
                           </div>
-                        </template>
 
-                        <Button
-                          @click="handleExportGroup(connection.id)"
-                          :disabled="isExporting || members.length === 0"
-                          size="sm"
+                          <div class="flex items-center gap-3 shrink-0">
+                            <template v-if="getSyncStatusForConnection(connection.id)">
+                              <div class="text-right space-y-1">
+                                <Badge
+                                  :variant="
+                                    getSyncStatusVariant(
+                                      getSyncStatusForConnection(connection.id).status,
+                                    )
+                                  "
+                                  class="font-normal"
+                                >
+                                  {{
+                                    getSyncStatusLabel(
+                                      getSyncStatusForConnection(connection.id).status,
+                                    )
+                                  }}
+                                </Badge>
+                                <p
+                                  v-if="
+                                    getSyncStatusForConnection(connection.id).externalGroupId
+                                  "
+                                  class="text-xs text-muted-foreground font-mono"
+                                >
+                                  {{
+                                    getSyncStatusForConnection(connection.id).externalGroupId
+                                  }}
+                                </p>
+                              </div>
+                            </template>
+
+                            <Button
+                              @click="handleExportGroup(connection.id)"
+                              :disabled="isExporting || members.length === 0"
+                              size="sm"
+                            >
+                              <Loader2
+                                v-if="isExporting"
+                                class="size-4 mr-2 animate-spin"
+                              />
+                              <Upload v-else class="size-4 mr-2" />
+                              {{ getExportButtonLabel(connection) }}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <p
+                          v-if="
+                            getSyncStatusForConnection(connection.id)?.lastErrorMessage
+                          "
+                          class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
                         >
-                          <Loader2
-                            v-if="isExporting"
-                            class="size-4 mr-2 animate-spin"
-                          />
-                          <Upload v-else class="size-4 mr-2" />
-                          {{ getExportButtonLabel(connection) }}
-                        </Button>
-                      </div>
-                    </div>
+                          {{
+                            getSyncStatusForConnection(connection.id).lastErrorMessage
+                          }}
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+                </section>
 
-                    <div
-                      v-if="
-                        getSyncStatusForConnection(connection.id)?.lastErrorMessage
-                      "
-                      class="mt-3 rounded-md bg-destructive/10 p-2 text-sm text-destructive"
-                    >
-                      {{
-                        getSyncStatusForConnection(connection.id).lastErrorMessage
-                      }}
-                    </div>
-                  </CardContent>
-                </Card>
-              </section>
-
-              <section v-if="unsupportedConnections.length" class="space-y-3">
-                <h3 class="text-sm font-medium text-muted-foreground">
-                  Без поддержки объединения
-                  <span class="font-normal">
-                    ({{ unsupportedConnections.length }})
-                  </span>
-                </h3>
-                <Card
-                  v-for="connection in unsupportedConnections"
-                  :key="connection.id"
-                  class="border-dashed bg-muted/20"
-                >
-                  <CardContent class="py-4">
-                    <div class="flex items-start justify-between gap-4">
-                      <div class="flex items-start gap-3 min-w-0">
+                <section v-if="unsupportedConnections.length" class="space-y-2">
+                  <h3 class="text-sm font-medium text-muted-foreground">
+                    Без поддержки объединения
+                    <span class="font-normal">
+                      · {{ unsupportedConnections.length }}
+                    </span>
+                  </h3>
+                  <div class="rounded-lg border border-dashed bg-muted/20 overflow-hidden">
+                    <ul class="divide-y divide-border/40">
+                      <li
+                        v-for="connection in unsupportedConnections"
+                        :key="connection.id"
+                        class="flex items-center gap-4 px-5 py-3.5"
+                      >
                         <div
                           class="size-10 rounded-lg bg-muted/60 flex items-center justify-center shrink-0 opacity-70"
                         >
@@ -847,36 +893,32 @@ export default {
                             :alt="connection.name"
                             class="size-6 opacity-70"
                           />
-                          <ExternalLink
+                          <Ban
                             v-else
-                            class="size-5 text-muted-foreground/70"
+                            class="size-4 text-muted-foreground/70"
                           />
                         </div>
-                        <div class="min-w-0 space-y-1">
+                        <div class="min-w-0 flex-1">
                           <div class="font-medium text-muted-foreground">
                             {{ connection.name }}
                           </div>
-                          <div class="text-sm text-muted-foreground">
+                          <p class="text-sm text-muted-foreground truncate">
                             {{ connection.adapterKey }}
-                          </div>
-                          <p class="text-xs text-muted-foreground pt-0.5">
-                            Адаптер не умеет объединять товары в одну карточку на
-                            маркетплейсе.
                           </p>
                         </div>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        class="shrink-0 font-normal text-muted-foreground"
-                      >
-                        Не поддерживается
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </section>
-            </div>
-          </div>
+                        <Badge
+                          variant="outline"
+                          class="shrink-0 font-normal text-muted-foreground"
+                        >
+                          Не поддерживается
+                        </Badge>
+                      </li>
+                    </ul>
+                  </div>
+                </section>
+              </template>
+            </CardContent>
+          </Card>
         </template>
       </div>
     </PageSection>
