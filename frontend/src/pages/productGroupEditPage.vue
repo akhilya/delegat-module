@@ -568,16 +568,6 @@ export default {
                 class="min-h-24 resize-none"
               />
             </SettingsFormField>
-            <div class="flex flex-wrap items-center gap-3 pt-1">
-              <Button
-                @click="handleSaveGroup"
-                :disabled="isSaving"
-              >
-                <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-                <Save v-else class="size-4 mr-2" />
-                {{ isCreateMode ? "Создать группу" : "Сохранить" }}
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
