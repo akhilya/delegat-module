@@ -140,6 +140,8 @@ export default {
       group: null,
       members: [],
       connections: [],
+      connectionGrouping: {},
+      isLoadingConnectionGrouping: false,
       syncStatuses: [],
       isLoading: false,
       isSaving: false,
@@ -171,6 +173,16 @@ export default {
       const memberIds = new Set(this.members.map((m) => m.product.id));
       return this.availableProducts.filter((p) => !memberIds.has(p.id));
     },
+    supportedConnections() {
+      return this.connections.filter(
+        (c) => this.connectionGrouping[c.id]?.supported,
+      );
+    },
+    unsupportedConnections() {
+      return this.connections.filter(
+        (c) => !this.connectionGrouping[c.id]?.supported,
+      );
+    },
   },
   methods: {
     ...mapActions([
@@ -184,6 +196,7 @@ export default {
       "getGroupSyncStatus",
       "getAllProducts",
       "getConnections",
+      "getCapabilities",
     ]),
 
     async fetchGroup() {
@@ -217,6 +230,72 @@ export default {
           displaySonnerError(error);
         },
       });
+      await this.fetchConnectionGroupingCapabilities();
+    },
+
+    async fetchConnectionGroupingCapabilities() {
+      if (!this.connections.length) {
+        this.connectionGrouping = {};
+        return;
+      }
+
+      this.isLoadingConnectionGrouping = true;
+      const grouping = {};
+
+      await Promise.all(
+        this.connections.map(
+          (conn) =>
+            new Promise((resolve) => {
+              this.getCapabilities({
+                connectionId: conn.id,
+                onSuccess: (response) => {
+                  const data = response.data?.value ?? response.data;
+                  const caps = data?.capabilities ?? data;
+                  const fieldBased = !!caps?.fieldBasedGrouping;
+                  const endpointBased = !!caps?.endpointBasedGrouping;
+                  grouping[conn.id] = {
+                    supported: fieldBased || endpointBased,
+                    fieldBased,
+                    endpointBased,
+                  };
+                  resolve();
+                },
+                onError: () => {
+                  grouping[conn.id] = {
+                    supported: false,
+                    fieldBased: false,
+                    endpointBased: false,
+                  };
+                  resolve();
+                },
+              });
+            }),
+        ),
+      );
+
+      this.connectionGrouping = grouping;
+      this.isLoadingConnectionGrouping = false;
+    },
+
+    getSyncStatusForConnection(connectionId) {
+      return this.syncStatuses.find((s) => s.connectionId === connectionId);
+    },
+
+    getGroupingTypeLabel(connectionId) {
+      const grouping = this.connectionGrouping[connectionId];
+      if (!grouping?.supported) return null;
+      if (grouping.fieldBased) return "Через поле карточки";
+      if (grouping.endpointBased) return "Через API слияния";
+      return "Поддерживается";
+    },
+
+    getExportButtonLabel(connection) {
+      const linked = this.getSyncStatusForConnection(connection.id);
+      const grouping = this.connectionGrouping[connection.id];
+      if (linked) return "Обновить привязку";
+      if (grouping?.fieldBased) return "Привязать группу";
+      if (grouping?.endpointBased) return "Объединить карточки";
+      return "Экспортировать";
     },
 
     async fetchSyncStatus() {
@@ -635,66 +714,167 @@ export default {
               Нет подключённых адаптеров
             </div>
 
-            <div v-else class="space-y-3">
-              <Card v-for="connection in connections" :key="connection.id">
-                <CardContent>
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                      <div class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                        <img
-                          v-if="connection.logoUrl"
-                          :src="connection.logoUrl"
-                          :alt="connection.name"
-                          class="w-6 h-6"
-                        />
-                        <ExternalLink v-else class="size-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <div class="font-medium">{{ connection.name }}</div>
-                        <div class="text-sm text-muted-foreground">{{ connection.adapterKey }}</div>
-                      </div>
-                    </div>
+            <div
+              v-else-if="isLoadingConnectionGrouping"
+              class="flex items-center gap-2 text-sm text-muted-foreground"
+            >
+              <Loader2 class="size-4 animate-spin" />
+              Проверка возможностей адаптеров…
+            </div>
 
-                    <div class="flex items-center gap-3">
-                      <!-- Sync Status -->
-                      <template v-if="syncStatuses.find(s => s.connectionId === connection.id)">
-                        <div class="text-right">
-                          <Badge :variant="getSyncStatusVariant(syncStatuses.find(s => s.connectionId === connection.id).status)">
-                            {{ getSyncStatusLabel(syncStatuses.find(s => s.connectionId === connection.id).status) }}
-                          </Badge>
-                          <div v-if="syncStatuses.find(s => s.connectionId === connection.id).externalGroupId" class="text-xs text-muted-foreground mt-1">
-                            ID: {{ syncStatuses.find(s => s.connectionId === connection.id).externalGroupId }}
+            <div v-else class="space-y-6">
+              <section v-if="supportedConnections.length" class="space-y-3">
+                <h3 class="text-sm font-medium">
+                  Поддерживают объединение
+                  <span class="font-normal text-muted-foreground">
+                    ({{ supportedConnections.length }})
+                  </span>
+                </h3>
+                <Card
+                  v-for="connection in supportedConnections"
+                  :key="connection.id"
+                >
+                  <CardContent class="py-4">
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="flex items-start gap-3 min-w-0">
+                        <div
+                          class="size-10 rounded-lg bg-muted flex items-center justify-center shrink-0"
+                        >
+                          <img
+                            v-if="connection.logoUrl"
+                            :src="connection.logoUrl"
+                            :alt="connection.name"
+                            class="size-6"
+                          />
+                          <ExternalLink
+                            v-else
+                            class="size-5 text-muted-foreground"
+                          />
+                        </div>
+                        <div class="min-w-0 space-y-1">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-medium">{{ connection.name }}</span>
+                            <Badge variant="secondary" class="font-normal">
+                              {{ getGroupingTypeLabel(connection.id) }}
+                            </Badge>
+                          </div>
+                          <div class="text-sm text-muted-foreground">
+                            {{ connection.adapterKey }}
                           </div>
                         </div>
-                      </template>
+                      </div>
 
-                      <Button
-                        @click="handleExportGroup(connection.id)"
-                        :disabled="isExporting || members.length === 0"
-                        size="sm"
-                      >
-                        <Loader2 v-if="isExporting" class="size-4 mr-2 animate-spin" />
-                        <Upload v-else class="size-4 mr-2" />
-                        {{
-                          syncStatuses.find(s => s.connectionId === connection.id)
-                            ? 'Обновить привязку'
-                            : connection.adapterKey === 'ozon'
-                              ? 'Привязать группу'
-                              : 'Объединить карточки'
-                        }}
-                      </Button>
+                      <div class="flex items-center gap-3 shrink-0">
+                        <template v-if="getSyncStatusForConnection(connection.id)">
+                          <div class="text-right">
+                            <Badge
+                              :variant="
+                                getSyncStatusVariant(
+                                  getSyncStatusForConnection(connection.id).status,
+                                )
+                              "
+                            >
+                              {{
+                                getSyncStatusLabel(
+                                  getSyncStatusForConnection(connection.id).status,
+                                )
+                              }}
+                            </Badge>
+                            <div
+                              v-if="
+                                getSyncStatusForConnection(connection.id).externalGroupId
+                              "
+                              class="text-xs text-muted-foreground mt-1"
+                            >
+                              ID:
+                              {{
+                                getSyncStatusForConnection(connection.id).externalGroupId
+                              }}
+                            </div>
+                          </div>
+                        </template>
+
+                        <Button
+                          @click="handleExportGroup(connection.id)"
+                          :disabled="isExporting || members.length === 0"
+                          size="sm"
+                        >
+                          <Loader2
+                            v-if="isExporting"
+                            class="size-4 mr-2 animate-spin"
+                          />
+                          <Upload v-else class="size-4 mr-2" />
+                          {{ getExportButtonLabel(connection) }}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
 
-                  <!-- Error message if exists -->
-                  <div
-                    v-if="syncStatuses.find(s => s.connectionId === connection.id)?.lastErrorMessage"
-                    class="mt-3 p-2 bg-destructive/10 text-destructive text-sm rounded"
-                  >
-                    {{ syncStatuses.find(s => s.connectionId === connection.id).lastErrorMessage }}
-                  </div>
-                </CardContent>
-              </Card>
+                    <div
+                      v-if="
+                        getSyncStatusForConnection(connection.id)?.lastErrorMessage
+                      "
+                      class="mt-3 rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+                    >
+                      {{
+                        getSyncStatusForConnection(connection.id).lastErrorMessage
+                      }}
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
+
+              <section v-if="unsupportedConnections.length" class="space-y-3">
+                <h3 class="text-sm font-medium text-muted-foreground">
+                  Без поддержки объединения
+                  <span class="font-normal">
+                    ({{ unsupportedConnections.length }})
+                  </span>
+                </h3>
+                <Card
+                  v-for="connection in unsupportedConnections"
+                  :key="connection.id"
+                  class="border-dashed bg-muted/20"
+                >
+                  <CardContent class="py-4">
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="flex items-start gap-3 min-w-0">
+                        <div
+                          class="size-10 rounded-lg bg-muted/60 flex items-center justify-center shrink-0 opacity-70"
+                        >
+                          <img
+                            v-if="connection.logoUrl"
+                            :src="connection.logoUrl"
+                            :alt="connection.name"
+                            class="size-6 opacity-70"
+                          />
+                          <ExternalLink
+                            v-else
+                            class="size-5 text-muted-foreground/70"
+                          />
+                        </div>
+                        <div class="min-w-0 space-y-1">
+                          <div class="font-medium text-muted-foreground">
+                            {{ connection.name }}
+                          </div>
+                          <div class="text-sm text-muted-foreground">
+                            {{ connection.adapterKey }}
+                          </div>
+                          <p class="text-xs text-muted-foreground pt-0.5">
+                            Адаптер не умеет объединять товары в одну карточку на
+                            маркетплейсе.
+                          </p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        class="shrink-0 font-normal text-muted-foreground"
+                      >
+                        Не поддерживается
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
             </div>
           </div>
         </template>
