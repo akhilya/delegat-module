@@ -9,6 +9,12 @@ import { BarcodeInput } from "@/components/ui/barcode";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { isAttributeType } from "@/lib/productAttributeValidation";
+import {
+  labelsToStoredValues,
+  parseAttributeOptions,
+  resolveAttributeOptionLabel,
+  resolveAttributeOptionLabels,
+} from "@/lib/attributeOptions";
 
 export default {
   components: {
@@ -51,25 +57,7 @@ export default {
     },
 
     getSelectOptions(attribute) {
-      if (!attribute.options) return [];
-
-      try {
-        const parsed = JSON.parse(attribute.options);
-        if (Array.isArray(parsed)) {
-          return parsed.map((option) => ({
-            value: String(option.value || option.label || option),
-            label: option.label || option.value || String(option),
-          }));
-        }
-      } catch {
-        // Not JSON - parse as comma-separated
-      }
-
-      return attribute.options
-        .split(",")
-        .map((opt) => opt.trim())
-        .filter(Boolean)
-        .map((label) => ({ value: label, label }));
+      return parseAttributeOptions(attribute.options);
     },
 
     getMultiSelectLabels(attribute, rawValue) {
@@ -77,30 +65,22 @@ export default {
       try {
         const parsed = JSON.parse(rawValue);
         if (Array.isArray(parsed)) {
-          return parsed.map((value) => this.labelForStoredValue(attribute, value));
+          return resolveAttributeOptionLabels(attribute.options, parsed);
         }
-        return [String(parsed)];
+        return [resolveAttributeOptionLabel(attribute.options, parsed)];
       } catch {
         return rawValue
           .split(",")
           .map((value) => value.trim())
-          .filter(Boolean);
+          .filter(Boolean)
+          .map((value) =>
+            resolveAttributeOptionLabel(attribute.options, value),
+          );
       }
     },
 
-    labelForStoredValue(attribute, storedValue) {
-      const options = this.getSelectOptions(attribute);
-      const option = options.find((item) => item.value === storedValue || item.label === storedValue);
-      return option ? option.label : storedValue;
-    },
-
     setMultiSelectByLabels(attribute, labels, setValue) {
-      const options = this.getSelectOptions(attribute);
-      const values = labels.map((label) => {
-        const option = options.find((item) => item.label === label);
-        return option ? option.value : label;
-      });
-      setValue(JSON.stringify(values));
+      setValue(JSON.stringify(labelsToStoredValues(attribute.options, labels)));
     },
 
     isFullWidthField(attribute) {
@@ -111,7 +91,9 @@ export default {
 </script>
 
 <template>
-  <div class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]">
+  <div
+    class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
+  >
     <div
       v-for="attribute in sortedAttributes"
       :key="attribute.id"
@@ -127,6 +109,7 @@ export default {
             :label="attribute.name"
             :label-for="'store-attr-' + attribute.id"
             :description="attribute.description"
+            :description-in-tooltip="attribute.descriptionInTooltip === true"
             :required="attribute.isRequired"
             :error="errorMessage"
             :inline="isType(attribute.type, 'boolean')"
@@ -138,7 +121,11 @@ export default {
               :model-value="value === 'true'"
               @update:model-value="setValue($event ? 'true' : 'false')"
             />
-            <FormControl v-else-if="isType(attribute.type, 'text') && attribute.isMultiline">
+            <FormControl
+              v-else-if="
+                isType(attribute.type, 'text') && attribute.isMultiline
+              "
+            >
               <Textarea
                 :id="'store-attr-' + attribute.id"
                 v-bind="componentField"
@@ -174,11 +161,15 @@ export default {
             </FormControl>
             <FormControl v-else-if="isType(attribute.type, 'multiselect')">
               <MultiSelectDropdown
-                :options="getSelectOptions(attribute).map((option) => option.label)"
+                :options="
+                  getSelectOptions(attribute).map((option) => option.label)
+                "
                 :model-value="getMultiSelectLabels(attribute, value)"
                 :invalid="!!errorMessage"
                 placeholder="Выберите..."
-                @update:model-value="setMultiSelectByLabels(attribute, $event, setValue)"
+                @update:model-value="
+                  setMultiSelectByLabels(attribute, $event, setValue)
+                "
               />
             </FormControl>
             <FormControl v-else-if="isType(attribute.type, 'barcode')">

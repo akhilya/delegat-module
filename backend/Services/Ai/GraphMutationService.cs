@@ -58,7 +58,7 @@ public class GraphMutationService
             outputType = fieldDef.Type,
             isRequired = fieldDef.IsRequired,
         };
-        sinkNode.data.fields.Add(field);
+        sinkNode.data!.fields!.Add(field);
         return field;
     }
 
@@ -550,6 +550,14 @@ public class GraphMutationService
                 attributeMap[a.name] = a.Id;
         }
 
+        var extendedPrice = await (
+            from m in _context.categoryMappings.AsNoTracking()
+            join c in _context.marketplaceConnections.AsNoTracking() on m.connectionId equals c.Id
+            join s in _context.stores.AsNoTracking() on c.storeId equals s.Id
+            where m.Id == mappingId
+            select s.extendedPriceParameters
+        ).FirstOrDefaultAsync(ct);
+
         foreach (var def in priceFieldDefs.OrderBy(f => f.SortOrder))
         {
             if (def.Key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase))
@@ -573,11 +581,11 @@ public class GraphMutationService
             }
 
             var (sourceType, sourceField, sourceAttrId) =
-                CategoryImportService.DeterminePriceAutoMapping(def, attributeMap);
+                CategoryImportService.DeterminePriceAutoMapping(def, attributeMap, extendedPrice);
 
             if (sourceType == FieldMappingSourceType.Static)
             {
-                if (def.Key.Equals("discount", StringComparison.OrdinalIgnoreCase))
+                if (def.Key.Equals("discount", StringComparison.OrdinalIgnoreCase) && !extendedPrice)
                 {
                     var nodeId = $"price-static-{def.Key}-{Guid.NewGuid().ToString("N")[..8]}";
                     graph.nodes.Add(new GraphNode

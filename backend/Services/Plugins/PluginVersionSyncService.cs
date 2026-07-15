@@ -285,7 +285,12 @@ public class PluginVersionSyncService
                 addedPriceFieldKeys = newPriceFields.Select(f => f.Key).ToList();
                 if (priceFieldsAdded > 0)
                 {
-                    var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(priceFields, attributeMap);
+                    var extendedPrice = await _context.stores.AsNoTracking()
+                        .Where(s => s.Id == connection.storeId)
+                        .Select(s => s.extendedPriceParameters)
+                        .FirstOrDefaultAsync(ct);
+                    var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
+                        priceFields, attributeMap, extendedPriceParameters: extendedPrice);
                     mapping.graphJson = GraphGenerator.SyncPriceFields(mapping.graphJson, priceSpecs);
                 }
             }

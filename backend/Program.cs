@@ -212,6 +212,7 @@ builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<ProductSyncService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
+builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
 
 // One-time startup repair for files broken by old rename behavior

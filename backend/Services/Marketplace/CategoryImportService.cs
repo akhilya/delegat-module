@@ -179,7 +179,7 @@ public class CategoryImportService
                 options = field.Options != null ? SerializeOptions(field.Options) : null,
                 defaultValue = defaultValue,
                 description = field.Description,
-                group = field.Group ?? DetermineGroupByKeywords(field.Name),
+                group = adapter.DisplayName,
                 categoryId = category.Id
             });
 
@@ -260,7 +260,11 @@ public class CategoryImportService
             try
             {
                 var priceFields = await adapter.GetPriceFieldsAsync(connection, externalCategoryId, ct);
-                priceSpecs = BuildPriceFieldSpecs(priceFields, attributeMap);
+                var extendedPrice = await _context.stores.AsNoTracking()
+                    .Where(s => s.Id == connection.storeId)
+                    .Select(s => s.extendedPriceParameters)
+                    .FirstOrDefaultAsync(ct);
+                priceSpecs = BuildPriceFieldSpecs(priceFields, attributeMap, extendedPriceParameters: extendedPrice);
             }
             catch
             {
@@ -392,7 +396,8 @@ public class CategoryImportService
     internal static List<FieldSpec> BuildPriceFieldSpecs(
         IReadOnlyCollection<ExternalField> priceFields,
         Dictionary<string, int> attributeMap,
-        bool skipAutoMapping = false)
+        bool skipAutoMapping = false,
+        bool extendedPriceParameters = false)
     {
         return priceFields
             .OrderBy(f => f.SortOrder)
@@ -400,7 +405,7 @@ public class CategoryImportService
             {
                 var (sourceType, sourceField, sourceAttributeId) = skipAutoMapping
                     ? (FieldMappingSourceType.Static, (string?)null, (int?)null)
-                    : DeterminePriceAutoMapping(field, attributeMap);
+                    : DeterminePriceAutoMapping(field, attributeMap, extendedPriceParameters);
                 return new FieldSpec
                 {
                     externalFieldKey = field.Key,
@@ -432,12 +437,26 @@ public class CategoryImportService
     }
 
     internal static (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
-        DeterminePriceAutoMapping(ExternalField field, Dictionary<string, int> attributeMap)
+        DeterminePriceAutoMapping(ExternalField field, Dictionary<string, int> attributeMap, bool extendedPriceParameters = false)
     {
         var keyLower = field.Key.ToLowerInvariant();
 
         if (keyLower == "price")
             return (FieldMappingSourceType.ProductField, "price", null);
+
+        if (extendedPriceParameters)
+        {
+            return keyLower switch
+            {
+                "oldprice" => (FieldMappingSourceType.ProductField, "oldPrice", null),
+                "minprice" => (FieldMappingSourceType.ProductField, "minPrice", null),
+                "netprice" => (FieldMappingSourceType.ProductField, "netPrice", null),
+                "discountedprice" => (FieldMappingSourceType.ProductField, "discountedPrice", null),
+                "discount" => (FieldMappingSourceType.ProductField, "discount", null),
+                "currency" or "currencyid" => (FieldMappingSourceType.ProductField, "currency", null),
+                _ => (FieldMappingSourceType.Static, null, null)
+            };
+        }
 
         if (keyLower == "oldprice" && TryResolveAttribute(attributeMap, "old_price", "oldprice", "старая цена", out var oldId))
             return (FieldMappingSourceType.CategoryAttribute, null, oldId);
@@ -472,7 +491,7 @@ public class CategoryImportService
         if (!IsStrictPriceSemanticKey(fieldDef.Key))
             return true;
 
-        var (expectedType, expectedField, expectedAttrId) = DeterminePriceAutoMapping(fieldDef, attributeMap);
+        var (expectedType, expectedField, expectedAttrId) = DeterminePriceAutoMapping(fieldDef, attributeMap, extendedPriceParameters: false);
 
         if (fieldDef.Key.Equals("discount", StringComparison.OrdinalIgnoreCase))
         {

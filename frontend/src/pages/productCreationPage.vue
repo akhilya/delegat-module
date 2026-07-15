@@ -36,6 +36,24 @@ import {
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
+import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
+import { useSelectedStore } from "@/composables/useSelectedStore";
+import { formatEquivalents } from "@/lib/currency";
+import { computeDiscountPercent } from "@/lib/productPrice";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  NumberField,
+  NumberFieldContent,
+  NumberFieldDecrement,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "@/components/ui/number-field";
 
 const GROUP_NONE = "__none__";
 
@@ -67,6 +85,17 @@ export default {
     CardTitle,
     Loader2,
     Plus,
+    AiDescriptionGenerator,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+    NumberField,
+    NumberFieldContent,
+    NumberFieldDecrement,
+    NumberFieldIncrement,
+    NumberFieldInput,
   },
   data() {
     return {
@@ -96,6 +125,14 @@ export default {
       storeAttributes.value.filter((a) => a.showOnProductPage !== false),
     );
 
+    const {
+      extendedPriceParameters,
+      storeCurrencies,
+      storeBaseCurrency,
+      loadMemberships,
+    } = useSelectedStore();
+
+    const priceField = z.number().min(0).optional().nullable();
     const formSchema = computed(() => toTypedSchema(
       z.object({
         product: z.object({
@@ -109,7 +146,14 @@ export default {
             .min(0, "Количество не может быть отрицательным")
             .optional()
             .nullable(),
-          price: z.number().min(0, "Цена не может быть отрицательной").optional().nullable(),
+          price: priceField,
+          ...(extendedPriceParameters.value ? {
+            oldPrice: priceField,
+            minPrice: priceField,
+            netPrice: priceField,
+            discount: z.number().int().min(0).max(99).optional().nullable(),
+            currency: z.string().max(3).optional().nullable(),
+          } : {}),
         }),
         categoryAttributes: buildAttributesSchema(visibleCategoryAttributes.value),
         storeAttributes: buildAttributesSchema(visibleStoreAttributes.value),
@@ -126,6 +170,11 @@ export default {
           description: "",
           storageQuantity: null,
           price: null,
+          oldPrice: null,
+          minPrice: null,
+          netPrice: null,
+          discount: null,
+          currency: null,
         },
         categoryAttributes: {},
         storeAttributes: {},
@@ -251,6 +300,39 @@ export default {
       if (mod10 >= 2 && mod10 <= 4) return "атрибута";
       return "атрибутов";
     }
+
+    function pricePreview(amount) {
+      return formatEquivalents(amount, storeCurrencies.value, storeBaseCurrency.value);
+    }
+
+    function syncDiscountFromPrices() {
+      if (!extendedPriceParameters.value) return;
+      form.setFieldValue(
+        "product.discount",
+        computeDiscountPercent(
+          form.values.product?.oldPrice,
+          form.values.product?.price,
+        ),
+      );
+    }
+
+    watch(
+      () => [form.values.product?.oldPrice, form.values.product?.price],
+      () => syncDiscountFromPrices(),
+    );
+
+    const aiAttributesSummary = computed(() => {
+      const lines = [];
+      for (const attr of visibleCategoryAttributes.value) {
+        const raw = form.values.categoryAttributes?.[String(attr.id)];
+        if (raw != null && raw !== "") lines.push(`${attr.name}: ${raw}`);
+      }
+      for (const attr of visibleStoreAttributes.value) {
+        const raw = form.values.storeAttributes?.[String(attr.id)];
+        if (raw != null && raw !== "") lines.push(`${attr.name}: ${raw}`);
+      }
+      return lines.join("\n");
+    });
 
     function autoResizeDescription() {
       const el = descriptionRef.value?.$el ?? descriptionRef.value;
@@ -449,6 +531,7 @@ export default {
     }
 
     fetchStoreAttributes();
+    loadMemberships();
     fetchProductGroups();
     if (fromGroupId) fetchGroupDetail(parseInt(fromGroupId));
     fetchCategories().then(() => prefillFromProduct());
@@ -586,6 +669,11 @@ export default {
       onGalleryDragChange,
       removeGalleryImage,
       openGalleryPreview,
+      extendedPriceParameters,
+      storeCurrencies,
+      storeBaseCurrency,
+      pricePreview,
+      aiAttributesSummary,
     };
   },
 };
@@ -725,62 +813,177 @@ export default {
                       </FormField>
 
                       <FormField v-slot="{ componentField, errorMessage }" name="product.description">
-                        <FormItem class="gap-0">
-                          <SettingsFormField label="Описание" label-for="product-description" :error="errorMessage">
-                            <FormControl>
-                              <Textarea
-                                id="product-description"
-                                ref="descriptionRef"
-                                v-bind="componentField"
-                                @input="autoResizeDescription"
-                                class="min-h-24 overflow-hidden resize-none"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
+                        <FormItem class="gap-1.5">
+                          <div class="flex items-center justify-between gap-2">
+                            <label for="product-description" class="text-sm font-medium leading-none">Описание</label>
+                            <AiDescriptionGenerator
+                              :product-name="form.values.product?.name"
+                              :category-name="selectedCategory?.name"
+                              :existing-description="form.values.product?.description"
+                              :attributes-summary="aiAttributesSummary"
+                              @generated="(text) => { form.setFieldValue('product.description', text); nextTick(() => autoResizeDescription()); }"
+                            />
+                          </div>
+                          <FormControl>
+                            <Textarea
+                              id="product-description"
+                              ref="descriptionRef"
+                              v-bind="componentField"
+                              @input="autoResizeDescription"
+                              class="min-h-24 overflow-hidden resize-none"
+                            />
+                          </FormControl>
+                          <p v-if="errorMessage" class="text-sm text-destructive">{{ errorMessage }}</p>
                         </FormItem>
                       </FormField>
 
-                      <div
-                        v-if="!selectedCategory?.hasSizes"
-                        class="grid grid-cols-1 sm:grid-cols-2 gap-5"
-                      >
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
-                          <FormItem class="gap-0">
-                            <SettingsFormField
-                              label="Количество на складе"
-                              label-for="product-quantity"
-                              :error="errorMessage"
-                            >
-                              <FormControl>
-                                <Input
-                                  id="product-quantity"
-                                  type="number"
-                                  :model-value="value"
-                                  @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
-                                />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
+                      <template v-if="!selectedCategory?.hasSizes">
+                        <div class="space-y-4 border-t pt-5">
+                          <div>
+                            <h4 class="text-sm font-medium">Остатки</h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              Наличие и складские параметры товара
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 gap-5">
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  label="Количество на складе"
+                                  label-for="product-quantity"
+                                  :error="errorMessage"
+                                >
+                                  <NumberField
+                                    id="product-quantity"
+                                    class="w-full"
+                                    :min="0"
+                                    :step="1"
+                                    :model-value="value ?? undefined"
+                                    @update:model-value="(v) => setValue(v ?? null)"
+                                  >
+                                    <NumberFieldContent class="w-full">
+                                      <NumberFieldDecrement />
+                                      <FormControl>
+                                        <NumberFieldInput />
+                                      </FormControl>
+                                      <NumberFieldIncrement />
+                                    </NumberFieldContent>
+                                  </NumberField>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
 
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
-                          <FormItem class="gap-0">
-                            <SettingsFormField label="Цена (₽)" label-for="product-price" :error="errorMessage">
-                              <FormControl>
-                                <Input
-                                  id="product-price"
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="0.00"
-                                  :model-value="value"
-                                  @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
-                                />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                      </div>
+                        <div class="space-y-4 border-t pt-5">
+                          <div>
+                            <h4 class="text-sm font-medium">Цена</h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              Основная цена хранится в {{ storeBaseCurrency || "базовой валюте магазина" }}
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 gap-5">
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
+                              <FormItem class="gap-0">
+                                <SettingsFormField :label="`Цена (${storeBaseCurrency || '—'})`" label-for="product-price" :error="errorMessage">
+                                  <FormControl>
+                                    <Input
+                                      id="product-price"
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      placeholder="0.00"
+                                      :model-value="value"
+                                      @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
+                                    />
+                                  </FormControl>
+                                  <p v-if="pricePreview(value).length" class="text-xs text-muted-foreground mt-1">
+                                    {{ pricePreview(value).join(" · ") }}
+                                  </p>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
+
+                        <div v-if="extendedPriceParameters" class="space-y-4 border-t pt-5">
+                          <div>
+                            <h4 class="text-sm font-medium">Расширенные параметры цены</h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              Для маркетплейсов со скидками, минимальной ценой и экспортом в другой валюте
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.oldPrice">
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="`Старая цена (${storeBaseCurrency || '—'})`"
+                                  :error="errorMessage"
+                                  description="Зачёркнутая цена до скидки. Скидка % считается от неё и поля «Цена» выше."
+                                >
+                                  <FormControl>
+                                    <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField v-slot="{ value, errorMessage }" name="product.discount">
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  label="Скидка (%)"
+                                  :error="errorMessage"
+                                  description="Вычисляется из старой цены и текущей цены"
+                                >
+                                  <FormControl>
+                                    <Input
+                                      type="text"
+                                      readonly
+                                      class="bg-muted"
+                                      :model-value="value != null ? String(value) : '—'"
+                                    />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.minPrice">
+                              <FormItem class="gap-0">
+                                <SettingsFormField :label="`Минимальная цена (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                                  <FormControl>
+                                    <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.netPrice">
+                              <FormItem class="gap-0">
+                                <SettingsFormField :label="`Себестоимость (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                                  <FormControl>
+                                    <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField v-slot="{ value, setValue, errorMessage }" name="product.currency">
+                              <FormItem class="gap-0 sm:col-span-2">
+                                <SettingsFormField
+                                  label="Валюта (экспорт)"
+                                  :error="errorMessage"
+                                  :description="`Суммы хранятся в ${storeBaseCurrency || 'базовой валюте'}. Валюта задаёт, в какой валюте уйдут цены на маркетплейс при экспорте.`"
+                                >
+                                  <FormControl>
+                                    <Select :model-value="value || storeBaseCurrency" @update:model-value="setValue($event)" class="w-full">
+                                      <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem v-for="c in storeCurrencies" :key="c.code" :value="c.code">{{ c.code }}</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
+                      </template>
                     </FieldGroup>
                   </CardContent>
                 </Card>

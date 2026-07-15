@@ -156,6 +156,7 @@ export default {
         options: "",
         defaultValue: "",
         description: "",
+        descriptionInTooltip: false,
       },
       attributeOptionsJson: null,
       cachedOptionsCount: 0,
@@ -279,6 +280,7 @@ export default {
         options: "",
         defaultValue: "",
         description: "",
+        descriptionInTooltip: false,
       };
       this.showAttributeDialog = true;
     },
@@ -305,6 +307,7 @@ export default {
           : this.formatOptionsForEdit(optionsRaw),
         defaultValue: attribute.defaultValue || "",
         description: attribute.description || "",
+        descriptionInTooltip: attribute.descriptionInTooltip === true,
       };
       this.primeDefaultValueOptions();
       this.showAttributeDialog = true;
@@ -351,6 +354,7 @@ export default {
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
+        descriptionInTooltip: this.attributeForm.descriptionInTooltip,
       };
 
       if (this.editingAttribute) {
@@ -972,6 +976,19 @@ export default {
                   placeholder="Подсказка для пользователя на странице товара"
                   class="min-h-20 resize-none"
                 />
+              </SettingsFormField>
+
+              <SettingsFormField label="Описание в подсказке">
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="store-attr-description-tooltip"
+                    :model-value="attributeForm.descriptionInTooltip"
+                    @update:model-value="attributeForm.descriptionInTooltip = $event"
+                  />
+                  <Label for="store-attr-description-tooltip" class="font-normal text-muted-foreground">
+                    Скрывать длинное описание за иконкой на странице товара
+                  </Label>
+                </div>
               </SettingsFormField>
 
               <SettingsFormField

@@ -1,9 +1,11 @@
 using Delegat.Enums;
 using Delegat.Infrastructure.Storage;
+using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
+using Delegat.Services;
 using Delegat.Services.Marketplace.Graph;
 using Delegat.Services.Marketplace.Modifiers;
 using System.Globalization;
@@ -604,6 +606,13 @@ public class MappingService
     /// <summary>
     /// Get value of a standard product field
     /// </summary>
+    private string GetStoreBaseCurrency(int storeId) =>
+        _context.stores.AsNoTracking()
+            .Where(s => s.Id == storeId)
+            .Select(s => s.baseCurrency)
+            .FirstOrDefault()
+        ?? throw new InvalidOperationException($"Store {storeId} has no base currency configured");
+
     private object? GetProductFieldValue(Product product, string? fieldName)
     {
         if (string.IsNullOrEmpty(fieldName))
@@ -616,6 +625,12 @@ public class MappingService
             "name" => product.name,
             "description" => product.description,
             "price" => product.price,
+            "oldprice" => product.oldPrice,
+            "minprice" => product.minPrice,
+            "netprice" => product.netPrice,
+            "discountedprice" => product.discountedPrice,
+            "discount" => product.discount,
+            "currency" or "currencyid" => product.currency ?? GetStoreBaseCurrency(product.storeId),
             "storagequantity" or "stock" or "quantity" => product.storageQuantity,
             "categoryid" => product.categoryId,
             "categoryname" => product.category?.name,
@@ -931,24 +946,51 @@ public class MappingService
         return value.Substring(0, maxLength);
     }
 
-    /// <summary>
-    /// Get available product fields for mapping
-    /// </summary>
-    public static List<ProductFieldInfo> GetAvailableProductFields()
+    public static List<ProductFieldInfo> GetBaseProductFields() =>
+    [
+        new("sku", "SKU / Артикул", "string"),
+        new("barcode", "Штрихкод (EAN)", "string"),
+        new("name", "Название", "string"),
+        new("description", "Описание", "string"),
+        new("categoryName", "Название категории", "string"),
+        new("groupName", "Название группы товара", "string"),
+        new("images", "Изображения", "array"),
+    ];
+
+    public static List<ProductFieldInfo> GetStockProductFields() =>
+    [
+        new("storageQuantity", "Количество на складе", "number"),
+    ];
+
+    public static List<ProductFieldInfo> GetPriceProductFields(bool extendedPriceParameters = false)
     {
-        return new List<ProductFieldInfo>
+        var fields = new List<ProductFieldInfo>
         {
-            new("sku", "SKU / Артикул", "string"),
-            new("barcode", "Штрихкод (EAN)", "string"),
-            new("name", "Название", "string"),
-            new("description", "Описание", "string"),
             new("price", "Цена", "number"),
-            new("storageQuantity", "Количество на складе", "number"),
-            new("categoryName", "Название категории", "string"),
-            new("groupName", "Название группы товара", "string"),
-            new("images", "Изображения", "array")
         };
+
+        if (extendedPriceParameters)
+        {
+            fields.AddRange(
+            [
+                new ProductFieldInfo("oldPrice", "Старая цена", "number"),
+                new ProductFieldInfo("minPrice", "Минимальная цена", "number"),
+                new ProductFieldInfo("netPrice", "Себестоимость", "number"),
+                new ProductFieldInfo("discountedPrice", "Цена со скидкой", "number"),
+                new ProductFieldInfo("discount", "Скидка %", "number"),
+                new ProductFieldInfo("currency", "Валюта", "string"),
+            ]);
+        }
+
+        return fields;
     }
+
+    /// <summary>All mappable product fields (base + stock + price).</summary>
+    public static List<ProductFieldInfo> GetAvailableProductFields(bool extendedPriceParameters = false)
+        => GetBaseProductFields()
+            .Concat(GetStockProductFields())
+            .Concat(GetPriceProductFields(extendedPriceParameters))
+            .ToList();
 }
 
 /// <summary>

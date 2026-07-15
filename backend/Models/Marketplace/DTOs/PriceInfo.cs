@@ -32,7 +32,7 @@ public record PriceInfo(
     /// <summary>
     /// Currency (ISO code)
     /// </summary>
-    string Currency = "RUB",
+    string? Currency = null,
 
     /// <summary>
     /// Variant identifier for multi-size products (e.g. chrtId for WB).

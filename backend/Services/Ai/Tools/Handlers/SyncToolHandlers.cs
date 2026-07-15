@@ -252,8 +252,8 @@ public class SyncToolHandlers : ToolHandlerBase
         if (!result.Success) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "archive_product",
-            $"Товар {p.ProductId} архивирован на {conn.name}", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Товар архивирован на {conn.name}");
+            $"Товар {p.ProductId} архивирован на {conn!.name}", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Товар архивирован на {conn!.name}");
     }
 
     internal async Task<(object, string)> ExportProductsBatchAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -300,18 +300,18 @@ public class SyncToolHandlers : ToolHandlerBase
         return (new { batchId, queued = productIds.Count }, $"Добавлено {productIds.Count} товаров в очередь экспорта");
     }
 
-    internal async Task<(object, string)> ExportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
+    internal Task<(object, string)> ExportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return (new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
-            $"Экспорт цен на подключение {p.ConnectionId} запущен");
+        return Task.FromResult(((object)new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
+            $"Экспорт цен на подключение {p.ConnectionId} запущен"));
     }
 
-    internal async Task<(object, string)> ExportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
+    internal Task<(object, string)> ExportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return (new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
-            $"Экспорт остатков на подключение {p.ConnectionId} запущен");
+        return Task.FromResult(((object)new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
+            $"Экспорт остатков на подключение {p.ConnectionId} запущен"));
     }
 
     internal async Task<(object, string)> GetBatchStatusAsync(string json, int storeId, int userId, CancellationToken ct)

@@ -102,6 +102,7 @@ public class StoreAttributeController : ControllerBase
             options = input.options,
             defaultValue = input.defaultValue,
             description = input.description,
+            descriptionInTooltip = input.descriptionInTooltip,
             storeId = selectedStoreId.Value
         });
 

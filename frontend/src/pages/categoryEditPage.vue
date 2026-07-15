@@ -181,6 +181,7 @@ export default {
         options: "",
         defaultValue: "",
         description: "",
+        descriptionInTooltip: false,
         group: "",
       },
       customGroupMode: false,
@@ -359,6 +360,7 @@ export default {
         options: "",
         defaultValue: "",
         description: "",
+        descriptionInTooltip: false,
         group: "",
       };
       this.showAttributeDialog = true;
@@ -391,6 +393,7 @@ export default {
           : this.formatOptionsForEdit(optionsRaw),
         defaultValue: attribute.defaultValue || "",
         description: attribute.description || "",
+        descriptionInTooltip: attribute.descriptionInTooltip === true,
         group,
       };
       this.primeDefaultValueOptions();
@@ -438,6 +441,7 @@ export default {
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
+        descriptionInTooltip: this.attributeForm.descriptionInTooltip,
         group: this.attributeForm.group.trim() || null,
       };
 
@@ -1166,6 +1170,19 @@ export default {
                   placeholder="Подсказка для пользователя на странице товара"
                   class="min-h-20 resize-none"
                 />
+              </SettingsFormField>
+
+              <SettingsFormField label="Описание в подсказке">
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="attr-description-tooltip"
+                    :model-value="attributeForm.descriptionInTooltip"
+                    @update:model-value="attributeForm.descriptionInTooltip = $event"
+                  />
+                  <Label for="attr-description-tooltip" class="font-normal text-muted-foreground">
+                    Скрывать длинное описание за иконкой на странице товара
+                  </Label>
+                </div>
               </SettingsFormField>
 
               <SettingsFormField label="Группа" label-for="attr-group">

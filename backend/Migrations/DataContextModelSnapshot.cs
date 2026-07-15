@@ -341,12 +341,19 @@ namespace Delegat.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
+                    b.Property<bool>("descriptionInTooltip")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("group")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
                     b.Property<bool>("isMultiline")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
@@ -365,7 +372,9 @@ namespace Delegat.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<bool>("showOnProductPage")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("sortOrder")
                         .HasColumnType("int");
@@ -1476,6 +1485,10 @@ namespace Delegat.Migrations
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)");
+
                     b.Property<DateTime?>("deletedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1484,10 +1497,25 @@ namespace Delegat.Migrations
                         .HasMaxLength(5000)
                         .HasColumnType("varchar(5000)");
 
+                    b.Property<int?>("discount")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("discountedPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("minPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<decimal?>("netPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("oldPrice")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal?>("price")
                         .HasColumnType("decimal(18,2)");
@@ -1643,10 +1671,23 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("baseCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)");
+
+                    b.Property<bool>("extendedPriceParameters")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
+
+                    b.Property<string>("timezone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.HasKey("Id");
 
@@ -1672,8 +1713,15 @@ namespace Delegat.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
+                    b.Property<bool>("descriptionInTooltip")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("isMultiline")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
@@ -1693,7 +1741,9 @@ namespace Delegat.Migrations
                         .HasColumnType("varchar(5000)");
 
                     b.Property<bool>("showOnProductPage")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("sortOrder")
                         .HasColumnType("int");
@@ -1709,6 +1759,39 @@ namespace Delegat.Migrations
                     b.HasIndex("storeId");
 
                     b.ToTable("storeAttributes");
+                });
+
+            modelBuilder.Entity("Delegat.Models.StoreCurrency", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)");
+
+                    b.Property<bool>("isEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal>("rateToBase")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "code")
+                        .IsUnique();
+
+                    b.ToTable("storeCurrencies");
                 });
 
             modelBuilder.Entity("Delegat.Models.StoreFile", b =>
@@ -2581,6 +2664,17 @@ namespace Delegat.Migrations
                     b.Navigation("store");
                 });
 
+            modelBuilder.Entity("Delegat.Models.StoreCurrency", b =>
+                {
+                    b.HasOne("Delegat.Models.Store", "store")
+                        .WithMany("currencies")
+                        .HasForeignKey("storeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("store");
+                });
+
             modelBuilder.Entity("Delegat.Models.StoreFile", b =>
                 {
                     b.HasOne("Delegat.Models.User", "authorUser")
@@ -2831,6 +2925,8 @@ namespace Delegat.Migrations
             modelBuilder.Entity("Delegat.Models.Store", b =>
                 {
                     b.Navigation("categories");
+
+                    b.Navigation("currencies");
 
                     b.Navigation("marketplaceConnections");
 

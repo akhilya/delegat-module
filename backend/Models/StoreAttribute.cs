@@ -72,6 +72,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
     public string? description { get; set; }
 
     /// <summary>
+    /// When true, description is shown in a tooltip instead of below the field on the product page.
+    /// </summary>
+    public bool descriptionInTooltip { get; set; } = false;
+
+    /// <summary>
     /// Timestamp when the attribute was created.
     /// </summary>
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
@@ -104,6 +109,7 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         options = form.options;
         defaultValue = form.defaultValue;
         description = form.description;
+        descriptionInTooltip = form.descriptionInTooltip;
         storeId = form.storeId;
         createdAt = DateTime.UtcNow;
         return true;
@@ -128,6 +134,8 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         options = form.options;
         defaultValue = form.defaultValue;
         description = form.description;
+        if (form.descriptionInTooltip.HasValue)
+            descriptionInTooltip = form.descriptionInTooltip.Value;
         return true;
     }
 
@@ -145,7 +153,8 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
-            description = description
+            description = description,
+            descriptionInTooltip = descriptionInTooltip
         };
     }
 
@@ -235,6 +244,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         public string? description { get; set; }
 
         /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
+
+        /// <summary>
         /// Store identifier.
         /// </summary>
         public int storeId { get; set; }
@@ -294,6 +308,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// </summary>
         [StringLength(ATTRIBUTE_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
+
+        /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
     }
 
     /// <summary>
@@ -355,6 +374,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// </summary>
         [StringLength(ATTRIBUTE_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
+
+        /// <summary>
+        /// Updated tooltip description flag.
+        /// </summary>
+        public bool? descriptionInTooltip { get; set; }
     }
 
     /// <summary>
@@ -416,5 +440,10 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// Human-readable description.
         /// </summary>
         public string? description { get; set; }
+
+        /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
     }
 }

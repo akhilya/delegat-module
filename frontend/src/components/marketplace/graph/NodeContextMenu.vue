@@ -87,7 +87,21 @@ const sourceItems = computed(() => {
       group: "source",
       kind: "productField",
       payload: f,
-    }),
+    }, "товар"),
+  );
+  (s.stockFields || []).forEach((f) =>
+    push(Database, f.displayName || f.key, {
+      group: "source",
+      kind: "productField",
+      payload: f,
+    }, "остат", "stock", "склад"),
+  );
+  (s.priceFields || []).forEach((f) =>
+    push(Database, f.displayName || f.key, {
+      group: "source",
+      kind: "productField",
+      payload: f,
+    }, "цен", "price"),
   );
   (s.categoryAttributes || []).forEach((a) =>
     push(Tag, a.name, { group: "source", kind: "attribute", payload: a }),

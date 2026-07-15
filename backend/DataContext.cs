@@ -11,6 +11,7 @@ namespace Delegat;
 public class DataContext : IdentityDbContext<User, UserRole, int>
 {
     public DbSet<Store> stores { get; set; }
+    public DbSet<StoreCurrency> storeCurrencies { get; set; }
     public DbSet<Product> products { get; set; }
     public DbSet<Models.File> files { get; set; }
     public DbSet<StoreFile> storeFiles { get; set; }
@@ -148,6 +149,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .Property(a => a.showOnProductPage)
             .HasDefaultValue(true);
 
+        builder.Entity<CategoryAttribute>()
+            .Property(a => a.descriptionInTooltip)
+            .HasDefaultValue(false);
+
         // CategoryMapping graphJson - LONGTEXT for the whole-category visual node graph
         builder.Entity<CategoryMapping>()
             .Property(m => m.graphJson)
@@ -227,6 +232,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<StoreAttribute>()
             .Property(a => a.showOnProductPage)
             .HasDefaultValue(true);
+
+        builder.Entity<StoreAttribute>()
+            .Property(a => a.descriptionInTooltip)
+            .HasDefaultValue(false);
 
         builder.Entity<ProductAttributeValue>()
             .HasIndex(pav => pav.productId);
@@ -397,6 +406,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiStoreSettings>()
             .HasIndex(s => s.StoreId)
             .IsUnique();
+
+        builder.Entity<StoreCurrency>()
+            .HasIndex(c => new { c.storeId, c.code })
+            .IsUnique();
+
+        builder.Entity<StoreCurrency>()
+            .HasOne(c => c.store)
+            .WithMany(s => s.currencies)
+            .HasForeignKey(c => c.storeId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // One marketplace group per evaluated grouping value per connection
         builder.Entity<GroupValueMarketplaceLink>()

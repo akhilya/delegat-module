@@ -135,7 +135,7 @@ public class RollbackToolHandlers : ToolHandlerBase
                         .FirstOrDefaultAsync(v => v.productId == snap.ProductId && v.attributeId == snap.AttributeId, ct);
                     if (val != null)
                     {
-                        val.value = snap.OldValue;
+                        val.value = snap.OldValue ?? string.Empty;
                     }
                     else if (snap.OldValue != null)
                     {

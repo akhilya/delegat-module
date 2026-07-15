@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Models;
@@ -7,8 +8,14 @@ namespace Delegat.Infrastructure.Data;
 
 public static class DatabaseSeeder
 {
+    /// <summary>Default base currency for stores created without an explicit value.</summary>
+    private const string DefaultStoreBaseCurrency = "RUB";
+
     public static async Task SeedAsync(IServiceProvider services, AdminSeedSettings settings)
     {
+        var logger = services.GetRequiredService<ILogger<DataContext>>();
+        await EnsureStoreBaseCurrenciesAsync(services, logger);
+
         // Skip if no admin email configured
         if (string.IsNullOrEmpty(settings.Email) ||
             string.IsNullOrEmpty(settings.Username) ||
@@ -18,7 +25,6 @@ public static class DatabaseSeeder
         }
 
         var userManager = services.GetRequiredService<UserManager<User>>();
-        var logger = services.GetRequiredService<ILogger<DataContext>>();
 
         // Find by email first, then fall back to username (old accounts may have no email)
         var existingAdmin = await userManager.FindByEmailAsync(settings.Email)
@@ -74,5 +80,16 @@ public static class DatabaseSeeder
             logger.LogInformation("Admin user created: {Email}", settings.Email);
         else
             logger.LogError("Failed to create admin user: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
+    }
+
+    private static async Task EnsureStoreBaseCurrenciesAsync(IServiceProvider services, ILogger logger)
+    {
+        var context = services.GetRequiredService<DataContext>();
+        var updated = await context.stores
+            .Where(s => s.baseCurrency == null || s.baseCurrency == "")
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.baseCurrency, DefaultStoreBaseCurrency));
+
+        if (updated > 0)
+            logger.LogInformation("Set default base currency for {Count} store(s)", updated);
     }
 }

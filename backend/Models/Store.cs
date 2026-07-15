@@ -1,5 +1,6 @@
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Models.Marketplace;
+using Delegat.Services;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -21,6 +22,28 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     /// </summary>
     [StringLength(STORE_NAME_MAX_LENGTH)]
     public string name { get; set; } = null!;
+
+    /// <summary>
+    /// IANA timezone for display and scheduling context.
+    /// </summary>
+    [StringLength(TIMEZONE_MAX_LENGTH)]
+    public string timezone { get; set; } = DEFAULT_TIMEZONE;
+
+    /// <summary>
+    /// When true, extended price fields are available on products and in mapping palette.
+    /// </summary>
+    public bool extendedPriceParameters { get; set; }
+
+    /// <summary>
+    /// ISO 4217 code of the store base currency. All product prices are stored in this currency.
+    /// </summary>
+    [StringLength(BASE_CURRENCY_MAX_LENGTH)]
+    public string baseCurrency { get; set; } = null!;
+
+    /// <summary>
+    /// Additional currencies with exchange rates to the store base currency.
+    /// </summary>
+    public virtual ICollection<StoreCurrency> currencies { get; set; } = new List<StoreCurrency>();
 
     /// <summary>
     /// Collection of users who are members of this store.
@@ -74,6 +97,10 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         {
             id = Id,
             name = name,
+            timezone = timezone,
+            extendedPriceParameters = extendedPriceParameters,
+            baseCurrency = baseCurrency,
+            currencies = MapCurrencyDtos(),
             membersCount = members?.Count(m => m.isActive) ?? 0,
             storeAdminsCount = storeAdmins?.Count(m => m.isActive) ?? 0,
         };
@@ -85,6 +112,10 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         {
             id = Id,
             name = name,
+            timezone = timezone,
+            extendedPriceParameters = extendedPriceParameters,
+            baseCurrency = baseCurrency,
+            currencies = MapCurrencyDtos(),
             members = members?.Where(m => m.isActive).Select(m => new MemberDTO
             {
                 id = m.Id,
@@ -94,10 +125,28 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         };
     }
 
+    public List<CurrencyDTO> MapCurrencyDtos()
+    {
+        return CurrencyService.BuildCurrencyList(this)
+            .Select(c => new CurrencyDTO
+            {
+                code = c.Code,
+                rateToBase = c.RateToBase,
+                isEnabled = c.IsEnabled,
+                isBase = c.IsBase,
+                updatedAt = c.UpdatedAt
+            })
+            .ToList();
+    }
+
     /// <summary>
     /// Maximum length for store name.
     /// </summary>
     public const int STORE_NAME_MAX_LENGTH = 40;
+
+    public const int TIMEZONE_MAX_LENGTH = 64;
+    public const int BASE_CURRENCY_MAX_LENGTH = 3;
+    public const string DEFAULT_TIMEZONE = "Europe/Moscow";
 
     /// <summary>
     /// Form for creating a new store.
@@ -146,6 +195,14 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// </summary>
         public string name { get; set; }
 
+        public string timezone { get; set; }
+
+        public bool extendedPriceParameters { get; set; }
+
+        public string baseCurrency { get; set; }
+
+        public List<CurrencyDTO> currencies { get; set; }
+
         /// <summary>
         /// Number of members in the store.
         /// </summary>
@@ -171,10 +228,27 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// </summary>
         public string name { get; set; }
 
+        public string timezone { get; set; }
+
+        public bool extendedPriceParameters { get; set; }
+
+        public string baseCurrency { get; set; }
+
+        public List<CurrencyDTO> currencies { get; set; }
+
         /// <summary>
         /// List of store members.
         /// </summary>
         public List<MemberDTO> members { get; set; }
+    }
+
+    public struct CurrencyDTO
+    {
+        public string code { get; set; }
+        public decimal rateToBase { get; set; }
+        public bool isEnabled { get; set; }
+        public bool isBase { get; set; }
+        public DateTime updatedAt { get; set; }
     }
 
     /// <summary>

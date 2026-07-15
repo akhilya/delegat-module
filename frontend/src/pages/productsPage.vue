@@ -19,6 +19,7 @@ import {
   getDefaultVisibilityWithStoreAttributes,
   combinedColumnPresets,
 } from "@/components/products/columns";
+import { getBaseCurrency } from "@/lib/currency";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { toast } from "vue-sonner";
@@ -155,6 +156,8 @@ export default {
       "importProductsApply",
       "getTrashProducts",
       "getTrashCount",
+      "getMyMemberships",
+      "getMe",
       "bulkRestoreProducts",
       "bulkPermanentDeleteProducts",
       "restoreProduct",
@@ -257,6 +260,30 @@ export default {
         onError: () => {
           this.storeAttributes = [];
         },
+      });
+    },
+
+    async fetchStoreBaseCurrency() {
+      let selectedStoreId = null;
+      await new Promise((resolve) => {
+        this.getMe({
+          onSuccess: (response) => {
+            selectedStoreId = response.data.value?.selectedStoreId ?? null;
+            resolve();
+          },
+          onError: () => resolve(),
+        });
+      });
+      await new Promise((resolve) => {
+        this.getMyMemberships({
+          onSuccess: (response) => {
+            const stores = response.data.value || [];
+            const store = stores.find((s) => s.id === selectedStoreId) || stores[0];
+            this.storeBaseCurrency = getBaseCurrency(store);
+            resolve();
+          },
+          onError: () => resolve(),
+        });
       });
     },
 
@@ -546,6 +573,7 @@ export default {
 
       // Store attributes for bulk edit
       storeAttributes: [],
+      storeBaseCurrency: null,
 
       // Category attributes for bulk edit (loaded dynamically)
       loadedCategoryAttributes: [],
@@ -675,7 +703,7 @@ export default {
     },
     // Dynamic columns including store attributes and preset
     productColumns() {
-      return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset);
+      return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset, this.storeBaseCurrency);
     },
     sortableColumnIds() {
       const base = ['name', 'sku', 'price', 'storageQuantity', 'category', 'createdAt', 'updatedAt'];
@@ -736,6 +764,7 @@ export default {
     // Fetch store attributes and categories in parallel
     await Promise.all([
       this.fetchStoreAttributes(),
+      this.fetchStoreBaseCurrency(),
       this.fetchCategories(),
       this.fetchTrashCount(),
     ]);

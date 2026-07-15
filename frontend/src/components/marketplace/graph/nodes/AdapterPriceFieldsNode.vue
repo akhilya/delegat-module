@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
 import { Banknote, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
-import { pinColor } from "../graphModel.js";
+import { mergeProductFieldSources, pinColor } from "../graphModel.js";
 
 const props = defineProps({
   id: String,
@@ -19,7 +19,7 @@ function aliasPrimaryLabel(f) {
 }
 
 const avail = computed(() => props.data.availableSources || {});
-const productFields = computed(() => avail.value.productFields || []);
+const productFields = computed(() => mergeProductFieldSources(avail.value));
 const categoryAttributes = computed(() => avail.value.categoryAttributes || []);
 const storeAttributes = computed(() => avail.value.storeAttributes || []);
 

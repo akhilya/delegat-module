@@ -120,6 +120,8 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
+import { formatMoney } from "@/lib/currency";
+import { useSelectedStore } from "@/composables/useSelectedStore";
 
 export default {
   components: {
@@ -225,6 +227,11 @@ export default {
     SettingsFormField,
     SettingsFormSection,
     Progress,
+  },
+  setup() {
+    const { storeBaseCurrency, loadMemberships } = useSelectedStore();
+    loadMemberships();
+    return { storeBaseCurrency, formatMoney };
   },
   data() {
     const validTabs = ["settings", "mappings", "products"];
@@ -2296,11 +2303,7 @@ export default {
 
     formatPrice(price) {
       if (price === null || price === undefined) return "—";
-      return new Intl.NumberFormat("ru-RU", {
-        style: "currency",
-        currency: "RUB",
-        minimumFractionDigits: 0,
-      }).format(price);
+      return formatMoney(price, this.storeBaseCurrency);
     },
   },
   mounted() {

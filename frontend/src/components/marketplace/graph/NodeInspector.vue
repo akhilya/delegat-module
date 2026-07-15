@@ -18,7 +18,7 @@ import OptionMapEditor from "../OptionMapEditor.vue";
 import TemplateEditor from "../TemplateEditor.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import { Trash2, X, ChevronDown, Plus } from "lucide-vue-next";
-import { fieldPinsFor } from "./graphModel.js";
+import { fieldPinsFor, mergeProductFieldSources } from "./graphModel.js";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
 
@@ -196,7 +196,7 @@ const currentSourceLabel = (f) => {
   if (s.type === "groupName") return "Название группы";
   if (s.type === "productField")
     return (
-      adapterAvail.value.productFields?.find((x) => x.key === s.field)
+      mergeProductFieldSources(adapterAvail.value).find((x) => x.key === s.field)
         ?.displayName ||
       s.field ||
       "Поле товара"
@@ -632,10 +632,30 @@ function resolvePreview(fieldKey, raw) {
                 <SelectContent>
                   <SelectItem :value="NONE">По проводу</SelectItem>
                   <SelectGroup v-if="adapterAvail.productFields?.length">
-                    <SelectLabel>Поле товара</SelectLabel>
+                    <SelectLabel>Товар</SelectLabel>
                     <SelectItem
                       v-for="pf in adapterAvail.productFields"
                       :key="pf.key"
+                      :value="`p:${pf.key}`"
+                    >
+                      {{ pf.displayName || pf.key }}
+                    </SelectItem>
+                  </SelectGroup>
+                  <SelectGroup v-if="adapterAvail.stockFields?.length">
+                    <SelectLabel>Остатки</SelectLabel>
+                    <SelectItem
+                      v-for="pf in adapterAvail.stockFields"
+                      :key="'stock-' + pf.key"
+                      :value="`p:${pf.key}`"
+                    >
+                      {{ pf.displayName || pf.key }}
+                    </SelectItem>
+                  </SelectGroup>
+                  <SelectGroup v-if="adapterAvail.priceFields?.length">
+                    <SelectLabel>Цена</SelectLabel>
+                    <SelectItem
+                      v-for="pf in adapterAvail.priceFields"
+                      :key="'price-' + pf.key"
                       :value="`p:${pf.key}`"
                     >
                       {{ pf.displayName || pf.key }}

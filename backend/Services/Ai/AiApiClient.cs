@@ -395,9 +395,20 @@ public class AiApiClient
 
         var proxied = CreateProxiedClient(model.proxyUrl);
 
-        return baseUrl == null
-            ? new Anthropic.AnthropicClient { ApiKey = model.apiKeyEncrypted, HttpClient = proxied }
-            : new Anthropic.AnthropicClient { ApiKey = model.apiKeyEncrypted, BaseUrl = baseUrl, HttpClient = proxied };
+        var apiKey = model.apiKeyEncrypted ?? string.Empty;
+
+        return (baseUrl, proxied) switch
+        {
+            (null, null) => new Anthropic.AnthropicClient { ApiKey = apiKey },
+            (null, not null) => new Anthropic.AnthropicClient { ApiKey = apiKey, HttpClient = proxied },
+            (not null, null) => new Anthropic.AnthropicClient { ApiKey = apiKey, BaseUrl = baseUrl },
+            (not null, not null) => new Anthropic.AnthropicClient
+            {
+                ApiKey = apiKey,
+                BaseUrl = baseUrl,
+                HttpClient = proxied,
+            },
+        };
     }
 
     private Anthropic.Models.Messages.MessageCreateParams BuildAnthropicParams(AiRequest request)
@@ -460,12 +471,16 @@ public class AiApiClient
             });
         }
 
+        var systemPrompt = string.IsNullOrEmpty(request.system)
+            ? null
+            : (Anthropic.Models.Messages.MessageCreateParamsSystem)request.system!;
+
         return new Anthropic.Models.Messages.MessageCreateParams
         {
             Model = request.model,
             MaxTokens = request.max_tokens,
             Messages = messageParams,
-            System = string.IsNullOrEmpty(request.system) ? null : request.system,
+            System = systemPrompt,
             Metadata = string.IsNullOrEmpty(request.user)
                 ? null
                 : new Anthropic.Models.Messages.Metadata { UserID = request.user },

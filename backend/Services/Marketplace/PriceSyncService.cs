@@ -5,6 +5,7 @@ using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
+using Delegat.Services;
 
 namespace Delegat.Services.Marketplace;
 
@@ -17,17 +18,20 @@ public class PriceSyncService
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly MappingService _mappingService;
     private readonly IOperationLogger _operationLogger;
+    private readonly CurrencyService _currencyService;
 
     public PriceSyncService(
         DataContext context,
         IMarketplaceAdapterRegistry adapterRegistry,
         MappingService mappingService,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        CurrencyService currencyService)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
         _mappingService = mappingService;
         _operationLogger = operationLogger;
+        _currencyService = currencyService;
     }
 
     /// <summary>
@@ -154,6 +158,11 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
 
+        var extendedPrice = await _context.stores.AsNoTracking()
+            .Where(s => s.Id == connection.storeId)
+            .Select(s => s.extendedPriceParameters)
+            .FirstOrDefaultAsync(ct);
+
         var canLog = operationId != null && storeId != null;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -193,7 +202,8 @@ public class PriceSyncService
                         externalPrice,
                         link.categoryMappingId != null && mappings.TryGetValue(link.categoryMappingId.Value, out var mapping)
                             ? mapping
-                            : null);
+                            : null,
+                        extendedPrice);
                     if (externalPrice.Stock.HasValue)
                         link.product.storageQuantity = externalPrice.Stock;
                 }
@@ -267,6 +277,14 @@ public class PriceSyncService
             .Where(m => mappingIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, ct);
 
+        var storeSettings = await _context.stores.AsNoTracking()
+            .Where(s => s.Id == connection.storeId)
+            .Select(s => new { s.extendedPriceParameters, s.baseCurrency })
+            .FirstOrDefaultAsync(ct);
+        var extendedPrice = storeSettings?.extendedPriceParameters ?? false;
+        var storeBaseCurrency = storeSettings?.baseCurrency
+            ?? throw new InvalidOperationException($"Store {connection.storeId} has no base currency configured");
+
         var canLog = operationId != null && storeId != null;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -309,10 +327,15 @@ public class PriceSyncService
                         return fromGraph;
                 }
 
-                return BuildLegacyPriceInfo(l);
+                return BuildLegacyPriceInfo(l, extendedPrice, storeBaseCurrency);
             })
             .Where(p => p.Price != null)
             .ToList();
+
+        var convertedPrices = new List<PriceInfo>();
+        foreach (var price in pricesToExport)
+            convertedPrices.Add(await ConvertPriceInfoForExportAsync(price, connection.storeId, ct));
+        pricesToExport = convertedPrices;
 
         var skippedNoPrice = exportableLinks.Count(l =>
         {
@@ -596,34 +619,88 @@ public class PriceSyncService
             stock.WarehouseId ?? "");
     }
 
-    private static PriceInfo BuildLegacyPriceInfo(ProductMarketplaceLink l)
+    private static PriceInfo BuildLegacyPriceInfo(ProductMarketplaceLink l, bool extendedPriceParameters, string storeBaseCurrency)
     {
-        var avs = l.product!.attributeValues;
+        var p = l.product!;
+        if (extendedPriceParameters)
+        {
+            return new PriceInfo(
+                ExternalProductId: l.externalProductId,
+                Price: p.price,
+                OldPrice: p.oldPrice,
+                Stock: p.storageQuantity,
+                DiscountedPrice: p.discountedPrice,
+                MinPrice: p.minPrice,
+                ExternalSku: l.externalSku,
+                Discount: p.discount,
+                NetPrice: p.netPrice,
+                Currency: p.currency ?? storeBaseCurrency);
+        }
+
+        var avs = p.attributeValues;
         return new PriceInfo(
             ExternalProductId: l.externalProductId,
-            Price: l.product.price,
+            Price: p.price,
             OldPrice: ParsePriceAttr(avs, "old_price"),
-            Stock: l.product.storageQuantity,
+            Stock: p.storageQuantity,
             MinPrice: ParsePriceAttr(avs, "min_price"),
             ExternalSku: l.externalSku,
             Discount: ParseIntAttr(avs, "discount")
         );
     }
 
-    private static void ApplyImportedPriceToProduct(Product product, PriceInfo externalPrice, CategoryMapping? mapping)
+    private async Task<PriceInfo> ConvertPriceInfoForExportAsync(PriceInfo info, int storeId, CancellationToken ct)
+    {
+        var baseCurrency = await _currencyService.GetStoreBaseCurrencyAsync(storeId, ct);
+        var targetCurrency = CurrencyService.NormalizeCodeOrBase(info.Currency, baseCurrency);
+        if (targetCurrency == baseCurrency)
+            return info;
+
+        async Task<decimal?> Conv(decimal? v) =>
+            v == null ? null : await _currencyService.ConvertFromBaseAsync(v.Value, targetCurrency, storeId, ct);
+
+        return info with
+        {
+            Price = await Conv(info.Price),
+            OldPrice = await Conv(info.OldPrice),
+            MinPrice = await Conv(info.MinPrice),
+            DiscountedPrice = await Conv(info.DiscountedPrice),
+            NetPrice = await Conv(info.NetPrice),
+        };
+    }
+
+    private static void ApplyImportedPriceToProduct(
+        Product product,
+        PriceInfo externalPrice,
+        CategoryMapping? mapping,
+        bool extendedPriceParameters)
     {
         if (externalPrice.Price.HasValue)
             product.price = externalPrice.Price;
+
+        if (extendedPriceParameters)
+        {
+            if (externalPrice.OldPrice.HasValue) product.oldPrice = externalPrice.OldPrice;
+            if (externalPrice.MinPrice.HasValue) product.minPrice = externalPrice.MinPrice;
+            if (externalPrice.DiscountedPrice.HasValue) product.discountedPrice = externalPrice.DiscountedPrice;
+            if (externalPrice.Discount.HasValue) product.discount = externalPrice.Discount;
+            if (externalPrice.NetPrice.HasValue) product.netPrice = externalPrice.NetPrice;
+            if (!string.IsNullOrWhiteSpace(externalPrice.Currency))
+                product.currency = externalPrice.Currency;
+        }
 
         if (mapping == null || MappingService.SchemaPriceFields(mapping.graphJson).Count == 0)
             return;
 
         WriteDirectPriceBinding(product, mapping, "price", externalPrice.Price);
-        WriteDirectPriceBinding(product, mapping, "oldPrice", externalPrice.OldPrice);
-        WriteDirectPriceBinding(product, mapping, "minPrice", externalPrice.MinPrice);
-        WriteDirectPriceBinding(product, mapping, "discountedPrice", externalPrice.DiscountedPrice);
-        WriteDirectPriceBinding(product, mapping, "discount", externalPrice.Discount);
-        WriteDirectPriceBinding(product, mapping, "netPrice", externalPrice.NetPrice);
+        if (!extendedPriceParameters)
+        {
+            WriteDirectPriceBinding(product, mapping, "oldPrice", externalPrice.OldPrice);
+            WriteDirectPriceBinding(product, mapping, "minPrice", externalPrice.MinPrice);
+            WriteDirectPriceBinding(product, mapping, "discountedPrice", externalPrice.DiscountedPrice);
+            WriteDirectPriceBinding(product, mapping, "discount", externalPrice.Discount);
+            WriteDirectPriceBinding(product, mapping, "netPrice", externalPrice.NetPrice);
+        }
     }
 
     private static void WriteDirectPriceBinding(Product product, CategoryMapping mapping, string fieldKey, object? value)

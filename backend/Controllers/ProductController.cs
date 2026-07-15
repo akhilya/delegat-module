@@ -85,13 +85,13 @@ public class ProductController : ControllerBase
             (true, false, _) => p => p.storeId == selectedStoreId.Value &&
                                      (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)),
             (false, _, true) => p => p.storeId == selectedStoreId.Value && p.categoryId == null,
-            (false, true, false) => p => p.storeId == selectedStoreId.Value && p.categoryId == categoryId.Value,
+            (false, true, false) => p => p.storeId == selectedStoreId.Value && p.categoryId == categoryId!.Value,
             (true, _, true) => p => p.storeId == selectedStoreId.Value &&
                                     (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
                                     p.categoryId == null,
             (true, true, false) => p => p.storeId == selectedStoreId.Value &&
                                         (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
-                                        p.categoryId == categoryId.Value,
+                                        p.categoryId == categoryId!.Value,
         };
 
         // Build sort expression
@@ -625,6 +625,20 @@ public class ProductController : ControllerBase
                     hasChanges = true;
                 }
 
+                if (request.updates.oldPrice.HasValue) { product.oldPrice = request.updates.oldPrice; hasChanges = true; }
+                if (request.updates.minPrice.HasValue) { product.minPrice = request.updates.minPrice; hasChanges = true; }
+                if (request.updates.netPrice.HasValue) { product.netPrice = request.updates.netPrice; hasChanges = true; }
+                if (request.updates.currency != null) { product.currency = request.updates.currency == "" ? null : request.updates.currency; hasChanges = true; }
+
+                if (request.updates.price.HasValue || request.updates.oldPrice.HasValue)
+                {
+                    if (product.price.HasValue)
+                        product.discountedPrice = product.price;
+                    product.discount = Delegat.Infrastructure.ProductPriceHelper.ComputeDiscountPercent(
+                        product.oldPrice, product.price);
+                    hasChanges = true;
+                }
+
                 if (request.updates.barcode != null)
                 {
                     var newBarcode = request.updates.barcode == "" ? null : request.updates.barcode;
@@ -728,6 +742,12 @@ public class ProductController : ControllerBase
         public int? storageQuantity { get; set; }
         /// <summary>New price, or null to leave unchanged.</summary>
         public decimal? price { get; set; }
+        public decimal? oldPrice { get; set; }
+        public decimal? minPrice { get; set; }
+        public decimal? netPrice { get; set; }
+        public decimal? discountedPrice { get; set; }
+        public int? discount { get; set; }
+        public string? currency { get; set; }
         /// <summary>Category attribute values to replace, or null to leave unchanged.</summary>
         public List<ProductAttributeValue.UserValueForm>? attributeValues { get; set; }
         /// <summary>Store attribute values to replace, or null to leave unchanged.</summary>

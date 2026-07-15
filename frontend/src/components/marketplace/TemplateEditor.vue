@@ -130,6 +130,38 @@ export default {
           <DropdownMenuSeparator />
         </template>
 
+        <template v-if="availableSources.stockFields?.length">
+          <DropdownMenuLabel class="text-xs py-0.5">Остатки</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              v-for="field in availableSources.stockFields"
+              :key="'stock-' + field.key"
+              class="text-xs cursor-pointer py-1"
+              @click="insertField(field.key)"
+            >
+              {{ field.displayName }}
+              <span class="ml-auto font-mono text-xs text-muted-foreground">{{ field.key }}</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </template>
+
+        <template v-if="availableSources.priceFields?.length">
+          <DropdownMenuLabel class="text-xs py-0.5">Цена</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              v-for="field in availableSources.priceFields"
+              :key="'price-' + field.key"
+              class="text-xs cursor-pointer py-1"
+              @click="insertField(field.key)"
+            >
+              {{ field.displayName }}
+              <span class="ml-auto font-mono text-xs text-muted-foreground">{{ field.key }}</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </template>
+
         <!-- Category attributes -->
         <template v-if="availableSources.categoryAttributes?.length">
           <DropdownMenuLabel class="text-xs py-0.5">Атрибуты категории</DropdownMenuLabel>

@@ -64,6 +64,7 @@ import {
   ADAPTER_PRICE_NODE_ID,
   sanitizeGraphNodes,
   sanitizeGraphEdges,
+  mergeProductFieldSources,
 } from "./graphModel.js";
 import { layoutGraph } from "./graphLayout.js";
 
@@ -629,8 +630,14 @@ function loadPickerModels() {
 
 const templateFieldRefs = computed(() => {
   const refs = [{ group: "value", label: "Исходное значение", snippet: "{{value}}" }];
-  for (const pf of props.availableSources.productFields || [])
-    refs.push({ group: "product", label: pf.displayName, snippet: `{{${pf.key}}}` });
+  for (const pf of mergeProductFieldSources(props.availableSources)) {
+    const group = (props.availableSources.stockFields || []).some((f) => f.key === pf.key)
+      ? "stock"
+      : (props.availableSources.priceFields || []).some((f) => f.key === pf.key)
+        ? "price"
+        : "product";
+    refs.push({ group, label: pf.displayName, snippet: `{{${pf.key}}}` });
+  }
   for (const ca of props.availableSources.categoryAttributes || [])
     refs.push({ group: "category", label: ca.name, snippet: `{{attr:${ca.id}}}` });
   for (const sa of props.availableSources.storeAttributes || [])

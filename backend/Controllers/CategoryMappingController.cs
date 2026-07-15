@@ -960,7 +960,12 @@ public class CategoryMappingController : ControllerBase
             try
             {
                 var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
-                priceSpecs = CategoryImportService.BuildPriceFieldSpecs(priceFields, attributeMap, skipAutoMapping);
+                var extendedPrice = await _unitOfWork.Repository<Store>().Query()
+                    .Where(s => s.Id == connection.storeId)
+                    .Select(s => s.extendedPriceParameters)
+                    .FirstOrDefaultAsync(ct);
+                priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
+                    priceFields, attributeMap, skipAutoMapping, extendedPrice);
             }
             catch (Exception ex)
             {

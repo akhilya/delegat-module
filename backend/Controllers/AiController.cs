@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
 
@@ -100,6 +101,38 @@ public class AiController : ControllerBase
         return Ok(new { explanation });
     }
 
+    [HttpPost("generate-product-description")]
+    public async Task<IActionResult> GenerateProductDescription(
+        [FromBody] GenerateProductDescriptionRequest request,
+        CancellationToken ct)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (storeId == null)
+            return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest("name is required");
+
+        try
+        {
+            var description = await _chatService.GenerateProductDescriptionAsync(
+                storeId.Value,
+                request.Name.Trim(),
+                request.Sku,
+                request.CategoryName,
+                request.AttributesSummary,
+                request.ExistingDescription,
+                request.ModelId,
+                ct);
+
+            return Ok(new { description });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+    }
+
     // GET /api/ai/operations — recent AI operations for undo history
     [HttpGet("operations")]
     public async Task<IActionResult> GetOperations(CancellationToken ct)
@@ -144,4 +177,14 @@ public class ExplainErrorRequest
     public string Context { get; set; } = "";
     public int? ProductId { get; set; }
     public int? ConnectionId { get; set; }
+}
+
+public class GenerateProductDescriptionRequest
+{
+    public string Name { get; set; } = "";
+    public string? Sku { get; set; }
+    public string? CategoryName { get; set; }
+    public string? AttributesSummary { get; set; }
+    public string? ExistingDescription { get; set; }
+    public int? ModelId { get; set; }
 }

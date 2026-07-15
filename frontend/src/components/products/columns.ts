@@ -11,6 +11,9 @@ import {
   getAttributeColumnSize,
   renderAttributeValueCell,
 } from "@/lib/attributeTableCell";
+import { formatDateTimeCell } from "@/utils/dateTime";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { formatMoney } from "@/lib/currency";
 
 /** Creates a copy icon SVG DOM element. */
 function createCopyIconEl(size = 12): SVGElement {
@@ -98,11 +101,9 @@ function renderCopyableSku(sku: string, extraClass = "") {
 }
 
 /** Renders a date value as two lines: date on top, time below in muted text. */
-function renderDateCell(val: string | null | undefined) {
+function renderDateCell(val: string | null | undefined, timezone = DEFAULT_TIMEZONE) {
   if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
-  const d = new Date(val);
-  const date = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const { date, time } = formatDateTimeCell(val, timezone);
   return h("div", { class: "flex flex-col" }, [
     h("span", { class: "text-sm tabular-nums" }, date),
     h("span", { class: "text-xs tabular-nums text-muted-foreground" }, time),
@@ -267,7 +268,7 @@ export const columns: ProductColumnDef[] = [
       if (value === null || value === undefined) {
         return h("span", { class: "text-muted-foreground" }, "—");
       }
-      return h("span", {}, `${value} ₽`);
+      return h("span", {}, String(value));
     },
   },
   {
@@ -544,10 +545,25 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
   },
 };
 
+function withPriceCurrency(col: ProductColumnDef, baseCurrency?: string | null): ProductColumnDef {
+  if (col.id !== "price" || !baseCurrency) return col;
+  return {
+    ...col,
+    cell: ({ row }) => {
+      const value = row.original.price;
+      if (value === null || value === undefined) {
+        return h("span", { class: "text-muted-foreground" }, "—");
+      }
+      return h("span", {}, formatMoney(value, baseCurrency));
+    },
+  };
+}
+
 /** Builds the full column array applying a combined preset and appending dynamic store attribute columns. */
 export function buildColumnsWithPreset(
   storeAttributes: StoreAttribute[],
   preset: CombinedColumnPreset = "none",
+  baseCurrency?: string | null,
 ): ProductColumnDef[] {
   const presetConfig = combinedColumnPresets.find((p) => p.id === preset);
   const combinedColumn = combinedColumns[preset];
@@ -556,7 +572,7 @@ export function buildColumnsWithPreset(
   let baseColumns = columns.filter((col) => {
     if (!presetConfig) return true;
     return !presetConfig.hidesColumns.includes(col.id);
-  });
+  }).map((col) => withPriceCurrency(col, baseCurrency));
 
   // Insert combined column after 'position' if it exists
   if (combinedColumn) {

@@ -175,16 +175,25 @@ public class FieldMappingController : ControllerBase
             ? await storeAttributeRepo.FindAllAsync(sa => sa.storeId == connection.storeId)
             : new List<StoreAttribute>();
 
-        var productFields = MappingService.GetAvailableProductFields();
+        var store = connection != null
+            ? await _unitOfWork.Repository<Store>().GetByIdWithIncludesAsync(connection.storeId, q => q.Include(s => s.currencies))
+            : null;
+
+        var extendedPrice = store?.extendedPriceParameters ?? false;
+        static object MapField(ProductFieldInfo f) => new
+        {
+            key = f.Key,
+            displayName = f.DisplayName,
+            type = f.Type,
+        };
 
         return Ok(new
         {
-            productFields = productFields.Select(f => new
-            {
-                key = f.Key,
-                displayName = f.DisplayName,
-                type = f.Type
-            }),
+            extendedPriceParameters = extendedPrice,
+            currencies = store?.MapCurrencyDtos() ?? new List<Store.CurrencyDTO>(),
+            productFields = MappingService.GetBaseProductFields().Select(MapField),
+            stockFields = MappingService.GetStockProductFields().Select(MapField),
+            priceFields = MappingService.GetPriceProductFields(extendedPrice).Select(MapField),
             categoryAttributes = category?.attributes?.Select(a => new
             {
                 id = a.Id,

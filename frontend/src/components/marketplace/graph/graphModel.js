@@ -569,13 +569,22 @@ function attributeLabel(id, list) {
   return found ? found.name : `Атрибут #${id ?? "?"}`;
 }
 
+export function mergeProductFieldSources(sources) {
+  if (!sources) return [];
+  return [
+    ...(sources.productFields || []),
+    ...(sources.stockFields || []),
+    ...(sources.priceFields || []),
+  ];
+}
+
 function productFieldLabel(key, sources) {
-  const found = (sources?.productFields || []).find((f) => f.key === key);
+  const found = mergeProductFieldSources(sources).find((f) => f.key === key);
   return found ? found.displayName : key;
 }
 
 function productFieldType(key, sources) {
-  const found = (sources?.productFields || []).find((f) => f.key === key);
+  const found = mergeProductFieldSources(sources).find((f) => f.key === key);
   if (found?.type) return found.type;
   if (key === "images") return "array"; // Изображения = Массив<Текст>
   return null;

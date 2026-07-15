@@ -131,6 +131,33 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
+    async addStoreCurrency(ctx, { storeId, data, onSuccess, onError }) {
+      try {
+        const response = await http.post(`/stores/${storeId}/currencies`, data, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
+    async patchStoreCurrency(ctx, { storeId, code, data, onSuccess, onError }) {
+      try {
+        const response = await http.patch(`/stores/${storeId}/currencies/${code}`, data, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
+    async deleteStoreCurrency(ctx, { storeId, code, onSuccess, onError }) {
+      try {
+        const response = await http.delete(`/stores/${storeId}/currencies/${code}`);
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
     async getAllUsers(ctx, { onSuccess, onError }) {
       return await useAxios(
         `/users/all`,

@@ -72,6 +72,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     public string? description { get; set; }
 
     /// <summary>
+    /// When true, description is shown in a tooltip instead of below the field on the product page.
+    /// </summary>
+    public bool descriptionInTooltip { get; set; } = false;
+
+    /// <summary>
     /// Attribute group for visual grouping (e.g., "Dimensions and weight", "Media").
     /// </summary>
     [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
@@ -105,6 +110,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         options = form.options;
         defaultValue = form.defaultValue;
         description = form.description;
+        descriptionInTooltip = form.descriptionInTooltip;
         group = form.group;
         categoryId = form.categoryId;
         return true;
@@ -129,6 +135,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         options = form.options;
         defaultValue = form.defaultValue;
         description = form.description;
+        if (form.descriptionInTooltip.HasValue)
+            descriptionInTooltip = form.descriptionInTooltip.Value;
         // Allow setting group to null or a value
         group = form.group;
         return true;
@@ -149,6 +157,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             options = options,
             defaultValue = defaultValue,
             description = description,
+            descriptionInTooltip = descriptionInTooltip,
             group = group
         };
     }
@@ -243,6 +252,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public string? description { get; set; }
 
         /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
+
+        /// <summary>
         /// Attribute group name for visual grouping.
         /// </summary>
         [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
@@ -307,6 +321,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// </summary>
         [StringLength(ATTRIBUTE_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
+
+        /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
 
         /// <summary>
         /// Attribute group name for visual grouping.
@@ -375,6 +394,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public string? description { get; set; }
 
         /// <summary>
+        /// Updated tooltip description flag.
+        /// </summary>
+        public bool? descriptionInTooltip { get; set; }
+
+        /// <summary>
         /// Updated group name.
         /// </summary>
         [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
@@ -440,6 +464,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Human-readable description.
         /// </summary>
         public string? description { get; set; }
+
+        /// <summary>
+        /// Show description in a tooltip on the product page.
+        /// </summary>
+        public bool descriptionInTooltip { get; set; }
 
         /// <summary>
         /// Attribute group name for visual grouping.

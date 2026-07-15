@@ -234,8 +234,8 @@
                   <MultiSelectDropdown
                     v-else-if="isType(attr.type, 'multiselect')"
                     :options="getSelectOptions(attr).map(o => o.label)"
-                    :model-value="parseMultiSelect(categoryAttributeValues[attr.id])"
-                    @update:model-value="categoryAttributeValues[attr.id] = JSON.stringify($event)"
+                    :model-value="parseMultiSelectLabels(attr, categoryAttributeValues[attr.id])"
+                    @update:model-value="categoryAttributeValues[attr.id] = setMultiSelectValue(attr, $event)"
                     :placeholder="attr.name"
                     :disabled="!enabledCategoryAttributes[attr.id]"
                   />
@@ -325,8 +325,8 @@
                   <MultiSelectDropdown
                     v-else-if="isType(attr.type, 'multiselect')"
                     :options="getSelectOptions(attr).map(o => o.label)"
-                    :model-value="parseMultiSelect(storeAttributeValues[attr.id])"
-                    @update:model-value="storeAttributeValues[attr.id] = JSON.stringify($event)"
+                    :model-value="parseMultiSelectLabels(attr, storeAttributeValues[attr.id])"
+                    @update:model-value="storeAttributeValues[attr.id] = setMultiSelectValue(attr, $event)"
                     :placeholder="attr.name"
                     :disabled="!enabledStoreAttributes[attr.id]"
                   />
@@ -396,6 +396,11 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { toast } from "vue-sonner";
+import {
+  labelsToStoredValues,
+  parseAttributeOptions,
+  resolveAttributeOptionLabels,
+} from "@/lib/attributeOptions";
 
 // Attribute types: 0=Text, 1=Number, 2=Boolean, 3=Select, 4=MultiSelect
 const TYPE_TEXT = [0, "Text", "text"];
@@ -416,33 +421,28 @@ function isType(attrType, typeName) {
 }
 
 function getSelectOptions(attribute) {
-  if (!attribute.options) return [];
-  try {
-    const parsed = JSON.parse(attribute.options);
-    if (Array.isArray(parsed)) {
-      return parsed.map((o) => ({
-        value: String(o.value || o.label || o),
-        label: o.label || o.value || String(o),
-      }));
-    }
-  } catch {
-    // Not JSON
-  }
-  return attribute.options
-    .split(",")
-    .map((opt) => opt.trim())
-    .filter(Boolean)
-    .map((label) => ({ value: label, label }));
+  return parseAttributeOptions(attribute.options);
 }
 
-function parseMultiSelect(value) {
+function parseMultiSelectLabels(attribute, value) {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [String(parsed)];
+    const values = Array.isArray(parsed) ? parsed : [parsed];
+    return resolveAttributeOptionLabels(attribute.options, values);
   } catch {
-    return value ? [value] : [];
+    return value
+      ? String(value)
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => resolveAttributeOptionLabels(attribute.options, [part])[0])
+      : [];
   }
+}
+
+function setMultiSelectValue(attribute, labels) {
+  return JSON.stringify(labelsToStoredValues(attribute.options, labels));
 }
 
 const props = defineProps({

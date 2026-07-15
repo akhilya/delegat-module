@@ -47,10 +47,28 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     public int? storageQuantity { get; set; }
 
     /// <summary>
-    /// Product price.
+    /// Product price (stored in the store base currency).
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal? price { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? oldPrice { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? minPrice { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? netPrice { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? discountedPrice { get; set; }
+
+    public int? discount { get; set; }
+
+    /// <summary>Display/export currency code (storage is always the store base currency).</summary>
+    [StringLength(3)]
+    public string? currency { get; set; }
 
     /// <summary>
     /// Timestamp when the product was created.
@@ -146,6 +164,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         categoryId = form.categoryId;
         storageQuantity = form.userAddForm.storageQuantity;
         price = form.userAddForm.price;
+        oldPrice = form.userAddForm.oldPrice;
+        minPrice = form.userAddForm.minPrice;
+        netPrice = form.userAddForm.netPrice;
+        currency = form.userAddForm.currency;
+        discountedPrice = price;
+        discount = Delegat.Infrastructure.ProductPriceHelper.ComputeDiscountPercent(oldPrice, price);
 
         return true;
     }
@@ -162,8 +186,19 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             storageQuantity = form.storageQuantity.Value;
         if (form.price.HasValue)
             price = form.price.Value;
+        if (form.oldPrice.HasValue)
+            oldPrice = form.oldPrice;
+        if (form.minPrice.HasValue)
+            minPrice = form.minPrice;
+        if (form.netPrice.HasValue)
+            netPrice = form.netPrice;
+        if (form.currency != null)
+            currency = form.currency == "" ? null : form.currency;
         if (form.categoryId.HasValue)
             categoryId = form.categoryId.Value;
+
+        discountedPrice = price;
+        discount = Delegat.Infrastructure.ProductPriceHelper.ComputeDiscountPercent(oldPrice, price);
 
         updatedAt = DateTime.UtcNow;
         return true;
@@ -194,7 +229,13 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             storeAttributeValues = storeAttributeValues.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
             notes = notes.Select(n => n.MapToDTO(serviceProvider)),
             storageQuantity,
-            price
+            price,
+            oldPrice,
+            minPrice,
+            netPrice,
+            discountedPrice,
+            discount,
+            currency
         };
     }
 
@@ -316,9 +357,16 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         public int? storageQuantity { get; set; }
 
         /// <summary>
-        /// Product price.
+        /// Product price (store base currency).
         /// </summary>
         public decimal? price { get; set; }
+
+        public decimal? oldPrice { get; set; }
+        public decimal? minPrice { get; set; }
+        public decimal? netPrice { get; set; }
+        public decimal? discountedPrice { get; set; }
+        public int? discount { get; set; }
+        public string? currency { get; set; }
 
         /// <summary>
         /// Optional category identifier.
@@ -365,9 +413,16 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         public int? storageQuantity { get; set; }
 
         /// <summary>
-        /// Updated product price.
+        /// Updated product price (store base currency).
         /// </summary>
         public decimal? price { get; set; }
+
+        public decimal? oldPrice { get; set; }
+        public decimal? minPrice { get; set; }
+        public decimal? netPrice { get; set; }
+        public decimal? discountedPrice { get; set; }
+        public int? discount { get; set; }
+        public string? currency { get; set; }
 
         /// <summary>
         /// Updated category identifier.

@@ -1,3 +1,4 @@
+using Delegat.Infrastructure;
 using Delegat.Models.Ai;
 
 namespace Delegat.Services.Ai.Prompts;
@@ -26,16 +27,18 @@ public static class AiPrompts
         string userName,
         bool isAdmin,
         AiPageContext? pageContext = null,
-        AiStoreSettings? settings = null)
+        AiStoreSettings? settings = null,
+        string? storeTimezone = null)
     {
-        var now = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm") + " UTC";
+        var tz = storeTimezone ?? StoreTimeHelper.DefaultTimezone;
+        var now = StoreTimeHelper.FormatInStoreTimezone(DateTime.UtcNow, tz);
         var connBlock = connections.Count == 0
             ? "none"
             : string.Join("\n", connections.Select(c =>
             {
                 var status = c.IsActive ? "active" : "inactive";
                 var sync = c.LastSyncAt.HasValue
-                    ? $", lastSync={c.LastSyncAt.Value:yyyy-MM-dd HH:mm} UTC"
+                    ? $", lastSync={StoreTimeHelper.FormatInStoreTimezone(c.LastSyncAt.Value, tz)}"
                     : ", never synced";
                 return $"  id={c.Id} name=\"{c.Name}\" adapter={c.AdapterKey} status={status}{sync}";
             }));
@@ -326,4 +329,28 @@ public static class AiPrompts
             $"When user says 'this connection' or 'its mappings' — use connectionId={ctx.ConnectionId}.",
         _ => $"=== CURRENT PAGE ===\nPage: {ctx.Page}"
     };
+
+    public const string GenerateProductDescriptionSystem =
+        "Ты копирайтер для интернет-магазина. Пиши продающие описания товаров на русском языке. " +
+        "Без markdown-заголовков, без списка характеристик — связный текст 2–4 абзаца. " +
+        "Не выдумывай характеристики, которых нет во входных данных. Ответь только текстом описания.";
+
+    public static string GenerateProductDescriptionUser(
+        string name,
+        string? sku,
+        string? categoryName,
+        string? attributesSummary,
+        string? existingDescription,
+        AiStoreSettings? settings)
+    {
+        var parts = new List<string> { $"Название: {name}" };
+        if (!string.IsNullOrWhiteSpace(sku)) parts.Add($"Артикул: {sku}");
+        if (!string.IsNullOrWhiteSpace(categoryName)) parts.Add($"Категория: {categoryName}");
+        if (!string.IsNullOrWhiteSpace(attributesSummary)) parts.Add($"Атрибуты:\n{attributesSummary}");
+        if (!string.IsNullOrWhiteSpace(existingDescription))
+            parts.Add($"Текущее описание (можно улучшить):\n{existingDescription}");
+        if (settings != null)
+            parts.Add(BuildSettingsBlock(settings));
+        return string.Join("\n\n", parts);
+    }
 }

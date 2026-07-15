@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 using static Delegat.Models.Store;
 
 namespace Delegat.Controllers;
@@ -266,9 +268,136 @@ public class StoreController : ControllerBase
                 store.storeAdmins.Add(admin);
         }
 
+        if (input.timezone != null)
+        {
+            var tz = input.timezone.Trim();
+            if (!StoreTimeHelper.IsValidTimezoneId(tz))
+                throw ApiException.BadRequest("Некорректный часовой пояс");
+            store.timezone = tz;
+        }
+
+        if (input.extendedPriceParameters.HasValue)
+            store.extendedPriceParameters = input.extendedPriceParameters.Value;
+
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
+    }
+
+    [HttpGet]
+    [Route("/stores/{id}/currencies")]
+    public async Task<IActionResult> GetStoreCurrencies(int id, CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (!await CanManageStoreAsync(id, currentUser))
+            throw ApiException.Forbidden("Недостаточно прав");
+
+        var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesAsync(id, q => q.Include(s => s.currencies));
+        if (store == null)
+            throw ApiException.NotFound("Магазин не найден");
+
+        return Ok(store.MapCurrencyDtos());
+    }
+
+    [HttpPost]
+    [Route("/stores/{id}/currencies")]
+    public async Task<IActionResult> AddStoreCurrency(int id, [FromBody] AddStoreCurrencyForm input, CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (!await CanManageStoreAsync(id, currentUser))
+            throw ApiException.Forbidden("Недостаточно прав");
+
+        var storeRepo = _unitOfWork.Repository<Store>();
+        var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
+        if (store == null)
+            throw ApiException.NotFound("Магазин не найден");
+
+        var code = CurrencyService.NormalizeCode(input.code);
+        var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
+        if (code == baseCurrency)
+            throw ApiException.BadRequest($"{baseCurrency} — базовая валюта, её не нужно добавлять");
+        if (!CurrencyService.IsValidCurrencyCode(code))
+            throw ApiException.BadRequest("Код валюты должен состоять из 3 букв");
+        if (input.rateToBase <= 0)
+            throw ApiException.BadRequest("Курс должен быть больше нуля");
+
+        if (store.currencies.Any(c => c.code == code))
+            throw ApiException.BadRequest("Валюта уже добавлена");
+
+        store.currencies.Add(new StoreCurrency
+        {
+            storeId = id,
+            code = code,
+            rateToBase = input.rateToBase,
+            isEnabled = true,
+            updatedAt = DateTime.UtcNow
+        });
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Ok(store.MapCurrencyDtos());
+    }
+
+    [HttpPatch]
+    [Route("/stores/{id}/currencies/{code}")]
+    public async Task<IActionResult> PatchStoreCurrency(int id, string code, [FromBody] PatchStoreCurrencyForm input, CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (!await CanManageStoreAsync(id, currentUser))
+            throw ApiException.Forbidden("Недостаточно прав");
+
+        code = CurrencyService.NormalizeCode(code);
+
+        var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
+        if (store == null)
+            throw ApiException.NotFound("Магазин не найден");
+
+        var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
+        if (code == baseCurrency)
+            throw ApiException.BadRequest($"Базовую валюту {baseCurrency} нельзя изменить");
+
+        var currency = store.currencies.FirstOrDefault(c => c.code == code);
+        if (currency == null)
+            throw ApiException.NotFound("Валюта не найдена");
+
+        if (input.rateToBase.HasValue)
+        {
+            if (input.rateToBase.Value <= 0)
+                throw ApiException.BadRequest("Курс должен быть больше нуля");
+            currency.rateToBase = input.rateToBase.Value;
+            currency.updatedAt = DateTime.UtcNow;
+        }
+        if (input.isEnabled.HasValue)
+            currency.isEnabled = input.isEnabled.Value;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Ok(store.MapCurrencyDtos());
+    }
+
+    [HttpDelete]
+    [Route("/stores/{id}/currencies/{code}")]
+    public async Task<IActionResult> DeleteStoreCurrency(int id, string code, CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (!await CanManageStoreAsync(id, currentUser))
+            throw ApiException.Forbidden("Недостаточно прав");
+
+        code = CurrencyService.NormalizeCode(code);
+
+        var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
+        if (store == null)
+            throw ApiException.NotFound("Магазин не найден");
+
+        var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
+        if (code == baseCurrency)
+            throw ApiException.BadRequest($"Базовую валюту {baseCurrency} нельзя удалить");
+
+        var currency = store.currencies.FirstOrDefault(c => c.code == code);
+        if (currency == null)
+            throw ApiException.NotFound("Валюта не найдена");
+
+        store.currencies.Remove(currency);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Ok(store.MapCurrencyDtos());
     }
 
     [HttpGet]
@@ -295,10 +424,24 @@ public class StoreController : ControllerBase
         public string? name { get; set; }
         public List<int>? memberIds { get; set; }
         public List<int>? storeAdminIds { get; set; }
+        public string? timezone { get; set; }
+        public bool? extendedPriceParameters { get; set; }
+    }
+
+    public struct AddStoreCurrencyForm
+    {
+        public string code { get; set; }
+        public decimal rateToBase { get; set; }
+    }
+
+    public struct PatchStoreCurrencyForm
+    {
+        public decimal? rateToBase { get; set; }
+        public bool? isEnabled { get; set; }
     }
 
     private static IQueryable<Store> StoreIncludes(IQueryable<Store> query) =>
-        query.Include(s => s.members).Include(s => s.storeAdmins);
+        query.Include(s => s.members).Include(s => s.storeAdmins).Include(s => s.currencies);
 
     private async Task<bool> CanManageStoreAsync(int storeId, User? user)
     {

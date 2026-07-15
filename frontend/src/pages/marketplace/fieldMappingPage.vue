@@ -8,6 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MappingCanvas from "@/components/marketplace/graph/MappingCanvas.vue";
+import { mergeProductFieldSources } from "@/components/marketplace/graph/graphModel.js";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
@@ -129,6 +130,8 @@ export default {
       fieldMappings: [],
       availableSources: {
         productFields: [],
+        stockFields: [],
+        priceFields: [],
         categoryAttributes: [],
         storeAttributes: [],
       },
@@ -342,6 +345,8 @@ export default {
         onSuccess: (response) => {
           this.availableSources = extractResponseData(response, {
             productFields: [],
+            stockFields: [],
+            priceFields: [],
             categoryAttributes: [],
             storeAttributes: [],
           });
@@ -553,7 +558,7 @@ export default {
         case "ProductField":
           return (
             !!fieldMapping.sourceField &&
-            (this.availableSources.productFields || []).some(
+            mergeProductFieldSources(this.availableSources).some(
               (f) => f.key === fieldMapping.sourceField,
             )
           );
@@ -616,7 +621,7 @@ export default {
     getCurrentSourceLabel(fieldMapping) {
       switch (fieldMapping.sourceType) {
         case "ProductField": {
-          const pf = this.availableSources.productFields?.find(
+          const pf = mergeProductFieldSources(this.availableSources).find(
             (f) => f.key === fieldMapping.sourceField,
           );
           return pf?.displayName || fieldMapping.sourceField || "Не выбрано";

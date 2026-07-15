@@ -960,6 +960,7 @@ public class ProductTransferService
                         options = srcAttr.options,
                         defaultValue = srcAttr.defaultValue,
                         description = srcAttr.description,
+                        descriptionInTooltip = srcAttr.descriptionInTooltip,
                         group = srcAttr.group
                     });
                     added++;
@@ -1006,6 +1007,7 @@ public class ProductTransferService
                 options = srcAttr.options,
                 defaultValue = srcAttr.defaultValue,
                 description = srcAttr.description,
+                descriptionInTooltip = srcAttr.descriptionInTooltip,
                 group = srcAttr.group
             });
         }

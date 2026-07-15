@@ -136,7 +136,7 @@ public class UserController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
             s => s.members.Any(m => m.Id == user.Id && m.isActive),
-            query => query.Include(s => s.members).Include(s => s.storeAdmins));
+            query => query.Include(s => s.members).Include(s => s.storeAdmins).Include(s => s.currencies));
 
         var result = stores.Select(s =>
         {

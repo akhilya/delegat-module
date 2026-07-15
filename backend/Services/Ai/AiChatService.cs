@@ -142,8 +142,12 @@ public class AiChatService
         var model = _modelService.DecryptForUse(modelConfig);
 
         // Build store context for system prompt
-        var storeName = await _context.stores.AsNoTracking()
-            .Where(s => s.Id == storeId).Select(s => s.name).FirstOrDefaultAsync(ct) ?? "Магазин";
+        var storeInfo = await _context.stores.AsNoTracking()
+            .Where(s => s.Id == storeId)
+            .Select(s => new { s.name, s.timezone })
+            .FirstOrDefaultAsync(ct);
+        var storeName = storeInfo?.name ?? "Магазин";
+        var storeTimezone = storeInfo?.timezone;
         var productCount = await _context.products.AsNoTracking()
             .CountAsync(p => p.storeId == storeId, ct);
         var connections = await _context.marketplaceConnections.AsNoTracking()
@@ -162,7 +166,7 @@ public class AiChatService
                 .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
                 .ToList(),
             currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false,
-            pageContext, storeSettings);
+            pageContext, storeSettings, storeTimezone);
 
         // Convert user messages to AI format
         var messages = userMessages.Select(m => new AiMessage
@@ -398,6 +402,70 @@ public class AiChatService
             return response.content.FirstOrDefault(b => b.type == "text")?.text?.Trim() ?? "Новый диалог";
         }
         catch { return "Новый диалог"; }
+    }
+
+    public async Task<string> GenerateProductDescriptionAsync(
+        int storeId,
+        string name,
+        string? sku,
+        string? categoryName,
+        string? attributesSummary,
+        string? existingDescription,
+        int? modelId,
+        CancellationToken ct = default)
+    {
+        var modelConfig = await _modelService.ResolveEnabledModelAsync(modelId, ct);
+        if (modelConfig == null)
+            throw new InvalidOperationException("Нет подключённых или включённых AI-моделей");
+
+        var storeSettings = await _context.aiStoreSettings.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
+
+        var decrypted = _modelService.DecryptForUse(modelConfig);
+        var request = new AiRequest
+        {
+            model = decrypted.modelId,
+            max_tokens = Math.Min(Math.Max(decrypted.maxTokens, 256), 4096),
+            system = AiPrompts.GenerateProductDescriptionSystem,
+            messages =
+            [
+                new AiMessage
+                {
+                    role = "user",
+                    content = AiPrompts.GenerateProductDescriptionUser(
+                        name, sku, categoryName, attributesSummary, existingDescription, storeSettings)
+                }
+            ]
+        };
+
+        try
+        {
+            var response = await _apiClient.SendAsync(decrypted, request, ct);
+            var text = string.Join(
+                "\n",
+                response.content
+                    .Where(b => b.type == "text" && !string.IsNullOrWhiteSpace(b.text))
+                    .Select(b => b.text!.Trim()));
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning(
+                    "AI returned empty description (model config {ModelConfigId}, provider {Provider}, stop_reason {StopReason})",
+                    modelConfig.Id, modelConfig.provider, response.stop_reason);
+                throw new InvalidOperationException("Модель вернула пустой ответ. Попробуйте другую модель или повторите запрос.");
+            }
+
+            return text;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI description generation failed for model config {ModelConfigId}", modelConfig.Id);
+            throw new InvalidOperationException($"Не удалось получить ответ от AI: {ex.Message}", ex);
+        }
     }
 
     // ---- Tool Dispatcher ----
@@ -1346,8 +1414,8 @@ public class AiChatService
         if (!result.Success) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "archive_product",
-            $"Товар {p.ProductId} архивирован на {conn.name}", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Товар архивирован на {conn.name}");
+            $"Товар {p.ProductId} архивирован на {conn!.name}", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Товар архивирован на {conn!.name}");
     }
 
     // ---- Mapping Tools ----
@@ -1902,18 +1970,18 @@ public class AiChatService
         return (new { batchId, queued = productIds.Count }, $"Добавлено {productIds.Count} товаров в очередь экспорта");
     }
 
-    private async Task<(object, string)> ExportPricesAsync(string json, int storeId, CancellationToken ct)
+    private Task<(object, string)> ExportPricesAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return (new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
-            $"Экспорт цен на подключение {p.ConnectionId} запущен");
+        return Task.FromResult(((object)new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
+            $"Экспорт цен на подключение {p.ConnectionId} запущен"));
     }
 
-    private async Task<(object, string)> ExportStocksAsync(string json, int storeId, CancellationToken ct)
+    private Task<(object, string)> ExportStocksAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return (new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
-            $"Экспорт остатков на подключение {p.ConnectionId} запущен");
+        return Task.FromResult(((object)new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
+            $"Экспорт остатков на подключение {p.ConnectionId} запущен"));
     }
 
     private async Task<(object, string)> GetBatchStatusAsync(string json, CancellationToken ct)
@@ -2735,7 +2803,7 @@ public class AiChatService
                         .FirstOrDefaultAsync(v => v.productId == snap.ProductId && v.attributeId == snap.AttributeId, ct);
                     if (val != null)
                     {
-                        val.value = snap.OldValue;
+                        val.value = snap.OldValue ?? string.Empty;
                     }
                     else if (snap.OldValue != null)
                     {

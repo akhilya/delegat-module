@@ -6,6 +6,10 @@ import { Check, X } from "lucide-vue-next";
 
 import BarcodeCell from "@/components/products/BarcodeCell.vue";
 import { isAttributeType } from "@/lib/productAttributeValidation.js";
+import {
+  parseAttributeOptions,
+  resolveAttributeOptionLabel,
+} from "@/lib/attributeOptions.js";
 
 export interface AttributeTableColumnDef {
   type: number | string;
@@ -16,23 +20,7 @@ export interface AttributeTableColumnDef {
 function parseSelectOptions(
   options?: string | null,
 ): { value: string; label: string }[] {
-  if (!options) return [];
-  try {
-    const parsed = JSON.parse(options);
-    if (Array.isArray(parsed)) {
-      return parsed.map((option) => ({
-        value: String(option.value ?? option.label ?? option),
-        label: String(option.label ?? option.value ?? option),
-      }));
-    }
-  } catch {
-    // Not JSON — fall through to comma-separated parsing.
-  }
-  return options
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((label) => ({ value: label, label }));
+  return parseAttributeOptions(options);
 }
 
 function parseMultiSelectValue(value: string): string[] {
@@ -54,10 +42,7 @@ function resolveSelectLabel(
   value: string,
   options?: string | null,
 ): string {
-  const match = parseSelectOptions(options).find(
-    (option) => option.value === value,
-  );
-  return match?.label ?? value;
+  return resolveAttributeOptionLabel(options, value);
 }
 
 function renderEmptyCell(): VNode {
@@ -100,7 +85,7 @@ export function renderAttributeValueCell(
             class:
               "inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs text-foreground/90",
           },
-          item,
+          resolveAttributeOptionLabel(attr.options, item),
         ),
       ),
     );

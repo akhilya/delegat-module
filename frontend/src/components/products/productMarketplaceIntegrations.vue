@@ -82,6 +82,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
+import { formatMoney } from "@/lib/currency";
+import { useSelectedStore } from "@/composables/useSelectedStore";
 
 export default {
   components: {
@@ -151,6 +153,11 @@ export default {
       type: Number,
       required: true,
     },
+  },
+  setup() {
+    const { storeBaseCurrency, loadMemberships } = useSelectedStore();
+    loadMemberships();
+    return { storeBaseCurrency, formatMoney };
   },
   data() {
     return {
@@ -558,11 +565,7 @@ export default {
     formatFieldValue(field, value) {
       if (value === null || value === undefined) return "—";
       if (field === "price") {
-        return new Intl.NumberFormat("ru-RU", {
-          style: "currency",
-          currency: "RUB",
-          minimumFractionDigits: 0,
-        }).format(value);
+        return formatMoney(value, this.storeBaseCurrency);
       }
       if (field === "description") {
         const str = String(value);
