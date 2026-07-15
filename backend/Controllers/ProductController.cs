@@ -59,7 +59,7 @@ public class ProductController : ControllerBase
     /// <param name="categoryId">Optional category ID to filter products by.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
-    /// <param name="sort">Multi-column sort, e.g. name:desc|price:asc (also accepts comma/semicolon separators)</param>
+    /// <param name="sort">Legacy single sort string (prefer repeated sort query params: sort=col:dir&amp;sort=col:dir)</param>
     /// <param name="sortBy">Legacy single-column sort (name, sku, price, storageQuantity, category).</param>
     /// <param name="sortDesc">Legacy sort direction. Default: true.</param>
     /// <returns>A paged result containing product review DTOs, total count, and last-page indicator.</returns>
@@ -103,7 +103,13 @@ public class ProductController : ControllerBase
                                         p.categoryId == categoryId!.Value,
         };
 
-        var sortSpecs = ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
+        var sortQueryParts = Request.Query["sort"]
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!)
+            .ToArray();
+        var sortSpecs = sortQueryParts.Length > 0
+            ? ProductSortHelper.ParseSortSpecs(sortQueryParts, sortBy, sortDesc)
+            : ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
         var orderBy = ProductSortHelper.BuildOrderBy(sortSpecs, hasSearch, searchQuery);
 
         var (items, total) = await productRepo.FindPagedAsync(

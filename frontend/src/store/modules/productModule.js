@@ -24,8 +24,13 @@ export default {
       params.set("pageSize", pageSize);
       if (categoryId != null) params.set("categoryId", categoryId);
       if (sort) {
-        const value = Array.isArray(sort) ? sort.filter(Boolean).join("|") : sort;
-        if (value) params.set("sort", value);
+        const parts = Array.isArray(sort)
+          ? sort
+          : String(sort).split(/[,;|]/);
+        for (const part of parts) {
+          const trimmed = part?.trim();
+          if (trimmed) params.append("sort", trimmed);
+        }
       } else {
         if (sortBy) params.set("sortBy", sortBy);
         if (sortDesc != null) params.set("sortDesc", sortDesc);

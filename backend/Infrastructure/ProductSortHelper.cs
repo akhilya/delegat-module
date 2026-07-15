@@ -8,14 +8,21 @@ public static class ProductSortHelper
 {
     private static readonly char[] SortPartSeparators = [',', ';', '|'];
 
-    public static List<ProductSortSpec> ParseSortSpecs(string? sort, string? legacySortBy, bool legacySortDesc)
+    public static List<ProductSortSpec> ParseSortSpecs(string? sort, string? legacySortBy, bool legacySortDesc) =>
+        ParseSortSpecs(sort is null ? null : new[] { sort }, legacySortBy, legacySortDesc);
+
+    public static List<ProductSortSpec> ParseSortSpecs(IEnumerable<string>? sortParts, string? legacySortBy, bool legacySortDesc)
     {
         var specs = new List<ProductSortSpec>();
 
-        if (!string.IsNullOrWhiteSpace(sort))
+        if (sortParts != null)
         {
-            foreach (var part in sort.Split(SortPartSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                TryAddSortPart(specs, part);
+            foreach (var raw in sortParts)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                foreach (var part in raw.Split(SortPartSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    TryAddSortPart(specs, part);
+            }
         }
         else if (!string.IsNullOrWhiteSpace(legacySortBy))
         {
