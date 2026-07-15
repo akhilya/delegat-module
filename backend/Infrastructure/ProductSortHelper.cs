@@ -112,6 +112,9 @@ public static class ProductSortHelper
         specs.Add(new ProductSortSpec(column, dir != "asc"));
     }
 
+    public static string FormatSortSpecs(IReadOnlyList<ProductSortSpec> specs) =>
+        string.Join(", ", specs.Select(s => $"{s.Column}:{(s.Desc ? "desc" : "asc")}"));
+
     private static bool TryGetStoreAttrId(string column, out int attrId)
     {
         attrId = 0;

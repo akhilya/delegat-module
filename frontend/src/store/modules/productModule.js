@@ -36,8 +36,16 @@ export default {
         if (sortDesc != null) params.set("sortDesc", sortDesc);
       }
 
+      const requestUrl = `/products?${params.toString()}`;
+      if (import.meta.env.DEV) {
+        console.debug("[productSort] API request", {
+          url: requestUrl,
+          sortParams: [...params.getAll("sort")],
+        });
+      }
+
       return await useAxios(
-        `/products?${params.toString()}`,
+        requestUrl,
         { method: "GET", cache: false },
         http,
         {
@@ -45,7 +53,12 @@ export default {
           abortPrevious: true,
         },
       )
-        .then((response) => onSuccess(response))
+        .then((response) => {
+          if (import.meta.env.DEV && response.data?.value?._sortDebug) {
+            console.debug("[productSort] API _sortDebug", response.data.value._sortDebug);
+          }
+          onSuccess(response);
+        })
         .catch((error) => onError(error));
     },
 

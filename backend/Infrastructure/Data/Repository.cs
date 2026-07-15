@@ -451,10 +451,12 @@ public class Repository<TEntity> where TEntity : class, IEntity
 
         var totalCount = await query.CountAsync(ct);
 
+        // Apply ordering before includes/split-query so ThenBy columns stay in the principal SQL.
+        query = orderBy(query);
+
         if (queryBuilder != null)
             query = queryBuilder(query);
 
-        query = orderBy(query);
         var items = await query.Skip(skip).Take(take).ToListAsync(ct);
 
         return (items, totalCount);

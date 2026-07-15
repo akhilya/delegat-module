@@ -85,3 +85,10 @@ export function toggleSortColumn(columns, columnId, shiftKey = false) {
 export function getSortIndex(columns, columnId) {
   return (columns || []).findIndex((c) => c.id === columnId);
 }
+
+/** @param {string} label @param {unknown} data */
+export function debugProductSort(label, data) {
+  if (import.meta.env.DEV) {
+    console.debug(`[productSort] ${label}`, data);
+  }
+}
