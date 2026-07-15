@@ -24,7 +24,8 @@ export default {
       params.set("pageSize", pageSize);
       if (categoryId != null) params.set("categoryId", categoryId);
       if (sort) {
-        params.set("sort", sort);
+        const value = Array.isArray(sort) ? sort.filter(Boolean).join("|") : sort;
+        if (value) params.set("sort", value);
       } else {
         if (sortBy) params.set("sortBy", sortBy);
         if (sortDesc != null) params.set("sortDesc", sortDesc);

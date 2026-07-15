@@ -1,19 +1,35 @@
 /** @typedef {{ id: string, desc: boolean }} SortColumn */
 
+function parseSortPart(part) {
+  const trimmed = part?.trim();
+  if (!trimmed) return null;
+  const colon = trimmed.indexOf(":");
+  if (colon <= 0) return null;
+  const id = trimmed.slice(0, colon).trim();
+  const dir = trimmed.slice(colon + 1).trim().toLowerCase();
+  if (!id) return null;
+  return { id, desc: dir !== "asc" };
+}
+
+/** @param {string | string[] | undefined} raw */
+function parseSortParts(raw) {
+  if (!raw) return [];
+  const items = Array.isArray(raw) ? raw : [raw];
+  const parts = [];
+  for (const item of items) {
+    if (typeof item !== "string" || !item.trim()) continue;
+    for (const segment of item.split(/[,;|]/)) {
+      const parsed = parseSortPart(segment);
+      if (parsed) parts.push(parsed);
+    }
+  }
+  return parts.slice(0, 5);
+}
+
 /** @returns {SortColumn[]} */
 export function parseSortFromQuery(query = {}) {
-  const raw = query.sort;
-  if (typeof raw === "string" && raw.trim()) {
-    return raw
-      .split(",")
-      .map((part) => {
-        const [id, dir] = part.split(":");
-        const columnId = id?.trim();
-        if (!columnId) return null;
-        return { id: columnId, desc: (dir?.trim() || "desc") !== "asc" };
-      })
-      .filter(Boolean);
-  }
+  const fromSort = parseSortParts(query.sort);
+  if (fromSort.length) return fromSort;
 
   if (query.sortBy) {
     return [{
@@ -25,10 +41,15 @@ export function parseSortFromQuery(query = {}) {
   return [];
 }
 
-/** @param {SortColumn[]} columns */
+/** @param {SortColumn[]} columns @returns {string | undefined} */
 export function serializeSortToQuery(columns) {
   if (!columns?.length) return undefined;
-  return columns.map((c) => `${c.id}:${c.desc ? "desc" : "asc"}`).join(",");
+  return columns.map((c) => `${c.id}:${c.desc ? "desc" : "asc"}`).join("|");
+}
+
+/** @param {SortColumn[]} columns */
+export function serializeSortKey(columns) {
+  return serializeSortToQuery(columns) ?? "";
 }
 
 /**
@@ -43,11 +64,7 @@ export function toggleSortColumn(columns, columnId, shiftKey = false) {
 
   if (shiftKey) {
     if (index >= 0) {
-      if (list[index].desc) {
-        list[index] = { ...list[index], desc: false };
-      } else {
-        list.splice(index, 1);
-      }
+      list[index] = { ...list[index], desc: !list[index].desc };
     } else {
       list.push({ id: columnId, desc: true });
     }

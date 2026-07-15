@@ -22,6 +22,7 @@ import {
 import { getBaseCurrency } from "@/lib/currency";
 import {
   parseSortFromQuery,
+  serializeSortKey,
   serializeSortToQuery,
   toggleSortColumn,
 } from "@/lib/productSort";
@@ -195,6 +196,7 @@ export default {
     },
 
     async fetchProducts() {
+      const generation = ++this.fetchGeneration;
       this.isProductsLoading = true;
       this.products = [];
 
@@ -205,6 +207,7 @@ export default {
         categoryId: this.filterCategoryId,
         sort: serializeSortToQuery(this.sortColumns),
         onSuccess: (response) => {
+          if (generation !== this.fetchGeneration) return;
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
           this.totalCount = response.data.value.totalCount;
@@ -216,10 +219,13 @@ export default {
           }
         },
         onError: (error) => {
+          if (generation !== this.fetchGeneration) return;
           displaySonnerError(error);
         },
       });
-      this.isProductsLoading = false;
+      if (generation === this.fetchGeneration) {
+        this.isProductsLoading = false;
+      }
     },
 
     async fetchCategories() {
@@ -539,6 +545,7 @@ export default {
 
     return {
       products: [],
+      fetchGeneration: 0,
       isProductsLoading: false,
       lastPage: false,
       startIndex,
@@ -619,12 +626,9 @@ export default {
     },
     '$route.query.sort'() {
       const next = parseSortFromQuery(this.$route.query);
-      const current = serializeSortToQuery(this.sortColumns);
-      const serialized = serializeSortToQuery(next);
-      if (current !== serialized) {
-        this.sortColumns = next;
-        if (!this.isTrashMode) this.fetchProducts();
-      }
+      if (serializeSortKey(this.sortColumns) === serializeSortKey(next)) return;
+      this.sortColumns = next;
+      if (!this.isTrashMode) this.fetchProducts();
     },
     startIndex() {
       this.fetchProducts();

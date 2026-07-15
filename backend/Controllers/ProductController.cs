@@ -59,7 +59,7 @@ public class ProductController : ControllerBase
     /// <param name="categoryId">Optional category ID to filter products by.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
-    /// <param name="sort">Multi-column sort, e.g. name:desc,price:asc</param>
+    /// <param name="sort">Multi-column sort, e.g. name:desc|price:asc (also accepts comma/semicolon separators)</param>
     /// <param name="sortBy">Legacy single-column sort (name, sku, price, storageQuantity, category).</param>
     /// <param name="sortDesc">Legacy sort direction. Default: true.</param>
     /// <returns>A paged result containing product review DTOs, total count, and last-page indicator.</returns>

@@ -6,23 +6,16 @@ public readonly record struct ProductSortSpec(string Column, bool Desc);
 
 public static class ProductSortHelper
 {
+    private static readonly char[] SortPartSeparators = [',', ';', '|'];
+
     public static List<ProductSortSpec> ParseSortSpecs(string? sort, string? legacySortBy, bool legacySortDesc)
     {
         var specs = new List<ProductSortSpec>();
 
         if (!string.IsNullOrWhiteSpace(sort))
         {
-            foreach (var part in sort.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                var colon = part.IndexOf(':');
-                if (colon <= 0) continue;
-
-                var column = part[..colon].Trim().ToLowerInvariant();
-                var dir = part[(colon + 1)..].Trim().ToLowerInvariant();
-                if (string.IsNullOrEmpty(column)) continue;
-
-                specs.Add(new ProductSortSpec(column, dir != "asc"));
-            }
+            foreach (var part in sort.Split(SortPartSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                TryAddSortPart(specs, part);
         }
         else if (!string.IsNullOrWhiteSpace(legacySortBy))
         {
@@ -99,6 +92,18 @@ public static class ProductSortHelper
                 "updatedat" => spec.Desc ? ordered.ThenByDescending(p => p.updatedAt) : ordered.ThenBy(p => p.updatedAt),
                 _ => spec.Desc ? ordered.ThenByDescending(p => p.Id) : ordered.ThenBy(p => p.Id),
             };
+
+    private static void TryAddSortPart(List<ProductSortSpec> specs, string part)
+    {
+        var colon = part.IndexOf(':');
+        if (colon <= 0) return;
+
+        var column = part[..colon].Trim().ToLowerInvariant();
+        var dir = part[(colon + 1)..].Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(column)) return;
+
+        specs.Add(new ProductSortSpec(column, dir != "asc"));
+    }
 
     private static bool TryGetStoreAttrId(string column, out int attrId)
     {
