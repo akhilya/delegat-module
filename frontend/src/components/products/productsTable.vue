@@ -348,7 +348,7 @@ export default {
                 <div
                   class="flex items-center gap-1 min-w-0 overflow-hidden"
                   :class="isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : ''"
-                  :title="isSortable(header.column.id) ? 'Клик — сортировка. Shift+клик — добавить столбец' : undefined"
+                  :title="isSortable(header.column.id) ? 'Клик — основная сортировка. Shift+клик — добавить столбец (2-я влияет только при одинаковых значениях 1-й)' : undefined"
                   @click="onHeaderClick(header.column.id, $event)"
                 >
                   <GripVertical

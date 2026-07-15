@@ -66,7 +66,8 @@ export function toggleSortColumn(columns, columnId, shiftKey = false) {
     if (index >= 0) {
       list[index] = { ...list[index], desc: !list[index].desc };
     } else {
-      list.push({ id: columnId, desc: true });
+      // ASC по умолчанию — чаще даёт видимый эффект tiebreaker (DESC нередко совпадает с Id).
+      list.push({ id: columnId, desc: false });
     }
     return list;
   }

@@ -216,11 +216,18 @@ export default {
         sort: sortQuery,
         onSuccess: (response) => {
           if (generation !== this.fetchGeneration) return;
+          const sortDebug = response.data.value._sortDebug;
           debugProductSort("fetchProducts response", {
             generation,
             orderedIds: response.data.value.items?.map((p) => p.id),
-            sortDebug: response.data.value._sortDebug,
+            sortDebug,
           });
+          if (import.meta.env.DEV && sortDebug?.secondaryEffect) {
+            const effect = sortDebug.secondaryEffect;
+            console.info(
+              `[productSort] ${effect.note} (групп с одинаковой 1-й колонкой: ${effect.samePrimaryValueGroupsOnPage}, позиций изменено: ${effect.positionsChangedVsPrimaryOnly})`,
+            );
+          }
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
           this.totalCount = response.data.value.totalCount;

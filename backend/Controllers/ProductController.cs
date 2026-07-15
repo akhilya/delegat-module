@@ -121,7 +121,7 @@ public class ProductController : ControllerBase
                 "Product sort debug: rawQuery=[{RawQuery}] boundSort={BoundSort} queryParts=[{QueryParts}] specs=[{Specs}]",
                 Request.QueryString.Value,
                 sort,
-                string.Join("|", sortQueryParts),
+                string.Join(", ", sortQueryParts),
                 ProductSortHelper.FormatSortSpecs(sortSpecs));
 
             try
@@ -167,6 +167,35 @@ public class ProductController : ControllerBase
         }
 
         var lastPage = startIndex + pageSize >= total;
+
+        object? secondaryEffect = null;
+        if (isDev && sortSpecs.Count > 1)
+        {
+            var primaryOnlyOrder = ProductSortHelper.BuildOrderBy(
+                sortSpecs.Take(1).ToList(),
+                hasSearch,
+                searchQuery);
+            var primaryOnlyIds = await primaryOnlyOrder(_context.products.AsNoTracking().Where(predicate))
+                .Skip(startIndex)
+                .Take(pageSize)
+                .Select(p => p.Id)
+                .ToListAsync();
+            var currentIds = items.Select(p => p.Id).ToList();
+            var changedPositions = currentIds
+                .Zip(primaryOnlyIds, (current, primary) => current != primary)
+                .Count(changed => changed);
+
+            secondaryEffect = new
+            {
+                primaryOnlyIds,
+                positionsChangedVsPrimaryOnly = changedPositions,
+                samePrimaryValueGroupsOnPage = CountSamePrimaryGroups(items, sortSpecs[0].Column),
+                note = changedPositions == 0
+                    ? "Вторая колонка — tiebreaker: на этой странице порядок совпадает с сортировкой только по первой колонке."
+                    : $"{changedPositions} позиций на странице отличаются от сортировки только по первой колонке.",
+            };
+        }
+
         if (!isDev)
         {
             return Ok(new
@@ -197,9 +226,23 @@ public class ProductController : ControllerBase
                     category = p.category?.name,
                     p.name,
                 }).ToArray(),
+                secondaryEffect,
             },
         });
     }
+
+    private static int CountSamePrimaryGroups(List<Product> items, string primaryColumn) =>
+        primaryColumn switch
+        {
+            "price" => items.GroupBy(p => p.price).Count(g => g.Count() > 1),
+            "storagequantity" => items.GroupBy(p => p.storageQuantity).Count(g => g.Count() > 1),
+            "name" => items.GroupBy(p => p.name).Count(g => g.Count() > 1),
+            "sku" => items.GroupBy(p => p.sku).Count(g => g.Count() > 1),
+            "category" => items.GroupBy(p => p.category?.name).Count(g => g.Count() > 1),
+            "createdat" => items.GroupBy(p => p.createdAt).Count(g => g.Count() > 1),
+            "updatedat" => items.GroupBy(p => p.updatedAt).Count(g => g.Count() > 1),
+            _ => 0,
+        };
 
     /// <summary>
     /// Retrieves a single product by its identifier, including all related entities.
