@@ -87,20 +87,47 @@ publish/
 *.zip
 
 # ======================
-# AI Tools & Local Assistants
+# Vibecoding / AI coding assistants
 # ======================
+# Agent runtime output (builds, logs, tool dumps)
+agent-tools/
+
+# IDE / CLI assistant config & caches
 .claude/
 .codex/
+.grok/
+.cursor/
+.windsurf/
+.aider*
+.continue/
+.roo/
+.cline/
+.factory/
+.opencode/
+.augment/
+.bolt/
+.vibe/
+vibecoding/
+
+# Agent skills, plugins, and local rule packs
 .agents/
 .superpowers/
 .impeccable/
 .impeccable.md
 **/.impeccable/
-.grok/
-.cursor/
+skills/
+.specstory/
+
+# MCP servers, terminal captures, browser automation helpers
 mcps/
 terminals/
 .playwright-mcp/
+.mcp.json
+mcp.json
+
+# Generated design/plan artifacts from AI workflows
+design-docs/
+.pr-plan/
 
 # ======================
 # Misc

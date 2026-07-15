@@ -16,10 +16,21 @@ logs/
 .env.*
 !.env.example
 
+agent-tools/
+terminals/
+mcps/
+.playwright-mcp/
+
 .claude/
 .codex/
+.grok/
+.cursor/
+.windsurf/
+.agents/
 .superpowers/
+.impeccable/
 .impeccable.md
+.specstory/
 
 *.nupkg
 publish/
