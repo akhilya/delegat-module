@@ -20,6 +20,11 @@ import {
   combinedColumnPresets,
 } from "@/components/products/columns";
 import { getBaseCurrency } from "@/lib/currency";
+import {
+  parseSortFromQuery,
+  serializeSortToQuery,
+  toggleSortColumn,
+} from "@/lib/productSort";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { toast } from "vue-sonner";
@@ -198,8 +203,7 @@ export default {
         pageSize: this.pageSize,
         searchQuery: this.searchQuery,
         categoryId: this.filterCategoryId,
-        sortBy: this.sortBy,
-        sortDesc: this.sortDesc,
+        sort: serializeSortToQuery(this.sortColumns),
         onSuccess: (response) => {
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
@@ -229,23 +233,16 @@ export default {
       });
     },
 
-    toggleSort(columnId) {
-      if (this.sortBy === columnId) {
-        if (this.sortDesc) {
-          this.sortDesc = false;
-        } else {
-          this.sortBy = null;
-          this.sortDesc = true;
-        }
-      } else {
-        this.sortBy = columnId;
-        this.sortDesc = true;
-      }
+    toggleSort(columnId, event) {
+      const shiftKey = Boolean(event?.shiftKey);
+      this.sortColumns = toggleSortColumn(this.sortColumns, columnId, shiftKey);
+      const sort = serializeSortToQuery(this.sortColumns);
       this.$router.replace({
         query: {
           ...this.$route.query,
-          sortBy: this.sortBy ?? undefined,
-          sortDesc: this.sortBy ? String(this.sortDesc) : undefined,
+          sort: sort ?? undefined,
+          sortBy: undefined,
+          sortDesc: undefined,
         },
       });
       if (this.page !== 1) this.page = 1;
@@ -557,11 +554,8 @@ export default {
         ? Number(this.$route.query.categoryId)
         : null,
 
-      // Sorting (restore from query)
-      sortBy: this.$route.query.sortBy || null,
-      sortDesc: this.$route.query.sortDesc != null
-        ? this.$route.query.sortDesc === "true"
-        : true,
+      // Multi-column sorting (restore from query)
+      sortColumns: parseSortFromQuery(this.$route.query),
 
       // Row selection
       rowSelection: {},
@@ -621,6 +615,15 @@ export default {
       const wantTrash = newVal === '1';
       if (wantTrash !== this.isTrashMode) {
         this.toggleTrashMode();
+      }
+    },
+    '$route.query.sort'() {
+      const next = parseSortFromQuery(this.$route.query);
+      const current = serializeSortToQuery(this.sortColumns);
+      const serialized = serializeSortToQuery(next);
+      if (current !== serialized) {
+        this.sortColumns = next;
+        if (!this.isTrashMode) this.fetchProducts();
       }
     },
     startIndex() {
@@ -866,8 +869,7 @@ export default {
         :column-order="columnOrder"
         :row-selection="rowSelection"
         :start-index="startIndex"
-        :sort-by="sortBy"
-        :sort-desc="sortDesc"
+        :sort-columns="sortColumns"
         :sortable-columns="sortableColumnIds"
         @update:row-selection="rowSelection = $event"
         @update:column-visibility="onColumnVisibilityChange"

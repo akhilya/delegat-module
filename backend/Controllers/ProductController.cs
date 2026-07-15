@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
@@ -58,12 +59,20 @@ public class ProductController : ControllerBase
     /// <param name="categoryId">Optional category ID to filter products by.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
-    /// <param name="sortBy">Column to sort by (name, sku, price, storageQuantity, category). Default: id.</param>
-    /// <param name="sortDesc">Whether to sort descending. Default: true.</param>
+    /// <param name="sort">Multi-column sort, e.g. name:desc,price:asc</param>
+    /// <param name="sortBy">Legacy single-column sort (name, sku, price, storageQuantity, category).</param>
+    /// <param name="sortDesc">Legacy sort direction. Default: true.</param>
     /// <returns>A paged result containing product review DTOs, total count, and last-page indicator.</returns>
     [HttpGet]
     [Route("/products")]
-    public async Task<IActionResult> GetAllProducts(string? searchQuery, int? categoryId = null, int startIndex = 0, int pageSize = 12, string? sortBy = null, bool sortDesc = true)
+    public async Task<IActionResult> GetAllProducts(
+        string? searchQuery,
+        int? categoryId = null,
+        int startIndex = 0,
+        int pageSize = 12,
+        string? sort = null,
+        string? sortBy = null,
+        bool sortDesc = true)
     {
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 12;
@@ -94,78 +103,8 @@ public class ProductController : ControllerBase
                                         p.categoryId == categoryId!.Value,
         };
 
-        // Build sort expression
-        // When searching, prioritize exact matches (name == query or sku == query) first
-        var sortByLower = sortBy?.ToLower();
-
-        // Check if sorting by a store attribute (storeattr_<id>)
-        int? storeAttrSortId = null;
-        if (sortByLower != null && sortByLower.StartsWith("storeattr_") &&
-            int.TryParse(sortByLower["storeattr_".Length..], out var parsedAttrId))
-        {
-            storeAttrSortId = parsedAttrId;
-        }
-
-        Func<IQueryable<Product>, IOrderedQueryable<Product>> secondarySort;
-        if (storeAttrSortId.HasValue)
-        {
-            var attrId = storeAttrSortId.Value;
-            secondarySort = sortDesc
-                ? q => q.OrderByDescending(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault())
-                : q => q.OrderBy(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault());
-        }
-        else
-        {
-            secondarySort = sortByLower switch
-            {
-                "name" => sortDesc ? q => q.OrderByDescending(p => p.name) : q => q.OrderBy(p => p.name),
-                "sku" => sortDesc ? q => q.OrderByDescending(p => p.sku) : q => q.OrderBy(p => p.sku),
-                "price" => sortDesc ? q => q.OrderByDescending(p => p.price) : q => q.OrderBy(p => p.price),
-                "storagequantity" => sortDesc ? q => q.OrderByDescending(p => p.storageQuantity) : q => q.OrderBy(p => p.storageQuantity),
-                "category" => sortDesc ? q => q.OrderByDescending(p => p.category!.name) : q => q.OrderBy(p => p.category!.name),
-                "createdat" => sortDesc ? q => q.OrderByDescending(p => p.createdAt) : q => q.OrderBy(p => p.createdAt),
-                "updatedat" => sortDesc ? q => q.OrderByDescending(p => p.updatedAt) : q => q.OrderBy(p => p.updatedAt),
-                _ => sortDesc ? q => q.OrderByDescending(p => p.Id) : q => q.OrderBy(p => p.Id),
-            };
-        }
-
-        Func<IQueryable<Product>, IOrderedQueryable<Product>> orderBy;
-        if (hasSearch)
-        {
-            orderBy = q =>
-            {
-                var ordered = q.OrderByDescending(p => p.name == searchQuery || p.sku == searchQuery)
-                               .ThenByDescending(p => p.name.StartsWith(searchQuery!) || p.sku.StartsWith(searchQuery!));
-                if (storeAttrSortId.HasValue)
-                {
-                    var attrId = storeAttrSortId.Value;
-                    return sortDesc
-                        ? ordered.ThenByDescending(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault())
-                        : ordered.ThenBy(p => p.storeAttributeValues.Where(v => v.storeAttributeId == attrId).Select(v => v.value).FirstOrDefault());
-                }
-                return sortByLower switch
-                {
-                    "name" => sortDesc ? ordered.ThenByDescending(p => p.name) : ordered.ThenBy(p => p.name),
-                    "sku" => sortDesc ? ordered.ThenByDescending(p => p.sku) : ordered.ThenBy(p => p.sku),
-                    "price" => sortDesc ? ordered.ThenByDescending(p => p.price) : ordered.ThenBy(p => p.price),
-                    "storagequantity" => sortDesc ? ordered.ThenByDescending(p => p.storageQuantity) : ordered.ThenBy(p => p.storageQuantity),
-                    "category" => sortDesc ? ordered.ThenByDescending(p => p.category!.name) : ordered.ThenBy(p => p.category!.name),
-                    "createdat" => sortDesc ? ordered.ThenByDescending(p => p.createdAt) : ordered.ThenBy(p => p.createdAt),
-                    "updatedat" => sortDesc ? ordered.ThenByDescending(p => p.updatedAt) : ordered.ThenBy(p => p.updatedAt),
-                    _ => sortDesc ? ordered.ThenByDescending(p => p.Id) : ordered.ThenBy(p => p.Id),
-                };
-            };
-        }
-        else
-        {
-            orderBy = secondarySort;
-        }
-
-        // Ensure deterministic ordering for AsSplitQuery — without a unique
-        // tiebreaker, split-query sub-queries may select different rows for
-        // the same LIMIT/OFFSET, losing collection data (files, images).
-        var stableOrderBy = orderBy;
-        orderBy = q => stableOrderBy(q).ThenBy(p => p.Id);
+        var sortSpecs = ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
+        var orderBy = ProductSortHelper.BuildOrderBy(sortSpecs, hasSearch, searchQuery);
 
         var (items, total) = await productRepo.FindPagedAsync(
             predicate,

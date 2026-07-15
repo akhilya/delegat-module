@@ -4,6 +4,7 @@
 import { ref, computed, watch, onMounted, onUpdated, onBeforeUnmount } from "vue";
 import { FlexRender, getCoreRowModel, useVueTable } from "@tanstack/vue-table";
 import { Loader2, GripVertical, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-vue-next";
+import { getSortIndex } from "@/lib/productSort";
 
 export default {
   components: {
@@ -36,13 +37,9 @@ export default {
       type: Array,
       default: () => [],
     },
-    sortBy: {
-      type: String,
-      default: null,
-    },
-    sortDesc: {
-      type: Boolean,
-      default: true,
+    sortColumns: {
+      type: Array,
+      default: () => [],
     },
     sortableColumns: {
       type: Array,
@@ -228,10 +225,16 @@ export default {
       return props.sortableColumns.includes(columnId);
     };
 
-    const onHeaderClick = (columnId) => {
+    const onHeaderClick = (columnId, event) => {
       if (isSortable(columnId)) {
-        emit("sort", columnId);
+        emit("sort", columnId, event);
       }
+    };
+
+    const getColumnSort = (columnId) => {
+      const index = getSortIndex(props.sortColumns, columnId);
+      if (index < 0) return null;
+      return { ...props.sortColumns[index], index };
     };
 
     const onRowClick = (row, event) => {
@@ -295,6 +298,7 @@ export default {
       selectedIds,
       canDragColumn,
       isSortable,
+      getColumnSort,
       onHeaderClick,
       onRowClick,
       draggedColumnId,
@@ -344,7 +348,8 @@ export default {
                 <div
                   class="flex items-center gap-1 min-w-0 overflow-hidden"
                   :class="isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : ''"
-                  @click="onHeaderClick(header.column.id)"
+                  :title="isSortable(header.column.id) ? 'Клик — сортировка. Shift+клик — добавить столбец' : undefined"
+                  @click="onHeaderClick(header.column.id, $event)"
                 >
                   <GripVertical
                     v-if="canDragColumn(header.column.id)"
@@ -358,8 +363,22 @@ export default {
                     />
                   </span>
                   <template v-if="isSortable(header.column.id)">
-                    <ArrowDown v-if="sortBy === header.column.id && sortDesc" class="size-3.5 shrink-0 text-foreground" />
-                    <ArrowUp v-else-if="sortBy === header.column.id && !sortDesc" class="size-3.5 shrink-0 text-foreground" />
+                    <span
+                      v-if="getColumnSort(header.column.id)"
+                      class="inline-flex items-center gap-0.5 shrink-0"
+                    >
+                      <span
+                        v-if="sortColumns.length > 1"
+                        class="text-[10px] leading-none font-semibold tabular-nums text-muted-foreground"
+                      >
+                        {{ getColumnSort(header.column.id).index + 1 }}
+                      </span>
+                      <ArrowDown
+                        v-if="getColumnSort(header.column.id).desc"
+                        class="size-3.5 text-foreground"
+                      />
+                      <ArrowUp v-else class="size-3.5 text-foreground" />
+                    </span>
                     <ArrowUpDown v-else class="size-3.5 shrink-0 opacity-30" />
                   </template>
                 </div>

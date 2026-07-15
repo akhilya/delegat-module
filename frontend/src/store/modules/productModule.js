@@ -16,15 +16,19 @@ export default {
      */
     async getAllProducts(
       ctx,
-      { searchQuery, startIndex, pageSize, categoryId, sortBy, sortDesc, onSuccess, onError },
+      { searchQuery, startIndex, pageSize, categoryId, sort, sortBy, sortDesc, onSuccess, onError },
     ) {
       const params = new URLSearchParams();
       if (searchQuery) params.set("searchQuery", searchQuery);
       params.set("startIndex", startIndex);
       params.set("pageSize", pageSize);
       if (categoryId != null) params.set("categoryId", categoryId);
-      if (sortBy) params.set("sortBy", sortBy);
-      if (sortDesc != null) params.set("sortDesc", sortDesc);
+      if (sort) {
+        params.set("sort", sort);
+      } else {
+        if (sortBy) params.set("sortBy", sortBy);
+        if (sortDesc != null) params.set("sortDesc", sortDesc);
+      }
 
       return await useAxios(
         `/products?${params.toString()}`,
