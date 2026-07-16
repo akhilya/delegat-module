@@ -1063,7 +1063,7 @@ public class ProductSyncService
                 {
                     sku = externalProduct.Sku ?? $"MP-{externalProductId}",
                     name = externalProduct.Name ?? $"Product {externalProductId}",
-                    description = externalProduct.Description ?? "",
+                    description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description) ?? "",
                     price = externalProduct.Price,
                     storageQuantity = externalProduct.Quantity,
                     categoryId = targetCategoryId

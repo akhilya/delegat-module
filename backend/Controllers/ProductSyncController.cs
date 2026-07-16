@@ -1768,12 +1768,16 @@ public class ProductSyncController : ControllerBase
 
         // Обновляем описание
         if (excludeFields?.Contains("description") != true &&
-            externalProduct.Description != null && product.description != externalProduct.Description)
+            externalProduct.Description != null)
         {
-            oldValues["description"] = product.description;
-            newValues["description"] = externalProduct.Description;
-            product.description = externalProduct.Description;
-            updatedFields.Add("description");
+            var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
+            if (description != null && product.description != description)
+            {
+                oldValues["description"] = product.description;
+                newValues["description"] = description;
+                product.description = description;
+                updatedFields.Add("description");
+            }
         }
 
         // Обновляем цену
@@ -1902,11 +1906,15 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("name");
         }
 
-        if (externalProduct.Description != null && product.description != externalProduct.Description)
+        if (externalProduct.Description != null)
         {
-            oldValues["description"] = product.description;
-            newValues["description"] = externalProduct.Description;
-            updatedFields.Add("description");
+            var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
+            if (description != null && product.description != description)
+            {
+                oldValues["description"] = product.description;
+                newValues["description"] = description;
+                updatedFields.Add("description");
+            }
         }
 
         if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
@@ -2042,11 +2050,15 @@ public class ProductSyncController : ControllerBase
                     updatedFields.Add("name");
                 }
 
-                if (externalProduct.Description != null && product.description != externalProduct.Description)
+                if (externalProduct.Description != null)
                 {
-                    oldValues["description"] = product.description;
-                    newValues["description"] = externalProduct.Description;
-                    updatedFields.Add("description");
+                    var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
+                    if (description != null && product.description != description)
+                    {
+                        oldValues["description"] = product.description;
+                        newValues["description"] = description;
+                        updatedFields.Add("description");
+                    }
                 }
 
                 if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
@@ -2418,10 +2430,14 @@ public class ProductSyncController : ControllerBase
                         updatedFields.Add("name");
                     }
 
-                    if (externalProduct.Description != null && product.description != externalProduct.Description)
+                    if (externalProduct.Description != null)
                     {
-                        product.description = externalProduct.Description;
-                        updatedFields.Add("description");
+                        var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
+                        if (description != null && product.description != description)
+                        {
+                            product.description = description;
+                            updatedFields.Add("description");
+                        }
                     }
 
                     if (externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
