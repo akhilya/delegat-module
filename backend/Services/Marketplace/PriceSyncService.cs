@@ -627,7 +627,8 @@ public class PriceSyncService
             return new PriceInfo(
                 ExternalProductId: l.externalProductId,
                 Price: p.price,
-                OldPrice: p.oldPrice,
+                // Marketplaces (e.g. Yandex) reject oldPrice == price as 0% discount
+                OldPrice: SanitizeOldPrice(p.price, p.oldPrice),
                 Stock: p.storageQuantity,
                 DiscountedPrice: p.discountedPrice,
                 MinPrice: p.minPrice,
@@ -641,12 +642,22 @@ public class PriceSyncService
         return new PriceInfo(
             ExternalProductId: l.externalProductId,
             Price: p.price,
-            OldPrice: ParsePriceAttr(avs, "old_price"),
+            OldPrice: SanitizeOldPrice(p.price, ParsePriceAttr(avs, "old_price")),
             Stock: p.storageQuantity,
             MinPrice: ParsePriceAttr(avs, "min_price"),
             ExternalSku: l.externalSku,
             Discount: ParseIntAttr(avs, "discount")
         );
+    }
+
+    /// <summary>Drop strike-through price when it does not represent a real discount.</summary>
+    private static decimal? SanitizeOldPrice(decimal? price, decimal? oldPrice)
+    {
+        if (oldPrice is null or <= 0)
+            return null;
+        if (price is null)
+            return oldPrice;
+        return oldPrice.Value > price.Value ? oldPrice : null;
     }
 
     private async Task<PriceInfo> ConvertPriceInfoForExportAsync(PriceInfo info, int storeId, CancellationToken ct)

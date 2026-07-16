@@ -57,6 +57,32 @@ function sourceTitle(f) {
   return `${boundLabel(f)} — нажмите для настройки`;
 }
 
+/** Tooltip for adapter field: description, unit, key. */
+function fieldTooltip(f) {
+  const parts = [];
+  if (f.description) parts.push(String(f.description).trim());
+  if (f.unit) parts.push(`Ед. изм.: ${f.unit}`);
+  if (f.minValue != null || f.maxValue != null) {
+    const range = [
+      f.minValue != null ? `от ${f.minValue}` : null,
+      f.maxValue != null ? `до ${f.maxValue}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (range) parts.push(range);
+  }
+  parts.push(`Ключ: ${f.fieldKey}`);
+  return parts.filter(Boolean).join("\n");
+}
+
+function fieldLabel(f) {
+  const base = f.label || f.fieldKey;
+  if (f.unit && !String(base).toLowerCase().includes(String(f.unit).toLowerCase())) {
+    return `${base}, ${f.unit}`;
+  }
+  return base;
+}
+
 const HEADER = 30;
 const ROW = 24;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
@@ -90,10 +116,11 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         v-for="f in fields"
         :key="f.fieldKey"
         class="vf-adapter__row cursor-pointer"
+        :title="fieldTooltip(f)"
         @click.stop="data.openField?.(f.fieldKey)"
       >
-        <span class="vf-adapter__label" :title="f.fieldKey">
-          {{ f.label || f.fieldKey }}<span v-if="f.isRequired" class="vf-req"> *</span>
+        <span class="vf-adapter__label" :title="fieldTooltip(f)">
+          {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
 
         <span

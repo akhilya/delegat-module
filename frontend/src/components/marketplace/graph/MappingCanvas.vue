@@ -247,6 +247,23 @@ function requestLoad(options = {}) {
 
 // Per-field import analysis + the data the adapter sink needs for its inline source dropdown.
 // Lane typing (setEdges) is split out so load/preview can defer it until the canvas has painted.
+function enrichFieldsWithDefs(fields, defs) {
+  if (!fields?.length) return fields || [];
+  return fields.map((f) => {
+    const def = defs?.[f.fieldKey];
+    if (!def) return f;
+    return {
+      ...f,
+      label: def.name || f.label,
+      outputType: def.type || f.outputType,
+      description: def.description ?? f.description ?? null,
+      unit: def.unit ?? f.unit ?? null,
+      minValue: def.minValue ?? f.minValue ?? null,
+      maxValue: def.maxValue ?? f.maxValue ?? null,
+    };
+  });
+}
+
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
   const { analysisBySink } = analyzeFields(nodes.value, edges.value);
@@ -254,9 +271,15 @@ function refreshAnalysis(options = {}) {
   for (const [key, def] of Object.entries(props.externalFieldDefs)) {
     if (def.options?.length) fieldOptionsMap[key] = def.options;
   }
+  const adapterNode = findNode(ADAPTER_NODE_ID);
+  const enrichedFields = enrichFieldsWithDefs(
+    adapterNode?.data?.fields,
+    props.externalFieldDefs,
+  );
   updateNodeData(ADAPTER_NODE_ID, {
     analysis: analysisBySink[ADAPTER_NODE_ID] || {},
     fieldOptionsMap,
+    fields: enrichedFields,
     sources: adapterSourceLabels(nodes.value, edges.value),
     availableSources: props.availableSources,
     setFieldSource,
@@ -283,6 +306,7 @@ function refreshAnalysis(options = {}) {
     updateNodeData(ADAPTER_PRICE_NODE_ID, {
       analysis: priceAnalysis,
       fieldOptionsMap: priceFieldOptionsMap,
+      fields: enrichFieldsWithDefs(priceNode.data?.fields, props.priceFieldDefs),
       sources: adapterSourceLabels(nodes.value, edges.value),
       availableSources: props.availableSources,
       setFieldSource: setPriceFieldSource,
@@ -951,7 +975,24 @@ onNodeDoubleClick(({ node }) => {
   if (!node) return;
   if (node.type === "adapterFields" || node.type === "adapterPriceFields") return;
   if (node.type !== "reroute") {
-    updateNodeData(node.id, { collapsed: !node.data?.collapsed });
+    // Always toggle against the live store node so inspector edits (staticValue/params)
+    // are not clobbered by a stale event snapshot.
+    const live = findNode(node.id) || node;
+    const nextCollapsed = !live.data?.collapsed;
+    updateNodeData(live.id, { collapsed: nextCollapsed });
+    if (selected.value?.id === live.id) {
+      const after = findNode(live.id);
+      if (after) {
+        selected.value = {
+          ...after,
+          data: { ...(after.data || {}), collapsed: nextCollapsed },
+        };
+      }
+    }
+    if (!loading.value) {
+      dirty.value = true;
+      scheduleHistory();
+    }
     return;
   }
   const src = edges.value.find((e) => e.target === node.id);
@@ -1313,13 +1354,22 @@ function onMenuAdd(desc) {
 
 function onInspectorUpdate(patch) {
   if (!selected.value) return;
-  updateNodeData(selected.value.id, patch);
+  // Merge against the live Vue Flow node so detached selected snapshots can't drop
+  // previously saved params/staticValue when patching (e.g. after collapse).
+  const live = findNode(selected.value.id);
+  const base = { ...(live?.data || selected.value.data || {}) };
+  const next = { ...base, ...patch };
+  if (patch.params && typeof patch.params === "object") {
+    next.params = { ...(base.params || {}), ...patch.params };
+  }
+  updateNodeData(selected.value.id, next);
   selected.value = {
-    ...selected.value,
-    data: { ...selected.value.data, ...patch },
+    ...(live || selected.value),
+    data: next,
   };
   if ("importable" in patch) nextTick(refreshAnalysis);
   dirty.value = true;
+  scheduleHistory();
   schedulePreview();
 }
 

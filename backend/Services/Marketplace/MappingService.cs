@@ -230,14 +230,20 @@ public class MappingService
             return raw == null ? null : raw.ToString();
         }
 
-        var price = GetDecimal("price");
+        // Platform convention: price/oldPrice. Yandex Market price block uses value/discountBase.
+        var price = GetDecimal("price") ?? GetDecimal("value");
         if (!price.HasValue)
             return null;
+
+        var oldPrice = GetDecimal("oldPrice") ?? GetDecimal("discountBase");
+        // Equal or empty strike-through is not a real discount — leave null so adapters omit it.
+        if (oldPrice.HasValue && oldPrice.Value <= price.Value)
+            oldPrice = null;
 
         return new PriceInfo(
             ExternalProductId: externalProductId,
             Price: price,
-            OldPrice: GetDecimal("oldPrice"),
+            OldPrice: oldPrice,
             Stock: stock,
             DiscountedPrice: GetDecimal("discountedPrice"),
             MinPrice: GetDecimal("minPrice"),
@@ -246,7 +252,8 @@ public class MappingService
             NetPrice: GetDecimal("netPrice"),
             AutoActionEnabled: GetString("autoActionEnabled"),
             PriceStrategyEnabled: GetString("priceStrategyEnabled"),
-            MinPriceForAutoActionsEnabled: GetBool("minPriceForAutoActionsEnabled")
+            MinPriceForAutoActionsEnabled: GetBool("minPriceForAutoActionsEnabled"),
+            Currency: GetString("currencyId") ?? GetString("currency")
         );
     }
 

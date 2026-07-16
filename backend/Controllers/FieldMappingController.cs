@@ -73,6 +73,9 @@ public class FieldMappingController : ControllerBase
                 type = f.Type,
                 options = f.Options,
                 description = f.Description,
+                unit = f.Unit,
+                minValue = f.MinValue,
+                maxValue = f.MaxValue,
                 sortOrder = f.SortOrder,
                 isAspect = f.IsAspect
             }));

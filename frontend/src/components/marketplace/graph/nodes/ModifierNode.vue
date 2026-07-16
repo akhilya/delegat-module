@@ -92,7 +92,9 @@ const paramPinRowOffset = computed(
 
     <div class="vf-card__head">
       <Wand2 class="size-3.5 text-muted-foreground" />
-      <span class="vf-card__kind">{{ title }}</span>
+      <span class="vf-card__kind" :title="summary || title">{{
+        collapsed && summary ? summary : title
+      }}</span>
       <AlertTriangle
         v-if="irreversible"
         class="vf-card__warn cursor-help"

@@ -85,7 +85,9 @@ const collapsed = computed(() => !!props.data.collapsed);
 
     <div class="vf-card__head">
       <component :is="icon" class="size-3.5 text-muted-foreground" />
-      <span class="vf-card__kind">{{ spec.label }}</span>
+      <span class="vf-card__kind" :title="summary || spec.label">{{
+        collapsed && summary ? summary : spec.label
+      }}</span>
     </div>
     <template v-if="!collapsed">
       <div v-if="summary" class="vf-card__title vf-card__title--sm">

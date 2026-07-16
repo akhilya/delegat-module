@@ -137,7 +137,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             f.MaxValue,
             f.ValidationPattern,
             f.Group,
-            f.SortOrder
+            f.SortOrder,
+            f.IsAspect
         )).ToList();
     }
 

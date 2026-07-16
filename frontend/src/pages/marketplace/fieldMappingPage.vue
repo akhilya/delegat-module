@@ -376,7 +376,15 @@ export default {
           for (const f of fields) {
             if (f.description) descMap[f.key] = f.description;
             if (f.isAspect) aspectMap[f.key] = true;
-            defsMap[f.key] = { name: f.name, type: f.type, options: f.options || [] };
+            defsMap[f.key] = {
+              name: f.name,
+              type: f.type,
+              options: f.options || [],
+              description: f.description || null,
+              unit: f.unit || null,
+              minValue: f.minValue ?? null,
+              maxValue: f.maxValue ?? null,
+            };
           }
           this.externalFieldDescriptions = descMap;
           this.aspectFields = aspectMap;

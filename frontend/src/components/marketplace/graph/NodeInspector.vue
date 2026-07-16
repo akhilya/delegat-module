@@ -162,6 +162,21 @@ const requiredCount = computed(
   () => (data.value.fields || []).filter((f) => f.isRequired).length,
 );
 
+function adapterFieldLabel(f) {
+  const base = f.label || f.fieldKey;
+  // Avoid "Name (кг), кг" when label already contains unit
+  if (f.unit && !String(base).includes(f.unit)) return `${base}, ${f.unit}`;
+  return base;
+}
+
+function adapterFieldTooltip(f) {
+  const parts = [];
+  if (f.description) parts.push(String(f.description).trim());
+  if (f.unit) parts.push(`Ед. изм.: ${f.unit}`);
+  parts.push(`Ключ: ${f.fieldKey}`);
+  return parts.filter(Boolean).join("\n");
+}
+
 // Adapter sink: per-field source binding lives here (in settings), not as dropdowns inside the block.
 const adapterFields = computed(() => data.value.fields || []);
 const adapterAvail = computed(() => data.value.availableSources || {});
@@ -597,10 +612,19 @@ function resolvePreview(fieldKey, raw) {
               :data-fk="f.fieldKey"
               :class="['space-y-1 px-1', highlightedField === f.fieldKey && 'vf-field-flash']"
             >
-              <Label class="text-xs">
-                {{ f.label || f.fieldKey
+              <Label class="text-xs" :title="adapterFieldTooltip(f)">
+                {{ adapterFieldLabel(f)
                 }}<span v-if="f.isRequired" class="text-destructive"> *</span>
               </Label>
+              <p
+                v-if="f.description || f.unit"
+                class="text-[11px] leading-snug text-muted-foreground line-clamp-2"
+                :title="adapterFieldTooltip(f)"
+              >
+                <span v-if="f.unit" class="font-medium text-foreground/70">{{ f.unit }}</span>
+                <span v-if="f.unit && f.description"> · </span>
+                <span v-if="f.description">{{ f.description }}</span>
+              </p>
               <!-- Resting: a cheap button. Only the row being edited mounts a real <Select>. -->
               <button
                 v-if="editingField !== f.fieldKey"
