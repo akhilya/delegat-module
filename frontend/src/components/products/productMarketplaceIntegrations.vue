@@ -84,6 +84,7 @@ import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_M
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 export default {
   components: {
@@ -156,8 +157,9 @@ export default {
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
+    const { formatDate: formatStoreDate } = useStoreDateTime();
     loadMemberships();
-    return { storeBaseCurrency, formatMoney };
+    return { storeBaseCurrency, formatMoney, formatStoreDate };
   },
   data() {
     return {
@@ -824,6 +826,7 @@ export default {
     formatDate(date) {
       if (!date) return "—";
       const d = new Date(date);
+      if (Number.isNaN(d.getTime())) return "—";
       const now = new Date();
       const diffMs = now - d;
       const diffMins = Math.floor(diffMs / 60000);
@@ -831,7 +834,7 @@ export default {
       if (diffMins < 1) return "только что";
       if (diffMins < 60) return `${diffMins} мин назад`;
       if (diffMins < 1440) return `${Math.floor(diffMins / 60)} ч назад`;
-      return d.toLocaleDateString("ru-RU");
+      return this.formatStoreDate(date);
     },
   },
   watch: {

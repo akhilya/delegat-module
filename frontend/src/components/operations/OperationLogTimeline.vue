@@ -1,9 +1,13 @@
 <script setup>
 import { ref, watch, nextTick } from "vue";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 const props = defineProps({
   logs: { type: Array, required: true },
 });
+
+const { formatTime: formatStoreTime, loadMemberships } = useStoreDateTime();
+loadMemberships();
 
 const container = ref(null);
 
@@ -20,8 +24,8 @@ watch(
 
 function formatTime(timestamp) {
   if (!timestamp) return "";
-  const d = new Date(timestamp);
-  return d.toLocaleTimeString("ru-RU", { hour12: false });
+  const formatted = formatStoreTime(timestamp);
+  return formatted === "—" ? "" : formatted;
 }
 
 function dotClass(level) {

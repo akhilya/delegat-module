@@ -19,28 +19,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  LogToolbar,
+  LogTableFrame,
+  LogCodeBlock,
+  LogMetaGrid,
+  LogDetailSheet,
+  formatLogDate as formatLogDateRaw,
+  httpStatusVariant,
+} from "@/components/logs";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
-  displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
-import {
-  Activity,
-  Check,
-  Copy,
-  Loader2,
-  RefreshCw,
-  ScrollText,
-} from "lucide-vue-next";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { Loader2, RefreshCw, ScrollText } from "lucide-vue-next";
 
 const NONE = "__all__";
 
@@ -62,21 +57,23 @@ export default {
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-    Activity,
-    Check,
-    Copy,
+    LogToolbar,
+    LogTableFrame,
+    LogCodeBlock,
+    LogMetaGrid,
+    LogDetailSheet,
     Loader2,
     RefreshCw,
     ScrollText,
+  },
+  setup() {
+    const { timezone, loadMemberships } = useStoreDateTime();
+    loadMemberships();
+    return { storeTimezone: timezone };
   },
   data() {
     return {
@@ -87,7 +84,6 @@ export default {
       isDetailLoading: false,
       detailOpen: false,
       detail: null,
-      copiedKey: null,
       connections: [],
       filters: {
         connectionId: NONE,
@@ -105,19 +101,26 @@ export default {
       if (this.errorCount === 0) return "Ошибок нет";
       return `${this.errorCount} с ошибкой`;
     },
-    summaryOk() {
-      return this.errorCount === 0;
-    },
     adapterOptions() {
       const keys = new Set(
-        (this.connections || [])
-          .map((c) => c.adapterKey)
-          .filter(Boolean),
+        (this.connections || []).map((c) => c.adapterKey).filter(Boolean),
       );
       return [...keys].sort();
     },
     hasMore() {
       return this.filters.offset + this.items.length < this.total;
+    },
+    detailMeta() {
+      if (!this.detail) return [];
+      return [
+        { label: "Время", value: this.formatLogDate(this.detail.createdAt) },
+        { label: "Длительность", value: `${this.detail.durationMs} мс` },
+        { label: "Адаптер", value: this.detail.adapterKey },
+        {
+          label: "Подключение",
+          value: this.connectionLabel(this.detail.connectionId),
+        },
+      ];
     },
   },
   methods: {
@@ -126,6 +129,10 @@ export default {
       "getAdapterHttpLogDetail",
       "getConnections",
     ]),
+    httpStatusVariant,
+    formatLogDate(value) {
+      return formatLogDateRaw(value, this.storeTimezone);
+    },
 
     async fetchConnections() {
       await this.getConnections({
@@ -177,6 +184,11 @@ export default {
       await this.fetchLogs({ append: true });
     },
 
+    setFilter(key, value) {
+      this.filters[key] = value;
+      this.refresh();
+    },
+
     async openDetail(row) {
       this.detailOpen = true;
       this.detail = null;
@@ -199,49 +211,9 @@ export default {
         (x) => String(x.id) === String(connectionId),
       );
       if (!c) return `#${connectionId}`;
-      return c.name ? `${c.adapterKey} · ${c.name}` : c.adapterKey || `#${connectionId}`;
-    },
-
-    formatDate(value) {
-      if (!value) return "—";
-      return new Date(value).toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    },
-
-    statusVariant(code) {
-      if (code >= 200 && code < 300) return "secondary";
-      if (code >= 400 && code < 500) return "destructive";
-      if (code >= 500) return "destructive";
-      if (code === 0) return "outline";
-      return "outline";
-    },
-
-    prettyJson(raw) {
-      if (!raw) return "—";
-      try {
-        return JSON.stringify(JSON.parse(raw), null, 2);
-      } catch {
-        return raw;
-      }
-    },
-
-    async copyText(key, text) {
-      try {
-        await navigator.clipboard.writeText(text || "");
-        this.copiedKey = key;
-        displaySonnerSuccess("Скопировано");
-        window.setTimeout(() => {
-          if (this.copiedKey === key) this.copiedKey = null;
-        }, 1500);
-      } catch {
-        displaySonnerError("Не удалось скопировать");
-      }
+      return c.name
+        ? `${c.adapterKey} · ${c.name}`
+        : c.adapterKey || `#${connectionId}`;
     },
   },
   async mounted() {
@@ -264,17 +236,10 @@ export default {
       </Button>
     </PageHeader>
 
-    <div
-      class="mb-4 flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center"
-    >
+    <LogToolbar :summary="summaryLabel" :summary-alert="errorCount > 0">
       <Select
         :model-value="filters.connectionId"
-        @update:model-value="
-          (v) => {
-            filters.connectionId = v;
-            refresh();
-          }
-        "
+        @update:model-value="(v) => setFilter('connectionId', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-52">
           <SelectValue placeholder="Подключение" />
@@ -293,12 +258,7 @@ export default {
 
       <Select
         :model-value="filters.adapterKey"
-        @update:model-value="
-          (v) => {
-            filters.adapterKey = v;
-            refresh();
-          }
-        "
+        @update:model-value="(v) => setFilter('adapterKey', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-40">
           <SelectValue placeholder="Адаптер" />
@@ -313,12 +273,7 @@ export default {
 
       <Select
         :model-value="filters.method"
-        @update:model-value="
-          (v) => {
-            filters.method = v;
-            refresh();
-          }
-        "
+        @update:model-value="(v) => setFilter('method', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-32">
           <SelectValue placeholder="Метод" />
@@ -334,12 +289,7 @@ export default {
 
       <Select
         :model-value="filters.statusClass"
-        @update:model-value="
-          (v) => {
-            filters.statusClass = v;
-            refresh();
-          }
-        "
+        @update:model-value="(v) => setFilter('statusClass', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-36">
           <SelectValue placeholder="Код" />
@@ -359,16 +309,7 @@ export default {
         placeholder="Поиск по path…"
         @keydown.enter="refresh"
       />
-
-      <Badge
-        :variant="summaryOk ? 'secondary' : 'destructive'"
-        class="h-8 shrink-0 gap-1.5 px-3"
-      >
-        <Check v-if="summaryOk" class="size-3.5" />
-        <Activity v-else class="size-3.5" />
-        {{ summaryLabel }}
-      </Badge>
-    </div>
+    </LogToolbar>
 
     <PageSection
       :loading="isLoading && items.length === 0"
@@ -377,244 +318,154 @@ export default {
       empty-title="Запросов пока нет"
       empty-description="После вызовов API адаптеров записи появятся здесь автоматически"
     >
-      <div class="overflow-hidden rounded-lg border">
-        <div class="overflow-x-auto">
-          <Table class="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-40">Дата и время</TableHead>
-                <TableHead class="w-20">Метод</TableHead>
-                <TableHead class="min-w-0">Ресурс</TableHead>
-                <TableHead class="w-36">Адаптер</TableHead>
-                <TableHead class="w-24 text-right">Ответ</TableHead>
-                <TableHead class="w-20 text-right">Код</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="row in items"
-                :key="row.id"
-                class="cursor-pointer hover:bg-muted/40"
-                @click="openDetail(row)"
+      <LogTableFrame>
+        <Table class="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-40">Дата и время</TableHead>
+              <TableHead class="w-20">Метод</TableHead>
+              <TableHead class="min-w-0">Ресурс</TableHead>
+              <TableHead class="w-36">Адаптер</TableHead>
+              <TableHead class="w-24 text-right">Ответ</TableHead>
+              <TableHead class="w-20 text-right">Код</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="row in items"
+              :key="row.id"
+              class="cursor-pointer hover:bg-muted/40"
+              @click="openDetail(row)"
+            >
+              <TableCell class="text-sm text-muted-foreground tabular-nums">
+                {{ formatLogDate(row.createdAt) }}
+              </TableCell>
+              <TableCell>
+                <code class="text-xs font-medium">{{ row.method }}</code>
+              </TableCell>
+              <TableCell class="max-w-0">
+                <div
+                  class="truncate font-mono text-xs"
+                  :title="row.path || row.url"
+                >
+                  {{ row.path || row.url }}
+                </div>
+              </TableCell>
+              <TableCell class="text-sm">
+                <div
+                  class="truncate"
+                  :title="connectionLabel(row.connectionId)"
+                >
+                  {{ row.adapterKey }}
+                </div>
+              </TableCell>
+              <TableCell
+                class="text-right text-sm text-muted-foreground tabular-nums"
               >
-                <TableCell class="text-sm text-muted-foreground">
-                  {{ formatDate(row.createdAt) }}
-                </TableCell>
-                <TableCell>
-                  <code class="text-xs font-medium">{{ row.method }}</code>
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <div
-                    class="truncate font-mono text-xs"
-                    :title="row.path || row.url"
-                  >
-                    {{ row.path || row.url }}
-                  </div>
-                </TableCell>
-                <TableCell class="text-sm">
-                  <div class="truncate" :title="connectionLabel(row.connectionId)">
-                    {{ row.adapterKey }}
-                  </div>
-                </TableCell>
-                <TableCell class="text-right text-sm text-muted-foreground tabular-nums">
-                  {{ row.durationMs }} мс
-                </TableCell>
-                <TableCell class="text-right">
-                  <Badge :variant="statusVariant(row.statusCode)">
-                    {{ row.statusCode || "—" }}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                {{ row.durationMs }} мс
+              </TableCell>
+              <TableCell class="text-right">
+                <Badge :variant="httpStatusVariant(row.statusCode)">
+                  {{ row.statusCode || "—" }}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
 
-      <div
-        v-if="items.length"
-        class="mt-3 flex items-center justify-between text-sm text-muted-foreground"
-      >
-        <span>
-          {{ items.length }} из {{ total }}
-        </span>
-        <Button
-          v-if="hasMore"
-          variant="outline"
-          size="sm"
-          :disabled="isLoading"
-          @click="loadMore"
-        >
-          Ещё
-        </Button>
-      </div>
+        <template v-if="items.length" #footer>
+          <span class="tabular-nums">{{ items.length }} из {{ total }}</span>
+          <Button
+            v-if="hasMore"
+            variant="outline"
+            size="sm"
+            :disabled="isLoading"
+            @click="loadMore"
+          >
+            Ещё
+          </Button>
+        </template>
+      </LogTableFrame>
     </PageSection>
 
-    <Sheet v-model:open="detailOpen">
-      <SheetContent
-        side="right"
-        class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+    <LogDetailSheet
+      v-model:open="detailOpen"
+      :loading="isDetailLoading"
+      :title="
+        detail ? `${detail.method} · ${detail.statusCode}` : 'Запрос'
+      "
+      :description="detail?.path || '…'"
+    >
+      <Tabs
+        v-if="detail"
+        default-value="overview"
+        class="flex min-h-0 flex-1 flex-col"
       >
-        <SheetHeader class="border-b px-4 py-3 text-left">
-          <SheetTitle class="font-mono text-base">
-            <template v-if="detail">
-              {{ detail.method }} · {{ detail.statusCode }}
-            </template>
-            <template v-else>Запрос</template>
-          </SheetTitle>
-          <SheetDescription class="truncate font-mono text-xs">
-            {{ detail?.path || "…" }}
-          </SheetDescription>
-        </SheetHeader>
+        <TabsList class="grid w-full grid-cols-3">
+          <TabsTrigger value="overview">Обзор</TabsTrigger>
+          <TabsTrigger value="request">Запрос</TabsTrigger>
+          <TabsTrigger value="response">Ответ</TabsTrigger>
+        </TabsList>
 
-        <div
-          v-if="isDetailLoading"
-          class="flex flex-1 items-center justify-center text-muted-foreground"
-        >
-          <Loader2 class="size-5 animate-spin" />
+        <div class="mt-4 min-h-0 flex-1 overflow-y-auto pb-2">
+          <TabsContent value="overview" class="mt-0 space-y-4">
+            <LogMetaGrid :items="detailMeta">
+              <template #item-3="{ item }">
+                <span class="truncate">{{ item.value }}</span>
+              </template>
+            </LogMetaGrid>
+            <div class="flex items-center justify-between gap-2 text-sm">
+              <span class="text-muted-foreground">Код</span>
+              <Badge :variant="httpStatusVariant(detail.statusCode)">
+                {{ detail.statusCode }}
+              </Badge>
+            </div>
+            <LogCodeBlock label="URL" :text="detail.url" max-height-class="max-h-28" />
+            <LogCodeBlock
+              v-if="detail.errorMessage"
+              label="Ошибка"
+              :text="detail.errorMessage"
+              tone="destructive"
+              max-height-class="max-h-40"
+            />
+            <div class="space-y-1 text-xs text-muted-foreground">
+              <div>storeId: {{ detail.storeId }}</div>
+              <div>connectionId: {{ detail.connectionId }}</div>
+              <div v-if="detail.operationId">
+                operationId: {{ detail.operationId }}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="request" class="mt-0 space-y-3">
+            <LogCodeBlock
+              label="Заголовки"
+              :text="detail.requestHeadersJson"
+              json
+              max-height-class="max-h-40"
+            />
+            <LogCodeBlock
+              label="Тело"
+              :text="detail.requestBody"
+              json
+            />
+          </TabsContent>
+
+          <TabsContent value="response" class="mt-0 space-y-3">
+            <LogCodeBlock
+              label="Заголовки"
+              :text="detail.responseHeadersJson"
+              json
+              max-height-class="max-h-40"
+            />
+            <LogCodeBlock
+              label="Тело"
+              :text="detail.responseBody"
+              json
+            />
+          </TabsContent>
         </div>
-
-        <Tabs
-          v-else-if="detail"
-          default-value="overview"
-          class="flex min-h-0 flex-1 flex-col"
-        >
-          <TabsList class="mx-4 mt-3 grid w-auto grid-cols-3">
-            <TabsTrigger value="overview">Обзор</TabsTrigger>
-            <TabsTrigger value="request">Запрос</TabsTrigger>
-            <TabsTrigger value="response">Ответ</TabsTrigger>
-          </TabsList>
-
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            <TabsContent value="overview" class="mt-0 space-y-3">
-              <div class="grid gap-2 text-sm">
-                <div class="flex justify-between gap-2">
-                  <span class="text-muted-foreground">Время</span>
-                  <span>{{ formatDate(detail.createdAt) }}</span>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <span class="text-muted-foreground">Длительность</span>
-                  <span class="tabular-nums">{{ detail.durationMs }} мс</span>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <span class="text-muted-foreground">Адаптер</span>
-                  <span>{{ detail.adapterKey }}</span>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <span class="text-muted-foreground">Подключение</span>
-                  <span class="truncate text-right">
-                    {{ connectionLabel(detail.connectionId) }}
-                  </span>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <span class="text-muted-foreground">Код</span>
-                  <Badge :variant="statusVariant(detail.statusCode)">
-                    {{ detail.statusCode }}
-                  </Badge>
-                </div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-xs font-medium text-muted-foreground">URL</div>
-                <pre
-                  class="overflow-x-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
-                >{{ detail.url }}</pre>
-              </div>
-              <div v-if="detail.errorMessage" class="space-y-1">
-                <div class="text-xs font-medium text-destructive">Ошибка</div>
-                <pre
-                  class="overflow-x-auto rounded-md border border-destructive/30 bg-destructive/5 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-                >{{ detail.errorMessage }}</pre>
-              </div>
-              <div class="grid gap-1 text-xs text-muted-foreground">
-                <div>storeId: {{ detail.storeId }}</div>
-                <div>connectionId: {{ detail.connectionId }}</div>
-                <div v-if="detail.operationId">
-                  operationId: {{ detail.operationId }}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="request" class="mt-0 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-muted-foreground"
-                  >Заголовки</span
-                >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7"
-                  @click="
-                    copyText('req-h', prettyJson(detail.requestHeadersJson))
-                  "
-                >
-                  <Copy class="mr-1 size-3.5" />
-                  Копировать
-                </Button>
-              </div>
-              <pre
-                class="max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-              >{{ prettyJson(detail.requestHeadersJson) }}</pre>
-
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-muted-foreground"
-                  >Тело</span
-                >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7"
-                  @click="copyText('req-b', detail.requestBody || '')"
-                >
-                  <Copy class="mr-1 size-3.5" />
-                  Копировать
-                </Button>
-              </div>
-              <pre
-                class="max-h-80 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-              >{{ prettyJson(detail.requestBody) }}</pre>
-            </TabsContent>
-
-            <TabsContent value="response" class="mt-0 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-muted-foreground"
-                  >Заголовки</span
-                >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7"
-                  @click="
-                    copyText('res-h', prettyJson(detail.responseHeadersJson))
-                  "
-                >
-                  <Copy class="mr-1 size-3.5" />
-                  Копировать
-                </Button>
-              </div>
-              <pre
-                class="max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-              >{{ prettyJson(detail.responseHeadersJson) }}</pre>
-
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-muted-foreground"
-                  >Тело</span
-                >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7"
-                  @click="copyText('res-b', detail.responseBody || '')"
-                >
-                  <Copy class="mr-1 size-3.5" />
-                  Копировать
-                </Button>
-              </div>
-              <pre
-                class="max-h-80 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-              >{{ prettyJson(detail.responseBody) }}</pre>
-            </TabsContent>
-          </div>
-        </Tabs>
-      </SheetContent>
-    </Sheet>
+      </Tabs>
+    </LogDetailSheet>
   </div>
 </template>

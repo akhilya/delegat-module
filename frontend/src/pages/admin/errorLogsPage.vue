@@ -1,11 +1,9 @@
 <script>
-
 import PageSection from "@/components/pageSection.vue";
-
-
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
+import Input from "@/components/ui/input/Input.vue";
 import {
   Table,
   TableBody,
@@ -14,14 +12,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  LogToolbar,
+  LogTableFrame,
+  LogCodeBlock,
+  LogMetaGrid,
+  LogDetailSheet,
+  formatLogDate as formatLogDateRaw,
+  httpStatusVariant,
+} from "@/components/logs";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Loader2,
   RefreshCw,
@@ -34,33 +40,90 @@ export default {
     Button,
     Badge,
     PageHeader,
+    Input,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
+    LogToolbar,
+    LogTableFrame,
+    LogCodeBlock,
+    LogMetaGrid,
+    LogDetailSheet,
     AlertTriangle,
     Check,
-    ChevronDown,
-    ChevronRight,
     Copy,
     Loader2,
     RefreshCw,
     Trash2,
   },
+  setup() {
+    const { timezone, loadMemberships } = useStoreDateTime();
+    loadMemberships();
+    return { storeTimezone: timezone };
+  },
   data() {
     return {
       logs: [],
-      expandedLogId: null,
-
+      query: "",
       isLoading: false,
       deletingLogId: null,
       copiedLogId: null,
+      detailOpen: false,
+      selected: null,
     };
+  },
+  computed: {
+    filteredLogs() {
+      const q = this.query.trim().toLowerCase();
+      if (!q) return this.logs;
+      return this.logs.filter((log) => {
+        const hay = [
+          log.message,
+          log.exceptionType,
+          log.method,
+          log.path,
+          log.queryString,
+          log.userName,
+          String(log.userId || ""),
+          String(log.statusCode || ""),
+          log.traceIdentifier,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    },
+    summaryLabel() {
+      const n = this.logs.length;
+      if (n === 0) return "Ошибок нет";
+      return `${n} запис${n === 1 ? "ь" : n < 5 ? "и" : "ей"}`;
+    },
+    detailMeta() {
+      if (!this.selected) return [];
+      return [
+        { label: "Время", value: this.formatLogDate(this.selected.createdAt) },
+        { label: "Метод", value: this.selected.method },
+        {
+          label: "Пользователь",
+          value: this.selected.userName || this.selected.userId || "—",
+        },
+        {
+          label: "Тип",
+          value: this.selected.exceptionType || "—",
+        },
+      ];
+    },
   },
   methods: {
     ...mapActions(["getErrorLogs", "deleteErrorLog"]),
+    httpStatusVariant,
+    formatLogDate(value) {
+      return formatLogDateRaw(value, this.storeTimezone);
+    },
 
     async fetchLogs() {
       this.isLoading = true;
@@ -76,8 +139,42 @@ export default {
       this.isLoading = false;
     },
 
-    toggleExpanded(logId) {
-      this.expandedLogId = this.expandedLogId === logId ? null : logId;
+    openDetail(log) {
+      this.selected = log;
+      this.detailOpen = true;
+    },
+
+    formatPath(log) {
+      return `${log.path || ""}${log.queryString || ""}`;
+    },
+
+    buildLogDetails(log) {
+      return [
+        `Время: ${formatLogDate(log.createdAt)}`,
+        `Статус: ${log.statusCode}`,
+        `Метод: ${log.method}`,
+        `Путь: ${this.formatPath(log)}`,
+        `Сообщение: ${log.message || "—"}`,
+        `Тип ошибки: ${log.exceptionType || "—"}`,
+        `Пользователь: ${log.userName || log.userId || "—"}`,
+        `Trace ID: ${log.traceIdentifier || "—"}`,
+        "",
+        "Stack trace:",
+        log.stackTrace || "—",
+      ].join("\n");
+    },
+
+    async copyLogDetails(log) {
+      try {
+        await navigator.clipboard.writeText(this.buildLogDetails(log));
+        this.copiedLogId = log.id;
+        displaySonnerSuccess("Детали ошибки скопированы");
+        window.setTimeout(() => {
+          if (this.copiedLogId === log.id) this.copiedLogId = null;
+        }, 1500);
+      } catch {
+        displaySonnerError("Не удалось скопировать детали ошибки");
+      }
     },
 
     async removeLog(log) {
@@ -92,8 +189,9 @@ export default {
         id: log.id,
         onSuccess: () => {
           this.logs = this.logs.filter((item) => item.id !== log.id);
-          if (this.expandedLogId === log.id) {
-            this.expandedLogId = null;
+          if (this.selected?.id === log.id) {
+            this.detailOpen = false;
+            this.selected = null;
           }
           displaySonnerSuccess("Лог удалён");
         },
@@ -102,54 +200,6 @@ export default {
         },
       });
       this.deletingLogId = null;
-    },
-
-    buildLogDetails(log) {
-      return [
-        `Время: ${this.formatDate(log.createdAt)}`,
-        `Статус: ${log.statusCode}`,
-        `Метод: ${log.method}`,
-        `Путь: ${this.formatPath(log)}`,
-        `Сообщение: ${log.message || "-"}`,
-        `Тип ошибки: ${log.exceptionType || "-"}`,
-        `Пользователь: ${log.userName || log.userId || "-"}`,
-        `Trace ID: ${log.traceIdentifier || "-"}`,
-        "",
-        "Stack trace:",
-        log.stackTrace || "-",
-      ].join("\n");
-    },
-
-    async copyLogDetails(log) {
-      try {
-        await navigator.clipboard.writeText(this.buildLogDetails(log));
-        this.copiedLogId = log.id;
-        displaySonnerSuccess("Детали ошибки скопированы");
-
-        window.setTimeout(() => {
-          if (this.copiedLogId === log.id) {
-            this.copiedLogId = null;
-          }
-        }, 1500);
-      } catch {
-        displaySonnerError("Не удалось скопировать детали ошибки");
-      }
-    },
-
-    formatDate(value) {
-      if (!value) return "-";
-      return new Date(value).toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    },
-
-    formatPath(log) {
-      return `${log.path}${log.queryString || ""}`;
     },
   },
   mounted() {
@@ -165,114 +215,162 @@ export default {
       description="Последние сохранённые серверные ошибки"
     >
       <Button variant="outline" :disabled="isLoading" @click="fetchLogs">
-        <Loader2 v-if="isLoading" class="size-4 mr-2 animate-spin" />
-        <RefreshCw v-else class="size-4 mr-2" />
+        <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
+        <RefreshCw v-else class="mr-2 size-4" />
         Обновить
       </Button>
     </PageHeader>
 
+    <LogToolbar :summary="summaryLabel" :summary-alert="logs.length > 0">
+      <Input
+        v-model="query"
+        class="h-9 w-full sm:max-w-sm"
+        placeholder="Поиск по сообщению, пути, пользователю…"
+      />
+    </LogToolbar>
+
     <PageSection
       :loading="isLoading"
-      :empty="logs.length === 0"
+      :empty="!isLoading && filteredLogs.length === 0"
       :empty-icon="AlertTriangle"
-      empty-title="Ошибок нет"
-      empty-description="Новые неожиданные ошибки backend появятся здесь автоматически"
+      :empty-title="
+        query.trim() && logs.length ? 'Ничего не найдено' : 'Ошибок нет'
+      "
+      :empty-description="
+        query.trim() && logs.length
+          ? 'Попробуйте изменить поисковый запрос'
+          : 'Новые неожиданные ошибки backend появятся здесь автоматически'
+      "
     >
-      <div class="rounded-lg border overflow-hidden">
-      <div class="overflow-x-auto">
+      <LogTableFrame>
         <Table class="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead class="w-10"></TableHead>
-              <TableHead class="w-44">Время</TableHead>
-              <TableHead class="w-24">Статус</TableHead>
-              <TableHead class="w-28">Метод</TableHead>
-              <TableHead class="w-[40%] max-w-0">Ошибка</TableHead>
-              <TableHead class="w-44">Пользователь</TableHead>
-              <TableHead class="w-24"></TableHead>
+              <TableHead class="w-40">Дата и время</TableHead>
+              <TableHead class="w-20">Метод</TableHead>
+              <TableHead class="min-w-0">Ошибка</TableHead>
+              <TableHead class="w-36">Пользователь</TableHead>
+              <TableHead class="w-20 text-right">Код</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <template v-for="log in logs" :key="log.id">
-              <TableRow>
-                <TableCell>
-                  <Button variant="ghost" size="icon" @click="toggleExpanded(log.id)">
-                    <ChevronDown v-if="expandedLogId === log.id" class="size-4" />
-                    <ChevronRight v-else class="size-4" />
-                    <span class="sr-only">Показать детали</span>
-                  </Button>
-                </TableCell>
-                <TableCell class="text-sm text-muted-foreground">
-                  {{ formatDate(log.createdAt) }}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="destructive">{{ log.statusCode }}</Badge>
-                </TableCell>
-                <TableCell>
-                  <code class="text-xs">{{ log.method }}</code>
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <div class="min-w-0 overflow-hidden">
-                    <div class="truncate font-medium" :title="log.message">{{ log.message }}</div>
-                    <div class="truncate text-xs text-muted-foreground" :title="log.exceptionType">
-                      {{ log.exceptionType }}
-                    </div>
+            <TableRow
+              v-for="log in filteredLogs"
+              :key="log.id"
+              class="cursor-pointer hover:bg-muted/40"
+              @click="openDetail(log)"
+            >
+              <TableCell class="text-sm text-muted-foreground tabular-nums">
+                {{ formatLogDate(log.createdAt) }}
+              </TableCell>
+              <TableCell>
+                <code class="text-xs font-medium">{{ log.method }}</code>
+              </TableCell>
+              <TableCell class="max-w-0">
+                <div class="min-w-0 overflow-hidden">
+                  <div class="truncate font-medium" :title="log.message">
+                    {{ log.message }}
                   </div>
-                </TableCell>
-                <TableCell class="text-sm">
-                  {{ log.userName || log.userId || "-" }}
-                </TableCell>
-                <TableCell>
-                  <div class="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      @click="copyLogDetails(log)"
-                    >
-                      <Check v-if="copiedLogId === log.id" class="size-4" />
-                      <Copy v-else class="size-4" />
-                      <span class="sr-only">Скопировать детали ошибки</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      :disabled="deletingLogId === log.id"
-                      @click="removeLog(log)"
-                    >
-                      <Loader2 v-if="deletingLogId === log.id" class="size-4 animate-spin" />
-                      <Trash2 v-else class="size-4" />
-                      <span class="sr-only">Удалить лог</span>
-                    </Button>
+                  <div
+                    class="truncate font-mono text-xs text-muted-foreground"
+                    :title="formatPath(log)"
+                  >
+                    {{ log.exceptionType || formatPath(log) }}
                   </div>
-                </TableCell>
-              </TableRow>
-              <TableRow v-if="expandedLogId === log.id" class="bg-muted/30 hover:bg-muted/30">
-                <TableCell colspan="7" class="p-0">
-                  <div class="grid gap-3 p-4 text-sm">
-                    <div class="grid gap-1">
-                      <div class="text-xs font-medium text-muted-foreground">Запрос</div>
-                      <code class="rounded-md bg-background px-3 py-2 text-xs">
-                        {{ formatPath(log) }}
-                      </code>
-                    </div>
-                    <div class="grid gap-1">
-                      <div class="text-xs font-medium text-muted-foreground">Trace ID</div>
-                      <code class="rounded-md bg-background px-3 py-2 text-xs">
-                        {{ log.traceIdentifier }}
-                      </code>
-                    </div>
-                    <div class="grid gap-1">
-                      <div class="text-xs font-medium text-muted-foreground">Stack trace</div>
-                      <pre class="max-h-96 overflow-auto rounded-md bg-background p-3 text-xs leading-relaxed">{{ log.stackTrace }}</pre>
-                    </div>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </template>
+                </div>
+              </TableCell>
+              <TableCell class="truncate text-sm">
+                {{ log.userName || log.userId || "—" }}
+              </TableCell>
+              <TableCell class="text-right">
+                <Badge :variant="httpStatusVariant(log.statusCode)">
+                  {{ log.statusCode }}
+                </Badge>
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
-      </div>
-      </div>
+
+        <template v-if="filteredLogs.length" #footer>
+          <span class="tabular-nums">
+            {{ filteredLogs.length
+            }}<template v-if="query.trim()">
+              из {{ logs.length }}</template
+            >
+          </span>
+        </template>
+      </LogTableFrame>
     </PageSection>
+
+    <LogDetailSheet
+      v-model:open="detailOpen"
+      :title="
+        selected
+          ? `${selected.method} · ${selected.statusCode}`
+          : 'Ошибка'
+      "
+      :description="selected ? formatPath(selected) : '…'"
+    >
+      <template v-if="selected" #actions>
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-8"
+          @click="copyLogDetails(selected)"
+        >
+          <Check v-if="copiedLogId === selected.id" class="mr-1.5 size-3.5" />
+          <Copy v-else class="mr-1.5 size-3.5" />
+          Копировать всё
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          class="h-8"
+          :disabled="deletingLogId === selected.id"
+          @click="removeLog(selected)"
+        >
+          <Loader2
+            v-if="deletingLogId === selected.id"
+            class="mr-1.5 size-3.5 animate-spin"
+          />
+          <Trash2 v-else class="mr-1.5 size-3.5" />
+          Удалить
+        </Button>
+      </template>
+
+      <div
+        v-if="selected"
+        class="min-h-0 flex-1 space-y-4 overflow-y-auto pb-2"
+      >
+        <LogMetaGrid :items="detailMeta" />
+        <div class="flex items-center justify-between gap-2 text-sm">
+          <span class="text-muted-foreground">Код</span>
+          <Badge :variant="httpStatusVariant(selected.statusCode)">
+            {{ selected.statusCode }}
+          </Badge>
+        </div>
+        <LogCodeBlock
+          label="Сообщение"
+          :text="selected.message || '—'"
+          tone="destructive"
+          max-height-class="max-h-28"
+        />
+        <LogCodeBlock
+          label="Запрос"
+          :text="formatPath(selected)"
+          max-height-class="max-h-24"
+        />
+        <LogCodeBlock
+          label="Trace ID"
+          :text="selected.traceIdentifier || '—'"
+          max-height-class="max-h-20"
+        />
+        <LogCodeBlock
+          label="Stack trace"
+          :text="selected.stackTrace || '—'"
+          max-height-class="max-h-96"
+        />
+      </div>
+    </LogDetailSheet>
   </div>
 </template>

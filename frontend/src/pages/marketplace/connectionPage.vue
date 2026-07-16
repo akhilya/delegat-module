@@ -122,6 +122,7 @@ import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 export default {
   components: {
@@ -230,8 +231,9 @@ export default {
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
+    const { formatDateTime: formatStoreDateTime } = useStoreDateTime();
     loadMemberships();
-    return { storeBaseCurrency, formatMoney };
+    return { storeBaseCurrency, formatMoney, formatStoreDateTime };
   },
   data() {
     const validTabs = ["settings", "mappings", "products"];
@@ -792,13 +794,8 @@ export default {
 
     formatQuotaResetTime(resetsAt) {
       if (!resetsAt) return null;
-      const date = new Date(resetsAt);
-      return date.toLocaleString("ru-RU", {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const formatted = this.formatStoreDateTime(resetsAt);
+      return formatted === "—" ? null : formatted;
     },
 
     async fetchMappings() {

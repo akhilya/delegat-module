@@ -49,8 +49,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 export default {
+  setup() {
+    const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+    loadMemberships();
+    return { formatStoreDateTime };
+  },
   components: {
     PageSection,
     PageHeader,
@@ -219,16 +225,7 @@ export default {
     },
 
     formatLoadedAt(value) {
-      if (!value) return "—";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "—";
-      return date.toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return this.formatStoreDateTime(value);
     },
   },
   mounted() {

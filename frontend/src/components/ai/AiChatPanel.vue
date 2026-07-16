@@ -26,8 +26,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
 
 const store = useStore();
+const {
+  timezone: storeTimezone,
+  relativeDayLabel,
+  todayKey,
+  loadMemberships,
+} = useStoreDateTime();
+loadMemberships();
 const messagesEl = ref(null);
 const inputEl = ref(null);
 const inputText = ref("");
@@ -93,12 +102,12 @@ const effectiveModelId = computed(() => {
   return defaultModel.value ? String(defaultModel.value.id ?? defaultModel.value.Id) : "";
 });
 
-// Group conversations by relative date for history view
+// Group conversations by relative date for history view (store calendar days)
 const groupedConversations = computed(() => {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+  const tz = storeTimezone.value;
+  const today = todayKey();
+  const yesterday = addCalendarDays(today, -1);
+  const weekAgo = addCalendarDays(today, -7);
 
   const groups = [
     { label: "Сегодня", items: [] },
@@ -107,8 +116,11 @@ const groupedConversations = computed(() => {
     { label: "Ранее", items: [] },
   ];
   for (const c of conversations.value) {
-    const d = new Date(c.lastMessageAt);
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = calendarDayKey(c.lastMessageAt, tz);
+    if (!day) {
+      groups[3].items.push(c);
+      continue;
+    }
     if (day >= today) groups[0].items.push(c);
     else if (day >= yesterday) groups[1].items.push(c);
     else if (day >= weekAgo) groups[2].items.push(c);
@@ -347,14 +359,20 @@ function cancelEditTitle() {
 }
 
 function formatRelativeDate(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) return "Сегодня";
-  if (diffDays === 1) return "Вчера";
-  if (diffDays < 7) return `${diffDays} дн. назад`;
-  return d.toLocaleDateString("ru", { day: "numeric", month: "short" });
+  const tz = storeTimezone.value;
+  const key = calendarDayKey(iso, tz);
+  if (!key) return "—";
+  const today = todayKey();
+  const yesterday = addCalendarDays(today, -1);
+  if (key === today) return "Сегодня";
+  if (key === yesterday) return "Вчера";
+  const [y, m, d] = key.split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  const diffDays = Math.round(
+    (Date.UTC(ty, tm - 1, td) - Date.UTC(y, m - 1, d)) / 86400000,
+  );
+  if (diffDays > 1 && diffDays < 7) return `${diffDays} дн. назад`;
+  return relativeDayLabel(iso);
 }
 
 async function submit() {

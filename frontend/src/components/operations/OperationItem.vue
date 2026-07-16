@@ -46,12 +46,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import OperationLogTimeline from "./OperationLogTimeline.vue";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 const props = defineProps({
   operation: { type: Object, required: true },
 });
 
 const emit = defineEmits(["retry", "remove", "pause", "resume", "stop"]);
+
+const { formatTime, loadMemberships } = useStoreDateTime();
+loadMemberships();
 
 const store = useStore();
 const expanded = ref(false);
@@ -336,9 +340,9 @@ const statusLabel = computed(() => {
             </Button>
             <div class="flex-1" />
             <span class="text-[10px] text-muted-foreground">
-              {{ new Date(operation.startedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
+              {{ formatTime(operation.startedAt) }}
               <template v-if="operation.finishedAt">
-                → {{ new Date(operation.finishedAt).toLocaleTimeString("ru-RU", { hour12: false }) }}
+                → {{ formatTime(operation.finishedAt) }}
               </template>
             </span>
             <AlertDialog>

@@ -17,8 +17,14 @@ import {
 } from "@/components/ui/table";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 export default {
+  setup() {
+    const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+    loadMemberships();
+    return { formatStoreDateTime };
+  },
   components: {
     PageSection,
     Button,
@@ -94,13 +100,8 @@ export default {
 
     formatDate(dateString) {
       if (!dateString) return "-";
-      return new Date(dateString).toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const formatted = this.formatStoreDateTime(dateString);
+      return formatted === "—" ? "-" : formatted;
     },
   },
   mounted() {
