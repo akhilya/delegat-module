@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Delegat.Services.Marketplace.Modifiers;
 
 namespace Delegat.Services.Marketplace.Graph;
@@ -8,8 +10,9 @@ namespace Delegat.Services.Marketplace.Graph;
 ///
 /// The frontend (Vue Flow) is the schema owner: it stores the full node objects
 /// (including layout/position) and the backend deserializes only the subset it needs
-/// to evaluate. Unknown JSON properties are ignored, so frontend-only fields round-trip
-/// untouched through the stored string.
+/// to evaluate. Frontend-only node.data fields round-trip via
+/// <see cref="GraphNodeData.ExtensionData"/> through Sync* serialize paths; raw
+/// PUT storage keeps the string untouched.
 /// </summary>
 public class MappingGraph
 {
@@ -107,6 +110,13 @@ public class GraphNodeData
     public string? outputType { get; set; }
     /// <summary>Field list for the single "adapterFields" sink node (one input pin per field).</summary>
     public List<AdapterField>? fields { get; set; }
+
+    /// <summary>
+    /// Frontend-only editor fields (e.g. collapsed) that must survive SyncAdapterFields /
+    /// SyncPriceFields deserialize→serialize round-trips. Evaluator ignores these.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>Option entry for "isAdapterValue" static nodes — same shape the frontend editor uses.</summary>

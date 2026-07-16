@@ -106,6 +106,7 @@ const {
   setNodes,
   setEdges,
   updateNodeData,
+  updateNodeInternals,
   toObject,
   fitView,
   onNodeClick,
@@ -264,6 +265,22 @@ function enrichFieldsWithDefs(fields, defs) {
   });
 }
 
+/** Enrich adapter field labels/tooltips once — not on every refreshAnalysis (avoids re-render thrash). */
+function applyFieldDefEnrichment() {
+  const adapterNode = findNode(ADAPTER_NODE_ID);
+  if (adapterNode) {
+    updateNodeData(ADAPTER_NODE_ID, {
+      fields: enrichFieldsWithDefs(adapterNode.data?.fields, props.externalFieldDefs),
+    });
+  }
+  const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
+  if (priceNode) {
+    updateNodeData(ADAPTER_PRICE_NODE_ID, {
+      fields: enrichFieldsWithDefs(priceNode.data?.fields, props.priceFieldDefs),
+    });
+  }
+}
+
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
   const { analysisBySink } = analyzeFields(nodes.value, edges.value);
@@ -271,15 +288,9 @@ function refreshAnalysis(options = {}) {
   for (const [key, def] of Object.entries(props.externalFieldDefs)) {
     if (def.options?.length) fieldOptionsMap[key] = def.options;
   }
-  const adapterNode = findNode(ADAPTER_NODE_ID);
-  const enrichedFields = enrichFieldsWithDefs(
-    adapterNode?.data?.fields,
-    props.externalFieldDefs,
-  );
   updateNodeData(ADAPTER_NODE_ID, {
     analysis: analysisBySink[ADAPTER_NODE_ID] || {},
     fieldOptionsMap,
-    fields: enrichedFields,
     sources: adapterSourceLabels(nodes.value, edges.value),
     availableSources: props.availableSources,
     setFieldSource,
@@ -306,7 +317,6 @@ function refreshAnalysis(options = {}) {
     updateNodeData(ADAPTER_PRICE_NODE_ID, {
       analysis: priceAnalysis,
       fieldOptionsMap: priceFieldOptionsMap,
-      fields: enrichFieldsWithDefs(priceNode.data?.fields, props.priceFieldDefs),
       sources: adapterSourceLabels(nodes.value, edges.value),
       availableSources: props.availableSources,
       setFieldSource: setPriceFieldSource,
@@ -891,6 +901,15 @@ watch(
   },
   { deep: true },
 );
+// Field defs (name/description/unit) can arrive after graph load — enrich once, not on every analysis pass.
+watch(
+  () => [props.externalFieldDefs, props.priceFieldDefs],
+  () => {
+    if (loading.value) return;
+    applyFieldDefEnrichment();
+  },
+  { deep: true },
+);
 // Price-API field list can arrive after graph load — append missing fields to the price sink.
 watch(
   () => props.priceFieldMappings,
@@ -908,7 +927,9 @@ watch(
     const next = copy.find((n) => n.id === ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
     const nextKeys = next.map((f) => f.fieldKey).join("\0");
     if (nextKeys !== curKeys) {
-      updateNodeData(ADAPTER_PRICE_NODE_ID, { fields: next });
+      updateNodeData(ADAPTER_PRICE_NODE_ID, {
+        fields: enrichFieldsWithDefs(next, props.priceFieldDefs),
+      });
       dirty.value = true;
     }
     refreshAnalysis();
@@ -989,6 +1010,7 @@ onNodeDoubleClick(({ node }) => {
         };
       }
     }
+    nextTick(() => updateNodeInternals([live.id]));
     if (!loading.value) {
       dirty.value = true;
       scheduleHistory();
@@ -1106,6 +1128,7 @@ async function load(options = {}) {
     }, stepCtx);
 
     await loadStep("load:refreshAnalysis", async () => {
+      applyFieldDefEnrichment();
       refreshAnalysis({ updateLanes: false });
       await waitForPaint();
     }, stepCtx);
@@ -1369,7 +1392,6 @@ function onInspectorUpdate(patch) {
   };
   if ("importable" in patch) nextTick(refreshAnalysis);
   dirty.value = true;
-  scheduleHistory();
   schedulePreview();
 }
 
