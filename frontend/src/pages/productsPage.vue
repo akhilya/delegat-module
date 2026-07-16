@@ -22,7 +22,6 @@ import {
 import { getBaseCurrency } from "@/lib/currency";
 import {
   parseSortFromQuery,
-  debugProductSort,
   serializeSortKey,
   serializeSortToQuery,
   toggleSortColumn,
@@ -201,33 +200,14 @@ export default {
       this.isProductsLoading = true;
       this.products = [];
 
-      const sortQuery = serializeSortToQuery(this.sortColumns);
-      debugProductSort("fetchProducts", {
-        generation,
-        sortColumns: this.sortColumns,
-        sortQuery,
-      });
-
       await this.getAllProducts({
         startIndex: this.startIndex,
         pageSize: this.pageSize,
         searchQuery: this.searchQuery,
         categoryId: this.filterCategoryId,
-        sort: sortQuery,
+        sort: serializeSortToQuery(this.sortColumns),
         onSuccess: (response) => {
           if (generation !== this.fetchGeneration) return;
-          const sortDebug = response.data.value._sortDebug;
-          debugProductSort("fetchProducts response", {
-            generation,
-            orderedIds: response.data.value.items?.map((p) => p.id),
-            sortDebug,
-          });
-          if (import.meta.env.DEV && sortDebug?.secondaryEffect) {
-            const effect = sortDebug.secondaryEffect;
-            console.info(
-              `[productSort] ${effect.note} (групп с одинаковой 1-й колонкой: ${effect.samePrimaryValueGroupsOnPage}, позиций изменено: ${effect.positionsChangedVsPrimaryOnly})`,
-            );
-          }
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
           this.totalCount = response.data.value.totalCount;
@@ -261,16 +241,8 @@ export default {
 
     toggleSort(columnId, event) {
       const shiftKey = Boolean(event?.shiftKey);
-      const prev = [...this.sortColumns];
       this.sortColumns = toggleSortColumn(this.sortColumns, columnId, shiftKey);
       const sort = serializeSortToQuery(this.sortColumns);
-      debugProductSort("toggleSort", {
-        columnId,
-        shiftKey,
-        prev,
-        next: this.sortColumns,
-        sortQuery: sort,
-      });
       this.$router.replace({
         query: {
           ...this.$route.query,

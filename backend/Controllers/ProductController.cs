@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
@@ -114,30 +112,6 @@ public class ProductController : ControllerBase
             : ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
         var orderBy = ProductSortHelper.BuildOrderBy(sortSpecs, hasSearch, searchQuery);
 
-        var isDev = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
-        if (isDev)
-        {
-            _logger.LogInformation(
-                "Product sort debug: rawQuery=[{RawQuery}] boundSort={BoundSort} queryParts=[{QueryParts}] specs=[{Specs}]",
-                Request.QueryString.Value,
-                sort,
-                string.Join(", ", sortQueryParts),
-                ProductSortHelper.FormatSortSpecs(sortSpecs));
-
-            try
-            {
-                var sqlPreview = orderBy(_context.products.AsNoTracking().Where(predicate))
-                    .Skip(startIndex)
-                    .Take(pageSize)
-                    .ToQueryString();
-                _logger.LogInformation("Product sort SQL: {Sql}", sqlPreview);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Product sort SQL preview failed");
-            }
-        }
-
         var (items, total) = await productRepo.FindPagedAsync(
             predicate,
             query => query
@@ -159,90 +133,14 @@ public class ProductController : ControllerBase
             paged.Add(dto);
         }
 
-        if (isDev)
-        {
-            _logger.LogInformation(
-                "Product sort result: ids=[{Ids}]",
-                string.Join(",", items.Select(p => p.Id)));
-        }
-
         var lastPage = startIndex + pageSize >= total;
-
-        object? secondaryEffect = null;
-        if (isDev && sortSpecs.Count > 1)
-        {
-            var primaryOnlyOrder = ProductSortHelper.BuildOrderBy(
-                sortSpecs.Take(1).ToList(),
-                hasSearch,
-                searchQuery);
-            var primaryOnlyIds = await primaryOnlyOrder(_context.products.AsNoTracking().Where(predicate))
-                .Skip(startIndex)
-                .Take(pageSize)
-                .Select(p => p.Id)
-                .ToListAsync();
-            var currentIds = items.Select(p => p.Id).ToList();
-            var changedPositions = currentIds
-                .Zip(primaryOnlyIds, (current, primary) => current != primary)
-                .Count(changed => changed);
-
-            secondaryEffect = new
-            {
-                primaryOnlyIds,
-                positionsChangedVsPrimaryOnly = changedPositions,
-                samePrimaryValueGroupsOnPage = CountSamePrimaryGroups(items, sortSpecs[0].Column),
-                note = changedPositions == 0
-                    ? "Вторая колонка — tiebreaker: на этой странице порядок совпадает с сортировкой только по первой колонке."
-                    : $"{changedPositions} позиций на странице отличаются от сортировки только по первой колонке.",
-            };
-        }
-
-        if (!isDev)
-        {
-            return Ok(new
-            {
-                items = paged,
-                totalCount = total,
-                lastPage,
-            });
-        }
-
         return Ok(new
         {
             items = paged,
             totalCount = total,
             lastPage,
-            _sortDebug = new
-            {
-                rawQuery = Request.QueryString.Value,
-                boundSort = sort,
-                queryParts = sortQueryParts,
-                specs = sortSpecs.Select(s => new { column = s.Column, desc = s.Desc }).ToArray(),
-                orderedIds = items.Select(p => p.Id).ToArray(),
-                orderedPreview = items.Select(p => new
-                {
-                    p.Id,
-                    p.price,
-                    p.storageQuantity,
-                    category = p.category?.name,
-                    p.name,
-                }).ToArray(),
-                secondaryEffect,
-            },
         });
     }
-
-    private static int CountSamePrimaryGroups(List<Product> items, string primaryColumn) =>
-        primaryColumn switch
-        {
-            "price" => items.GroupBy(p => p.price).Count(g => g.Count() > 1),
-            "storagequantity" => items.GroupBy(p => p.storageQuantity).Count(g => g.Count() > 1),
-            "name" => items.GroupBy(p => p.name).Count(g => g.Count() > 1),
-            "sku" => items.GroupBy(p => p.sku).Count(g => g.Count() > 1),
-            "category" => items.GroupBy(p => p.category?.name).Count(g => g.Count() > 1),
-            "createdat" => items.GroupBy(p => p.createdAt).Count(g => g.Count() > 1),
-            "updatedat" => items.GroupBy(p => p.updatedAt).Count(g => g.Count() > 1),
-            _ => 0,
-        };
 
     /// <summary>
     /// Retrieves a single product by its identifier, including all related entities.
