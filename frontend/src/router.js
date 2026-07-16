@@ -26,6 +26,7 @@ const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
 const MarketplaceConnectionPage = () => import("./pages/marketplace/connectionPage.vue");
 const MarketplaceCategoryImportPage = () => import("./pages/marketplace/categoryImportPage.vue");
 const MarketplaceFieldMappingPage = () => import("./pages/marketplace/fieldMappingPage.vue");
+const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
 const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
 
@@ -55,6 +56,7 @@ export const PAGE_ADMIN_PLUGINS = "/settings/admin/plugins";
 export const PAGE_ADMIN_AI = "/settings/admin/ai";
 export const PAGE_MARKETPLACE = "/adapter";
 export const PAGE_MARKETPLACE_PLUGINS = "/adapter/plugins";
+export const PAGE_ADAPTER_LOGS = "/settings/adapter-logs";
 export const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
 export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/adapter/:connId/categories/import";
 export const PAGE_MARKETPLACE_FIELD_MAPPING = "/adapter/:connId/categories/:mappingId";
@@ -91,9 +93,11 @@ export const routes = [
       { path: "admin/error-logs", component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
       { path: "admin/plugins", component: PluginsPage, meta: { title: "Плагины" } },
       { path: "admin/ai", component: AiModelsPage, meta: { title: "AI Модели" } },
+      { path: "adapter-logs", component: AdapterLogsPage, meta: { title: "Логи адаптеров" } },
     ],
   },
   { path: PAGE_SETTINGS_OPERATIONS, redirect: PAGE_SETTINGS },
+  { path: "/adapter-logs", redirect: PAGE_ADAPTER_LOGS },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
   { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
   { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },

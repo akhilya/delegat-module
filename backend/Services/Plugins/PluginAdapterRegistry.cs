@@ -14,14 +14,20 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
     private readonly PluginManager _pluginManager;
     private readonly ILoggerFactory _loggerFactory;
     private readonly EncryptionService? _encryptionService;
+    private readonly IAdapterHttpLogger? _httpLogger;
     private readonly Dictionary<string, PluginAdapterWrapper> _wrapperCache = new();
     private readonly object _cacheLock = new();
 
-    public PluginAdapterRegistry(PluginManager pluginManager, ILoggerFactory loggerFactory, EncryptionService? encryptionService = null)
+    public PluginAdapterRegistry(
+        PluginManager pluginManager,
+        ILoggerFactory loggerFactory,
+        EncryptionService? encryptionService = null,
+        IAdapterHttpLogger? httpLogger = null)
     {
         _pluginManager = pluginManager;
         _loggerFactory = loggerFactory;
         _encryptionService = encryptionService;
+        _httpLogger = httpLogger;
     }
 
     public IReadOnlyList<IMarketplaceAdapter> GetAll()
@@ -89,7 +95,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
                 throw new KeyNotFoundException($"Plugin '{key}' not found");
             }
 
-            var wrapper = new PluginAdapterWrapper(currentPlugin, _loggerFactory, _encryptionService);
+            var wrapper = new PluginAdapterWrapper(currentPlugin, _loggerFactory, _encryptionService, _httpLogger);
             _wrapperCache[key] = wrapper;
             return wrapper;
         }

@@ -70,6 +70,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Persisted server errors for administrators
     public DbSet<ErrorLog> errorLogs { get; set; }
 
+    // Outbound marketplace HTTP request logs
+    public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }
+
     // Platform settings editable by administrators
     public DbSet<AppSetting> appSettings { get; set; }
 
@@ -373,6 +376,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<ErrorLog>()
             .HasIndex(e => e.statusCode);
+
+        // Adapter HTTP logs
+        builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => new { l.storeId, l.createdAt });
+        builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => new { l.connectionId, l.createdAt });
+        builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => new { l.statusCode, l.createdAt });
+        builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => new { l.adapterKey, l.createdAt });
 
         // AppSetting indexes
         builder.Entity<AppSetting>()

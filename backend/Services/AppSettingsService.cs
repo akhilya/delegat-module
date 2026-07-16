@@ -47,6 +47,12 @@ public class AppSettingsService
             "integer",
             "Количество auth-запросов в минуту на IP. Текущее middleware применяет значение после перезапуска приложения.",
             () => "10"),
+        new(
+            AppSettingKeys.AdapterHttpLogRetentionDays,
+            "Срок хранения логов адаптеров, дни",
+            "integer",
+            "Сколько дней хранить исходящие HTTP-логи адаптеров (1–30). По умолчанию 7.",
+            () => "7"),
     ];
 
     public AppSettingsService(DataContext context)
@@ -227,6 +233,7 @@ public static class AppSettingKeys
     public const string MaxConnections = "MAX_CONNECTIONS";
     public const string GlobalRateLimit = "GLOBAL_RATE_LIMIT";
     public const string AuthRateLimit = "AUTH_RATE_LIMIT";
+    public const string AdapterHttpLogRetentionDays = "ADAPTER_HTTP_LOG_RETENTION_DAYS";
 }
 
 public record AppSettingDto(

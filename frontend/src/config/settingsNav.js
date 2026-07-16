@@ -7,6 +7,7 @@ import {
   PAGE_ADMIN_PLUGINS,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_AI,
+  PAGE_ADAPTER_LOGS,
 } from "@/router";
 import {
   Settings2,
@@ -17,6 +18,7 @@ import {
   Plug,
   AlertTriangle,
   Sparkles,
+  ScrollText,
 } from "lucide-vue-next";
 
 /** @typedef {{ id: string, label: string, to: string, icon: import('vue').Component, visible?: (ctx: NavContext) => boolean }} SettingsNavItem */
@@ -31,6 +33,7 @@ export const SETTINGS_ROUTE_LABELS = {
   [PAGE_ADMIN_PLUGINS]: "Плагины",
   [PAGE_ADMIN_ERROR_LOGS]: "Логи ошибок",
   [PAGE_ADMIN_AI]: "ИИ",
+  [PAGE_ADAPTER_LOGS]: "Логи адаптеров",
 };
 
 const ADMIN_PREFIX = "/settings/admin";
@@ -42,6 +45,7 @@ const ADMIN_PREFIX = "/settings/admin";
 export function getPersonalSettingsItems(ctx) {
   const items = [
     { id: "user", label: "Пользователь", to: PAGE_SETTINGS_USER, icon: User },
+    { id: "adapter-logs", label: "Логи адаптеров", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
   ];
   if (ctx.canManageStore && !ctx.isAdmin) {
     items.push({ id: "stores", label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store });

@@ -18,6 +18,7 @@ using Delegat.Services.Ai.Tools;
 using Delegat.Services.Ai.Tools.Handlers;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Plugins;
+using Delegat.Marketplace.SDK;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -186,6 +187,12 @@ builder.Services.AddScoped<ProductTransferService>();
 
 // Persisted error logs
 builder.Services.AddScoped<IErrorLogService, ErrorLogService>();
+
+// Outbound marketplace HTTP logs (singleton queue + query API)
+builder.Services.AddSingleton<AdapterHttpLogService>();
+builder.Services.AddSingleton<IAdapterHttpLogger>(sp => sp.GetRequiredService<AdapterHttpLogService>());
+builder.Services.AddSingleton<IAdapterHttpLogQueryService>(sp => sp.GetRequiredService<AdapterHttpLogService>());
+builder.Services.AddHostedService<AdapterHttpLogCleanupService>();
 
 // AI services
 builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));

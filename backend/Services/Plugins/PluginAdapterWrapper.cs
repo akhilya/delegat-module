@@ -18,12 +18,18 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     private readonly IMarketplacePlugin _plugin;
     private readonly ILogger _logger;
     private readonly EncryptionService? _encryptionService;
+    private readonly IAdapterHttpLogger? _httpLogger;
 
-    public PluginAdapterWrapper(IMarketplacePlugin plugin, ILoggerFactory loggerFactory, EncryptionService? encryptionService = null)
+    public PluginAdapterWrapper(
+        IMarketplacePlugin plugin,
+        ILoggerFactory loggerFactory,
+        EncryptionService? encryptionService = null,
+        IAdapterHttpLogger? httpLogger = null)
     {
         _plugin = plugin;
         _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
         _encryptionService = encryptionService;
+        _httpLogger = httpLogger;
     }
 
     #region Metadata
@@ -678,9 +684,12 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         return new ConnectionContext
         {
             ConnectionId = connection.Id,
+            StoreId = connection.storeId,
+            AdapterKey = connection.adapterKey ?? _plugin.Key,
             Credentials = credentials,
             Settings = settings,
-            Logger = _logger
+            Logger = _logger,
+            HttpLogger = _httpLogger
         };
     }
 

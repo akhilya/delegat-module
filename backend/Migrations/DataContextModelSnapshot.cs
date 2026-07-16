@@ -657,6 +657,82 @@ namespace Delegat.Migrations
                     b.ToTable("invitationTokens");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Marketplace.AdapterHttpLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("adapterKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("durationMs")
+                        .HasColumnType("int");
+
+                    b.Property<string>("errorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("method")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("operationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("path")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("requestBody")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("requestHeadersJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("responseBody")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("responseHeadersJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("statusCode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("adapterKey", "createdAt");
+
+                    b.HasIndex("connectionId", "createdAt");
+
+                    b.HasIndex("statusCode", "createdAt");
+
+                    b.HasIndex("storeId", "createdAt");
+
+                    b.ToTable("adapterHttpLogs");
+                });
+
             modelBuilder.Entity("Delegat.Models.Marketplace.CategoryMapping", b =>
                 {
                     b.Property<int>("Id")
