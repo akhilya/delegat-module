@@ -26,6 +26,8 @@
   <ItemGroup>
     <!-- Reference the main backend project -->
     <ProjectReference Include="..\backend\Delegat.csproj" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
   </ItemGroup>
 
   <ItemGroup>
