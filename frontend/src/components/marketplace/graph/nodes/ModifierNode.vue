@@ -60,8 +60,8 @@ const paramPinRowOffset = computed(
       'vf-card--modifier',
       unknown && 'vf-card--error',
       selected && 'vf-card--selected',
-      hasPins && 'vf-card--haspins',
-      collapsed && !hasPins && 'vf-card--collapsed',
+      hasPins && !collapsed && 'vf-card--haspins',
+      collapsed && 'vf-card--collapsed',
     ]"
   >
     <template v-if="hasPins">
@@ -69,7 +69,7 @@ const paramPinRowOffset = computed(
         id="in"
         type="target"
         :position="Position.Left"
-        :style="{ top: topFor(0) }"
+        :style="{ top: collapsed ? '50%' : topFor(0) }"
       />
       <Handle
         v-for="(pin, i) in fieldPins"
@@ -77,7 +77,7 @@ const paramPinRowOffset = computed(
         :id="`field:${pin.id}`"
         type="target"
         :position="Position.Left"
-        :style="{ top: topFor(fieldPinRowOffset + i) }"
+        :style="{ top: collapsed ? '50%' : topFor(fieldPinRowOffset + i) }"
       />
       <Handle
         v-for="(p, i) in paramPins"
@@ -85,7 +85,7 @@ const paramPinRowOffset = computed(
         :id="`p:${p.key}`"
         type="target"
         :position="Position.Left"
-        :style="{ top: topFor(paramPinRowOffset + i), background: paramColor(p.type) }"
+        :style="{ top: collapsed ? '50%' : topFor(paramPinRowOffset + i), background: paramColor(p.type) }"
       />
     </template>
     <Handle v-else id="in" type="target" :position="Position.Left" />
@@ -102,7 +102,7 @@ const paramPinRowOffset = computed(
       />
     </div>
 
-    <div v-if="hasPins" class="vf-mod__pins">
+    <div v-if="hasPins && !collapsed" class="vf-mod__pins">
       <div class="vf-mod__pin-row vf-mod__pin-row--value">значение</div>
       <div
         v-for="pin in fieldPins"
