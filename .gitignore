@@ -91,16 +91,16 @@ publish/
 # ======================
 # Vibecoding / AI coding assistants
 # ======================
+# Never commit IDE/agent/vibecode artifacts to this repository.
+# Local-only: Cursor rules, Claude, Codex, MCP caches, agent skills, etc.
 # Agent runtime output (builds, logs, tool dumps)
 agent-tools/
 
-# IDE / CLI assistant config & caches
+# IDE / CLI assistant config & caches (entire trees — no exceptions)
 .claude/
 .codex/
 .grok/
 .cursor/
-!.cursor/rules/
-!.cursor/rules/**
 .windsurf/
 .aider*
 .continue/
@@ -112,6 +112,11 @@ agent-tools/
 .bolt/
 .vibe/
 vibecoding/
+.cursorrules
+.cursorignore
+AGENTS.md
+CLAUDE.md
+.copilot/
 
 # Agent skills, plugins, and local rule packs
 .agents/
