@@ -1,0 +1,17 @@
+---
+description: Keep Public API v1 and its docs in sync with every platform change
+alwaysApply: true
+---
+
+# Public API must stay in sync
+
+Whenever you change platform behavior that partners could use via integrations (catalog, sync, connections, auth, quotas, operations, DTOs, error semantics):
+
+1. **Update Public API** under `backend/Controllers/PublicApi/` (routes, DTOs, status codes, async `202` + operations) if the change affects the partner contract — or explicitly note why v1 is unchanged.
+2. **Update docs** in lockstep:
+   - [docs/api/public-v1.md](docs/api/public-v1.md) — human reference
+   - XML/`[ProducesResponseType]` / Swagger text on Public API controllers so `/swagger` (Public API v1) stays accurate
+3. **Do not** silently change SPA-only internals and leave `/api/v1` stale or undocumented.
+4. Breaking partner changes need a clear note in `docs/api/public-v1.md` (and prefer additive v1 changes over breaking ones).
+
+SPA `/api/*` (JWT cookie + CSRF) is separate; Public API uses API keys and `/api/v1/stores/{storeId}/...`.

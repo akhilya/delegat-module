@@ -55,6 +55,7 @@
 - Rate limiting: 300 req/min global, 10 req/min on auth endpoints
 - isAdmin flag (no RBAC — sufficient for per-instance model)
 - Admin seed via env vars (ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD)
+- **Public API v1:** API keys (`dk_…`) for ERP/1C/n8n — see [docs/api/public-v1.md](../api/public-v1.md)
 
 ### AI Assistant
 - Embedded Claude-powered agent via `AiChatPanel` (floating chat, all pages)

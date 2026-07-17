@@ -2206,6 +2206,56 @@ namespace Delegat.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Delegat.Models.UserApiKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("keyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("keyPrefix")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("last4")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("varchar(4)");
+
+                    b.Property<DateTime?>("lastUsedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("revokedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("keyHash")
+                        .IsUnique();
+
+                    b.HasIndex("userId");
+
+                    b.ToTable("userApiKeys");
+                });
+
             modelBuilder.Entity("Delegat.Models.UserRole", b =>
                 {
                     b.Property<int>("Id")
@@ -2895,6 +2945,17 @@ namespace Delegat.Migrations
                         .HasForeignKey("selectedStoreId");
 
                     b.Navigation("selectedStore");
+                });
+
+            modelBuilder.Entity("Delegat.Models.UserApiKey", b =>
+                {
+                    b.HasOne("Delegat.Models.User", "user")
+                        .WithMany()
+                        .HasForeignKey("userId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("user");
                 });
 
             modelBuilder.Entity("StoreAdministrators", b =>

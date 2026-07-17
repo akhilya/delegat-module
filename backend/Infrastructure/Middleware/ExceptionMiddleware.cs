@@ -62,18 +62,42 @@ public class ExceptionMiddleware
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = exception.StatusCode;
 
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+
+        if (IsPublicApi(context))
+        {
+            var code = exception.StatusCode switch
+            {
+                401 => "unauthorized",
+                403 => "forbidden",
+                404 => "not_found",
+                409 => "conflict",
+                422 => "validation_error",
+                429 => "rate_limited",
+                _ => "bad_request"
+            };
+            var publicBody = new
+            {
+                error = new
+                {
+                    code,
+                    message = exception.Message,
+                    details = exception.Data ?? (object?)exception.Errors
+                }
+            };
+            return context.Response.WriteAsync(JsonSerializer.Serialize(publicBody, options));
+        }
+
         var response = new ErrorResponse
         {
             Title = exception.Message,
             Status = exception.StatusCode,
             Errors = exception.Errors,
             Data = exception.Data
-        };
-
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
         return context.Response.WriteAsync(JsonSerializer.Serialize(response, options));
@@ -84,6 +108,27 @@ public class ExceptionMiddleware
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+
+        if (IsPublicApi(context))
+        {
+            var publicBody = new
+            {
+                error = new
+                {
+                    code = "internal_error",
+                    message = _environment.IsDevelopment()
+                        ? exception.Message
+                        : "An unexpected error occurred."
+                }
+            };
+            return context.Response.WriteAsync(JsonSerializer.Serialize(publicBody, options));
+        }
+
         var response = new ErrorResponse
         {
             Title = _environment.IsDevelopment()
@@ -92,20 +137,16 @@ public class ExceptionMiddleware
             Status = (int)HttpStatusCode.InternalServerError
         };
 
-        // Include stack trace in development
         if (_environment.IsDevelopment())
         {
             response.Detail = exception.StackTrace;
         }
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-
         return context.Response.WriteAsync(JsonSerializer.Serialize(response, options));
     }
+
+    private static bool IsPublicApi(HttpContext context) =>
+        context.Request.Path.StartsWithSegments("/api/v1");
 }
 
 /// <summary>

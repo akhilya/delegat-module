@@ -17,6 +17,7 @@ public class CsrfHeaderMiddleware
     {
         if (!SafeMethods.Contains(context.Request.Method)
             && !context.Request.Path.StartsWithSegments("/hubs")
+            && !context.Request.Path.StartsWithSegments("/api/v1")
             && !context.Request.Headers.ContainsKey("X-CSRF"))
         {
             context.Response.StatusCode = 403;

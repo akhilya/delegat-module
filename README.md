@@ -38,6 +38,7 @@ docs/             — Documentation
 
 - [Platform capabilities](docs/platform/capabilities.md)
 - [SaaS architecture](docs/architecture/saas-architecture.md)
+- [Public API v1](docs/api/public-v1.md)
 - [OpenCart adapter](docs/adapters/opencart.md)
 
 ## Releases

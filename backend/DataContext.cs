@@ -43,6 +43,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
+    public DbSet<UserApiKey> userApiKeys { get; set; }
 
     // File sharing
     public DbSet<FileShareToken> fileShareTokens { get; set; }
@@ -109,6 +110,20 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
                     join.HasKey("StoreId", "UserId");
                     join.HasIndex("UserId");
                 });
+
+        // Auth: refresh tokens already configured elsewhere; API keys
+        builder.Entity<UserApiKey>()
+            .HasIndex(k => k.keyHash)
+            .IsUnique();
+
+        builder.Entity<UserApiKey>()
+            .HasIndex(k => k.userId);
+
+        builder.Entity<UserApiKey>()
+            .HasOne(k => k.user)
+            .WithMany()
+            .HasForeignKey(k => k.userId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // SystemVersion unique key
         builder.Entity<SystemVersion>()
