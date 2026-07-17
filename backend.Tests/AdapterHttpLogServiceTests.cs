@@ -58,7 +58,7 @@ public class AdapterHttpLogServiceTests
     [Fact]
     public void TruncateBody_LongBody_TruncatesAndMarks()
     {
-        var prefix = """{"apiKey":"leak-me","data":"""";
+        var prefix = "{\"apiKey\":\"leak-me\",\"data\":\"";
         var filler = new string('x', AdapterHttpLogService.MaxBodyChars);
         var body = prefix + filler + "\"}";
 
