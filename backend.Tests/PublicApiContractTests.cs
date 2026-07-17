@@ -150,4 +150,48 @@ public class PublicApiContractTests
         Assert.Contains("internal_error", body);
         Assert.DoesNotContain("secret internals", body);
     }
+
+    [Fact]
+    public async Task ExceptionMiddleware_PublicApi_Unhandled_ShowsMessageInDevelopment()
+    {
+        var middleware = new ExceptionMiddleware(
+            _ => throw new InvalidOperationException("dev-visible"),
+            NullLogger<ExceptionMiddleware>.Instance,
+            new FakeHostEnvironment { EnvironmentName = Environments.Development });
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/v1/stores/1/products";
+        context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection().BuildServiceProvider();
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(500, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal("internal_error", doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal("dev-visible", doc.RootElement.GetProperty("error").GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task ExceptionMiddleware_PublicApi_IncludesDetailsFromApiExceptionData()
+    {
+        var middleware = new ExceptionMiddleware(
+            _ => throw ApiException.BadRequest("invalid payload", new { field = "sku" }),
+            NullLogger<ExceptionMiddleware>.Instance,
+            new FakeHostEnvironment());
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/v1/stores/1/products";
+        context.Response.Body = new MemoryStream();
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(400, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        var error = doc.RootElement.GetProperty("error");
+        Assert.Equal("bad_request", error.GetProperty("code").GetString());
+        Assert.Equal("sku", error.GetProperty("details").GetProperty("field").GetString());
+    }
 }

@@ -70,4 +70,22 @@ public class PublicApiImportHelpersTests
         Assert.True(ok);
         Assert.Null(categoryId);
     }
+
+    [Fact]
+    public void TryResolve_WhitespaceExternalCategory_WithoutForce_Skips()
+    {
+        // IsNullOrEmpty is false for whitespace, so lookup runs and fails closed.
+        var ok = PublicApiImportHelpers.TryResolveImportItem(
+            "sku-1", "   ", null, false, false, Mappings, out _);
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void TryResolve_ExplicitTarget_IgnoresUnmappedExternalCategory()
+    {
+        var ok = PublicApiImportHelpers.TryResolveImportItem(
+            "sku-1", "unknown-cat", 77, false, false, Mappings, out var categoryId);
+        Assert.True(ok);
+        Assert.Equal(77, categoryId);
+    }
 }

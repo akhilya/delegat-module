@@ -80,6 +80,29 @@ public class UserApiKeyServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_TrimsName()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new User
+        {
+            Id = 30,
+            UserName = "u30",
+            Email = "u30@example.com",
+            NormalizedUserName = "U30",
+            NormalizedEmail = "U30@EXAMPLE.COM",
+            isActive = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        });
+        await db.SaveChangesAsync();
+
+        var svc = new UserApiKeyService(db);
+        var (dto, _) = await svc.CreateAsync(30, "  ERP bridge  ");
+        var json = System.Text.Json.JsonSerializer.Serialize(dto);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal("ERP bridge", doc.RootElement.GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task CreateAsync_NameTooLong_Throws()
     {
         await using var db = CreateDb();

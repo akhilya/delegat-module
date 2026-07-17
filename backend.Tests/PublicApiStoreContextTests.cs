@@ -120,4 +120,16 @@ public class PublicApiStoreContextTests
         Assert.Equal(5, userId);
         Assert.Equal(20, storeId);
     }
+
+    [Fact]
+    public async Task EnsureStoreAccessAsync_MissingStore_ThrowsForbidden()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(MakeUser(9));
+        await db.SaveChangesAsync();
+
+        var ctx = new PublicApiStoreContext(new StubCurrentUser { UserId = 9 }, db);
+        var ex = await Assert.ThrowsAsync<ApiException>(() => ctx.EnsureStoreAccessAsync(404));
+        Assert.Equal(403, ex.StatusCode);
+    }
 }
