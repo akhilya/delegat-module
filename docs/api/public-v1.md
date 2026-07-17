@@ -22,15 +22,20 @@ Authorization: Bearer dk_your_key_here
 | Revoke | Immediate via UI or `DELETE /api/api-keys/{id}` (SPA JWT) |
 | Rate limit | ~120 req/min per API key (or IP if key unknown) |
 
-### Swagger
+### Swagger / OpenAPI
 
-Non-production: [http://localhost:5000/swagger](http://localhost:5000/swagger) → document **Public API v1**.
+| Environment | UI | OpenAPI JSON |
+|-------------|----|--------------|
+| Any instance (incl. production) | `https://{your-instance}/swagger` | `https://{your-instance}/swagger/v1-public/swagger.json` |
+| Local API (direct) | `http://localhost:5000/swagger` | `http://localhost:5000/swagger/v1-public/swagger.json` |
 
-1. **Authorize**
+In the app: **Settings → User → Public API** → link «Открыть Swagger».
+
+1. Open Swagger → **Authorize**
 2. Paste only `dk_…` (do **not** type `Bearer`)
 3. Try it out — request must include `Authorization: Bearer dk_…`
 
-OpenAPI JSON: `/swagger/v1-public/swagger.json`
+On production only **Public API v1** is listed (SPA/internal API docs are hidden).
 
 ## Base URL
 
@@ -207,3 +212,4 @@ Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhoo
 
 - Design: [docs/plans/2026-07-17-public-api-v1-design.md](../plans/2026-07-17-public-api-v1-design.md)
 - Key management UI: Settings → User (SPA JWT `/api/api-keys`)
+- Swagger UI: `/swagger` on every instance (production included)

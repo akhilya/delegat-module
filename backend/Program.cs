@@ -519,15 +519,16 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-if (!app.Environment.IsProduction())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1-public/swagger.json", "Public API v1");
+    c.SwaggerEndpoint("/swagger/v1-public/swagger.json", "Public API v1");
+    // SPA/internal API docs stay off production — partners only need Public API v1.
+    if (!app.Environment.IsProduction())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SPA API");
-    });
-}
+    c.DocumentTitle = "Delegat API";
+    c.RoutePrefix = "swagger";
+});
 
 app.UseCors();
 app.UseAuthentication();

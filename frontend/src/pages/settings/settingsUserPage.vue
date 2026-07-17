@@ -10,7 +10,7 @@ import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, Copy, Trash2, KeyRound } from "lucide-vue-next";
+import { Loader2, Copy, Trash2, KeyRound, ExternalLink } from "lucide-vue-next";
 
 const me = ref(null);
 const isLoading = ref(false);
@@ -210,6 +210,19 @@ onMounted(() => {
           Ключи для внешних интеграций (ERP, 1С, n8n). Авторизация:
           <code class="text-xs">Authorization: Bearer dk_…</code>.
           Полный ключ показывается только при создании.
+        </p>
+        <p class="mb-4 max-w-2xl text-sm">
+          <a
+            href="/swagger"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+          >
+            Открыть Swagger (Public API v1)
+            <ExternalLink class="size-3.5" />
+          </a>
+          <span class="text-muted-foreground"> · </span>
+          <span class="text-muted-foreground text-xs">/swagger</span>
         </p>
 
         <div
