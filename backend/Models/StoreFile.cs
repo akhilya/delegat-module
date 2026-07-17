@@ -33,6 +33,12 @@ public class StoreFile : IEntity, IMapToDTO<object>
 
     public bool isPublic { get; set; } = false;
 
+    /// <summary>
+    /// Unguessable token used in public URLs (null when not public).
+    /// </summary>
+    [StringLength(64)]
+    public string? publicToken { get; set; }
+
     [ForeignKey(nameof(folder))]
     public int? folderId { get; set; }
     public StoreFolder? folder { get; set; }
@@ -83,7 +89,9 @@ public class StoreFile : IEntity, IMapToDTO<object>
             Id,
             uploadDateTime,
             fullPath = $"/api/store-storage/files/{Id}/download",
-            publicUrl = isPublic ? $"/api/pub/store-files/{Id}/{Uri.EscapeDataString(fileName)}" : (string?)null,
+            publicUrl = isPublic && !string.IsNullOrEmpty(publicToken)
+                ? $"/api/pub/store-files/{publicToken}/{Uri.EscapeDataString(fileName)}"
+                : (string?)null,
             isPublic,
             fileName,
             contentType,

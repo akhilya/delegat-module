@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
 using Delegat.Services.Plugins;
 
 namespace Delegat.Controllers;
@@ -13,17 +14,20 @@ public class PluginController : ControllerBase
     private readonly PluginManager _pluginManager;
     private readonly PluginAdapterRegistry _registry;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<PluginController> _logger;
 
     public PluginController(
         PluginManager pluginManager,
         PluginAdapterRegistry registry,
         IServiceScopeFactory scopeFactory,
+        ICurrentUserService currentUserService,
         ILogger<PluginController> logger)
     {
         _pluginManager = pluginManager;
         _registry = registry;
         _scopeFactory = scopeFactory;
+        _currentUserService = currentUserService;
         _logger = logger;
     }
 
@@ -85,10 +89,13 @@ public class PluginController : ControllerBase
     [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> UploadPlugin(IFormFile file)
     {
+        await EnsureAdminAsync();
+
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest("Файл не предоставлен");
 
-        if (!file.FileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        var safeFileName = FileNameSafety.Sanitize(file.FileName, "plugin.dll");
+        if (!safeFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             throw ApiException.BadRequest("Разрешены только файлы .dll");
 
         // Validate file size (max 50MB)
@@ -96,14 +103,17 @@ public class PluginController : ControllerBase
             throw ApiException.BadRequest("Файл слишком большой. Максимальный размер — 50 МБ");
 
         var pluginsDir = _pluginManager.PluginsDirectory;
-        var destPath = Path.Combine(pluginsDir, file.FileName);
+        var destPath = Path.GetFullPath(Path.Combine(pluginsDir, safeFileName));
+        if (!destPath.StartsWith(Path.GetFullPath(pluginsDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !destPath.Equals(Path.GetFullPath(pluginsDir), StringComparison.OrdinalIgnoreCase))
+            throw ApiException.BadRequest("Некорректное имя файла плагина");
 
         // If file exists, check if plugin is loaded and unload it first
         if (System.IO.File.Exists(destPath))
         {
             // Find and unload any plugin using this file
             var existingPlugin = _pluginManager.GetAllLoadedPlugins()
-                .FirstOrDefault(p => Path.GetFileName(p.FilePath).Equals(file.FileName, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(p => Path.GetFileName(p.FilePath).Equals(safeFileName, StringComparison.OrdinalIgnoreCase));
 
             if (existingPlugin != null)
             {
@@ -126,7 +136,7 @@ public class PluginController : ControllerBase
             // Try to load the plugin
             var loaded = _pluginManager.LoadPlugin(destPath);
 
-            _logger.LogInformation("Plugin uploaded and loaded: {Key} from {File}", loaded.Key, file.FileName);
+            _logger.LogInformation("Plugin uploaded and loaded: {Key} from {File}", loaded.Key, safeFileName);
 
             // Invalidate registry cache
             _registry.InvalidateCache(loaded.Key);
@@ -148,7 +158,7 @@ public class PluginController : ControllerBase
                 try { System.IO.File.Delete(destPath); } catch { }
             }
 
-            _logger.LogError(ex, "Failed to install plugin from {File}", file.FileName);
+            _logger.LogError(ex, "Failed to install plugin from {File}", safeFileName);
             throw ApiException.BadRequest($"Не удалось загрузить плагин: {ex.Message}");
         }
     }
@@ -157,8 +167,10 @@ public class PluginController : ControllerBase
     /// Delete a plugin
     /// </summary>
     [HttpDelete("{key}")]
-    public IActionResult DeletePlugin(string key)
+    public async Task<IActionResult> DeletePlugin(string key)
     {
+        await EnsureAdminAsync();
+
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
             throw ApiException.NotFound($"Плагин '{key}' не найден");
@@ -203,6 +215,8 @@ public class PluginController : ControllerBase
     [HttpPost("{key}/reload")]
     public async Task<IActionResult> ReloadPlugin(string key)
     {
+        await EnsureAdminAsync();
+
         try
         {
             var reloaded = _pluginManager.ReloadPlugin(key);
@@ -244,5 +258,12 @@ public class PluginController : ControllerBase
             _logger.LogError(ex, "Failed to reload plugin {Key}", key);
             throw ApiException.BadRequest($"Не удалось перезагрузить плагин: {ex.Message}");
         }
+    }
+
+    private async Task EnsureAdminAsync()
+    {
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null || !user.isAdmin)
+            throw ApiException.Forbidden("Только администраторы могут управлять плагинами");
     }
 }

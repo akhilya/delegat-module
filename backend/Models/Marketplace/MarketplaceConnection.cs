@@ -1,5 +1,4 @@
 using Delegat.Infrastructure.Interfaces;
-using Delegat.Infrastructure.Security;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -130,17 +129,13 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
 
     ConnectionDetailDTO IMapToDTO<ConnectionDetailDTO>.MapToDTO(IServiceProvider serviceProvider)
     {
-        var decryptedCreds = credentialsJson;
-        var encryption = serviceProvider.GetService(typeof(EncryptionService)) as EncryptionService;
-        if (encryption != null && !string.IsNullOrEmpty(credentialsJson) && encryption.IsEncrypted(credentialsJson))
-            decryptedCreds = encryption.Decrypt(credentialsJson);
-
         return new ConnectionDetailDTO
         {
             id = Id,
             name = name,
             adapterKey = adapterKey,
-            credentialsJson = decryptedCreds,
+            credentialsJson = null,
+            hasCredentials = !string.IsNullOrEmpty(credentialsJson),
             settingsJson = settingsJson,
             isActive = isActive,
             lastSyncAt = lastSyncAt,
@@ -342,9 +337,14 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
         public string adapterKey { get; set; }
 
         /// <summary>
-        /// JSON-serialized credentials.
+        /// JSON-serialized credentials. Always null in API responses — never expose secrets.
         /// </summary>
         public string? credentialsJson { get; set; }
+
+        /// <summary>
+        /// Whether credentials are configured (without revealing their values).
+        /// </summary>
+        public bool hasCredentials { get; set; }
 
         /// <summary>
         /// JSON-serialized settings.

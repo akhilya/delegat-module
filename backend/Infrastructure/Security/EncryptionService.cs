@@ -3,8 +3,16 @@ using System.Text;
 
 namespace Delegat.Infrastructure.Security;
 
+/// <summary>
+/// Encrypts secrets with AES-256-GCM. Legacy AES-CBC ciphertexts (no prefix) remain decryptable
+/// so existing credentials can be read and re-encrypted on next write.
+/// </summary>
 public class EncryptionService
 {
+    private const string GcmPrefix = "gcm:";
+    private const int NonceSize = 12;
+    private const int TagSize = 16;
+
     private readonly byte[] _key;
 
     public EncryptionService(string base64Key)
@@ -16,22 +24,65 @@ public class EncryptionService
 
     public string Encrypt(string plainText)
     {
-        using var aes = Aes.Create();
-        aes.Key = _key;
-        aes.GenerateIV();
-
-        using var encryptor = aes.CreateEncryptor();
         var plainBytes = Encoding.UTF8.GetBytes(plainText);
-        var cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+        var nonce = new byte[NonceSize];
+        RandomNumberGenerator.Fill(nonce);
 
-        var result = new byte[aes.IV.Length + cipherBytes.Length];
-        Buffer.BlockCopy(aes.IV, 0, result, 0, aes.IV.Length);
-        Buffer.BlockCopy(cipherBytes, 0, result, aes.IV.Length, cipherBytes.Length);
+        var cipherBytes = new byte[plainBytes.Length];
+        var tag = new byte[TagSize];
 
-        return Convert.ToBase64String(result);
+        using var aes = new AesGcm(_key, TagSize);
+        aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
+
+        var result = new byte[NonceSize + cipherBytes.Length + TagSize];
+        Buffer.BlockCopy(nonce, 0, result, 0, NonceSize);
+        Buffer.BlockCopy(cipherBytes, 0, result, NonceSize, cipherBytes.Length);
+        Buffer.BlockCopy(tag, 0, result, NonceSize + cipherBytes.Length, TagSize);
+
+        return GcmPrefix + Convert.ToBase64String(result);
     }
 
     public string Decrypt(string cipherText)
+    {
+        if (string.IsNullOrEmpty(cipherText))
+            throw new ArgumentException("Ciphertext is empty.", nameof(cipherText));
+
+        if (cipherText.StartsWith(GcmPrefix, StringComparison.Ordinal))
+            return DecryptGcm(cipherText[GcmPrefix.Length..]);
+
+        // Legacy AES-CBC (IV || ciphertext), no authentication
+        return DecryptLegacyCbc(cipherText);
+    }
+
+    /// <summary>
+    /// Plain JSON starts with '{'. Encrypted payloads are Base64 (legacy) or gcm:Base64.
+    /// </summary>
+    public bool IsEncrypted(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+        if (value.StartsWith(GcmPrefix, StringComparison.Ordinal))
+            return true;
+        return !value.TrimStart().StartsWith('{');
+    }
+
+    private string DecryptGcm(string base64Payload)
+    {
+        var full = Convert.FromBase64String(base64Payload);
+        if (full.Length < NonceSize + TagSize)
+            throw new CryptographicException("Invalid GCM ciphertext.");
+
+        var nonce = full.AsSpan(0, NonceSize);
+        var tag = full.AsSpan(full.Length - TagSize, TagSize);
+        var cipher = full.AsSpan(NonceSize, full.Length - NonceSize - TagSize);
+        var plain = new byte[cipher.Length];
+
+        using var aes = new AesGcm(_key, TagSize);
+        aes.Decrypt(nonce, cipher, tag, plain);
+        return Encoding.UTF8.GetString(plain);
+    }
+
+    private string DecryptLegacyCbc(string cipherText)
     {
         var fullCipher = Convert.FromBase64String(cipherText);
 
@@ -48,13 +99,5 @@ public class EncryptionService
         using var decryptor = aes.CreateDecryptor();
         var plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
         return Encoding.UTF8.GetString(plainBytes);
-    }
-
-    /// <summary>
-    /// Plain JSON starts with '{'. Encrypted Base64 never does.
-    /// </summary>
-    public bool IsEncrypted(string value)
-    {
-        return !string.IsNullOrEmpty(value) && !value.TrimStart().StartsWith('{');
     }
 }

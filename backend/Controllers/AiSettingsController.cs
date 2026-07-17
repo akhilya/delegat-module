@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
 
@@ -81,6 +82,11 @@ public class AiSettingsController : ControllerBase
             || string.IsNullOrWhiteSpace(req.ApiKey) || string.IsNullOrWhiteSpace(req.ModelId))
             return BadRequest("name, apiUrl, apiKey, modelId are required");
 
+        if (!UrlSafety.TryValidateHttpUrl(req.ApiUrl, out _, out var apiUrlError, allowPrivateHosts: true))
+            return BadRequest($"apiUrl: {apiUrlError}");
+        if (!UrlSafety.TryValidateProxyUrl(req.ProxyUrl, out var proxyError, allowPrivateHosts: true))
+            return BadRequest($"proxyUrl: {proxyError}");
+
         var model = await _modelService.CreateAsync(
             req.Name, req.ApiUrl, req.ApiKey, req.ModelId,
             req.Provider, proxyUrl: req.ProxyUrl, ct: ct);
@@ -95,6 +101,11 @@ public class AiSettingsController : ControllerBase
         await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
+
+        if (req.ApiUrl != null && !UrlSafety.TryValidateHttpUrl(req.ApiUrl, out _, out var apiUrlError, allowPrivateHosts: true))
+            return BadRequest($"apiUrl: {apiUrlError}");
+        if (req.ProxyUrl != null && !UrlSafety.TryValidateProxyUrl(req.ProxyUrl, out var proxyError, allowPrivateHosts: true))
+            return BadRequest($"proxyUrl: {proxyError}");
 
         await _modelService.UpdateAsync(model, req.Name, req.ApiUrl, req.ApiKey, req.ModelId, req.Provider, proxyUrl: req.ProxyUrl, ct: ct);
         return Ok(new { model.Id, model.name });
@@ -152,6 +163,11 @@ public class AiSettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.ApiUrl))
             return BadRequest("apiUrl is required");
 
+        if (!UrlSafety.TryValidateHttpUrl(req.ApiUrl, out _, out var apiUrlError, allowPrivateHosts: true))
+            return BadRequest($"apiUrl: {apiUrlError}");
+        if (!UrlSafety.TryValidateProxyUrl(req.ProxyUrl, out var proxyError, allowPrivateHosts: true))
+            return BadRequest($"proxyUrl: {proxyError}");
+
         // If editing an existing model without re-entering the key, reuse the stored one
         var apiKey = req.ApiKey;
         if (string.IsNullOrEmpty(apiKey) && req.ModelConfigId.HasValue)
@@ -176,7 +192,7 @@ public class AiSettingsController : ControllerBase
     [HttpGet("store-settings")]
     public async Task<IActionResult> GetStoreSettings(CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (!storeId.HasValue) return Unauthorized();
 
         var settings = await _context.aiStoreSettings
@@ -196,7 +212,7 @@ public class AiSettingsController : ControllerBase
     [HttpPut("store-settings")]
     public async Task<IActionResult> SaveStoreSettings([FromBody] SaveStoreSettingsRequest req, CancellationToken ct)
     {
-        var storeId = _currentUserService.GetSelectedStoreId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (!storeId.HasValue) return Unauthorized();
 
         var settings = await _context.aiStoreSettings
@@ -227,9 +243,8 @@ public class AiSettingsController : ControllerBase
 
     private static string MaskKey(string encrypted)
     {
-        // Show only last 4 chars of encrypted value to confirm it's set
         if (string.IsNullOrEmpty(encrypted)) return "";
-        return encrypted.Length <= 8 ? "****" : $"****{encrypted[^4..]}";
+        return "••••••••";
     }
 }
 

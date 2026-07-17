@@ -7,10 +7,10 @@ namespace Delegat.Services.Ai;
 public class AiModelConfigService
 {
     private readonly DataContext _context;
-    private readonly EncryptionService? _encryption;
+    private readonly EncryptionService _encryption;
     private readonly AiApiClient _apiClient;
 
-    public AiModelConfigService(DataContext context, AiApiClient apiClient, EncryptionService? encryption = null)
+    public AiModelConfigService(DataContext context, AiApiClient apiClient, EncryptionService encryption)
     {
         _context = context;
         _encryption = encryption;
@@ -51,11 +51,15 @@ public class AiModelConfigService
     public async Task<AiModelConfig> CreateAsync(string name, string apiUrl, string plainApiKey, string modelId,
         AiModelProvider provider, string? proxyUrl = null, CancellationToken ct = default)
     {
+        UrlSafety.EnsureSafeHttpUrl(apiUrl, allowPrivateHosts: true);
+        if (!UrlSafety.TryValidateProxyUrl(proxyUrl, out var proxyError, allowPrivateHosts: true))
+            throw new ArgumentException(proxyError);
+
         var model = new AiModelConfig
         {
             name = name,
             apiUrl = apiUrl,
-            apiKeyEncrypted = _encryption?.Encrypt(plainApiKey) ?? plainApiKey,
+            apiKeyEncrypted = _encryption.Encrypt(plainApiKey),
             modelId = modelId,
             provider = provider,
             proxyUrl = string.IsNullOrWhiteSpace(proxyUrl) ? null : proxyUrl.Trim(),
@@ -69,12 +73,21 @@ public class AiModelConfigService
     public async Task UpdateAsync(AiModelConfig model, string? name, string? apiUrl, string? plainApiKey,
         string? modelId, AiModelProvider? provider, string? proxyUrl = null, CancellationToken ct = default)
     {
+        if (apiUrl != null)
+        {
+            UrlSafety.EnsureSafeHttpUrl(apiUrl, allowPrivateHosts: true);
+            model.apiUrl = apiUrl;
+        }
         if (name != null) model.name = name;
-        if (apiUrl != null) model.apiUrl = apiUrl;
-        if (plainApiKey != null) model.apiKeyEncrypted = _encryption?.Encrypt(plainApiKey) ?? plainApiKey;
+        if (plainApiKey != null) model.apiKeyEncrypted = _encryption.Encrypt(plainApiKey);
         if (modelId != null) model.modelId = modelId;
         if (provider.HasValue) model.provider = provider.Value;
-        if (proxyUrl != null) model.proxyUrl = string.IsNullOrWhiteSpace(proxyUrl) ? null : proxyUrl.Trim();
+        if (proxyUrl != null)
+        {
+            if (!UrlSafety.TryValidateProxyUrl(proxyUrl, out var proxyError, allowPrivateHosts: true))
+                throw new ArgumentException(proxyError);
+            model.proxyUrl = string.IsNullOrWhiteSpace(proxyUrl) ? null : proxyUrl.Trim();
+        }
         await _context.SaveChangesAsync(ct);
     }
 
@@ -119,7 +132,7 @@ public class AiModelConfigService
             Id = model.Id,
             name = model.name,
             apiUrl = model.apiUrl,
-            apiKeyEncrypted = _encryption?.Decrypt(model.apiKeyEncrypted) ?? model.apiKeyEncrypted,
+            apiKeyEncrypted = _encryption.Decrypt(model.apiKeyEncrypted),
             modelId = model.modelId,
             provider = model.provider,
             maxTokens = model.maxTokens,
@@ -160,6 +173,10 @@ public class AiModelConfigService
     public async Task<List<string>> DiscoverModelsAsync(
         string apiUrl, string? apiKey, AiModelProvider provider, string? proxyUrl = null, CancellationToken ct = default)
     {
+        UrlSafety.EnsureSafeHttpUrl(apiUrl, allowPrivateHosts: true);
+        if (!UrlSafety.TryValidateProxyUrl(proxyUrl, out var proxyError, allowPrivateHosts: true))
+            throw new ArgumentException(proxyError);
+
         // Normalize: strip known completion paths
         var baseUrl = apiUrl.TrimEnd('/');
         foreach (var suffix in new[] { "/chat/completions", "/v1/messages", "/messages", "/v1" })

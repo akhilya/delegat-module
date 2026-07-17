@@ -8,6 +8,7 @@ using Microsoft.Net.Http.Headers;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Models.Products;
@@ -219,7 +220,8 @@ public class FileController : ControllerBase
         foreach (var file in files)
         {
             var uniqueKey = Guid.NewGuid().ToString("N");
-            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{file.FileName}";
+            var safeName = FileNameSafety.Sanitize(file.FileName);
+            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{safeName}";
 
             var fileEntity = new Models.File();
             fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, file.ContentType, file.Length));
@@ -297,7 +299,7 @@ public class FileController : ControllerBase
             if (!contentDisposition.IsFileDisposition())
                 continue;
 
-            var fileName = contentDisposition.FileName.Value ?? "unknown";
+            var fileName = FileNameSafety.Sanitize(contentDisposition.FileName.Value);
             var contentType = section.ContentType ?? "application/octet-stream";
 
             var uniqueKey = Guid.NewGuid().ToString("N");
@@ -566,8 +568,35 @@ public class FileController : ControllerBase
         return Ok(new
         {
             url = $"/api/shared/{token}",
+            token,
             expiresAt = shareToken.expiresAt
         });
+    }
+
+    [HttpDelete]
+    [Route("/files/shares/{token}")]
+    public async Task<IActionResult> RevokeShare(string token)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Магазин не выбран");
+
+        var share = await _context.fileShareTokens
+            .Include(t => t.file)
+            .FirstOrDefaultAsync(t => t.token == token);
+        if (share == null)
+            throw ApiException.NotFound("Ссылка не найдена");
+
+        var product = await _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == share.file.productId);
+        if (product == null || product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Ссылка не принадлежит вашему магазину");
+
+        _context.fileShareTokens.Remove(share);
+        await _context.SaveChangesAsync();
+        return Ok(new { success = true });
     }
 
     public record SetPublicRequest(bool isPublic);
@@ -596,6 +625,11 @@ public class FileController : ControllerBase
             throw ApiException.NotFound("Файл не найден");
 
         file.isPublic = request.isPublic;
+        if (request.isPublic)
+            file.publicToken ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        else
+            file.publicToken = null;
+
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(file.MapToDTO(_serviceProvider));
@@ -648,7 +682,7 @@ public class SharedFileController : ControllerBase
 /// <summary>
 /// Serves permanently public product files — no authentication required.
 /// Files must have isPublic = true to be accessible here.
-/// URL format: /api/pub/files/{id}/{filename} — filename segment is for the extension only,
+/// URL format: /api/pub/files/{token}/{filename} — filename segment is decorative;
 /// the server always serves the actual file from the DB record.
 /// </summary>
 [ApiController]
@@ -664,10 +698,13 @@ public class PublicFileController : ControllerBase
     }
 
     [HttpGet]
-    [Route("/pub/files/{id}/{filename}")]
-    public async Task GetPublicFile(int id, string filename)
+    [Route("/pub/files/{token}/{filename}")]
+    public async Task GetPublicFile(string token, string filename)
     {
-        var file = await _db.files.FirstOrDefaultAsync(f => f.Id == id && f.isPublic);
+        if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
+            throw ApiException.NotFound("Файл не найден");
+
+        var file = await _db.files.FirstOrDefaultAsync(f => f.publicToken == token && f.isPublic);
 
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
@@ -682,16 +719,19 @@ public class PublicFileController : ControllerBase
         Response.ContentType = file.contentType;
         Response.ContentLength = file.length;
         Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        Response.Headers["Cache-Control"] = "private, max-age=3600";
 
         await _storageService.StreamToAsync(file.filePath, Response.Body);
     }
 
     [HttpGet]
-    [Route("/pub/store-files/{id}/{filename}")]
-    public async Task GetPublicStoreFile(int id, string filename)
+    [Route("/pub/store-files/{token}/{filename}")]
+    public async Task GetPublicStoreFile(string token, string filename)
     {
-        var file = await _db.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.isPublic);
+        if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
+            throw ApiException.NotFound("Файл не найден");
+
+        var file = await _db.storeFiles.FirstOrDefaultAsync(f => f.publicToken == token && f.isPublic);
 
         if (file == null)
             throw ApiException.NotFound("Файл не найден");
@@ -706,7 +746,7 @@ public class PublicFileController : ControllerBase
         Response.ContentType = file.contentType;
         Response.ContentLength = file.length;
         Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        Response.Headers["Cache-Control"] = "private, max-age=3600";
 
         await _storageService.StreamToAsync(file.filePath, Response.Body);
     }

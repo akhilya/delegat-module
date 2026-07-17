@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Services;
@@ -92,7 +93,8 @@ public class StoreStorageController : ControllerBase
         foreach (var file in files)
         {
             var uniqueKey = Guid.NewGuid().ToString("N");
-            var filePath = $"{storeId}/store/{uniqueKey}/{file.FileName}";
+            var safeName = FileNameSafety.Sanitize(file.FileName);
+            var filePath = $"{storeId}/store/{uniqueKey}/{safeName}";
 
             using var stream = file.OpenReadStream();
             var uploaded = await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
@@ -200,6 +202,10 @@ public class StoreStorageController : ControllerBase
             throw ApiException.NotFound("Файл не найден");
 
         file.isPublic = request.isPublic;
+        if (request.isPublic)
+            file.publicToken ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        else
+            file.publicToken = null;
         await _context.SaveChangesAsync(ct);
 
         return Ok(file.MapToDTO(_serviceProvider));
@@ -586,13 +592,13 @@ public class StoreStorageController : ControllerBase
             throw ApiException.Unauthorized();
 
         var folderId = id == "root" ? (int?)null : int.Parse(id);
-        if (folderId.HasValue)
-        {
-            var folderExists = await _context.storeFolders
-                .AnyAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct);
-            if (!folderExists)
-                throw ApiException.NotFound("Папка не найдена");
-        }
+        if (!folderId.HasValue)
+            throw ApiException.BadRequest("Нельзя создать публичную ссылку на корневую папку хранилища");
+
+        var folderExists = await _context.storeFolders
+            .AnyAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct);
+        if (!folderExists)
+            throw ApiException.NotFound("Папка не найдена");
 
         var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var shareToken = new StoreFolderShareToken
@@ -608,7 +614,38 @@ public class StoreStorageController : ControllerBase
         _context.storeFolderShareTokens.Add(shareToken);
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { url = $"/api/shared/store-folder/{token}", expiresAt = shareToken.expiresAt });
+        return Ok(new { url = $"/api/shared/store-folder/{token}", token, expiresAt = shareToken.expiresAt });
+    }
+
+    [HttpDelete]
+    [Route("/store-storage/shares/file/{token}")]
+    public async Task<IActionResult> RevokeFileShare(string token, CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        var share = await _context.storeFileShareTokens
+            .Include(t => t.file)
+            .FirstOrDefaultAsync(t => t.token == token, ct);
+        if (share == null || share.file.storeId != storeId)
+            throw ApiException.NotFound("Ссылка не найдена");
+
+        _context.storeFileShareTokens.Remove(share);
+        await _context.SaveChangesAsync(ct);
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete]
+    [Route("/store-storage/shares/folder/{token}")]
+    public async Task<IActionResult> RevokeFolderShare(string token, CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        var share = await _context.storeFolderShareTokens
+            .FirstOrDefaultAsync(t => t.token == token && t.storeId == storeId, ct);
+        if (share == null)
+            throw ApiException.NotFound("Ссылка не найдена");
+
+        _context.storeFolderShareTokens.Remove(share);
+        await _context.SaveChangesAsync(ct);
+        return Ok(new { success = true });
     }
 
     [HttpPost]
@@ -871,6 +908,9 @@ public class SharedStoreStorageController : ControllerBase
 
         if (shareToken == null || shareToken.IsExpired)
             throw ApiException.NotFound("Ссылка не найдена или истекла");
+
+        if (!shareToken.folderId.HasValue)
+            throw ApiException.NotFound("Ссылка на корневую папку больше не поддерживается");
 
         var folderController = HttpContext.RequestServices.GetRequiredService<StoreStorageController>();
         folderController.ControllerContext = ControllerContext;

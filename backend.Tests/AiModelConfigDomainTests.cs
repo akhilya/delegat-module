@@ -1,3 +1,4 @@
+using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
 using Delegat.Tests.Infrastructure;
@@ -25,7 +26,8 @@ public class AiModelConfigDomainTests
         var saved = await db.aiModelConfigs.SingleAsync();
         Assert.Equal("Renamed", saved.name);
         Assert.Equal("https://new.example.test", saved.apiUrl);
-        Assert.Equal("new-secret", saved.apiKeyEncrypted);
+        Assert.Equal("new-secret", service.DecryptForUse(saved).apiKeyEncrypted);
+        Assert.StartsWith("gcm:", saved.apiKeyEncrypted);
         Assert.Equal("model-2", saved.modelId);
         Assert.Equal(AiModelProvider.Anthropic, saved.provider);
         Assert.Null(saved.proxyUrl);
@@ -73,5 +75,8 @@ public class AiModelConfigDomainTests
     }
 
     private static AiModelConfigService CreateService(DataContext db)
-        => new(db, new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance));
+    {
+        var key = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
+        return new(db, new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance), new EncryptionService(key));
+    }
 }

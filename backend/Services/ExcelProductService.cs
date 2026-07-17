@@ -8,6 +8,17 @@ namespace Delegat.Services;
 
 public class ExcelProductService
 {
+    private static string SafeExcelText(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+        // Defense-in-depth against spreadsheet formula injection when opened in Excel
+        var c = value[0];
+        if (c is '=' or '+' or '-' or '@' or '\t' or '\r')
+            return "'" + value;
+        return value;
+    }
+
     public MemoryStream ExportToExcel(
         List<Product> products,
         List<CategoryAttribute> categoryAttributes,
@@ -75,33 +86,33 @@ public class ExcelProductService
         {
             int c = 1;
             ws.Cell(row, c++).Value = p.Id;
-            ws.Cell(row, c++).Value = p.sku;
-            ws.Cell(row, c++).Value = p.category?.name ?? "";
+            ws.Cell(row, c++).Value = SafeExcelText(p.sku);
+            ws.Cell(row, c++).Value = SafeExcelText(p.category?.name ?? "");
             // Group(s) — comma-separated when product belongs to multiple groups.
             // Read-only: edits in this column are ignored on import.
-            ws.Cell(row, c++).Value = string.Join(", ",
+            ws.Cell(row, c++).Value = SafeExcelText(string.Join(", ",
                 p.groupMemberships?
                     .Where(gm => gm.group != null)
                     .Select(gm => gm.group.name)
-                    .Distinct() ?? Enumerable.Empty<string>());
-            ws.Cell(row, c++).Value = p.name;
-            ws.Cell(row, c++).Value = p.description;
+                    .Distinct() ?? Enumerable.Empty<string>()));
+            ws.Cell(row, c++).Value = SafeExcelText(p.name);
+            ws.Cell(row, c++).Value = SafeExcelText(p.description);
             ws.Cell(row, c++).Value = p.price?.ToString() ?? "";
             ws.Cell(row, c++).Value = p.storageQuantity?.ToString() ?? "";
-            ws.Cell(row, c++).Value = p.barcode ?? "";
+            ws.Cell(row, c++).Value = SafeExcelText(p.barcode ?? "");
 
             // Category attribute values
             foreach (var attr in catAttrList)
             {
                 var val = p.attributeValues.FirstOrDefault(av => av.attributeId == attr.Id);
-                ws.Cell(row, c++).Value = val?.value ?? "";
+                ws.Cell(row, c++).Value = SafeExcelText(val?.value ?? "");
             }
 
             // Store attribute values
             foreach (var attr in storeAttrList)
             {
                 var val = p.storeAttributeValues.FirstOrDefault(sav => sav.storeAttributeId == attr.Id);
-                ws.Cell(row, c++).Value = val?.value ?? "";
+                ws.Cell(row, c++).Value = SafeExcelText(val?.value ?? "");
             }
 
             // Gray background for read-only cells in data rows (id, sku, category, group)

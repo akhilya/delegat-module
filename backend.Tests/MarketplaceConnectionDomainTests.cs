@@ -74,7 +74,8 @@ public class MarketplaceConnectionDomainTests
         var detail = ((IMapToDTO<MarketplaceConnection.ConnectionDetailDTO>)connection)
             .MapToDTO(new ServiceCollection().BuildServiceProvider());
 
-        Assert.Equal("""{"token":"detail-secret"}""", detail.credentialsJson);
+        Assert.Null(detail.credentialsJson);
+        Assert.True(detail.hasCredentials);
     }
 
     [Fact]
