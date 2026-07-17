@@ -1,10 +1,11 @@
 using System.Text.Json;
 using Delegat.Controllers.PublicApi;
 using Delegat.Infrastructure.Middleware;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
@@ -139,6 +140,7 @@ public class PublicApiContractTests
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/stores/1/sync";
         context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection().BuildServiceProvider();
 
         await middleware.InvokeAsync(context);
 
