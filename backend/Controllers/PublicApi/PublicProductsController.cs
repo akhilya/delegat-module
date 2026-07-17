@@ -59,9 +59,7 @@ public class PublicProductsController : ControllerBase
         CancellationToken ct = default)
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 50;
-        if (pageSize > 200) pageSize = 200;
+        (page, pageSize) = PublicApiPaging.Normalize(page, pageSize);
 
         var q = _db.products.AsNoTracking().Where(p => p.storeId == storeId);
         if (!string.IsNullOrWhiteSpace(search))

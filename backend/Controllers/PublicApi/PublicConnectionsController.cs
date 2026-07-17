@@ -102,9 +102,7 @@ public class PublicConnectionsController : ControllerBase
         CancellationToken ct = default)
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 50;
-        if (pageSize > 200) pageSize = 200;
+        (page, pageSize) = PublicApiPaging.Normalize(page, pageSize);
 
         var q = _db.productMarketplaceLinks
             .AsNoTracking()
@@ -148,9 +146,11 @@ public class PublicConnectionsController : ControllerBase
         CancellationToken ct = default)
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 20;
-        if (pageSize > 100) pageSize = 100;
+        (page, pageSize) = PublicApiPaging.Normalize(
+            page,
+            pageSize,
+            PublicApiPaging.DefaultOperationsPageSize,
+            PublicApiPaging.MaxOperationsPageSize);
 
         var q = _db.operations.AsNoTracking().Where(o => o.storeId == storeId);
         if (!string.IsNullOrEmpty(status))

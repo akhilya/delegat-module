@@ -26,49 +26,6 @@ public class PublicApiAuthTests
     }
 
     [Fact]
-    public void CsrfMiddleware_SkipsPublicApiV1()
-    {
-        Assert.StartsWith("/api/v1", "/api/v1/stores/1/products");
-        Assert.False("/api/products".StartsWith("/api/v1", StringComparison.Ordinal));
-    }
-
-    [Theory]
-    [InlineData(401, "unauthorized")]
-    [InlineData(403, "forbidden")]
-    [InlineData(404, "not_found")]
-    [InlineData(409, "conflict")]
-    public void PublicApiErrorCodes_MapFromStatus(int status, string expectedCode)
-    {
-        var code = status switch
-        {
-            401 => "unauthorized",
-            403 => "forbidden",
-            404 => "not_found",
-            409 => "conflict",
-            422 => "validation_error",
-            429 => "rate_limited",
-            _ => "bad_request"
-        };
-        Assert.Equal(expectedCode, code);
-    }
-
-    [Fact]
-    public void AcceptedOperation_Shape_ContainsLinks()
-    {
-        var storeId = 7;
-        var operationId = "abc123";
-        var body = new
-        {
-            operationId,
-            status = "running",
-            links = new { self = $"/api/v1/stores/{storeId}/operations/{operationId}" }
-        };
-
-        Assert.Equal("abc123", body.operationId);
-        Assert.Contains("/api/v1/stores/7/operations/", body.links.self);
-    }
-
-    [Fact]
     public void ApiException_Forbidden_Is403()
     {
         var ex = ApiException.Forbidden("Нет доступа к этому магазину");

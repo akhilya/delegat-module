@@ -157,19 +157,21 @@ public class PublicSyncController : ControllerBase
         var batchId = Guid.NewGuid().ToString("N");
         var queued = 0;
 
+        var localCategoryByExternal = mappings.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.localCategoryId);
+
         foreach (var item in body.products)
         {
-            if (string.IsNullOrWhiteSpace(item.externalId))
+            if (!PublicApiImportHelpers.TryResolveImportItem(
+                    item.externalId,
+                    item.externalCategoryId,
+                    item.targetCategoryId,
+                    item.forceImportWithoutMapping,
+                    body.forceImportWithoutMapping,
+                    localCategoryByExternal,
+                    out var targetCategoryId))
                 continue;
-
-            int? targetCategoryId = item.targetCategoryId;
-            if (!targetCategoryId.HasValue && !string.IsNullOrEmpty(item.externalCategoryId))
-            {
-                if (mappings.TryGetValue(item.externalCategoryId, out var mapping))
-                    targetCategoryId = mapping.localCategoryId;
-                else if (!item.forceImportWithoutMapping && !body.forceImportWithoutMapping)
-                    continue;
-            }
 
             _db.pendingProductImports.Add(new PendingProductImport
             {
