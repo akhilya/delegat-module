@@ -184,6 +184,7 @@ public class PublicApiContractTests
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/stores/1/products";
         context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection().BuildServiceProvider();
 
         await middleware.InvokeAsync(context);
 

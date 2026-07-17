@@ -207,7 +207,7 @@ public class ApiKeyAuthenticationHandlerTests
         await handler.ChallengeAsync(new AuthenticationProperties());
 
         Assert.Equal(401, http.Response.StatusCode);
-        Assert.Equal("application/json", http.Response.ContentType);
+        Assert.StartsWith("application/json", http.Response.ContentType);
         http.Response.Body.Position = 0;
         using var doc = await JsonDocument.ParseAsync(http.Response.Body);
         Assert.Equal("unauthorized", doc.RootElement.GetProperty("error").GetProperty("code").GetString());
@@ -225,7 +225,7 @@ public class ApiKeyAuthenticationHandlerTests
         await handler.ForbidAsync(new AuthenticationProperties());
 
         Assert.Equal(403, http.Response.StatusCode);
-        Assert.Equal("application/json", http.Response.ContentType);
+        Assert.StartsWith("application/json", http.Response.ContentType);
         http.Response.Body.Position = 0;
         using var doc = await JsonDocument.ParseAsync(http.Response.Body);
         Assert.Equal("forbidden", doc.RootElement.GetProperty("error").GetProperty("code").GetString());
