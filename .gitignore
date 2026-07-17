@@ -99,6 +99,8 @@ agent-tools/
 .codex/
 .grok/
 .cursor/
+!.cursor/rules/
+!.cursor/rules/**
 .windsurf/
 .aider*
 .continue/

@@ -136,12 +136,16 @@ builder.Services.AddAuthentication(options =>
                 context.Fail("User is inactive");
         }
     };
-});
+})
+.AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+    PublicApiAuthorizeAttribute.Scheme, _ => { });
 
 // Infrastructure Services
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<Delegat.Controllers.PublicApi.PublicApiStoreContext>();
+builder.Services.AddScoped<UserApiKeyService>();
 builder.Services.AddHttpClient("MinIOStorage", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(10);
@@ -243,6 +247,43 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.CustomSchemaIds(t => t.FullName!.Replace('+', '.'));
+    options.SwaggerDoc("v1-public", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Delegat Public API",
+        Version = "v1",
+        Description =
+            "Partner API for ERP/1C/n8n (API key auth).\n\n" +
+            "**Auth:** Authorize with key `dk_…` only (Swagger adds Bearer).\n\n" +
+            "**Docs:** see repository `docs/api/public-v1.md`.\n\n" +
+            "**Async sync:** POST export/import endpoints return **202** + `operationId`; " +
+            "poll `GET /api/v1/stores/{storeId}/operations/{operationId}`."
+    });
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Delegat SPA API",
+        Version = "v1"
+    });
+    options.DocInclusionPredicate((docName, apiDesc) =>
+    {
+        var path = apiDesc.RelativePath ?? "";
+        var isPublic = path.StartsWith("api/v1/", StringComparison.OrdinalIgnoreCase)
+                       || path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase);
+        return docName == "v1-public" ? isPublic : !isPublic;
+    });
+    options.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "Paste the full API key only (starts with dk_). Do not type the word Bearer — Swagger adds it.",
+        Name = "Authorization",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "API Key"
+    });
+    options.OperationFilter<Delegat.Infrastructure.PublicApiSwaggerSecurityFilter>();
+
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, "Delegat.xml");
+    if (System.IO.File.Exists(xmlPath))
+        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 });
 
 // CORS
@@ -305,6 +346,18 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("public-api", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.User?.FindFirst("apiKeyId")?.Value
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -469,13 +522,17 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 if (!app.Environment.IsProduction())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1-public/swagger.json", "Public API v1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SPA API");
+    });
 }
 
 app.UseCors();
-app.UseRateLimiter();
-app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<CsrfHeaderMiddleware>();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<OperationHub>("/hubs/operations");
