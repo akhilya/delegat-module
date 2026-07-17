@@ -26,17 +26,13 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore
-        working-directory: backend
+        run: dotnet restore backend.Tests/Delegat.Tests.csproj
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
-        working-directory: backend
+        run: dotnet build backend.Tests/Delegat.Tests.csproj --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal
-        working-directory: backend
-        continue-on-error: true
+        run: dotnet test backend.Tests/Delegat.Tests.csproj --no-build --configuration Release --verbosity normal
 
   build:
     name: Build & Push Images
