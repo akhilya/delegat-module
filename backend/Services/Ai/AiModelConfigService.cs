@@ -80,12 +80,10 @@ public class AiModelConfigService
 
     public async Task SetDefaultAsync(int id, CancellationToken ct = default)
     {
-        await _context.aiModelConfigs
-            .Where(m => m.isDefault)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.isDefault, false), ct);
-        await _context.aiModelConfigs
-            .Where(m => m.Id == id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.isDefault, true), ct);
+        var models = await _context.aiModelConfigs.ToListAsync(ct);
+        foreach (var model in models)
+            model.isDefault = model.Id == id;
+        await _context.SaveChangesAsync(ct);
     }
 
     public async Task ToggleEnabledAsync(int id, CancellationToken ct = default)

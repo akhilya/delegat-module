@@ -9,6 +9,7 @@
     "preview": "vite preview --host",
     "lint": "eslint . --ext .js,.vue",
     "lint:fix": "eslint . --ext .js,.vue --fix",
+    "test:e2e": "playwright test",
     "ui:diff": "npx shadcn-vue@latest diff",
     "ui:add": "npx shadcn-vue@latest add",
     "ui:audit": "node scripts/ui-audit.mjs"
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^24.0.4",
     "@vitejs/plugin-vue": "^5.2.3",
     "eslint": "^9.29.0",
