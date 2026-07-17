@@ -18,6 +18,7 @@ public class YandexParameterHelpersTests
         YandexParameterHelpers.ParameterValueLabels.Clear();
         YandexParameterHelpers.ParameterRestrictions.Clear();
         YandexParameterHelpers.FilteringParameterIds.Clear();
+        YandexParameterHelpers.AllowCustomValueParameterIds.Clear();
     }
 
     [Fact]
@@ -185,6 +186,59 @@ public class YandexParameterHelpersTests
     {
         var entry = YandexParameterHelpers.BuildEnumParameterValue(
             27141351, "28699195", out var warning);
+        Assert.Null(entry);
+        Assert.Contains("27141351", warning);
+        Assert.Contains("28699195", warning);
+    }
+
+    [Fact]
+    public void ResolveMappedParameterValue_SelectFreeText_SendsValueWithoutValueId()
+    {
+        // Manufacturer color name / allowCustomValues: free text must not be silently dropped
+        // even when the graph field type is select (and the value contains ':').
+        var entry = YandexParameterHelpers.ResolveMappedParameterValue(
+            14871214,
+            "Red Dead Redemption 2 : POP Артур",
+            "select",
+            out var warning);
+
+        Assert.Null(warning);
+        Assert.NotNull(entry);
+        Assert.Equal(14871214, entry!.ParameterId);
+        Assert.Null(entry.ValueId);
+        Assert.Equal("Red Dead Redemption 2 : POP Артур", entry.Value);
+    }
+
+    [Fact]
+    public void ResolveMappedParameterValue_SelectDictionaryId_KeepsValueIdAndValue()
+    {
+        var entry = YandexParameterHelpers.ResolveMappedParameterValue(
+            13887626, "13898641:серый", "select", out var warning);
+
+        Assert.Null(warning);
+        Assert.NotNull(entry);
+        Assert.Equal(13898641, entry!.ValueId);
+        Assert.Equal("серый", entry.Value);
+    }
+
+    [Fact]
+    public void ResolveMappedParameterValue_StringType_SendsPlainValue()
+    {
+        var entry = YandexParameterHelpers.ResolveMappedParameterValue(
+            14871214, "серый", "string", out var warning);
+
+        Assert.Null(warning);
+        Assert.NotNull(entry);
+        Assert.Null(entry!.ValueId);
+        Assert.Equal("серый", entry.Value);
+    }
+
+    [Fact]
+    public void ResolveMappedParameterValue_SelectMissingLabel_ReturnsNullWithWarning()
+    {
+        var entry = YandexParameterHelpers.ResolveMappedParameterValue(
+            27141351, "28699195", "select", out var warning);
+
         Assert.Null(entry);
         Assert.Contains("27141351", warning);
         Assert.Contains("28699195", warning);
