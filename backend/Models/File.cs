@@ -77,6 +77,12 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public bool isPublic { get; set; } = false;
 
     /// <summary>
+    /// Unguessable token used in public URLs (null when not public).
+    /// </summary>
+    [StringLength(64)]
+    public string? publicToken { get; set; }
+
+    /// <summary>
     /// Optional folder this file belongs to (null = root level).
     /// </summary>
     [ForeignKey(nameof(folder))]
@@ -138,7 +144,9 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
             Id,
             uploadDateTime,
             fullPath = $"/api/files/{Id}/download",
-            publicUrl = isPublic ? $"/api/pub/files/{Id}/{Uri.EscapeDataString(fileName)}" : (string?)null,
+            publicUrl = isPublic && !string.IsNullOrEmpty(publicToken)
+                ? $"/api/pub/files/{publicToken}/{Uri.EscapeDataString(fileName)}"
+                : (string?)null,
             isPublic,
             fileName,
             contentType,

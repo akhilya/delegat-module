@@ -40,7 +40,7 @@ public static class AiPrompts
                 var sync = c.LastSyncAt.HasValue
                     ? $", lastSync={StoreTimeHelper.FormatInStoreTimezone(c.LastSyncAt.Value, tz)}"
                     : ", never synced";
-                return $"  id={c.Id} name=\"{c.Name}\" adapter={c.AdapterKey} status={status}{sync}";
+                return $"  id={c.Id} name=\"{SanitizeForPrompt(c.Name)}\" adapter={SanitizeForPrompt(c.AdapterKey)} status={status}{sync}";
             }));
         var userRole = isAdmin ? "administrator" : "regular user";
         var pageBlock = pageContext != null ? $"\n{BuildPageBlock(pageContext)}\n" : "";
@@ -54,8 +54,8 @@ public static class AiPrompts
 
         === CURRENT CONTEXT ===
         Date/time: {now}
-        Store: name="{storeName}" (id={storeId}), total products={productCount}
-        Current user: {userName} ({userRole})
+        Store: name="{SanitizeForPrompt(storeName)}" (id={storeId}), total products={productCount}
+        Current user: {SanitizeForPrompt(userName)} ({userRole})
 
         Marketplace connections:
         {connBlock}
@@ -299,7 +299,7 @@ public static class AiPrompts
             _          => "None — never use emojis",
         };
         var desc = !string.IsNullOrWhiteSpace(s.StoreDescription)
-            ? $"\nStore description: {s.StoreDescription}"
+            ? $"\nStore description: {SanitizeForPrompt(s.StoreDescription)}"
             : "";
         return $"=== PERSONAL SETTINGS ==={desc}\nCommunication style: {style}\nResponse brevity: {brevity}\nEmoji usage: {emoji}";
     }
@@ -309,8 +309,8 @@ public static class AiPrompts
         "fieldMapping" =>
             $"=== CURRENT PAGE ===\n" +
             $"Page: Field mapping editor\n" +
-            $"Mapping: \"{ctx.MappingName}\" (id={ctx.MappingId})\n" +
-            $"Connection: \"{ctx.ConnectionName}\" (id={ctx.ConnectionId})\n" +
+            $"Mapping: \"{SanitizeForPrompt(ctx.MappingName)}\" (id={ctx.MappingId})\n" +
+            $"Connection: \"{SanitizeForPrompt(ctx.ConnectionName)}\" (id={ctx.ConnectionId})\n" +
             (ctx.PreviewProductId.HasValue
                 ? $"Preview product: id={ctx.PreviewProductId} — optional validation only; optionMap must cover all category options.\n"
                 : "") +
@@ -319,16 +319,37 @@ public static class AiPrompts
         "product" =>
             $"=== CURRENT PAGE ===\n" +
             $"Page: Product editor\n" +
-            $"Product: \"{ctx.ProductName}\" (id={ctx.ProductId}" +
+            $"Product: \"{SanitizeForPrompt(ctx.ProductName)}\" (id={ctx.ProductId}" +
             (ctx.CategoryId.HasValue ? $", categoryId={ctx.CategoryId}" : "") + ")\n" +
             $"When user says 'this product', 'its description', 'its name/price/barcode' — use productId={ctx.ProductId}.",
         "connection" =>
             $"=== CURRENT PAGE ===\n" +
             $"Page: Marketplace connection\n" +
-            $"Connection: \"{ctx.ConnectionName}\" (id={ctx.ConnectionId})\n" +
+            $"Connection: \"{SanitizeForPrompt(ctx.ConnectionName)}\" (id={ctx.ConnectionId})\n" +
             $"When user says 'this connection' or 'its mappings' — use connectionId={ctx.ConnectionId}.",
-        _ => $"=== CURRENT PAGE ===\nPage: {ctx.Page}"
+        _ => $"=== CURRENT PAGE ===\nPage: {SanitizeForPrompt(ctx.Page)}"
     };
+
+    /// <summary>
+    /// Neutralize common prompt-injection delimiters in user-controlled context strings.
+    /// </summary>
+    internal static string SanitizeForPrompt(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+
+        var cleaned = value
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Replace('\0', ' ');
+
+        // Collapse instruction-looking fence markers
+        cleaned = cleaned
+            .Replace("===", "—", StringComparison.Ordinal)
+            .Replace("```", "'''", StringComparison.Ordinal);
+
+        return cleaned.Length > 500 ? cleaned[..500] : cleaned;
+    }
 
     public const string GenerateProductDescriptionSystem =
         "Ты копирайтер для интернет-магазина. Пиши продающие описания товаров на русском языке. " +

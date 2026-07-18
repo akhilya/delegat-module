@@ -484,6 +484,10 @@ namespace Delegat.Migrations
                     b.Property<int>("productId")
                         .HasColumnType("int");
 
+                    b.Property<string>("publicToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
                     b.Property<DateTime>("uploadDateTime")
                         .HasColumnType("datetime(6)");
 
@@ -494,6 +498,9 @@ namespace Delegat.Migrations
                     b.HasIndex("folderId");
 
                     b.HasIndex("productId");
+
+                    b.HasIndex("publicToken")
+                        .IsUnique();
 
                     b.ToTable("files");
                 });
@@ -1904,6 +1911,10 @@ namespace Delegat.Migrations
                     b.Property<long>("length")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("publicToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
                     b.Property<int>("storeId")
                         .HasColumnType("int");
 
@@ -1915,6 +1926,9 @@ namespace Delegat.Migrations
                     b.HasIndex("authorUserId");
 
                     b.HasIndex("folderId");
+
+                    b.HasIndex("publicToken")
+                        .IsUnique();
 
                     b.HasIndex("storeId");
 

@@ -206,7 +206,7 @@ public class ProductSyncController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
 
         var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
@@ -456,7 +456,7 @@ public class ProductSyncController : ControllerBase
 
         var batchId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         // Batch-load product names
         var productNames = await _context.products
@@ -853,7 +853,7 @@ public class ProductSyncController : ControllerBase
         // Use provided operationId or generate new batch ID
         var batchId = !string.IsNullOrEmpty(input.operationId) ? input.operationId : Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         var skippedProducts = new List<object>();
         int queued = 0;
@@ -1258,7 +1258,7 @@ public class ProductSyncController : ControllerBase
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "price-import",
             "Импорт цен", connectionId: connectionId, connectionName: connection.name);
@@ -1299,7 +1299,7 @@ public class ProductSyncController : ControllerBase
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "price-export",
             "Экспорт цен", connectionId: connectionId, connectionName: connection.name);
@@ -1342,7 +1342,7 @@ public class ProductSyncController : ControllerBase
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "stock-export",
             "Экспорт остатков", connectionId: connectionId, connectionName: connection.name);

@@ -896,31 +896,41 @@ export default {
     },
 
     parseCredentials() {
-      if (this.connection?.credentialsJson) {
-        try {
-          this.credentialValues = JSON.parse(this.connection.credentialsJson);
-        } catch {
-          this.credentialValues = {};
+      // Credentials are never returned by the API — leave fields empty;
+      // saving with empty fields keeps existing secrets on the server.
+      this.credentialValues = {};
+      if (this.connection?.hasCredentials && this.credentialFields?.length) {
+        for (const field of this.credentialFields) {
+          this.credentialValues[field.key] = "";
         }
       }
     },
 
     buildCredentialsJson() {
+      const hasAnyValue = Object.values(this.credentialValues).some(
+        (v) => v != null && String(v).trim() !== "",
+      );
+      if (!hasAnyValue) return null;
       return JSON.stringify(this.credentialValues);
     },
 
     async handleSave() {
       this.isSaving = true;
+      const credentialsJson = this.buildCredentialsJson();
+      const data = {
+        name: this.connection.name,
+        settingsJson: this.connection.settingsJson,
+        isActive: this.connection.isActive,
+      };
+      if (credentialsJson != null) {
+        data.credentialsJson = credentialsJson;
+      }
       await this.updateConnection({
         connectionId: this.connectionId,
-        data: {
-          name: this.connection.name,
-          credentialsJson: this.buildCredentialsJson(),
-          settingsJson: this.connection.settingsJson,
-          isActive: this.connection.isActive,
-        },
+        data,
         onSuccess: () => {
           displaySonnerSuccess("Подключение сохранено");
+          this.parseCredentials();
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -2546,12 +2556,19 @@ export default {
                 v-if="credentialFields?.length"
                 title="Данные для подключения"
               >
+                <p
+                  v-if="connection?.hasCredentials"
+                  class="text-sm text-muted-foreground mb-4"
+                >
+                  Учётные данные уже сохранены. Оставьте поля пустыми, чтобы не
+                  менять их, или введите новые значения для замены.
+                </p>
                 <SettingsFormField
                   v-for="field in credentialFields"
                   :key="field.key"
                   :label="field.displayName"
                   :label-for="`cred-${field.key}`"
-                  :required="field.isRequired"
+                  :required="field.isRequired && !connection?.hasCredentials"
                 >
                   <PasswordInput
                     v-if="field.isSecret"

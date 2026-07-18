@@ -46,10 +46,12 @@ var mysqlSettings = builder.Configuration.GetMySqlSettings();
 var minioSettings = builder.Configuration.GetMinIOSettings();
 var jwtSettings = builder.Configuration.GetJwtSettings();
 
-// Encryption
-var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY") ?? "";
-if (!string.IsNullOrEmpty(encryptionKey))
-    builder.Services.AddSingleton(new EncryptionService(encryptionKey));
+// Encryption — required; fail fast if missing or invalid
+var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+if (string.IsNullOrWhiteSpace(encryptionKey))
+    throw new InvalidOperationException(
+        "ENCRYPTION_KEY environment variable is required (32-byte Base64-encoded AES-256 key).");
+builder.Services.AddSingleton(new EncryptionService(encryptionKey));
 
 // Database
 var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";

@@ -122,20 +122,16 @@ public class MarketplaceConnectionController : ControllerBase
         if (connection == null)
             throw ApiException.NotFound("Подключение не найдено");
 
-        var credentialsJson = connection.credentialsJson;
-        if (_encryptionService != null
-            && !string.IsNullOrEmpty(credentialsJson)
-            && _encryptionService.IsEncrypted(credentialsJson))
-        {
-            credentialsJson = _encryptionService.Decrypt(credentialsJson);
-        }
+        var hasCredentials = !string.IsNullOrEmpty(connection.credentialsJson);
 
         return Ok(new MarketplaceConnection.ConnectionDetailDTO
         {
             id = connection.Id,
             name = connection.name,
             adapterKey = connection.adapterKey,
-            credentialsJson = credentialsJson,
+            // Never return decrypted credentials — client must re-enter to rotate
+            credentialsJson = null,
+            hasCredentials = hasCredentials,
             settingsJson = connection.settingsJson,
             isActive = connection.isActive,
             lastSyncAt = connection.lastSyncAt,
@@ -163,8 +159,9 @@ public class MarketplaceConnectionController : ControllerBase
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
-        var encryptedCreds = _encryptionService != null && !string.IsNullOrEmpty(input.credentialsJson)
-            ? _encryptionService.Encrypt(input.credentialsJson)
+        var encryptedCreds = !string.IsNullOrEmpty(input.credentialsJson)
+            ? (_encryptionService?.Encrypt(input.credentialsJson)
+               ?? throw ApiException.InternalServerError("Шифрование не настроено"))
             : input.credentialsJson;
 
         var connection = new MarketplaceConnection();
@@ -202,13 +199,48 @@ public class MarketplaceConnectionController : ControllerBase
         if (connection == null)
             throw ApiException.NotFound("Подключение не найдено");
 
-        if (_encryptionService != null && input.credentialsJson != null)
+        // Empty/null credentialsJson means "keep existing" — do not overwrite with blanks
+        if (string.IsNullOrWhiteSpace(input.credentialsJson) || IsBlankCredentialsObject(input.credentialsJson))
+        {
+            input.credentialsJson = null;
+        }
+        else if (_encryptionService != null)
+        {
             input.credentialsJson = _encryptionService.Encrypt(input.credentialsJson);
+        }
+        else
+        {
+            throw ApiException.InternalServerError("Шифрование не настроено");
+        }
 
         connection.UpdateFill(input);
         await repo.UpdateAsync(connection);
 
         return Ok(new { success = true });
+    }
+
+    private static bool IsBlankCredentialsObject(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return false;
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                    return false;
+                if (prop.Value.ValueKind is not (System.Text.Json.JsonValueKind.String
+                    or System.Text.Json.JsonValueKind.Null))
+                    return false;
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

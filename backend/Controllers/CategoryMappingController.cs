@@ -654,7 +654,7 @@ public class CategoryMappingController : ControllerBase
                 throw ApiException.NotFound("Локальная категория не найдена");
         }
 
-        var storeId = _currentUserService.GetSelectedStoreId() ?? connection.storeId;
+        var storeId = connection.storeId;
 
         if (!string.IsNullOrEmpty(input.operationId))
             await _operationLogger.LogAsync(input.operationId, storeId, "info",

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Minio;
 using Minio.DataModel.Args;
 using Delegat.Infrastructure.Configuration;
+using Delegat.Infrastructure.Security;
 
 namespace Delegat.Infrastructure.Storage;
 
@@ -119,6 +120,9 @@ public class MinIOStorageService : IStorageService
     /// </summary>
     public async Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default)
     {
+        if (!UrlSafety.TryValidateHttpUrl(uri, out var safeUri, out _))
+            return null;
+
         const int maxRetries = 3;
         const int baseDelayMs = 1000;
 
@@ -130,7 +134,7 @@ public class MinIOStorageService : IStorageService
 
                 using var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
 
-                using var response = await httpClient.GetAsync(uri, ct);
+                using var response = await httpClient.GetAsync(safeUri, ct);
 
                 // Check for rate limiting (429 Too Many Requests)
                 if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
