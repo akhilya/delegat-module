@@ -1,44 +1,38 @@
 <script setup>
-import { LogOut, Moon, Sun } from "lucide-vue-next";
+import { computed } from "vue";
 import {
   SidebarFooter,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarMenuButton,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import UserAccountMenu from "@/components/UserAccountMenu.vue";
 
 defineProps({
-  isDark: { type: Boolean, default: false },
+  userName: { type: String, default: "" },
   version: { type: String, default: "" },
 });
 
-const emit = defineEmits(["toggle-theme", "logout"]);
+const { isMobile, state } = useSidebar();
+
+const menuSide = computed(() => {
+  if (isMobile.value) return "bottom";
+  if (state.value === "collapsed") return "right";
+  return "top";
+});
 </script>
 
 <template>
   <SidebarFooter>
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton
-          :tooltip="isDark ? 'Светлая тема' : 'Тёмная тема'"
-          @click="emit('toggle-theme')"
-        >
-          <Sun v-if="isDark" />
-          <Moon v-else />
-          <span>{{ isDark ? "Светлая тема" : "Тёмная тема" }}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton tooltip="Выйти" @click="emit('logout')">
-          <LogOut />
-          <span>Выйти</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem v-if="version">
-        <SidebarGroupLabel class="h-auto py-1 text-[10px]">
-          v{{ version }}
-        </SidebarGroupLabel>
+        <UserAccountMenu
+          variant="sidebar"
+          :user-name="userName"
+          :version="version"
+          :side="menuSide"
+          align="start"
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   </SidebarFooter>

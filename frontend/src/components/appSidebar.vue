@@ -16,7 +16,6 @@ import { buildSidebarGroups } from "@/config/sidebarNav";
 import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { http } from "@/main";
-import { useDark, useToggle } from "@vueuse/core";
 
 export default {
   components: {
@@ -34,11 +33,6 @@ export default {
     AppSidebarStoreSwitcher,
     AppSidebarNavCollapsible,
     AppSidebarFooter,
-  },
-  setup() {
-    const isDark = useDark();
-    const toggleDark = useToggle(isDark);
-    return { isDark, toggleDark };
   },
   data() {
     return {
@@ -92,7 +86,6 @@ export default {
       "getMyMemberships",
       "getConnections",
       "getAvailableAdapters",
-      "postLogOut",
       "postSelectStore",
     ]),
     showConfirm(title, message) {
@@ -158,8 +151,8 @@ export default {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
       if (hasUploads) {
         const confirmed = await this.showConfirm(
-          "Переключить магазин",
-          "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
+          this.$t("components.appSidebar.switchStoreTitle"),
+          this.$t("components.appSidebar.switchStoreUploadWarning")
         );
         if (!confirmed) return;
       }
@@ -214,10 +207,8 @@ export default {
     </SidebarContent>
 
     <AppSidebarFooter
-      :is-dark="isDark"
+      :user-name="me?.userName"
       :version="displayVersion"
-      @toggle-theme="toggleDark()"
-      @logout="postLogOut"
     />
   </Sidebar>
 
@@ -231,8 +222,8 @@ export default {
         <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
-        <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Продолжить</AlertDialogAction>
+        <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t('common.cancel') }}</AlertDialogCancel>
+        <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">{{ $t('app.continue') }}</AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>
