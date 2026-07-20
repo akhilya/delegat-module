@@ -26,7 +26,9 @@
 
   <ItemGroup>
     <!-- Reference the main backend project -->
-    <ProjectReference Include="..\backend\Delegat.csproj" />
+    <!-- Skip CopyPlugins: tests already reference YandexMarket, and nested plugin builds race on SDK deps.json -->
+    <ProjectReference Include="..\backend\Delegat.csproj"
+                      AdditionalProperties="BuildPlugins=false" />
     <ProjectReference Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj"
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
   </ItemGroup>

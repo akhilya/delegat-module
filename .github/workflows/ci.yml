@@ -29,7 +29,7 @@ jobs:
         run: dotnet restore backend.Tests/Delegat.Tests.csproj
 
       - name: Build
-        run: dotnet build backend.Tests/Delegat.Tests.csproj --no-restore --configuration Release
+        run: dotnet build backend.Tests/Delegat.Tests.csproj --no-restore --configuration Release -p:BuildPlugins=false
 
       - name: Test
         run: dotnet test backend.Tests/Delegat.Tests.csproj --no-build --configuration Release --verbosity normal
