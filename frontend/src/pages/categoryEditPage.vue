@@ -70,34 +70,31 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_CATEGORIES, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
-import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
+import {
+  ATTRIBUTE_GROUP_OPTIONS,
+  ATTRIBUTE_GROUP_VALUES,
+} from "@/constants/attributeGroups";
 
 // Threshold for large options lists (above this - show count only, not full list)
 const LARGE_OPTIONS_THRESHOLD = 50;
 
-// Lookup map for type labels (supports both numeric and string keys from JSON)
+// Lookup map for type i18n keys (supports both numeric and string keys from JSON)
 const ATTRIBUTE_TYPES = {
-  0: { label: "Текст", value: 0 },
-  1: { label: "Число", value: 1 },
-  2: { label: "Да/Нет", value: 2 },
-  3: { label: "Выбор", value: 3 },
-  4: { label: "Множественный выбор", value: 4 },
+  0: { i18nKey: "text", value: 0 },
+  1: { i18nKey: "number", value: 1 },
+  2: { i18nKey: "boolean", value: 2 },
+  3: { i18nKey: "select", value: 3 },
+  4: { i18nKey: "multiSelect", value: 4 },
   // String keys for JSON enum serialization (JsonStringEnumConverter)
-  "Text": { label: "Текст", value: 0 },
-  "Number": { label: "Число", value: 1 },
-  "Boolean": { label: "Да/Нет", value: 2 },
-  "Select": { label: "Выбор", value: 3 },
-  "MultiSelect": { label: "Множественный выбор", value: 4 },
+  "Text": { i18nKey: "text", value: 0 },
+  "Number": { i18nKey: "number", value: 1 },
+  "Boolean": { i18nKey: "boolean", value: 2 },
+  "Select": { i18nKey: "select", value: 3 },
+  "MultiSelect": { i18nKey: "multiSelect", value: 4 },
 };
 
-// Unique list of types for dropdown (no duplicates)
-const ATTRIBUTE_TYPE_OPTIONS = [
-  { label: "Текст", value: 0 },
-  { label: "Число", value: 1 },
-  { label: "Да/Нет", value: 2 },
-  { label: "Выбор", value: 3 },
-  { label: "Множественный выбор", value: 4 },
-];
+// Unique list of type values for the dropdown (no duplicates); labels are resolved via i18n in the component
+const ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4];
 
 export default {
   components: {
@@ -192,23 +189,30 @@ export default {
       isLoadingDefaultValueOptions: false,
       PAGE_CATEGORIES,
       ATTRIBUTE_TYPES,
-      ATTRIBUTE_TYPE_OPTIONS,
+      ATTRIBUTE_TYPE_VALUES,
       ATTRIBUTE_GROUP_OPTIONS,
       LARGE_OPTIONS_THRESHOLD,
     };
   },
   computed: {
     breadcrumbs() {
-      const items = [{ label: "Категории", to: PAGE_CATEGORIES }];
+      const items = [{ label: this.$t("routes.categories"), to: PAGE_CATEGORIES }];
       if (this.category?.name) {
         items.push({ label: this.category.name });
       } else {
-        items.push({ label: "Редактирование" });
+        items.push({ label: this.$t("pages.categoryEditPage.breadcrumbEditing") });
       }
       return items;
     },
     attributeTypeLabel() {
-      return ATTRIBUTE_TYPES[this.attributeForm.type]?.label || "Текст";
+      const i18nKey = ATTRIBUTE_TYPES[this.attributeForm.type]?.i18nKey || "text";
+      return this.$t(`pages.categoryEditPage.attributeTypes.${i18nKey}`);
+    },
+    attributeTypeOptions() {
+      return ATTRIBUTE_TYPE_VALUES.map((value) => ({
+        value,
+        label: this.$t(`pages.categoryEditPage.attributeTypes.${ATTRIBUTE_TYPES[value].i18nKey}`),
+      }));
     },
     showOptionsField() {
       const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
@@ -219,8 +223,8 @@ export default {
       return typeValue === 0;
     },
     /**
-     * Проверяет, содержит ли текущий атрибут большой список опций
-     * (для таких списков показываем только count, не весь текст)
+     * Whether the current attribute has a large options list
+     * (for such lists we only show a count, not the full text)
      */
     hasLargeOptions() {
       return this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD;
@@ -230,8 +234,11 @@ export default {
     },
     groupSelectOptions() {
       return [
-        { value: "", label: "Без группы (Прочее)" },
-        ...ATTRIBUTE_GROUP_OPTIONS.map((g) => ({ value: g, label: g })),
+        { value: "", label: this.$t("pages.categoryEditPage.noGroupOption") },
+        ...ATTRIBUTE_GROUP_OPTIONS.map((option) => ({
+          value: option.value,
+          label: this.$t(`attributeGroups.${option.key}`),
+        })),
       ];
     },
     defaultValueSelectOptions() {
@@ -242,10 +249,10 @@ export default {
       const n = this.attributes.length;
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return "атрибутов";
-      if (mod10 === 1) return "атрибут";
-      if (mod10 >= 2 && mod10 <= 4) return "атрибута";
-      return "атрибутов";
+      if (mod100 >= 11 && mod100 <= 14) return this.$t("pages.categoryEditPage.attributesCount.many");
+      if (mod10 === 1) return this.$t("pages.categoryEditPage.attributesCount.one");
+      if (mod10 >= 2 && mod10 <= 4) return this.$t("pages.categoryEditPage.attributesCount.few");
+      return this.$t("pages.categoryEditPage.attributesCount.many");
     },
   },
   methods: {
@@ -277,7 +284,7 @@ export default {
 
     async handleSaveCategory() {
       if (!this.category.name.trim()) {
-        displaySonnerError("Введите название категории");
+        displaySonnerError(this.$t("pages.categoryEditPage.nameRequired"));
         return;
       }
 
@@ -288,7 +295,7 @@ export default {
         description: this.category.description?.trim() || null,
         hasSizes: this.category.hasSizes ?? false,
         onSuccess: () => {
-          displaySonnerSuccess("Категория сохранена");
+          displaySonnerSuccess(this.$t("pages.categoryEditPage.saved"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -370,11 +377,11 @@ export default {
       this.resetAttributeDialogOptionsState();
       this.editingAttribute = attribute;
       this.attributeOptionsJson = null;
-      // Нормализуем тип (может прийти как строка "Select" или число 3)
+      // Normalize the type (may arrive as a string like "Select" or a number like 3)
       const normalizedType = ATTRIBUTE_TYPES[attribute.type]?.value ?? attribute.type;
       const group = attribute.group || "";
       // If the group is not in the predefined list, switch to custom mode
-      this.customGroupMode = group !== "" && !ATTRIBUTE_GROUP_OPTIONS.includes(group);
+      this.customGroupMode = group !== "" && !ATTRIBUTE_GROUP_VALUES.includes(group);
       const optionsRaw = attribute.options || "";
       this.cachedOptionsCount = optionsRaw ? this.getOptionsCount(optionsRaw) : 0;
       this.attributeOptionsJson =
@@ -402,18 +409,23 @@ export default {
 
     generateKey() {
       if (!this.attributeForm.name) return;
-      // Convert name to snake_case key
+      // Convert name to snake_case key. Cyrillic chars are written as \uXXXX escapes
+      // below so this source file has no non-ASCII glyphs; runtime behavior is unchanged.
       this.attributeForm.key = this.attributeForm.name
         .toLowerCase()
-        .replace(/[^a-zа-яё0-9\s]/gi, "")
+        .replace(/[^a-z\u0400-\u04FF0-9\s]/gi, "")
         .replace(/\s+/g, "_")
-        .replace(/[а-яё]/gi, (char) => {
+        .replace(/[\u0400-\u04FF]/gi, (char) => {
           const translitMap = {
-            а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo",
-            ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m",
-            н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
-            ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
-            ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+            "\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g",
+            "\u0434": "d", "\u0435": "e", "\u0451": "yo", "\u0436": "zh",
+            "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k",
+            "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o",
+            "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t",
+            "\u0443": "u", "\u0444": "f", "\u0445": "h", "\u0446": "ts",
+            "\u0447": "ch", "\u0448": "sh", "\u0449": "sch", "\u044a": "",
+            "\u044b": "y", "\u044c": "", "\u044d": "e", "\u044e": "yu",
+            "\u044f": "ya",
           };
           return translitMap[char.toLowerCase()] || char;
         });
@@ -421,11 +433,11 @@ export default {
 
     async handleSaveAttribute() {
       if (!this.attributeForm.name.trim()) {
-        displaySonnerError("Введите название атрибута");
+        displaySonnerError(this.$t("pages.categoryEditPage.attrNameRequired"));
         return;
       }
       if (!this.attributeForm.key.trim()) {
-        displaySonnerError("Введите ключ атрибута");
+        displaySonnerError(this.$t("pages.categoryEditPage.attrKeyRequired"));
         return;
       }
 
@@ -451,7 +463,7 @@ export default {
           attributeId: this.editingAttribute.id,
           attribute: attributeData,
           onSuccess: () => {
-            displaySonnerSuccess("Атрибут обновлён");
+            displaySonnerSuccess(this.$t("pages.categoryEditPage.attrUpdated"));
             this.showAttributeDialog = false;
             this.fetchCategory();
           },
@@ -464,7 +476,7 @@ export default {
           categoryId: this.categoryId,
           attribute: attributeData,
           onSuccess: () => {
-            displaySonnerSuccess("Атрибут добавлен");
+            displaySonnerSuccess(this.$t("pages.categoryEditPage.attrAdded"));
             this.showAttributeDialog = false;
             this.fetchCategory();
           },
@@ -483,7 +495,7 @@ export default {
         categoryId: this.categoryId,
         attributeId,
         onSuccess: () => {
-          displaySonnerSuccess("Атрибут удалён");
+          displaySonnerSuccess(this.$t("pages.categoryEditPage.attrDeleted"));
           this.fetchCategory();
         },
         onError: (error) => {
@@ -500,7 +512,7 @@ export default {
         categoryId: this.categoryId,
         attributeIds,
         onSuccess: () => {
-          displaySonnerSuccess("Порядок атрибутов сохранён");
+          displaySonnerSuccess(this.$t("pages.categoryEditPage.orderSaved"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -510,7 +522,10 @@ export default {
     },
 
     getAttributeTypeLabel(type) {
-      return ATTRIBUTE_TYPES[type]?.label || "Неизвестный тип";
+      const i18nKey = ATTRIBUTE_TYPES[type]?.i18nKey;
+      return i18nKey
+        ? this.$t(`pages.categoryEditPage.attributeTypes.${i18nKey}`)
+        : this.$t("pages.categoryEditPage.attributeTypes.unknown");
     },
 
     getOptionsRaw() {
@@ -538,7 +553,7 @@ export default {
 
     applyImportedOptions(parsed) {
       if (!parsed.length) {
-        displaySonnerError("Файл не содержит вариантов");
+        displaySonnerError(this.$t("pages.categoryEditPage.fileNoOptions"));
         return;
       }
 
@@ -557,7 +572,9 @@ export default {
 
       this.cachedOptionsCount = parsed.length;
       this.primeDefaultValueOptions();
-      displaySonnerSuccess(`Импортировано вариантов: ${parsed.length.toLocaleString()}`);
+      displaySonnerSuccess(
+        this.$t("pages.categoryEditPage.importedCount", { count: parsed.length.toLocaleString() }),
+      );
     },
 
     parseImportedOptionsText(text) {
@@ -607,13 +624,13 @@ export default {
     exportAttributeOptions() {
       const raw = this.getOptionsRaw();
       if (!raw) {
-        displaySonnerError("Нет вариантов для экспорта");
+        displaySonnerError(this.$t("pages.categoryEditPage.noOptionsToExport"));
         return;
       }
 
       const parsed = this.parseOptions(raw);
       if (!parsed.length) {
-        displaySonnerError("Нет вариантов для экспорта");
+        displaySonnerError(this.$t("pages.categoryEditPage.noOptionsToExport"));
         return;
       }
 
@@ -626,7 +643,9 @@ export default {
       anchor.download = `${key}-options.json`;
       anchor.click();
       URL.revokeObjectURL(url);
-      displaySonnerSuccess(`Экспортировано вариантов: ${parsed.length.toLocaleString()}`);
+      displaySonnerSuccess(
+        this.$t("pages.categoryEditPage.exportedCount", { count: parsed.length.toLocaleString() }),
+      );
     },
 
     triggerOptionsImport() {
@@ -642,17 +661,17 @@ export default {
         try {
           const text = loadEvent.target?.result;
           if (typeof text !== "string") {
-            displaySonnerError("Не удалось прочитать файл");
+            displaySonnerError(this.$t("pages.categoryEditPage.fileReadFailed"));
             return;
           }
           const parsed = this.parseImportedOptionsText(text);
           this.applyImportedOptions(parsed);
         } catch {
-          displaySonnerError("Ошибка чтения файла");
+          displaySonnerError(this.$t("pages.categoryEditPage.fileReadError"));
         }
       };
       reader.onerror = () => {
-        displaySonnerError("Ошибка чтения файла");
+        displaySonnerError(this.$t("pages.categoryEditPage.fileReadError"));
       };
       reader.readAsText(file);
       event.target.value = "";
@@ -676,13 +695,13 @@ export default {
     },
 
     /**
-     * Парсит опции из строки (поддерживает JSON и comma-separated для обратной совместимости)
+     * Parses options from a string (supports JSON and comma-separated for backward compatibility)
      * @returns {Array<{value: string, label: string}>}
      */
     parseOptions(optionsStr) {
       if (!optionsStr) return [];
 
-      // Пробуем распарсить как JSON
+      // Try to parse as JSON
       try {
         const parsed = JSON.parse(optionsStr);
         if (Array.isArray(parsed)) {
@@ -692,10 +711,10 @@ export default {
           }));
         }
       } catch {
-        // Не JSON - парсим как comma-separated
+        // Not JSON - parse as comma-separated
       }
 
-      // Fallback: comma-separated строка (поддержка формата "value:label")
+      // Fallback: comma-separated string (supports the "value:label" format)
       return optionsStr.split(',').map(o => o.trim()).filter(Boolean).map(item => {
         if (item.includes(':')) {
           const [value, ...labelParts] = item.split(':');
@@ -706,22 +725,22 @@ export default {
     },
 
     /**
-     * Форматирует опции для отображения в textarea (JSON -> comma-separated labels)
-     * Для больших списков (>LARGE_OPTIONS_THRESHOLD) возвращает пустую строку,
-     * т.к. они отображаются в read-only режиме
+     * Formats options for display in the textarea (JSON -> comma-separated labels)
+     * For large lists (>LARGE_OPTIONS_THRESHOLD) returns an empty string,
+     * since they're displayed in read-only mode
      */
     formatOptionsForEdit(optionsStr) {
       if (!optionsStr) return "";
 
-      // Пробуем распарсить как JSON
+      // Try to parse as JSON
       try {
         const parsed = JSON.parse(optionsStr);
         if (Array.isArray(parsed)) {
-          // Для больших списков не форматируем - они будут показаны как count
+          // Don't format large lists - they're shown as a count instead
           if (parsed.length > LARGE_OPTIONS_THRESHOLD) {
-            return ""; // Пустая строка - UI покажет информационный блок
+            return ""; // Empty string - the UI will show an info block
           }
-          // Формат: "value:label" если они разные, иначе просто label
+          // Format: "value:label" if they differ, otherwise just the label
           return parsed.map(o => {
             const value = o.value || o.label || o;
             const label = o.label || o.value || o;
@@ -730,7 +749,7 @@ export default {
           }).join(', ');
         }
       } catch {
-        // Уже в нужном формате
+        // Already in the right format
       }
 
       return optionsStr;
@@ -749,7 +768,7 @@ export default {
     },
 
     /**
-     * Количество опций
+     * Options count
      */
     getOptionsCount(optionsStr) {
       if (!optionsStr) return 0;
@@ -780,10 +799,10 @@ export default {
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1 space-y-1">
             <h1 class="text-lg font-semibold">
-              {{ category.name || "Редактирование категории" }}
+              {{ category.name || $t("pages.categoryEditPage.editingCategoryFallback") }}
             </h1>
             <p class="text-sm text-muted-foreground">
-              Название, описание и настройки размерной сетки для товаров категории.
+              {{ $t("pages.categoryEditPage.subtitle") }}
             </p>
           </div>
           <Button
@@ -793,28 +812,28 @@ export default {
           >
             <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
             <Save v-else class="size-4 mr-2" />
-            Сохранить
+            {{ $t("common.save") }}
           </Button>
         </div>
 
         <!-- Block 1: Settings -->
         <div class="max-w-2xl space-y-4">
-            <SettingsFormField label="Название" label-for="category-name">
+            <SettingsFormField :label="$t('common.name')" label-for="category-name">
               <Input
                 id="category-name"
                 v-model="category.name"
-                placeholder="Введите название"
+                :placeholder="$t('pages.categoryEditPage.namePlaceholder')"
               />
             </SettingsFormField>
-            <SettingsFormField label="Описание" label-for="category-description">
+            <SettingsFormField :label="$t('common.description')" label-for="category-description">
               <Textarea
                 id="category-description"
                 v-model="category.description"
-                placeholder="Необязательно"
+                :placeholder="$t('pages.categoryEditPage.optionalPlaceholder')"
                 class="min-h-24 resize-none"
               />
             </SettingsFormField>
-            <SettingsFormField label="Размерная сетка">
+            <SettingsFormField :label="$t('pages.categoryEditPage.sizeGridLabel')">
               <div class="flex items-center gap-2 h-9">
                 <Switch
                   id="category-has-sizes"
@@ -822,7 +841,7 @@ export default {
                   @update:model-value="category.hasSizes = $event"
                 />
                 <Label for="category-has-sizes" class="font-normal text-muted-foreground">
-                  Товары имеют размеры
+                  {{ $t("pages.categoryEditPage.hasSizesLabel") }}
                 </Label>
               </div>
             </SettingsFormField>
@@ -832,12 +851,11 @@ export default {
         <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">
           <CardHeader class="!px-0">
             <CardTitle class="text-base">
-              Атрибуты категории
+              {{ $t("pages.categoryEditPage.attributesCardTitle") }}
             </CardTitle>
             <CardDescription>
               {{ attributes.length }} {{ attributesCountLabel }}.
-              Порядок строк определяет порядок полей на странице товара —
-              перетащите строки, чтобы изменить порядок.
+              {{ $t("pages.categoryEditPage.attributesOrderHint") }}
             </CardDescription>
             <CardAction>
               <Button
@@ -846,15 +864,15 @@ export default {
                 @click="openAddAttributeDialog"
               >
                 <Plus class="size-4 mr-2" />
-                Добавить
+                {{ $t("common.add") }}
               </Button>
             </CardAction>
           </CardHeader>
           <CardContent class="!px-0 pb-6 pt-0">
             <EmptyState
               v-if="attributes.length === 0"
-              title="Нет атрибутов"
-              description="Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики"
+              :title="$t('pages.categoryEditPage.noAttributesTitle')"
+              :description="$t('pages.categoryEditPage.noAttributesDescription')"
               class="py-10"
             >
               <template #icon>
@@ -862,7 +880,7 @@ export default {
               </template>
               <Button variant="outline" @click="openAddAttributeDialog">
                 <Plus class="size-4 mr-2" />
-                Добавить атрибут
+                {{ $t("pages.categoryEditPage.addAttribute") }}
               </Button>
             </EmptyState>
 
@@ -875,12 +893,12 @@ export default {
                   <TableHeader>
                     <TableRow class="hover:bg-transparent">
                       <TableHead class="w-9 px-3" />
-                      <TableHead class="min-w-[11rem] px-3 sm:min-w-[16rem]">Название</TableHead>
-                      <TableHead class="hidden sm:table-cell px-3">Ключ</TableHead>
-                      <TableHead class="hidden md:table-cell px-3">Группа</TableHead>
-                      <TableHead class="px-3">Тип</TableHead>
-                      <TableHead class="hidden lg:table-cell w-28 text-right px-3">Опции</TableHead>
-                      <TableHead class="hidden xl:table-cell px-3">Описание</TableHead>
+                      <TableHead class="min-w-[11rem] px-3 sm:min-w-[16rem]">{{ $t("common.name") }}</TableHead>
+                      <TableHead class="hidden sm:table-cell px-3">{{ $t("pages.categoryEditPage.keyLabel") }}</TableHead>
+                      <TableHead class="hidden md:table-cell px-3">{{ $t("pages.categoryEditPage.groupLabel") }}</TableHead>
+                      <TableHead class="px-3">{{ $t("pages.categoryEditPage.typeHeader") }}</TableHead>
+                      <TableHead class="hidden lg:table-cell w-28 text-right px-3">{{ $t("pages.categoryEditPage.optionsHeader") }}</TableHead>
+                      <TableHead class="hidden xl:table-cell px-3">{{ $t("common.description") }}</TableHead>
                       <TableHead class="w-24 px-2" />
                     </TableRow>
                   </TableHeader>
@@ -905,7 +923,7 @@ export default {
                             <span
                               v-if="attribute.isRequired"
                               class="shrink-0 text-destructive"
-                              title="Обязательное поле"
+                              :title="$t('pages.categoryEditPage.requiredFieldTitle')"
                             >*</span>
                           </div>
                           <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
@@ -923,16 +941,16 @@ export default {
                           >
                             {{ attribute.group }}
                           </Badge>
-                          <span v-else class="text-muted-foreground">—</span>
+                          <span v-else class="text-muted-foreground">{{ $t("common.emDash") }}</span>
                         </TableCell>
                         <TableCell class="px-3 text-muted-foreground">
                           {{ getAttributeTypeLabel(attribute.type) }}
                         </TableCell>
                         <TableCell class="hidden lg:table-cell px-3 text-right tabular-nums text-muted-foreground">
-                          {{ attribute.options ? getOptionsCount(attribute.options) : "—" }}
+                          {{ attribute.options ? getOptionsCount(attribute.options) : $t("common.emDash") }}
                         </TableCell>
                         <TableCell class="hidden xl:table-cell px-3 text-muted-foreground max-w-xs truncate">
-                          {{ attribute.description || "—" }}
+                          {{ attribute.description || $t("common.emDash") }}
                         </TableCell>
                         <TableCell class="px-2">
                           <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
@@ -952,20 +970,19 @@ export default {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
+                                  <AlertDialogTitle>{{ $t("pages.categoryEditPage.deleteAttributeTitle") }}</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
-                                    Все значения этого атрибута у товаров будут удалены.
+                                    {{ $t("pages.categoryEditPage.deleteAttributeDescription", { name: attribute.name }) }}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                  <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                                   <AlertDialogAction
                                     @click="handleDeleteAttribute(attribute.id)"
                                     :disabled="isDeletingAttribute"
                                   >
                                     <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
-                                    Удалить
+                                    {{ $t("common.delete") }}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -991,28 +1008,28 @@ export default {
       >
         <DialogHeader class="shrink-0 border-b px-6 pt-6 pb-4">
           <DialogTitle>
-            {{ editingAttribute ? "Редактировать атрибут" : "Новый атрибут" }}
+            {{ editingAttribute ? $t("pages.categoryEditPage.editAttributeTitle") : $t("pages.categoryEditPage.newAttributeTitle") }}
           </DialogTitle>
           <DialogDescription>
-            Параметры поля на странице товара в этой категории
+            {{ $t("pages.categoryEditPage.attributeDialogSubtitle") }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <FieldGroup class="gap-6">
             <section class="space-y-4">
-              <h3 class="text-sm font-medium">Основное</h3>
+              <h3 class="text-sm font-medium">{{ $t("pages.categoryEditPage.basicSection") }}</h3>
               <div class="grid gap-4 sm:grid-cols-2">
-                <SettingsFormField label="Название" label-for="attr-name">
+                <SettingsFormField :label="$t('common.name')" label-for="attr-name">
                   <Input
                     id="attr-name"
                     v-model="attributeForm.name"
-                    placeholder="Цвет, Размер, Бренд"
+                    :placeholder="$t('pages.categoryEditPage.namePlaceholderExamples')"
                     @input="!editingAttribute && generateKey()"
                   />
                 </SettingsFormField>
-                <SettingsFormField label="Ключ" label-for="attr-key">
-                  <template #description>Используется в API и экспорте</template>
+                <SettingsFormField :label="$t('pages.categoryEditPage.keyLabel')" label-for="attr-key">
+                  <template #description>{{ $t("pages.categoryEditPage.keyDescription") }}</template>
                   <Input
                     id="attr-key"
                     v-model="attributeForm.key"
@@ -1021,14 +1038,14 @@ export default {
                   />
                 </SettingsFormField>
               </div>
-              <SettingsFormField label="Тип значения" label-for="attr-type">
+              <SettingsFormField :label="$t('pages.categoryEditPage.typeLabel')" label-for="attr-type">
                 <Select v-model="attributeForm.type">
                   <SelectTrigger id="attr-type" class="w-full">
                     <SelectValue :placeholder="attributeTypeLabel" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
-                      v-for="typeInfo in ATTRIBUTE_TYPE_OPTIONS"
+                      v-for="typeInfo in attributeTypeOptions"
                       :key="typeInfo.value"
                       :value="typeInfo.value"
                     >
@@ -1041,7 +1058,7 @@ export default {
 
             <section v-if="showOptionsField" class="space-y-3">
               <div class="flex items-center justify-between gap-3">
-                <h3 class="text-sm font-medium">Варианты</h3>
+                <h3 class="text-sm font-medium">{{ $t("pages.categoryEditPage.optionsSection") }}</h3>
                 <div class="flex items-center gap-2">
                   <Button
                     type="button"
@@ -1051,7 +1068,7 @@ export default {
                     @click="exportAttributeOptions"
                   >
                     <Download class="size-3.5 mr-1.5" />
-                    Экспорт
+                    {{ $t("pages.categoryEditPage.export") }}
                   </Button>
                   <Button
                     type="button"
@@ -1060,7 +1077,7 @@ export default {
                     @click="triggerOptionsImport"
                   >
                     <Upload class="size-3.5 mr-1.5" />
-                    Импорт
+                    {{ $t("pages.categoryEditPage.import") }}
                   </Button>
                 </div>
               </div>
@@ -1081,10 +1098,10 @@ export default {
                     <span class="font-medium tabular-nums">
                       {{ editingOptionsCount.toLocaleString() }}
                     </span>
-                    <span class="text-muted-foreground"> вариантов</span>
+                    <span class="text-muted-foreground"> {{ $t("pages.categoryEditPage.optionsWord") }}</span>
                   </p>
                   <p class="text-xs text-muted-foreground mt-0.5">
-                    Список хранится в JSON — редактируйте через импорт и экспорт
+                    {{ $t("pages.categoryEditPage.largeOptionsHint") }}
                   </p>
                 </div>
                 <Button
@@ -1095,25 +1112,25 @@ export default {
                   @click="clearAttributeOptions"
                 >
                   <Trash2 class="size-3.5 mr-1.5" />
-                  Очистить
+                  {{ $t("pages.categoryEditPage.clearOptions") }}
                 </Button>
               </div>
               <Textarea
                 v-else
                 v-model="attributeForm.options"
-                placeholder="Красный, Синий, Зелёный — или value:подпись"
+                :placeholder="$t('pages.categoryEditPage.optionsPlaceholderExample')"
                 class="min-h-24 resize-none font-mono text-sm"
                 @input="onOptionsTextInput"
               />
               <p class="text-xs text-muted-foreground">
-                JSON, CSV или текст — по одному варианту на строку или через запятую
+                {{ $t("pages.categoryEditPage.optionsFormatHint") }}
               </p>
             </section>
 
             <section class="space-y-4">
-              <h3 class="text-sm font-medium">Дополнительно</h3>
+              <h3 class="text-sm font-medium">{{ $t("pages.categoryEditPage.additionalSection") }}</h3>
 
-              <SettingsFormField label="Значение по умолчанию" label-for="attr-default">
+              <SettingsFormField :label="$t('pages.categoryEditPage.defaultValueLabel')" label-for="attr-default">
                 <div
                   v-if="attributeForm.type === 2"
                   class="flex items-center gap-2 h-9"
@@ -1124,7 +1141,7 @@ export default {
                     @update:model-value="attributeForm.defaultValue = $event ? 'true' : 'false'"
                   />
                   <span class="text-sm text-muted-foreground">
-                    {{ attributeForm.defaultValue === "true" ? "Да" : "Нет" }}
+                    {{ attributeForm.defaultValue === "true" ? $t("common.yes") : $t("common.no") }}
                   </span>
                 </div>
                 <div
@@ -1137,7 +1154,7 @@ export default {
                     @update:model-value="attributeForm.defaultValue = $event"
                     :options="defaultValueSelectOptions"
                     :disabled="isLoadingDefaultValueOptions"
-                    placeholder="Не выбрано"
+                    :placeholder="$t('pages.categoryEditPage.notSelectedPlaceholder')"
                     class="w-full"
                     @open="loadDefaultValueOptionsIfNeeded"
                   />
@@ -1145,34 +1162,34 @@ export default {
                     v-if="hasLargeOptions && !defaultValueOptionsReady"
                     class="text-xs text-muted-foreground"
                   >
-                    Список загрузится при открытии выбора
+                    {{ $t("pages.categoryEditPage.lazyLoadHint") }}
                   </p>
                 </div>
                 <Input
                   v-else
                   id="attr-default"
                   v-model="attributeForm.defaultValue"
-                  :placeholder="attributeForm.type === 4 ? 'значение1, значение2' : 'Необязательно'"
+                  :placeholder="attributeForm.type === 4 ? $t('pages.categoryEditPage.multiValuePlaceholder') : $t('pages.categoryEditPage.optionalPlaceholder')"
                   :type="attributeForm.type === 1 ? 'number' : 'text'"
                 />
                 <template
                   v-if="attributeForm.type === 4 && editingOptionsCount"
                   #description
                 >
-                  Несколько значений через запятую
+                  {{ $t("pages.categoryEditPage.multiValueHint") }}
                 </template>
               </SettingsFormField>
 
-              <SettingsFormField label="Описание" label-for="attr-description">
+              <SettingsFormField :label="$t('common.description')" label-for="attr-description">
                 <Textarea
                   id="attr-description"
                   v-model="attributeForm.description"
-                  placeholder="Подсказка для пользователя на странице товара"
+                  :placeholder="$t('pages.categoryEditPage.descriptionPlaceholder')"
                   class="min-h-20 resize-none"
                 />
               </SettingsFormField>
 
-              <SettingsFormField label="Описание в подсказке">
+              <SettingsFormField :label="$t('pages.categoryEditPage.descriptionInTooltipLabel')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="attr-description-tooltip"
@@ -1180,17 +1197,17 @@ export default {
                     @update:model-value="attributeForm.descriptionInTooltip = $event"
                   />
                   <Label for="attr-description-tooltip" class="font-normal text-muted-foreground">
-                    Скрывать длинное описание за иконкой на странице товара
+                    {{ $t("pages.categoryEditPage.descriptionInTooltipHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
-              <SettingsFormField label="Группа" label-for="attr-group">
+              <SettingsFormField :label="$t('pages.categoryEditPage.groupLabel')" label-for="attr-group">
                 <Input
                   v-if="customGroupMode"
                   id="attr-group"
                   v-model="attributeForm.group"
-                  placeholder="Название группы"
+                  :placeholder="$t('pages.categoryEditPage.groupNamePlaceholder')"
                 />
                 <SearchableSelect
                   v-else
@@ -1198,7 +1215,7 @@ export default {
                   :model-value="attributeForm.group"
                   @update:model-value="attributeForm.group = $event"
                   :options="groupSelectOptions"
-                  placeholder="Без группы"
+                  :placeholder="$t('pages.categoryEditPage.noGroupPlaceholder')"
                   class="w-full"
                 />
                 <template #description>
@@ -1208,14 +1225,14 @@ export default {
                     class="h-auto p-0 text-xs"
                     @click="customGroupMode = !customGroupMode; if (!customGroupMode) attributeForm.group = ''"
                   >
-                    {{ customGroupMode ? "Выбрать из списка" : "Своя группа" }}
+                    {{ customGroupMode ? $t("pages.categoryEditPage.chooseFromListLabel") : $t("pages.categoryEditPage.customGroupLabel") }}
                   </Button>
                 </template>
               </SettingsFormField>
 
               <SettingsFormField
                 v-if="isTextAttributeType"
-                label="Многострочный текст"
+                :label="$t('pages.categoryEditPage.multilineLabel')"
               >
                 <div class="flex items-center gap-2 h-9">
                   <Switch
@@ -1224,12 +1241,12 @@ export default {
                     @update:model-value="attributeForm.isMultiline = $event"
                   />
                   <Label for="attr-multiline" class="font-normal text-muted-foreground">
-                    Поле с переносами строк на странице товара
+                    {{ $t("pages.categoryEditPage.multilineHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
-              <SettingsFormField label="На странице товара">
+              <SettingsFormField :label="$t('pages.categoryEditPage.showOnProductPageLabel')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="attr-visible"
@@ -1237,12 +1254,12 @@ export default {
                     @update:model-value="attributeForm.showOnProductPage = $event"
                   />
                   <Label for="attr-visible" class="font-normal text-muted-foreground">
-                    Показывать при редактировании товара
+                    {{ $t("pages.categoryEditPage.showOnProductPageHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
-              <SettingsFormField label="Обязательное поле">
+              <SettingsFormField :label="$t('pages.categoryEditPage.requiredFieldTitle')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="attr-required"
@@ -1250,7 +1267,7 @@ export default {
                     @update:model-value="attributeForm.isRequired = $event"
                   />
                   <Label for="attr-required" class="font-normal text-muted-foreground">
-                    Требовать заполнение при создании товара
+                    {{ $t("pages.categoryEditPage.requiredFieldHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
@@ -1260,11 +1277,11 @@ export default {
 
         <DialogFooter class="shrink-0 border-t px-6 py-4">
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
             <Loader2 v-if="isAddingAttribute" class="size-4 mr-2 animate-spin" />
-            {{ editingAttribute ? "Сохранить" : "Добавить" }}
+            {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>
         </DialogFooter>
       </DialogContent>

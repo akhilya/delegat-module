@@ -71,7 +71,7 @@ export default {
       newGroupDescription: "",
       showCreateDialog: false,
       groupToDelete: null,
-      breadcrumbs: [{ label: "Группы товаров" }],
+      breadcrumbs: [{ label: this.$t("pages.productGroupsPage.breadcrumb") }],
       PAGE_PRODUCTS,
     };
   },
@@ -93,7 +93,7 @@ export default {
 
     async handleCreateGroup() {
       if (!this.newGroupName.trim()) {
-        displaySonnerError("Введите название группы");
+        displaySonnerError(this.$t("pages.productGroupsPage.nameRequired"));
         return;
       }
 
@@ -103,7 +103,7 @@ export default {
         description: this.newGroupDescription.trim() || null,
         productIds: [],
         onSuccess: (response) => {
-          displaySonnerSuccess("Группа создана");
+          displaySonnerSuccess(this.$t("pages.productGroupsPage.created"));
           this.newGroupName = "";
           this.newGroupDescription = "";
           this.showCreateDialog = false;
@@ -122,7 +122,7 @@ export default {
       await this.deleteGroup({
         id: groupId,
         onSuccess: () => {
-          displaySonnerSuccess("Группа удалена");
+          displaySonnerSuccess(this.$t("pages.productGroupsPage.deleted"));
           this.fetchGroups();
         },
         onError: (error) => {
@@ -153,11 +153,11 @@ export default {
     getSyncStatusLabel(status) {
       switch (status) {
         case "Synced":
-          return "Синхронизировано";
+          return this.$t("pages.productGroupsPage.syncStatus.synced");
         case "Pending":
-          return "Ожидает";
+          return this.$t("pages.productGroupsPage.syncStatus.pending");
         case "Error":
-          return "Ошибка";
+          return this.$t("pages.productGroupsPage.syncStatus.error");
         default:
           return status;
       }
@@ -174,39 +174,39 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageHeader title="Группы товаров" description="Локальные наборы товаров для объединения в одну карточку на маркетплейсе">
+    <PageHeader :title="$t('pages.productGroupsPage.title')" :description="$t('pages.productGroupsPage.description')">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
             <Plus class="size-4 mr-2" />
-            Создать группу
+            {{ $t("pages.productGroupsPage.createGroup") }}
           </Button>
         </DialogTrigger>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Новая группа</DialogTitle>
+            <DialogTitle>{{ $t("pages.productGroupsPage.newGroupTitle") }}</DialogTitle>
             <DialogDescription>
-              Введите название и описание для новой группы товаров
+              {{ $t("pages.productGroupsPage.newGroupDescription") }}
             </DialogDescription>
           </DialogHeader>
           <div class="py-4 space-y-4">
             <Input
               v-model="newGroupName"
-              placeholder="Название группы"
+              :placeholder="$t('pages.productGroupsPage.namePlaceholder')"
               @keyup.enter="handleCreateGroup"
             />
             <Input
               v-model="newGroupDescription"
-              placeholder="Описание (необязательно)"
+              :placeholder="$t('pages.productGroupsPage.descriptionPlaceholder')"
             />
           </div>
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline">Отмена</Button>
+              <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateGroup" :disabled="isCreating">
               <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
-              Создать
+              {{ $t("common.create") }}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -217,13 +217,13 @@ export default {
       :loading="isLoading"
       :empty="groups.length === 0"
       :empty-icon="Layers"
-      empty-title="Нет групп товаров"
-      empty-description="Создайте первую группу для объединения товаров"
+      :empty-title="$t('pages.productGroupsPage.emptyTitle')"
+      :empty-description="$t('pages.productGroupsPage.emptyDescription')"
     >
       <template #empty-action>
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
-          Создать группу
+          {{ $t("pages.productGroupsPage.createGroup") }}
         </Button>
       </template>
 
@@ -232,10 +232,10 @@ export default {
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
-                <TableHead>Название</TableHead>
-                <TableHead class="hidden md:table-cell">Описание</TableHead>
-                <TableHead class="w-28 text-right">Товары</TableHead>
-                <TableHead class="hidden sm:table-cell">Маркетплейсы</TableHead>
+                <TableHead>{{ $t("common.name") }}</TableHead>
+                <TableHead class="hidden md:table-cell">{{ $t("common.description") }}</TableHead>
+                <TableHead class="w-28 text-right">{{ $t("pages.productGroupsPage.productsHeader") }}</TableHead>
+                <TableHead class="hidden sm:table-cell">{{ $t("pages.productGroupsPage.marketplacesHeader") }}</TableHead>
                 <TableHead class="w-12" />
               </TableRow>
             </TableHeader>
@@ -256,7 +256,7 @@ export default {
                   </span>
                 </TableCell>
                 <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
-                  {{ group.description || "—" }}
+                  {{ group.description || $t("common.emDash") }}
                 </TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
                   {{ group.membersCount || 0 }}
@@ -275,13 +275,13 @@ export default {
                       {{ link.connectionName }}
                     </Badge>
                   </div>
-                  <span v-else class="text-muted-foreground">—</span>
+                  <span v-else class="text-muted-foreground">{{ $t("common.emDash") }}</span>
                 </TableCell>
                 <TableCell class="px-2">
                   <ConfirmDialog
-                    title="Удалить группу?"
-                    :description="`Вы уверены что хотите удалить группу &quot;${group.name}&quot;? Это действие нельзя отменить. Связи с адаптерами также будут удалены.`"
-                    confirm-label="Удалить"
+                    :title="$t('pages.productGroupsPage.deleteTitle')"
+                    :description="$t('pages.productGroupsPage.deleteDescription', { name: group.name })"
+                    :confirm-label="$t('common.delete')"
                     :loading="isDeleting"
                     @confirm="handleDeleteGroup(group.id)"
                   >

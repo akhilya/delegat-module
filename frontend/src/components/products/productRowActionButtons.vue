@@ -88,18 +88,18 @@ export default {
     <DropdownMenuContent align="end">
       <DropdownMenuItem @click.stop="navigate">
         <ArrowRight class="size-4 mr-2" />
-        Перейти
+        {{ $t("productRowActions.goTo") }}
       </DropdownMenuItem>
       <DropdownMenuItem @click.stop="openTransfer">
         <ArrowRightLeft class="size-4 mr-2" />
-        Переместить в магазин
+        {{ $t("productRowActions.moveToStore") }}
       </DropdownMenuItem>
       <DropdownMenuItem
         class="text-destructive focus:text-destructive"
         @click.stop="showDeleteDialog = true"
       >
         <Trash2 class="size-4 mr-2" />
-        Переместить в корзину
+        {{ $t("productRowActions.moveToTrash") }}
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
@@ -107,18 +107,18 @@ export default {
   <AlertDialog v-model:open="showDeleteDialog">
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>Отправить в корзину?</AlertDialogTitle>
+        <AlertDialogTitle>{{ $t("productRowActions.confirmTrashTitle") }}</AlertDialogTitle>
         <AlertDialogDescription>
-          Товар будет перемещён в корзину. Его можно будет восстановить.
+          {{ $t("productRowActions.confirmTrashDescription") }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>Отмена</AlertDialogCancel>
+        <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction
           class="bg-destructive text-white hover:bg-destructive/90"
           @click="confirmDelete"
         >
-          В корзину
+          {{ $t("productRowActions.toTrash") }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

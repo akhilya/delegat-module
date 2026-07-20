@@ -64,11 +64,11 @@ export default {
     <DropdownMenuContent align="end">
       <DropdownMenuItem @click.stop="showRestoreDialog = true">
         <Undo2 class="size-4 mr-2" />
-        Восстановить
+        {{ $t("trashRowActions.restore") }}
       </DropdownMenuItem>
       <DropdownMenuItem class="text-destructive focus:text-destructive" @click.stop="showDeleteDialog = true">
         <Trash2 class="size-4 mr-2" />
-        Удалить навсегда
+        {{ $t("trashRowActions.deleteForever") }}
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
@@ -76,15 +76,15 @@ export default {
   <AlertDialog v-model:open="showRestoreDialog">
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>Восстановить товар?</AlertDialogTitle>
+        <AlertDialogTitle>{{ $t("trashRowActions.confirmRestoreTitle") }}</AlertDialogTitle>
         <AlertDialogDescription>
-          Товар будет восстановлен из корзины и снова появится в списке товаров.
+          {{ $t("trashRowActions.confirmRestoreDescription") }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>Отмена</AlertDialogCancel>
+        <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction @click="$emit('restore', id)">
-          Восстановить
+          {{ $t("trashRowActions.restore") }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
@@ -93,18 +93,18 @@ export default {
   <AlertDialog v-model:open="showDeleteDialog">
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
+        <AlertDialogTitle>{{ $t("trashRowActions.confirmDeleteTitle") }}</AlertDialogTitle>
         <AlertDialogDescription>
-          Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.
+          {{ $t("trashRowActions.confirmDeleteDescription") }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>Отмена</AlertDialogCancel>
+        <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction
           class="bg-destructive text-white hover:bg-destructive/90"
           @click="$emit('permanent-delete', id)"
         >
-          Удалить навсегда
+          {{ $t("trashRowActions.deleteForever") }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

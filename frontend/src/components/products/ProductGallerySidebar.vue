@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Loader2, Plus, X } from "lucide-vue-next";
 import draggable from "vuedraggable";
+import { t } from "@/i18n";
 
 const images = defineModel("images", { type: Array, required: true });
 
@@ -32,9 +33,9 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
         layout === 'inline' ? 'px-0 border-b-0 py-0' : '',
       ]"
     >
-      <p class="text-sm font-medium">Фотографии</p>
+      <p class="text-sm font-medium">{{ t("products.productGallerySidebar.title") }}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-        Первое — главное
+        {{ t("products.productGallerySidebar.firstIsMainHint") }}
       </p>
     </div>
 
@@ -72,7 +73,7 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
           >
             <img
               :src="element.previewUrl || `/api/files/${element.fileId}/thumbnail?w=256`"
-              :alt="element.displayName || 'Фото товара'"
+              :alt="element.displayName || t('products.productGallerySidebar.productPhotoAlt')"
               :class="[
                 'size-full pointer-events-none',
                 layout === 'sidebar' ? 'object-cover' : 'object-contain',
@@ -82,7 +83,7 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
               v-if="index === 0"
               class="absolute top-1.5 left-1.5 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-medium"
             >
-              Главное
+              {{ t("products.productGallerySidebar.mainBadge") }}
             </div>
             <Button
               type="button"

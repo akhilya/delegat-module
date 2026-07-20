@@ -84,9 +84,9 @@ function isIrreversible(key) {
             <th v-if="selectable" class="w-[40px] py-2 px-2">
               <Checkbox :model-value="allIncluded" @update:model-value="toggleAll" />
             </th>
-            <th class="text-left py-2 px-2 font-medium text-muted-foreground" :class="selectable ? 'w-[100px]' : 'w-1/4'">Поле</th>
-            <th class="text-left py-2 px-2 font-medium text-muted-foreground">Текущее</th>
-            <th class="text-left py-2 px-2 font-medium text-muted-foreground">Новое</th>
+            <th class="text-left py-2 px-2 font-medium text-muted-foreground" :class="selectable ? 'w-[100px]' : 'w-1/4'">{{ $t("fieldChangesTable.fieldHeader") }}</th>
+            <th class="text-left py-2 px-2 font-medium text-muted-foreground">{{ $t("fieldChangesTable.currentHeader") }}</th>
+            <th class="text-left py-2 px-2 font-medium text-muted-foreground">{{ $t("fieldChangesTable.newHeader") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -107,17 +107,17 @@ function isIrreversible(key) {
                 <span
                   v-if="isIrreversible(field.key)"
                   class="inline-flex items-center text-warning-foreground"
-                  title="Необратимые модификаторы"
+                  :title="$t('fieldChangesTable.irreversibleModifiers')"
                 >
                   <AlertTriangle class="size-3.5" />
                 </span>
               </div>
             </td>
             <td class="py-2 px-3 break-words whitespace-pre-wrap align-top">
-              <span class="bg-error/10 text-error-foreground px-1 rounded">{{ field.oldValue ?? "(пусто)" }}</span>
+              <span class="bg-error/10 text-error-foreground px-1 rounded">{{ field.oldValue ?? $t("fieldChangesTable.emptyValue") }}</span>
             </td>
             <td class="py-2 px-3 break-words whitespace-pre-wrap align-top">
-              <span class="bg-success/10 text-success-foreground px-1 rounded">{{ field.newValue ?? "(пусто)" }}</span>
+              <span class="bg-success/10 text-success-foreground px-1 rounded">{{ field.newValue ?? $t("fieldChangesTable.emptyValue") }}</span>
             </td>
           </tr>
         </tbody>
@@ -137,9 +137,9 @@ function isIrreversible(key) {
         <table class="w-full table-fixed text-sm">
           <thead>
             <tr class="border-b">
-              <th class="w-1/4 text-left py-2 px-3 font-medium text-muted-foreground">Поле</th>
-              <th class="text-left py-2 px-3 font-medium text-muted-foreground">Текущее</th>
-              <th class="text-left py-2 px-3 font-medium text-muted-foreground">Новое</th>
+              <th class="w-1/4 text-left py-2 px-3 font-medium text-muted-foreground">{{ $t("fieldChangesTable.fieldHeader") }}</th>
+              <th class="text-left py-2 px-3 font-medium text-muted-foreground">{{ $t("fieldChangesTable.currentHeader") }}</th>
+              <th class="text-left py-2 px-3 font-medium text-muted-foreground">{{ $t("fieldChangesTable.newHeader") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -151,12 +151,12 @@ function isIrreversible(key) {
               <td class="py-2 px-3 text-muted-foreground align-top">{{ field.label }}</td>
               <td class="py-2 px-3 break-words whitespace-pre-wrap align-top">
                 <span class="bg-error/10 text-error-foreground px-1 rounded">
-                  {{ field.oldValue || "(пусто)" }}
+                  {{ field.oldValue || $t("fieldChangesTable.emptyValue") }}
                 </span>
               </td>
               <td class="py-2 px-3 break-words whitespace-pre-wrap align-top">
                 <span class="bg-success/10 text-success-foreground px-1 rounded">
-                  {{ field.newValue || "(пусто)" }}
+                  {{ field.newValue || $t("fieldChangesTable.emptyValue") }}
                 </span>
               </td>
             </tr>
@@ -167,8 +167,8 @@ function isIrreversible(key) {
       <EmptyState
         v-if="items.length === 0"
         size="sm"
-        title="Изменений не обнаружено"
-        description="Данные на адаптере совпадают с локальными."
+        :title="$t('fieldChangesTable.noChangesTitle')"
+        :description="$t('fieldChangesTable.noChangesDescription')"
       />
     </template>
   </div>

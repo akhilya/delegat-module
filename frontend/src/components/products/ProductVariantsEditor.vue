@@ -27,6 +27,7 @@ import { Loader2, Plus, Trash2, GripVertical, Layers } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useDebounceFn } from "@vueuse/core";
 import draggable from "vuedraggable";
+import { t } from "@/i18n";
 
 export default {
   components: {
@@ -105,7 +106,7 @@ export default {
           },
         });
         this.variants.push(newVariant);
-        displaySonnerSuccess("Размер добавлен");
+        displaySonnerSuccess(t("products.productVariantsEditor.variantAdded"));
       } catch (error) {
         displaySonnerError(error);
       }
@@ -120,7 +121,7 @@ export default {
           variantId: variant.id,
         });
         this.variants = this.variants.filter((v) => v.id !== variant.id);
-        displaySonnerSuccess("Размер удалён");
+        displaySonnerSuccess(t("products.productVariantsEditor.variantDeleted"));
       } catch (error) {
         displaySonnerError(error);
       }
@@ -194,12 +195,12 @@ export default {
     <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
       <p class="text-sm font-medium flex items-center gap-2">
         <Layers class="size-4" />
-        Размеры
+        {{ $t("products.productVariantsEditor.title") }}
       </p>
       <Button variant="ghost" size="sm" @click="handleAdd" :disabled="isAdding" class="h-7">
         <Loader2 v-if="isAdding" class="size-4 mr-1 animate-spin" />
         <Plus v-else class="size-4 mr-1" />
-        Добавить
+        {{ $t("common.add") }}
       </Button>
     </div>
     <div class="flex-1 min-h-0 overflow-y-auto">
@@ -209,8 +210,8 @@ export default {
 
       <EmptyState
         v-else-if="variants.length === 0"
-        title="Нет размеров"
-        description="Добавьте размеры, чтобы управлять ценой, штрихкодом и остатками по каждому из них."
+        :title="$t('products.productVariantsEditor.emptyTitle')"
+        :description="$t('products.productVariantsEditor.emptyDescription')"
         class="py-10"
       >
         <template #icon>
@@ -222,11 +223,11 @@ export default {
         <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10 pl-4 pr-2" />
-            <TableHead class="px-3">Размер</TableHead>
-            <TableHead class="px-3">Артикул (SKU)</TableHead>
-            <TableHead class="px-3">Штрихкод</TableHead>
-            <TableHead class="w-28 px-3">Цена</TableHead>
-            <TableHead class="w-24 px-3">Остаток</TableHead>
+            <TableHead class="px-3">{{ $t("products.productVariantsEditor.sizeHeader") }}</TableHead>
+            <TableHead class="px-3">{{ $t("products.productVariantsEditor.skuHeader") }}</TableHead>
+            <TableHead class="px-3">{{ $t("products.productVariantsEditor.barcodeHeader") }}</TableHead>
+            <TableHead class="w-28 px-3">{{ $t("products.productVariantsEditor.priceHeader") }}</TableHead>
+            <TableHead class="w-24 px-3">{{ $t("products.productVariantsEditor.quantityHeader") }}</TableHead>
             <TableHead class="w-12 pl-2 pr-4" />
           </TableRow>
         </TableHeader>
@@ -301,15 +302,15 @@ export default {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Удалить размер?</AlertDialogTitle>
+                    <AlertDialogTitle>{{ $t("products.productVariantsEditor.deleteConfirmTitle") }}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Размер "{{ variant.size || '(без названия)' }}" будет удалён. Это действие нельзя отменить.
+                      {{ $t("products.productVariantsEditor.deleteConfirmDescription", { name: variant.size || $t("products.productVariantsEditor.unnamedFallback") }) }}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Отмена</AlertDialogCancel>
+                    <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                     <AlertDialogAction @click="handleDelete(variant)">
-                      Удалить
+                      {{ $t("common.delete") }}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -325,7 +326,7 @@ export default {
         class="flex items-center gap-2 border-t px-4 py-2 text-sm text-muted-foreground"
       >
         <Loader2 class="size-3 animate-spin" />
-        <span>Сохранение...</span>
+        <span>{{ $t("products.productVariantsEditor.saving") }}</span>
       </div>
     </div>
   </div>

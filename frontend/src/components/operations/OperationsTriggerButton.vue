@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useStore } from "vuex";
 import { Activity, ChevronRight, ChevronLeft } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { t } from "@/i18n";
 
 const store = useStore();
 
@@ -31,7 +32,7 @@ function showFabs() {
       type="button"
       variant="ghost"
       class="fixed bottom-6 right-0 z-[9996] h-12 w-5 rounded-l-xl rounded-r-none bg-muted/80 border border-r-0 border-border/60 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted"
-      title="Показать кнопки"
+      :title="t('operations.showButtons')"
       @click="showFabs"
     >
       <ChevronLeft class="size-3" />
@@ -49,7 +50,7 @@ function showFabs() {
         variant="ghost"
         size="icon"
         class="size-6 rounded-full bg-background/90 border border-border/60 backdrop-blur-sm text-muted-foreground opacity-0 group-hover/opsgroup:opacity-100 transition-opacity hover:text-foreground shrink-0"
-        title="Скрыть кнопки"
+        :title="t('operations.hideButtons')"
         @click.stop="hideFabs"
       >
         <ChevronRight class="size-3" />

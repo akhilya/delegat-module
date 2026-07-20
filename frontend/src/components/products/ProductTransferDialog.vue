@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2, AlertTriangle, ArrowRightLeft, Copy, ExternalLink, CheckCircle2, XCircle } from "lucide-vue-next";
+import { t } from "@/i18n";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -49,8 +50,7 @@ const emit = defineEmits(["update:open", "transferred"]);
 
 const store = useStore();
 
-// Russian plural form picker. forms = [singular, few, many]
-//   1 → "характеристика", 2-4 → "характеристики", 5+/0 → "характеристик"
+// Russian plural form picker. forms = [one, few, many] — for English callers can reuse the same string 3x.
 function pluralize(n, forms) {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -180,7 +180,7 @@ watch(targetStoreId, async (newId) => {
       confirmBreakLinks.value = false;
     },
     onError: (error) => {
-      previewError.value = error?.response?.data?.message || error?.message || "Не удалось загрузить превью";
+      previewError.value = error?.response?.data?.message || error?.message || t("products.productTransferDialog.previewLoadFailed");
       preview.value = null;
     },
   });
@@ -248,14 +248,13 @@ async function submit() {
       // Backend now enqueues — returns { queued: true, operationId, totalFiles }.
       // Real progress lives in the operations side panel.
       const result = response.data.value;
-      const targetStoreName = preview.value.targetStore?.name || "целевой магазин";
-      // "Перенос" (м.р.) → "поставлен", "Клонирование" (ср.р.) → "поставлено"
+      const targetStoreName = preview.value.targetStore?.name || t("products.productTransferDialog.targetStoreFallback");
       const headline = mode.value === "move"
-        ? `Перенос в «${targetStoreName}» поставлен в очередь`
-        : `Клонирование в «${targetStoreName}» поставлено в очередь`;
+        ? t("products.productTransferDialog.queuedMoveHeadline", { store: targetStoreName })
+        : t("products.productTransferDialog.queuedCloneHeadline", { store: targetStoreName });
       const tail = result?.totalFiles
-        ? `Прогресс по ${result.totalFiles} файлам — в панели операций.`
-        : "Прогресс — в панели операций.";
+        ? t("products.productTransferDialog.progressWithFiles", { count: result.totalFiles })
+        : t("products.productTransferDialog.progressGeneric");
       displaySonnerSuccess(`${headline}. ${tail}`);
       emit("transferred", { queued: true, operationId: result?.operationId, mode: mode.value });
       emit("update:open", false);
@@ -280,7 +279,7 @@ function close() {
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <ArrowRightLeft class="size-5" />
-          Перенести товар в другой магазин
+          {{ t("products.productTransferDialog.dialogTitle") }}
         </DialogTitle>
         <DialogDescription>
           {{ productName || productSku || `#${productId}` }}
@@ -291,7 +290,7 @@ function close() {
       <div class="-mx-6 min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-2 thin-scrollbar">
         <!-- Mode toggle -->
         <div class="space-y-2">
-          <Label class="text-sm">Режим</Label>
+          <Label class="text-sm">{{ t("products.productTransferDialog.modeLabel") }}</Label>
           <div class="grid grid-cols-2 gap-2">
             <Button
               type="button"
@@ -303,7 +302,7 @@ function close() {
               @click="mode = 'clone'"
             >
               <Copy class="size-4" />
-              Клонировать
+              {{ t("products.productTransferDialog.cloneAction") }}
             </Button>
             <Button
               type="button"
@@ -315,25 +314,25 @@ function close() {
               @click="mode = 'move'"
             >
               <ArrowRightLeft class="size-4" />
-              Переместить
+              {{ t("products.productTransferDialog.moveAction") }}
             </Button>
           </div>
           <p class="text-xs text-muted-foreground">
-            <template v-if="mode === 'clone'">Копия появится в целевом магазине. Оригинал не меняется.</template>
-            <template v-else>Оригинал отправится в корзину исходного магазина — оттуда его можно восстановить.</template>
+            <template v-if="mode === 'clone'">{{ t("products.productTransferDialog.cloneModeHint") }}</template>
+            <template v-else>{{ t("products.productTransferDialog.moveModeHint") }}</template>
           </p>
         </div>
 
         <!-- Target store -->
         <div class="space-y-2">
-          <Label for="target-store" class="text-sm">Куда переносим</Label>
+          <Label for="target-store" class="text-sm">{{ t("products.productTransferDialog.targetStoreLabel") }}</Label>
           <Select
             :model-value="targetStoreId == null ? '' : String(targetStoreId)"
             @update:model-value="(v) => targetStoreId = v ? Number(v) : null"
             :disabled="isLoadingMemberships"
           >
             <SelectTrigger id="target-store" class="w-full">
-              <SelectValue :placeholder="isLoadingMemberships ? 'Загрузка магазинов…' : 'Выберите магазин'" />
+              <SelectValue :placeholder="isLoadingMemberships ? t('products.productTransferDialog.loadingStoresPlaceholder') : t('products.productTransferDialog.chooseStorePlaceholder')" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem
@@ -342,7 +341,7 @@ function close() {
                 :value="String(m.id)"
                 as="button"
               >
-                {{ m.name }}<span v-if="m.id === currentStoreId" class="text-muted-foreground"> · текущий</span>
+                {{ m.name }}<span v-if="m.id === currentStoreId" class="text-muted-foreground"> · {{ t("products.productTransferDialog.currentStoreSuffix") }}</span>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -351,7 +350,7 @@ function close() {
         <!-- Preview area -->
         <div v-if="isLoadingPreview" class="flex items-center gap-2 text-sm text-muted-foreground py-2">
           <Loader2 class="size-4 animate-spin" />
-          Проверяем что и куда поедет…
+          {{ t("products.productTransferDialog.checkingPreview") }}
         </div>
 
         <div v-else-if="previewError" class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -374,32 +373,32 @@ function close() {
               <CheckCircle2 v-if="skuResolved" class="size-4" />
               <AlertTriangle v-else class="size-4" />
               <template v-if="skuResolved">
-                Артикул «{{ newSku.trim() }}»
+                {{ t("products.productTransferDialog.skuResolvedLabel", { sku: newSku.trim() }) }}
               </template>
               <template v-else>
-                Артикул «{{ productSku }}» уже занят — задайте новый
+                {{ t("products.productTransferDialog.skuConflictLabel", { sku: productSku }) }}
               </template>
             </Label>
-            <Input id="new-sku" v-model="newSku" placeholder="Новый артикул" />
+            <Input id="new-sku" v-model="newSku" :placeholder="t('products.productTransferDialog.newSkuPlaceholder')" />
           </div>
 
           <!-- Category resolution -->
           <div v-if="preview.sourceProduct.categoryName" class="space-y-2">
-            <Label class="text-sm">Категория</Label>
+            <Label class="text-sm">{{ t("products.productTransferDialog.categoryLabel") }}</Label>
             <div class="flex items-start gap-1.5 text-xs">
               <CheckCircle2 v-if="preview.matchedCategory" class="size-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <XCircle v-else class="size-3.5 mt-0.5 text-amber-700 dark:text-amber-400 shrink-0" />
               <span class="text-muted-foreground">
-                Исходная: <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
+                {{ t("products.productTransferDialog.sourceCategoryLabel") }} <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
                 <template v-if="preview.matchedCategory">
-                  В целевом магазине найдена с тем же названием —
-                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, ['характеристика перенесётся', 'характеристики перенесутся', 'характеристик перенесётся']) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">,
-                    <span v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')" class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['будет добавлена', 'будут добавлены', 'будет добавлено']) }}</span>
-                    <span v-else class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['не подойдёт', 'не подойдут', 'не подойдёт']) }}</span>
+                  {{ t("products.productTransferDialog.foundSameNameInTarget") }}
+                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, [t("products.productTransferDialog.attrMappableOne"), t("products.productTransferDialog.attrMappableFew"), t("products.productTransferDialog.attrMappableMany")]) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">,
+                    <span v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')" class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.attrWillBeAddedOne"), t("products.productTransferDialog.attrWillBeAddedFew"), t("products.productTransferDialog.attrWillBeAddedMany")]) }}</span>
+                    <span v-else class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.attrWontFitOne"), t("products.productTransferDialog.attrWontFitFew"), t("products.productTransferDialog.attrWontFitMany")]) }}</span>
                   </template>.
                 </template>
                 <template v-else>
-                  В целевом магазине такой нет.
+                  {{ t("products.productTransferDialog.notFoundInTarget") }}
                 </template>
               </span>
             </div>
@@ -409,19 +408,19 @@ function close() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem v-if="preview.matchedCategory" value="match" as="button">
-                  Использовать найденную «{{ preview.matchedCategory.name }}»
+                  {{ t("products.productTransferDialog.useFoundCategory", { name: preview.matchedCategory.name }) }}
                 </SelectItem>
-                <SelectItem value="create" as="button">Создать такую же в целевом магазине</SelectItem>
-                <SelectItem value="none" as="button">Без категории</SelectItem>
+                <SelectItem value="create" as="button">{{ t("products.productTransferDialog.createSameCategory") }}</SelectItem>
+                <SelectItem value="none" as="button">{{ t("products.productTransferDialog.noCategory") }}</SelectItem>
               </SelectContent>
             </Select>
             <div v-if="preview.matchedCategory?.attributesUnmappable?.length" class="space-y-2">
               <div class="text-xs" :class="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create') ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'">
                 <template v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')">
-                  Будут добавлены: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                  {{ t("products.productTransferDialog.willBeAddedPrefix") }} {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
                 </template>
                 <template v-else>
-                  Не подойдут: {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                  {{ t("products.productTransferDialog.wontFitPrefix") }} {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
                 </template>
               </div>
               <label v-if="categoryAction === 'match' || categoryAction === 'create'" class="flex items-start gap-2 text-sm cursor-pointer">
@@ -431,9 +430,9 @@ function close() {
                   class="mt-0.5"
                 />
                 <span class="text-xs">
-                  Добавить {{ preview.matchedCategory.attributesUnmappable.length }}
-                  {{ pluralize(preview.matchedCategory.attributesUnmappable.length, ['недостающий атрибут', 'недостающих атрибута', 'недостающих атрибутов']) }}
-                  к категории «{{ preview.matchedCategory.name }}»
+                  {{ t("products.productTransferDialog.addMissingAttrsPrefix") }} {{ preview.matchedCategory.attributesUnmappable.length }}
+                  {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.missingAttrOne"), t("products.productTransferDialog.missingAttrFew"), t("products.productTransferDialog.missingAttrMany")]) }}
+                  {{ t("products.productTransferDialog.addMissingAttrsSuffix", { name: preview.matchedCategory.name }) }}
                 </span>
               </label>
             </div>
@@ -442,20 +441,20 @@ function close() {
           <!-- Store attributes -->
           <div v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
                class="text-xs text-muted-foreground">
-            Глобальные атрибуты: перенесётся {{ preview.storeAttributesMappable }} из {{ preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }}<template v-if="preview.storeAttributesUnmappable.length">. В целевом магазине нет: {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
+            {{ t("products.productTransferDialog.storeAttributesSummary", { mapped: preview.storeAttributesMappable, total: preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }) }}<template v-if="preview.storeAttributesUnmappable.length">. {{ t("products.productTransferDialog.storeAttributesMissingInTarget") }} {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
           </div>
 
           <!-- Group selection -->
           <div class="space-y-2">
-            <Label class="text-sm">Группа</Label>
+            <Label class="text-sm">{{ t("products.productTransferDialog.groupLabel") }}</Label>
             <Select v-model="groupAction">
               <SelectTrigger class="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none" as="button">Без группы</SelectItem>
-                <SelectItem v-if="preview.targetGroups.length > 0" value="use" as="button">Добавить в существующую</SelectItem>
-                <SelectItem value="create" as="button">Создать новую</SelectItem>
+                <SelectItem value="none" as="button">{{ t("products.productTransferDialog.noGroup") }}</SelectItem>
+                <SelectItem v-if="preview.targetGroups.length > 0" value="use" as="button">{{ t("products.productTransferDialog.addToExistingGroup") }}</SelectItem>
+                <SelectItem value="create" as="button">{{ t("products.productTransferDialog.createNewGroup") }}</SelectItem>
               </SelectContent>
             </Select>
             <Select
@@ -464,7 +463,7 @@ function close() {
               @update:model-value="(v) => groupUseId = v ? Number(v) : null"
             >
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Выберите группу" />
+                <SelectValue :placeholder="t('products.productTransferDialog.chooseGroupPlaceholder')" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="g in preview.targetGroups" :key="g.id" :value="String(g.id)" as="button">
@@ -472,7 +471,7 @@ function close() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            <Input v-if="groupAction === 'create'" v-model="groupNewName" placeholder="Название новой группы" />
+            <Input v-if="groupAction === 'create'" v-model="groupNewName" :placeholder="t('products.productTransferDialog.newGroupNamePlaceholder')" />
           </div>
 
           <!-- Marketplace links: behavior differs by mode -->
@@ -492,10 +491,10 @@ function close() {
               <AlertTriangle v-if="mode === 'move'" class="size-4" />
               <ExternalLink v-else class="size-4" />
               <template v-if="mode === 'move'">
-                После переноса оторвутся {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с адаптерами
+                {{ t("products.productTransferDialog.linksWillBreakAfterMovePrefix") }} {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, [t("products.productTransferDialog.linkOne"), t("products.productTransferDialog.linkFew"), t("products.productTransferDialog.linkMany")]) }} {{ t("products.productTransferDialog.withAdaptersSuffix") }}
               </template>
               <template v-else>
-                У оригинала {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, ['связка', 'связки', 'связок']) }} с адаптерами
+                {{ t("products.productTransferDialog.originalHasLinksPrefix") }} {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, [t("products.productTransferDialog.linkOne"), t("products.productTransferDialog.linkFew"), t("products.productTransferDialog.linkMany")]) }} {{ t("products.productTransferDialog.withAdaptersSuffix") }}
               </template>
             </div>
             <ul class="text-xs text-muted-foreground space-y-1">
@@ -508,12 +507,10 @@ function close() {
             </ul>
             <p class="text-xs text-muted-foreground">
               <template v-if="mode === 'move'">
-                Сами карточки на Ozon/Wildberries останутся, но связь с товаром в Delegat потеряется —
-                в новом магазине их придётся завести заново.
+                {{ t("products.productTransferDialog.moveLinksExplanation") }}
               </template>
               <template v-else>
-                Связи остаются у оригинала. У клона их не будет —
-                заведёте сами после клонирования, если нужно.
+                {{ t("products.productTransferDialog.cloneLinksExplanation") }}
               </template>
             </p>
             <label v-if="mode === 'move'" class="flex items-start gap-2 text-sm cursor-pointer">
@@ -522,28 +519,28 @@ function close() {
                 @update:model-value="confirmBreakLinks = $event"
                 class="mt-0.5"
               />
-              <span>Согласен потерять связи — в новом магазине заведу заново</span>
+              <span>{{ t("products.productTransferDialog.confirmBreakLinksLabel") }}</span>
             </label>
           </div>
 
           <!-- Summary of what will travel -->
           <div class="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-0.5">
             <div class="font-medium text-foreground mb-1">
-              {{ mode === 'move' ? 'Также переедет:' : 'Также скопируется:' }}
+              {{ mode === 'move' ? t("products.productTransferDialog.alsoMovesLabel") : t("products.productTransferDialog.alsoCopiesLabel") }}
             </div>
-            <div>· {{ preview.filesCount }} {{ pluralize(preview.filesCount, ['файл', 'файла', 'файлов']) }}<span v-if="preview.foldersCount"> в {{ preview.foldersCount }} {{ pluralize(preview.foldersCount, ['папке', 'папках', 'папках']) }}</span></div>
-            <div>· {{ preview.imagesCount }} {{ pluralize(preview.imagesCount, ['изображение', 'изображения', 'изображений']) }}</div>
-            <div v-if="preview.notesCount > 0">· {{ preview.notesCount }} {{ pluralize(preview.notesCount, ['заметка', 'заметки', 'заметок']) }}</div>
-            <div v-if="preview.variantsCount > 0">· {{ preview.variantsCount }} {{ pluralize(preview.variantsCount, ['размер', 'размера', 'размеров']) }}</div>
+            <div>· {{ preview.filesCount }} {{ pluralize(preview.filesCount, [t("products.productTransferDialog.fileOne"), t("products.productTransferDialog.fileFew"), t("products.productTransferDialog.fileMany")]) }}<span v-if="preview.foldersCount"> {{ t("products.productTransferDialog.inFoldersPrefix") }} {{ preview.foldersCount }} {{ pluralize(preview.foldersCount, [t("products.productTransferDialog.folderOne"), t("products.productTransferDialog.folderFew"), t("products.productTransferDialog.folderMany")]) }}</span></div>
+            <div>· {{ preview.imagesCount }} {{ pluralize(preview.imagesCount, [t("products.productTransferDialog.imageOne"), t("products.productTransferDialog.imageFew"), t("products.productTransferDialog.imageMany")]) }}</div>
+            <div v-if="preview.notesCount > 0">· {{ preview.notesCount }} {{ pluralize(preview.notesCount, [t("products.productTransferDialog.noteOne"), t("products.productTransferDialog.noteFew"), t("products.productTransferDialog.noteMany")]) }}</div>
+            <div v-if="preview.variantsCount > 0">· {{ preview.variantsCount }} {{ pluralize(preview.variantsCount, [t("products.productTransferDialog.variantOne"), t("products.productTransferDialog.variantFew"), t("products.productTransferDialog.variantMany")]) }}</div>
           </div>
         </div>
       </div>
 
       <DialogFooter>
-        <Button variant="outline" @click="close" :disabled="isSubmitting">Отмена</Button>
+        <Button variant="outline" @click="close" :disabled="isSubmitting">{{ t("common.cancel") }}</Button>
         <Button @click="submit" :disabled="!canSubmit">
           <Loader2 v-if="isSubmitting" class="size-4 animate-spin mr-2" />
-          {{ mode === "move" ? "Переместить" : "Клонировать" }}
+          {{ mode === "move" ? t("products.productTransferDialog.moveAction") : t("products.productTransferDialog.cloneAction") }}
         </Button>
       </DialogFooter>
     </DialogContent>

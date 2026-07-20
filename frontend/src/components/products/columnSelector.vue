@@ -1,13 +1,13 @@
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" size="icon" class="size-8" title="Колонки">
+      <Button variant="ghost" size="icon" class="size-8" :title="$t('columnSelector.columnsTitle')">
         <SlidersHorizontal class="size-4" />
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" class="w-64">
       <!-- Preset Selection -->
-      <DropdownMenuLabel>Комбинированные колонки</DropdownMenuLabel>
+      <DropdownMenuLabel>{{ $t("columnSelector.combinedColumns") }}</DropdownMenuLabel>
       <DropdownMenuSeparator />
       <DropdownMenuRadioGroup
         :model-value="selectedPreset"
@@ -27,7 +27,7 @@
       </DropdownMenuRadioGroup>
 
       <DropdownMenuSeparator />
-      <DropdownMenuLabel>Поля товара</DropdownMenuLabel>
+      <DropdownMenuLabel>{{ $t("columnSelector.productFields") }}</DropdownMenuLabel>
       <DropdownMenuSeparator />
 
       <!-- Individual columns (excluding those hidden by preset) -->
@@ -46,7 +46,7 @@
       <!-- Store attributes section -->
       <template v-if="storeAttributes.length > 0">
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Глобальные атрибуты</DropdownMenuLabel>
+        <DropdownMenuLabel>{{ $t("columnSelector.storeAttributes") }}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           v-for="attr in storeAttributes"

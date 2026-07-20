@@ -69,7 +69,7 @@ export default {
       newCategoryDescription: "",
       showCreateDialog: false,
       categoryToDelete: null,
-      breadcrumbs: [{ label: "Категории" }],
+      breadcrumbs: [{ label: this.$t("pages.categoriesPage.breadcrumb") }],
       PAGE_PRODUCTS,
     };
   },
@@ -91,7 +91,7 @@ export default {
 
     async handleCreateCategory() {
       if (!this.newCategoryName.trim()) {
-        displaySonnerError("Введите название категории");
+        displaySonnerError(this.$t("pages.categoriesPage.nameRequired"));
         return;
       }
 
@@ -100,7 +100,7 @@ export default {
         name: this.newCategoryName.trim(),
         description: this.newCategoryDescription.trim() || null,
         onSuccess: (response) => {
-          displaySonnerSuccess("Категория создана");
+          displaySonnerSuccess(this.$t("pages.categoriesPage.created"));
           this.newCategoryName = "";
           this.newCategoryDescription = "";
           this.showCreateDialog = false;
@@ -119,7 +119,7 @@ export default {
       await this.deleteCategory({
         id: categoryId,
         onSuccess: () => {
-          displaySonnerSuccess("Категория удалена");
+          displaySonnerSuccess(this.$t("pages.categoriesPage.deleted"));
           this.fetchCategories();
         },
         onError: (error) => {
@@ -145,39 +145,39 @@ export default {
     <NavigationBar />
     <Breadcrumbs :items="breadcrumbs" />
 
-    <PageHeader title="Категории" description="Управление категориями товаров и их атрибутами">
+    <PageHeader :title="$t('pages.categoriesPage.title')" :description="$t('pages.categoriesPage.description')">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
             <Plus class="size-4 mr-2" />
-            Добавить категорию
+            {{ $t("pages.categoriesPage.addCategory") }}
           </Button>
         </DialogTrigger>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Новая категория</DialogTitle>
+            <DialogTitle>{{ $t("pages.categoriesPage.newCategoryTitle") }}</DialogTitle>
             <DialogDescription>
-              Введите название и описание для новой категории
+              {{ $t("pages.categoriesPage.newCategoryDescription") }}
             </DialogDescription>
           </DialogHeader>
           <div class="py-4 space-y-4">
             <Input
               v-model="newCategoryName"
-              placeholder="Название категории"
+              :placeholder="$t('pages.categoriesPage.namePlaceholder')"
               @keyup.enter="handleCreateCategory"
             />
             <Input
               v-model="newCategoryDescription"
-              placeholder="Описание (необязательно)"
+              :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
             />
           </div>
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline">Отмена</Button>
+              <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateCategory" :disabled="isCreating">
               <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
-              Создать
+              {{ $t("common.create") }}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -188,13 +188,13 @@ export default {
       :loading="isLoading"
       :empty="categories.length === 0"
       :empty-icon="FolderOpen"
-      empty-title="Нет категорий"
-      empty-description="Создайте первую категорию для товаров"
+      :empty-title="$t('pages.categoriesPage.emptyTitle')"
+      :empty-description="$t('pages.categoriesPage.emptyDescription')"
     >
       <template #empty-action>
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
-          Добавить категорию
+          {{ $t("pages.categoriesPage.addCategory") }}
         </Button>
       </template>
 
@@ -203,10 +203,10 @@ export default {
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
-                <TableHead>Название</TableHead>
-                <TableHead class="hidden md:table-cell">Описание</TableHead>
-                <TableHead class="w-28 text-right">Товары</TableHead>
-                <TableHead class="w-32 text-right">Атрибуты</TableHead>
+                <TableHead>{{ $t("common.name") }}</TableHead>
+                <TableHead class="hidden md:table-cell">{{ $t("common.description") }}</TableHead>
+                <TableHead class="w-28 text-right">{{ $t("pages.categoriesPage.productsHeader") }}</TableHead>
+                <TableHead class="w-32 text-right">{{ $t("pages.categoriesPage.attributesHeader") }}</TableHead>
                 <TableHead class="w-12" />
               </TableRow>
             </TableHeader>
@@ -227,7 +227,7 @@ export default {
                   </span>
                 </TableCell>
                 <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
-                  {{ category.description || "—" }}
+                  {{ category.description || $t("common.emDash") }}
                 </TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
                   {{ category.productsCount || 0 }}
@@ -237,9 +237,9 @@ export default {
                 </TableCell>
                 <TableCell class="px-2">
                   <ConfirmDialog
-                    title="Удалить категорию?"
-                    :description="`Вы уверены что хотите удалить категорию &quot;${category.name}&quot;? Это действие нельзя отменить.`"
-                    confirm-label="Удалить"
+                    :title="$t('pages.categoriesPage.deleteTitle')"
+                    :description="$t('pages.categoriesPage.deleteDescription', { name: category.name })"
+                    :confirm-label="$t('common.delete')"
                     :loading="isDeleting"
                     @confirm="handleDeleteCategory(category.id)"
                   >

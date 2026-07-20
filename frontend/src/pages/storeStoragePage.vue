@@ -8,10 +8,11 @@ import ProductFileManager from "@/components/products/ProductFileManager.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import { http } from "@/main";
 import { displaySonnerError } from "@/store/sonnerHelper";
+import { t } from "@/i18n";
 
 const files = ref([]);
 const isLoading = ref(false);
-const breadcrumbs = [{ label: "Хранилище" }];
+const breadcrumbs = [{ label: t("pages.storeStoragePage.breadcrumb") }];
 
 async function fetchFiles() {
   isLoading.value = true;
@@ -34,18 +35,18 @@ onMounted(fetchFiles);
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Хранилище"
-      description="Общие файлы магазина, не привязанные к конкретному товару"
+      :title="t('pages.storeStoragePage.title')"
+      :description="t('pages.storeStoragePage.description')"
     />
 
     <PageSection class="flex min-h-[calc(100vh-12rem)] flex-1 flex-col overflow-hidden rounded-xl border bg-card p-0">
       <div v-if="isLoading" class="flex min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
-        Загрузка хранилища...
+        {{ t("pages.storeStoragePage.loading") }}
       </div>
       <ProductFileManager
         v-else
         scope="store"
-        storage-label="Общее хранилище магазина"
+        :storage-label="t('pages.storeStoragePage.storageLabel')"
         :files="files"
         @filesChanged="fetchFiles"
       />

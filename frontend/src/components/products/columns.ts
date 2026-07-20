@@ -4,6 +4,7 @@
 import { ColumnDef } from "@tanstack/vue-table";
 import { h } from "vue";
 
+import { t } from "@/i18n";
 import ImageFile from "../imageFile.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -91,7 +92,7 @@ function renderCopyableSku(sku: string, extraClass = "") {
         }, 800);
       }
     },
-    title: "Копировать артикул",
+    title: t("products.columns.copySkuTooltip"),
   }, [
     sku,
     h("span", {
@@ -196,7 +197,7 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "image",
-    label: "Изображение",
+    label: t("products.columns.imageLabel"),
     hideable: true,
     header: "",
     cell: ({ row }) => {
@@ -209,18 +210,18 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "sku",
-    label: "Артикул",
+    label: t("products.columns.skuLabel"),
     hideable: true,
-    header: "Артикул",
+    header: t("products.columns.skuLabel"),
     accessorKey: "sku",
     size: 80,
     cell: ({ row }) => renderCopyableSku(row.original.sku),
   },
   {
     id: "barcode",
-    label: "Штрихкод",
+    label: t("products.columns.barcodeLabel"),
     hideable: true,
-    header: "Штрихкод",
+    header: t("products.columns.barcodeLabel"),
     size: 110,
     cell: ({ row }) => {
       const barcode = row.original.barcode;
@@ -232,9 +233,9 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "category",
-    label: "Категория",
+    label: t("products.columns.categoryLabel"),
     hideable: true,
-    header: "Категория",
+    header: t("products.columns.categoryLabel"),
     cell: ({ row }) => {
       const categoryName = row.original.categoryName;
       if (!categoryName) {
@@ -245,10 +246,10 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "storageQuantity",
-    label: "На складе",
+    label: t("products.columns.storageQuantityLabel"),
     hideable: true,
     accessorKey: "storageQuantity",
-    header: "На складе",
+    header: t("products.columns.storageQuantityLabel"),
     cell: ({ row }) => {
       const value = row.original.storageQuantity;
       if (value === null || value === undefined) {
@@ -259,10 +260,10 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "price",
-    label: "Цена",
+    label: t("products.columns.priceLabel"),
     hideable: true,
     accessorKey: "price",
-    header: "Цена",
+    header: t("products.columns.priceLabel"),
     cell: ({ row }) => {
       const value = row.original.price;
       if (value === null || value === undefined) {
@@ -273,10 +274,10 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "name",
-    label: "Название",
+    label: t("common.name"),
     hideable: true,
     accessorKey: "name",
-    header: "Название",
+    header: t("common.name"),
     cell: ({ row }) => {
       return h("div", { class: "flex flex-col overflow-hidden" }, [
         h(
@@ -289,17 +290,17 @@ export const columns: ProductColumnDef[] = [
   },
   {
     id: "createdAt",
-    label: "Создан",
+    label: t("products.columns.createdAtLabel"),
     hideable: true,
-    header: "Создан",
+    header: t("products.columns.createdAtLabel"),
     size: 130,
     cell: ({ row }) => renderDateCell(row.original.createdAt),
   },
   {
     id: "updatedAt",
-    label: "Изменён",
+    label: t("products.columns.updatedAtLabel"),
     hideable: true,
-    header: "Изменён",
+    header: t("products.columns.updatedAtLabel"),
     size: 130,
     cell: ({ row }) => renderDateCell(row.original.updatedAt),
   },
@@ -404,32 +405,32 @@ export interface CombinedColumnConfig {
 export const combinedColumnPresets: CombinedColumnConfig[] = [
   {
     id: "none",
-    label: "Раздельные колонки",
-    description: "Показывать все поля отдельно",
+    label: t("products.columns.presets.none.label"),
+    description: t("products.columns.presets.none.description"),
     hidesColumns: [],
   },
   {
     id: "product",
-    label: "Товар",
-    description: "Изображение + Название + Категория",
+    label: t("products.columns.presets.product.label"),
+    description: t("products.columns.presets.product.description"),
     hidesColumns: ["image", "name", "category"],
   },
   {
     id: "product_sku",
-    label: "Товар + SKU",
-    description: "Изображение + Название + SKU + Категория",
+    label: t("products.columns.presets.productSku.label"),
+    description: t("products.columns.presets.productSku.description"),
     hidesColumns: ["image", "name", "sku", "category"],
   },
   {
     id: "name_sku",
-    label: "Название + SKU",
-    description: "Название с артикулом",
+    label: t("products.columns.presets.nameSku.label"),
+    description: t("products.columns.presets.nameSku.description"),
     hidesColumns: ["name", "sku"],
   },
   {
     id: "name_cat_sku",
-    label: "Название + Категория + SKU",
-    description: "Текстовая информация о товаре",
+    label: t("products.columns.presets.nameCategorySku.label"),
+    description: t("products.columns.presets.nameCategorySku.description"),
     hidesColumns: ["name", "category", "sku"],
   },
 ];
@@ -440,9 +441,9 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
 
   product: {
     id: "combined_product",
-    label: "Товар",
+    label: t("products.columns.presets.product.label"),
     hideable: false,
-    header: "Товар",
+    header: t("products.columns.presets.product.label"),
     size: 320,
     cell: ({ row }) => {
       const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
@@ -471,9 +472,9 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
 
   product_sku: {
     id: "combined_product_sku",
-    label: "Товар + SKU",
+    label: t("products.columns.presets.productSku.label"),
     hideable: false,
-    header: "Товар",
+    header: t("products.columns.presets.product.label"),
     size: 360,
     cell: ({ row }) => {
       const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
@@ -503,9 +504,9 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
 
   name_sku: {
     id: "combined_name_sku",
-    label: "Название + SKU",
+    label: t("products.columns.presets.nameSku.label"),
     hideable: false,
-    header: "Название",
+    header: t("common.name"),
     size: 300,
     cell: ({ row }) => {
       return h("div", { class: "flex flex-col gap-0.5 overflow-hidden" }, [
@@ -521,9 +522,9 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
 
   name_cat_sku: {
     id: "combined_name_cat_sku",
-    label: "Название + Категория + SKU",
+    label: t("products.columns.presets.nameCategorySku.label"),
     hideable: false,
-    header: "Товар",
+    header: t("products.columns.presets.product.label"),
     size: 320,
     cell: ({ row }) => {
       return h("div", { class: "flex flex-col gap-0.5 overflow-hidden" }, [

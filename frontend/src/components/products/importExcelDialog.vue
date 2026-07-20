@@ -2,19 +2,19 @@
   <Dialog v-model:open="isOpen">
     <DialogContent size="3xl" class="max-h-[85vh] overflow-hidden flex flex-col">
       <DialogHeader>
-        <DialogTitle>Импорт из Excel</DialogTitle>
+        <DialogTitle>{{ t("products.importExcelDialog.title") }}</DialogTitle>
         <DialogDescription>
           <template v-if="step === 'upload'">
-            Загрузите ранее экспортированный .xlsx файл с изменениями
+            {{ t("products.importExcelDialog.stepUploadDescription") }}
           </template>
           <template v-else-if="step === 'preview'">
-            Проверьте изменения перед применением
+            {{ t("products.importExcelDialog.stepPreviewDescription") }}
           </template>
           <template v-else-if="step === 'applying'">
-            Применение изменений...
+            {{ t("products.importExcelDialog.stepApplyingDescription") }}
           </template>
           <template v-else-if="step === 'result'">
-            Результат импорта
+            {{ t("products.importExcelDialog.stepResultDescription") }}
           </template>
         </DialogDescription>
       </DialogHeader>
@@ -30,8 +30,8 @@
           @drop.prevent="handleDrop"
         >
           <Upload class="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p class="text-sm font-medium">Перетащите .xlsx файл сюда</p>
-          <p class="text-xs text-muted-foreground mt-1">или нажмите для выбора</p>
+          <p class="text-sm font-medium">{{ t("products.importExcelDialog.dropzoneTitle") }}</p>
+          <p class="text-xs text-muted-foreground mt-1">{{ t("products.importExcelDialog.dropzoneHint") }}</p>
         </div>
         <input
           ref="fileInput"
@@ -48,28 +48,28 @@
         <!-- Summary -->
         <div class="flex gap-3 text-sm">
           <div class="bg-muted rounded px-3 py-1.5">
-            Всего строк: <span class="font-medium">{{ changeset.summary.totalRows }}</span>
+            {{ t("products.importExcelDialog.totalRows") }} <span class="font-medium">{{ changeset.summary.totalRows }}</span>
           </div>
           <div class="bg-success-muted text-success-foreground rounded px-3 py-1.5">
-            Изменено: <span class="font-medium">{{ changeset.summary.changedProducts }}</span>
+            {{ t("products.importExcelDialog.changedCount") }} <span class="font-medium">{{ changeset.summary.changedProducts }}</span>
           </div>
           <div v-if="changeset.summary.unchangedProducts > 0" class="bg-muted rounded px-3 py-1.5">
-            Без изменений: <span class="font-medium">{{ changeset.summary.unchangedProducts }}</span>
+            {{ t("products.importExcelDialog.unchangedCount") }} <span class="font-medium">{{ changeset.summary.unchangedProducts }}</span>
           </div>
           <div v-if="changeset.summary.errorCount > 0" class="bg-error-muted text-error-foreground rounded px-3 py-1.5">
-            Ошибок: <span class="font-medium">{{ changeset.summary.errorCount }}</span>
+            {{ t("products.importExcelDialog.errorCount") }} <span class="font-medium">{{ changeset.summary.errorCount }}</span>
           </div>
         </div>
 
         <!-- Errors -->
         <div v-if="changeset.errors && changeset.errors.length > 0" class="space-y-1">
-          <p class="text-sm font-medium text-destructive">Ошибки:</p>
+          <p class="text-sm font-medium text-destructive">{{ t("products.importExcelDialog.errorsTitle") }}</p>
           <div
             v-for="(err, i) in changeset.errors"
             :key="i"
             class="text-sm bg-error-muted text-error-foreground rounded px-3 py-1.5"
           >
-            Строка {{ err.row }}<template v-if="err.productId"> (ID {{ err.productId }})</template>:
+            {{ t("products.importExcelDialog.rowLabel", { row: err.row }) }}<template v-if="err.productId"> {{ t("products.importExcelDialog.productIdSuffix", { id: err.productId }) }}</template>:
             {{ err.field }} &mdash; {{ err.message }}
           </div>
         </div>
@@ -81,7 +81,7 @@
       <!-- Applying step -->
       <div v-else-if="step === 'applying'" class="flex-1 flex flex-col items-center justify-center py-8">
         <Loader2 class="h-8 w-8 animate-spin text-primary mb-3" />
-        <p class="text-sm text-muted-foreground">Применение изменений...</p>
+        <p class="text-sm text-muted-foreground">{{ t("products.importExcelDialog.stepApplyingDescription") }}</p>
       </div>
 
       <!-- Result step -->
@@ -90,7 +90,7 @@
           <div class="text-center space-y-2">
             <CheckCircle2 class="h-10 w-10 mx-auto text-success" />
             <p class="text-lg font-medium">
-              Обновлено товаров: {{ applyResult.appliedCount }}
+              {{ t("products.importExcelDialog.updatedCount", { count: applyResult.appliedCount }) }}
             </p>
             <div
               v-if="applyResult.errors && applyResult.errors.length > 0"
@@ -112,20 +112,20 @@
 
       <DialogFooter>
         <DialogClose v-if="step === 'upload' || step === 'result'" as-child>
-          <Button variant="outline">{{ step === 'result' ? 'Закрыть' : 'Отмена' }}</Button>
+          <Button variant="outline">{{ step === 'result' ? t("common.close") : t("common.cancel") }}</Button>
         </DialogClose>
         <Button
           v-if="step === 'preview'"
           variant="outline"
           @click="resetToUpload"
         >
-          Назад
+          {{ t("common.back") }}
         </Button>
         <Button
           v-if="step === 'preview' && changeset.changes && changeset.changes.length > 0"
           @click="handleApply"
         >
-          Применить изменения
+          {{ t("products.importExcelDialog.applyChanges") }}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -136,6 +136,7 @@
 import { ref, computed, watch } from "vue";
 import { useStore } from "vuex";
 import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-vue-next";
+import { t } from "@/i18n";
 import {
   Dialog,
   DialogClose,
@@ -204,7 +205,7 @@ function handleDrop(event) {
 
 async function processFile(file) {
   if (!file.name.endsWith(".xlsx")) {
-    uploadError.value = "Поддерживается только формат .xlsx";
+    uploadError.value = t("products.importExcelDialog.unsupportedFormat");
     return;
   }
   uploadError.value = "";
@@ -219,7 +220,7 @@ async function processFile(file) {
     },
     onError: (error) => {
       uploadError.value =
-        error.response?.data?.message || "Ошибка при обработке файла";
+        error.response?.data?.message || t("products.importExcelDialog.processError");
       step.value = "upload";
     },
   });
@@ -236,13 +237,13 @@ async function handleApply() {
       applyError.value = null;
       step.value = "result";
       if (data.appliedCount > 0) {
-        toast.success(`Обновлено товаров: ${data.appliedCount}`);
+        toast.success(t("products.importExcelDialog.updatedCount", { count: data.appliedCount }));
         emit("saved");
       }
     },
     onError: (error) => {
       applyError.value =
-        error.response?.data?.message || "Ошибка при применении изменений";
+        error.response?.data?.message || t("products.importExcelDialog.applyError");
       applyResult.value = null;
       step.value = "result";
     },

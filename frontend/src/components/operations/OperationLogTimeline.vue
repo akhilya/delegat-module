@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, nextTick } from "vue";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { t } from "@/i18n";
 
 const props = defineProps({
   logs: { type: Array, required: true },
@@ -56,7 +57,7 @@ function textClass(level) {
 <template>
   <div ref="container" class="max-h-72 overflow-y-auto space-y-0.5 text-xs">
     <div v-if="logs.length === 0" class="text-muted-foreground text-center py-2">
-      Ожидание логов...
+      {{ t("operations.waitingForLogs") }}
     </div>
     <div
       v-for="(log, idx) in logs"
@@ -75,7 +76,7 @@ function textClass(level) {
       </span>
     </div>
     <div v-if="logs.length >= 500" class="text-muted-foreground text-center py-1">
-      Показано максимум 500 записей
+      {{ t("operations.maxLogEntries") }}
     </div>
   </div>
 </template>

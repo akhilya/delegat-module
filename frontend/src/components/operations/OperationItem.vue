@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import OperationLogTimeline from "./OperationLogTimeline.vue";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { t } from "@/i18n";
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -186,12 +187,12 @@ const canStop = computed(() => isRunning.value || isPaused.value);
 const canExpand = computed(() => !props.operation._fromHistory || props.operation._canExpand !== false);
 
 function formatDuration(ms) {
-  if (ms < 1000) return `${ms}мс`;
+  if (ms < 1000) return t("operations.durationMs", { ms });
   const totalSec = Math.floor(ms / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  if (min === 0) return `${sec}с`;
-  return `${min}м ${sec}с`;
+  if (min === 0) return t("operations.durationSec", { sec });
+  return t("operations.durationMinSec", { min, sec });
 }
 
 const elapsed = computed(() => {
@@ -203,15 +204,9 @@ const elapsed = computed(() => {
 });
 
 const statusLabel = computed(() => {
-  switch (props.operation.status) {
-    case "running": return "выполняется";
-    case "paused": return "пауза";
-    case "completed": return "завершено";
-    case "failed": return "ошибка";
-    case "partial": return "частично";
-    case "cancelled": return "остановлено";
-    default: return "";
-  }
+  const status = props.operation.status;
+  if (!["running", "paused", "completed", "failed", "partial", "cancelled"].includes(status)) return "";
+  return t(`operations.status.${status}`);
 });
 </script>
 
@@ -265,36 +260,36 @@ const statusLabel = computed(() => {
           <div v-if="!isFinished && operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
             <div class="bg-muted/50 rounded p-1.5">
               <div class="font-medium">{{ operation.progress.total }}</div>
-              <div class="text-muted-foreground">Всего</div>
+              <div class="text-muted-foreground">{{ t("operations.total") }}</div>
             </div>
             <div class="bg-warning/10 rounded p-1.5">
               <div class="font-medium text-warning-foreground">
                 {{ operation.progress.pending }}
               </div>
-              <div class="text-muted-foreground">В очереди</div>
+              <div class="text-muted-foreground">{{ t("operations.pending") }}</div>
             </div>
             <div class="bg-success/10 rounded p-1.5">
               <div class="font-medium text-success-foreground">
                 {{ operation.progress.completed }}
               </div>
-              <div class="text-muted-foreground">Готово</div>
+              <div class="text-muted-foreground">{{ t("operations.completed") }}</div>
             </div>
             <div class="bg-error/10 rounded p-1.5">
               <div class="font-medium text-error-foreground">
                 {{ operation.progress.failed }}
               </div>
-              <div class="text-muted-foreground">Ошибки</div>
+              <div class="text-muted-foreground">{{ t("operations.errors") }}</div>
             </div>
           </div>
 
           <div v-if="loadingLogs" class="flex items-center gap-2 text-xs text-muted-foreground py-2">
             <Loader2 class="size-3 animate-spin" />
-            Загрузка логов...
+            {{ t("operations.loadingLogs") }}
           </div>
           <OperationLogTimeline v-else :logs="operation.logs" />
 
           <div v-if="operation.authorUserName" class="text-xs text-muted-foreground">
-            Запустил: {{ operation.authorUserName }}
+            {{ t("operations.startedBy", { name: operation.authorUserName }) }}
           </div>
 
           <div class="flex items-center gap-1.5 pt-1.5 border-t">
@@ -306,7 +301,7 @@ const statusLabel = computed(() => {
               @click="emit('pause', operation.id)"
             >
               <Pause class="size-3 mr-1" />
-              Пауза
+              {{ t("operations.pause") }}
             </Button>
             <Button
               v-if="isPaused && supportsPause"
@@ -316,7 +311,7 @@ const statusLabel = computed(() => {
               @click="emit('resume', operation.id)"
             >
               <Play class="size-3 mr-1" />
-              Продолжить
+              {{ t("operations.resume") }}
             </Button>
             <Button
               v-if="canStop"
@@ -326,7 +321,7 @@ const statusLabel = computed(() => {
               @click="emit('stop', operation.id)"
             >
               <Square class="size-3 mr-1" />
-              Остановить
+              {{ t("operations.stop") }}
             </Button>
             <Button
               v-if="isFinished && operation.canRetry && operation.progress?.failed > 0"
@@ -336,7 +331,7 @@ const statusLabel = computed(() => {
               @click="emit('retry', operation.id)"
             >
               <RefreshCw class="size-3 mr-1" />
-              Повторить ({{ operation.progress.failed }})
+              {{ t("operations.retry", { count: operation.progress.failed }) }}
             </Button>
             <div class="flex-1" />
             <span class="text-[10px] text-muted-foreground">
@@ -353,14 +348,14 @@ const statusLabel = computed(() => {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Удалить операцию?</AlertDialogTitle>
+                  <AlertDialogTitle>{{ t("operations.deleteTitle") }}</AlertDialogTitle>
                   <AlertDialogDescription>
                     {{ operation.title }}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction @click="emit('remove', operation.id)">Удалить</AlertDialogAction>
+                  <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
+                  <AlertDialogAction @click="emit('remove', operation.id)">{{ t("operations.deleteConfirm") }}</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

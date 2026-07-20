@@ -348,7 +348,7 @@ export default {
                 <div
                   class="flex items-center gap-1 min-w-0 overflow-hidden"
                   :class="isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : ''"
-                  :title="isSortable(header.column.id) ? 'Клик — основная сортировка. Shift+клик — добавить столбец (2-я влияет только при одинаковых значениях 1-й)' : undefined"
+                  :title="isSortable(header.column.id) ? $t('products.productsTable.sortHeaderHint') : undefined"
                   @click="onHeaderClick(header.column.id, $event)"
                 >
                   <GripVertical
@@ -410,7 +410,7 @@ export default {
             <template v-else>
               <tr class="transition-colors">
                 <td :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b">
-                  Нет результатов
+                  {{ $t("products.productsTable.noResults") }}
                 </td>
               </tr>
             </template>

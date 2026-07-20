@@ -326,7 +326,7 @@ export default {
       await this.bulkDeleteProducts({
         productIds,
         onSuccess: ({ deletedCount }) => {
-          toast.success(`Удалено товаров: ${deletedCount}`);
+          toast.success(this.$t("pages.productsPage.toast.bulkDeleted", { count: deletedCount }));
           this.isBulkDeleteDialogOpen = false;
           this.rowSelection = {};
           this.selectedProductsMap = {};
@@ -335,7 +335,7 @@ export default {
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || "Не удалось удалить товары",
+            error.response?.data?.message || this.$t("pages.productsPage.toast.bulkDeleteFailed"),
           );
         },
       });
@@ -373,7 +373,7 @@ export default {
       await this.restoreProduct({
         productId,
         onSuccess: () => {
-          toast.success("Товар восстановлен");
+          toast.success(this.$t("pages.productsPage.toast.restored"));
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -385,7 +385,7 @@ export default {
       await this.permanentDeleteProduct({
         productId,
         onSuccess: () => {
-          toast.success("Товар удалён навсегда");
+          toast.success(this.$t("pages.productsPage.toast.permanentlyDeleted"));
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -397,13 +397,13 @@ export default {
       await this.deleteProduct({
         productId,
         onSuccess: () => {
-          toast.success("Товар перемещён в корзину");
+          toast.success(this.$t("pages.productsPage.toast.movedToTrash"));
           this.fetchProducts();
           this.fetchTrashCount();
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || "Не удалось переместить товар в корзину",
+            error.response?.data?.message || this.$t("pages.productsPage.toast.moveToTrashFailed"),
           );
         },
       });
@@ -430,7 +430,7 @@ export default {
       await this.bulkRestoreProducts({
         productIds: this.selectedProductIds,
         onSuccess: ({ data }) => {
-          toast.success(`Восстановлено товаров: ${data.value.restoredCount}`);
+          toast.success(this.$t("pages.productsPage.toast.bulkRestored", { count: data.value.restoredCount }));
           this.clearSelection();
           this.fetchTrashProducts();
           this.fetchTrashCount();
@@ -445,7 +445,7 @@ export default {
       await this.bulkPermanentDeleteProducts({
         productIds: this.selectedProductIds,
         onSuccess: ({ data }) => {
-          toast.success(`Удалено навсегда: ${data.value.deletedCount}`);
+          toast.success(this.$t("pages.productsPage.toast.bulkPermanentlyDeleted", { count: data.value.deletedCount }));
           this.isBulkPermanentDeleteDialogOpen = false;
           this.clearSelection();
           this.fetchTrashProducts();
@@ -467,11 +467,11 @@ export default {
       await this.exportProductsTemplate({
         productIds: this.selectedProductIds,
         onSuccess: () => {
-          toast.success("Файл экспортирован");
+          toast.success(this.$t("pages.productsPage.toast.fileExported"));
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || "Не удалось экспортировать",
+            error.response?.data?.message || this.$t("pages.productsPage.toast.exportFailed"),
           );
         },
       });
@@ -702,11 +702,13 @@ export default {
     breadcrumbs() {
       if (this.isTrashMode) {
         return [
-          { label: "Товары", to: "/products" },
-          { label: `Корзина товаров${this.trashCount > 0 ? ` (${this.trashCount})` : ''}` },
+          { label: this.$t("routes.products"), to: "/products" },
+          { label: this.trashCount > 0
+            ? this.$t("pages.productsPage.breadcrumbTrashWithCount", { count: this.trashCount })
+            : this.$t("pages.productsPage.breadcrumbTrash") },
         ];
       }
-      return [{ label: "Товары" }];
+      return [{ label: this.$t("routes.products") }];
     },
     // Dynamic columns including store attributes and preset
     productColumns() {
@@ -799,7 +801,7 @@ export default {
           <div class="relative flex-1 h-9">
             <Input
               class="absolute w-full h-full"
-              placeholder="Поиск..."
+              :placeholder="$t('common.search') + '...'"
               v-model="searchQuery"
               @keypress.enter="fetchProducts"
             />
@@ -830,7 +832,7 @@ export default {
                   :class="filterCategoryId == null ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = null"
                 >
-                  Все категории
+                  {{ $t("pages.productsPage.filters.allCategories") }}
                   <Check v-if="filterCategoryId == null" class="size-4 shrink-0" />
                 </Button>
                 <Button
@@ -839,7 +841,7 @@ export default {
                   :class="filterCategoryId === -1 ? 'bg-accent font-medium' : ''"
                   @click="filterCategoryId = -1"
                 >
-                  Без категории
+                  {{ $t("pages.productsPage.filters.noCategory") }}
                   <Check v-if="filterCategoryId === -1" class="size-4 shrink-0" />
                 </Button>
                 <div class="h-px bg-border my-1" />
@@ -911,7 +913,7 @@ export default {
         <!-- Left: Page size + Selection info -->
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-2">
-            <p class="text-sm text-muted-foreground">по</p>
+            <p class="text-sm text-muted-foreground">{{ $t("pages.productsPage.perPageLabel") }}</p>
             <Select
               :model-value="String(pageSize)"
               @update:model-value="(val) => pageSize = Number(val)"
@@ -933,7 +935,7 @@ export default {
           <template v-if="hasSelection">
             <div class="h-4 w-px bg-border" />
             <span class="text-sm font-medium">
-              Выбрано: {{ selectedProductIds.length }}
+              {{ $t("pages.productsPage.selectedCount", { count: selectedProductIds.length }) }}
             </span>
             <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
               <X class="h-4 w-4" />
@@ -944,20 +946,20 @@ export default {
               <div class="flex">
                 <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
                   <Pencil class="h-4 w-4 mr-1" />
-                  Изменить
+                  {{ $t("common.edit") }}
                 </Button>
                 <Button variant="outline" size="sm" class="h-8 rounded-l-none" @click="isExcelDialogOpen = true">
                   <FileSpreadsheet class="h-4 w-4 mr-1" />
-                  Редактирование из таблицы
+                  {{ $t("pages.productsPage.bulkEditFromTable") }}
                 </Button>
               </div>
               <Button variant="outline" size="sm" class="h-8" @click="isBulkAdapterDialogOpen = true">
                 <RefreshCw class="h-4 w-4 mr-1" />
-                Адаптеры
+                {{ $t("nav.adapters") }}
               </Button>
               <Button variant="destructive" size="sm" class="h-8" @click="openBulkDeleteDialog">
                 <Trash2 class="h-4 w-4 mr-1" />
-                В корзину
+                {{ $t("pages.productsPage.moveToTrash") }}
               </Button>
             </template>
 
@@ -965,11 +967,11 @@ export default {
             <template v-else>
               <Button variant="outline" size="sm" class="h-8" :disabled="isRestoring" @click="handleBulkRestore">
                 <Undo2 class="h-4 w-4 mr-1" />
-                {{ isRestoring ? 'Восстановление...' : 'Восстановить' }}
+                {{ isRestoring ? $t("pages.productsPage.restoring") : $t("trashRowActions.restore") }}
               </Button>
               <Button variant="destructive" size="sm" class="h-8" @click="isBulkPermanentDeleteDialogOpen = true">
                 <Trash2 class="h-4 w-4 mr-1" />
-                Удалить навсегда
+                {{ $t("trashRowActions.deleteForever") }}
               </Button>
             </template>
           </template>
@@ -1023,21 +1025,21 @@ export default {
     <Dialog v-model:open="isExcelDialogOpen">
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Редактирование из таблицы</DialogTitle>
+          <DialogTitle>{{ $t("pages.productsPage.excelDialog.title") }}</DialogTitle>
           <DialogDescription>
-            Действие для выбранных {{ selectedProductIds.length }} товаров
+            {{ $t("pages.productsPage.excelDialog.description", { count: selectedProductIds.length }) }}
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-2">
           <Button variant="outline" class="w-full justify-start" :disabled="isExporting"
                   @click="handleExportExcel">
             <Download class="h-4 w-4 mr-2" />
-            {{ isExporting ? 'Экспорт...' : 'Скачать шаблон редактирования' }}
+            {{ isExporting ? $t("pages.productsPage.excelDialog.exporting") : $t("pages.productsPage.excelDialog.downloadTemplate") }}
           </Button>
           <Button variant="outline" class="w-full justify-start"
                   @click="openImportFromExcelDialog">
             <Upload class="h-4 w-4 mr-2" />
-            Загрузить изменения из файла
+            {{ $t("pages.productsPage.excelDialog.uploadChanges") }}
           </Button>
         </div>
       </DialogContent>
@@ -1062,19 +1064,19 @@ export default {
     <AlertDialog v-model:open="isBulkDeleteDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Отправить в корзину?</AlertDialogTitle>
+          <AlertDialogTitle>{{ $t("productRowActions.confirmTrashTitle") }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Выбранные товары будут перемещены в корзину. Их можно будет восстановить.
+            {{ $t("pages.productsPage.bulkTrashConfirm.description") }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="isDeleting">Отмена</AlertDialogCancel>
+          <AlertDialogCancel :disabled="isDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             @click.prevent="handleBulkDelete"
             :disabled="isDeleting"
             class="bg-destructive text-white hover:bg-destructive/90"
           >
-            {{ isDeleting ? "Перемещение..." : "В корзину" }}
+            {{ isDeleting ? $t("pages.productsPage.bulkTrashConfirm.moving") : $t("productRowActions.toTrash") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1084,20 +1086,19 @@ export default {
     <AlertDialog v-model:open="isBulkPermanentDeleteDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
+          <AlertDialogTitle>{{ $t("trashRowActions.confirmDeleteTitle") }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Вы собираетесь безвозвратно удалить {{ selectedProductIds.length }} товаров.
-            Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.
+            {{ $t("pages.productsPage.bulkPermanentDeleteConfirm.description", { count: selectedProductIds.length }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="isPermanentDeleting">Отмена</AlertDialogCancel>
+          <AlertDialogCancel :disabled="isPermanentDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             @click.prevent="handleBulkPermanentDelete"
             :disabled="isPermanentDeleting"
             class="bg-destructive text-white hover:bg-destructive/90"
           >
-            {{ isPermanentDeleting ? "Удаление..." : "Удалить навсегда" }}
+            {{ isPermanentDeleting ? $t("pages.productsPage.bulkPermanentDeleteConfirm.deleting") : $t("trashRowActions.deleteForever") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

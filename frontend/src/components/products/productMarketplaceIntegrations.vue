@@ -85,6 +85,7 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { t } from "@/i18n";
 
 export default {
   components: {
@@ -245,7 +246,7 @@ export default {
     },
     importWarning() {
       return this.hasIrreversibleFields()
-        ? "Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную."
+        ? this.$t("productMarketplaceIntegrations.irreversibleFieldsWarning")
         : null;
     },
     importIrreversibleFields() {
@@ -301,7 +302,7 @@ export default {
         });
         await this.fetchData();
       } catch {
-        displaySonnerError("Ошибка сохранения маппинга");
+        displaySonnerError(t("productMarketplaceIntegrations.errorSavingMapping"));
       }
     },
 
@@ -340,7 +341,7 @@ export default {
     async handleExportToAll() {
       const allExportable = this.connectionsWithMapping;
       if (allExportable.length === 0) {
-        displaySonnerSuccess("Нет подключений с маппингом для экспорта");
+        displaySonnerSuccess(t("productMarketplaceIntegrations.noExportableConnections"));
         return;
       }
 
@@ -365,8 +366,8 @@ export default {
       for (const conn of allExportable) {
         const operationId = crypto.randomUUID().replace(/-/g, "");
         const title = conn.isLinked
-          ? `Экспорт: ${"товар #" + this.productId}`
-          : `Экспорт товара #${this.productId}`;
+          ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
+          : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });
         await this.$store.dispatch("operations/startOperation", {
           id: operationId,
           type: "single-export",
@@ -406,10 +407,10 @@ export default {
       }
 
       if (successCount > 0) {
-        displaySonnerSuccess(`Экспортировано на ${successCount} адаптер(ов)`);
+        displaySonnerSuccess(t("productMarketplaceIntegrations.exportedToAdapters", { count: successCount }));
       }
       if (errorCount > 0) {
-        displaySonnerError(`Ошибок при экспорте: ${errorCount}`);
+        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
       }
 
       this.isExportingAll = false;
@@ -434,7 +435,7 @@ export default {
               selections: [{ productId: this.productId, categoryMappingId: mappingId }],
             });
           } catch {
-            displaySonnerError(`Ошибка сохранения маппинга для ${conn.adapterName}`);
+            displaySonnerError(t("productMarketplaceIntegrations.errorSavingMappingFor", { adapter: conn.adapterName }));
             return;
           }
         }
@@ -455,7 +456,7 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (!result.hasChanges) {
-            displaySonnerSuccess("Изменений не обнаружено");
+            displaySonnerSuccess(t("productMarketplaceIntegrations.noChangesFound"));
           } else {
             this.importPreviewData = result;
             this.importExcludedFields = new Set(result.irreversibleFields || []);
@@ -516,7 +517,7 @@ export default {
       await this.$store.dispatch("operations/startOperation", {
         id: operationId,
         type: "single-import",
-        title: `Импорт: ${"товар #" + this.productId}`,
+        title: t("productMarketplaceIntegrations.importTitle", { id: this.productId }),
         connectionId: conn?.connectionId || null,
         connectionName: conn?.connectionName || null,
       });
@@ -529,11 +530,11 @@ export default {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
             displaySonnerSuccess(
-              `Обновлено: ${result.updatedFields.join(", ")}`,
+              t("productMarketplaceIntegrations.updatedFieldsMessage", { fields: result.updatedFields.join(", ") }),
             );
             this.$emit("product-updated");
           } else {
-            displaySonnerSuccess("Изменений не обнаружено");
+            displaySonnerSuccess(t("productMarketplaceIntegrations.noChangesFound"));
           }
           this.fetchData();
         },
@@ -554,14 +555,11 @@ export default {
     },
 
     getFieldLabel(field) {
-      const labels = {
-        name: "Название",
-        description: "Описание",
-        price: "Цена",
-        storageQuantity: "Остаток",
-      };
       if (field.startsWith("attr:")) return field.substring(5);
-      return labels[field] || field;
+      const known = ["name", "description", "price", "storageQuantity"];
+      return known.includes(field)
+        ? t(`productMarketplaceIntegrations.fieldLabels.${field}`)
+        : field;
     },
 
     formatFieldValue(field, value) {
@@ -579,12 +577,12 @@ export default {
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
       if (conn.mappingMissing) {
-        displaySonnerError("Маппинг этой связи удалён. Отвяжите товар или выберите новый маппинг.");
+        displaySonnerError(t("productMarketplaceIntegrations.mappingDeletedError"));
         return;
       }
 
       if (conn.availableMappings?.length > 1 && !this.mappingSelections[conn.connectionId]) {
-        displaySonnerError("Выберите маппинг перед экспортом");
+        displaySonnerError(t("productMarketplaceIntegrations.chooseMappingBeforeExport"));
         return;
       }
 
@@ -592,8 +590,8 @@ export default {
 
       const operationId = crypto.randomUUID().replace(/-/g, "");
       const title = conn.isLinked
-        ? `Экспорт: ${"товар #" + this.productId}`
-        : `Экспорт товара #${this.productId}`;
+        ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
+        : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });
       await this.$store.dispatch("operations/startOperation", {
         id: operationId,
         type: "single-export",
@@ -607,7 +605,7 @@ export default {
           linkId: conn.linkId,
           operationId,
           onSuccess: () => {
-            displaySonnerSuccess(`Товар обновлён на ${conn.adapterName}`);
+            displaySonnerSuccess(t("productMarketplaceIntegrations.productUpdatedOnAdapter", { adapter: conn.adapterName }));
             this.fetchData();
           },
           onError: (error) => {
@@ -620,7 +618,7 @@ export default {
           productId: this.productId,
           operationId,
           onSuccess: () => {
-            displaySonnerSuccess(`Товар экспортирован на ${conn.adapterName}`);
+            displaySonnerSuccess(t("productMarketplaceIntegrations.productExportedToAdapter", { adapter: conn.adapterName }));
             this.fetchData();
           },
           onError: (error) => {
@@ -646,9 +644,9 @@ export default {
         newSku: this.recreateNewSku.trim(),
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
-          let msg = "Товар пересоздан на адаптере";
+          let msg = t("productMarketplaceIntegrations.productRecreated");
           if (result.archiveError) {
-            msg += ` (архивация старого: ${result.archiveError})`;
+            msg += t("productMarketplaceIntegrations.archiveErrorSuffix", { error: result.archiveError });
           }
           displaySonnerSuccess(msg);
           this.showRecreateDialog = false;
@@ -678,7 +676,7 @@ export default {
           linkId: this.linkConn.linkId,
           externalProductId: this.linkExternalId.trim(),
           onSuccess: () => {
-            displaySonnerSuccess(`Товар перепривязан на ${this.linkConn.adapterName}`);
+            displaySonnerSuccess(t("productMarketplaceIntegrations.productRelinked", { adapter: this.linkConn.adapterName }));
             this.showLinkDialog = false;
             this.linkConn = null;
             this.fetchData();
@@ -693,7 +691,7 @@ export default {
           productId: this.productId,
           externalProductId: this.linkExternalId.trim(),
           onSuccess: () => {
-            displaySonnerSuccess(`Товар привязан к ${this.linkConn.adapterName}`);
+            displaySonnerSuccess(t("productMarketplaceIntegrations.productLinked", { adapter: this.linkConn.adapterName }));
             this.showLinkDialog = false;
             this.linkConn = null;
             this.fetchData();
@@ -710,9 +708,9 @@ export default {
       if (!conn.isLinked || !conn.linkId || this.unlinkingLinkId) return;
 
       const ok = await confirm({
-        title: "Отвязать товар?",
-        description: `Товар будет отвязан от ${conn.adapterName}. Экспорт в этот маркетплейс прекратится.`,
-        confirmLabel: "Отвязать",
+        title: t("productMarketplaceIntegrations.unlinkConfirmTitle"),
+        description: t("productMarketplaceIntegrations.unlinkConfirmDescription", { adapter: conn.adapterName }),
+        confirmLabel: t("productMarketplaceIntegrations.unlinkConfirmLabel"),
       });
       if (!ok) return;
 
@@ -721,7 +719,7 @@ export default {
         await this.unlinkProduct({
           linkId: conn.linkId,
           onSuccess: () => {
-            displaySonnerSuccess(`Товар отвязан от ${conn.adapterName}`);
+            displaySonnerSuccess(t("productMarketplaceIntegrations.productUnlinked", { adapter: conn.adapterName }));
             this.fetchData();
           },
           onError: (error) => {
@@ -741,7 +739,7 @@ export default {
 
     getSelectedMappingName(conn) {
       const m = this.getSelectedMapping(conn);
-      return m ? (m.name || m.externalCategoryName || `Маппинг #${m.id}`) : null;
+      return m ? (m.name || m.externalCategoryName || t("productMarketplaceIntegrations.mappingFallback", { id: m.id })) : null;
     },
 
     getMappingRoute(conn) {
@@ -776,7 +774,7 @@ export default {
         return {
           variant: "destructive",
           icon: AlertTriangle,
-          label: "Нет маппинга",
+          label: t("productMarketplaceIntegrations.noMapping"),
           color: "text-error",
         };
       }
@@ -789,28 +787,28 @@ export default {
           return {
             variant: "default",
             icon: CheckCircle,
-            label: "Синхронизирован",
+            label: t("productMarketplaceIntegrations.statusSynced"),
             color: "text-success",
           };
         case "NotSynced":
           return {
             variant: "secondary",
             icon: AlertTriangle,
-            label: "Не синхронизирован",
+            label: t("productMarketplaceIntegrations.statusNotSynced"),
             color: "text-muted-foreground",
           };
         case "SyncError":
           return {
             variant: "destructive",
             icon: XCircle,
-            label: "Ошибка",
+            label: t("productMarketplaceIntegrations.statusError"),
             color: "text-error",
           };
         case "Modified":
           return {
             variant: "outline",
             icon: AlertTriangle,
-            label: "Изменён",
+            label: t("productMarketplaceIntegrations.statusModified"),
             color: "text-warning",
           };
         default:
@@ -831,9 +829,9 @@ export default {
       const diffMs = now - d;
       const diffMins = Math.floor(diffMs / 60000);
 
-      if (diffMins < 1) return "только что";
-      if (diffMins < 60) return `${diffMins} мин назад`;
-      if (diffMins < 1440) return `${Math.floor(diffMins / 60)} ч назад`;
+      if (diffMins < 1) return t("productMarketplaceIntegrations.justNow");
+      if (diffMins < 60) return t("productMarketplaceIntegrations.minutesAgo", { count: diffMins });
+      if (diffMins < 1440) return t("productMarketplaceIntegrations.hoursAgo", { count: Math.floor(diffMins / 60) });
       return this.formatStoreDate(date);
     },
   },
@@ -857,7 +855,7 @@ export default {
     <div class="flex items-center px-4 h-11 border-b shrink-0">
       <p class="text-sm font-medium flex items-center gap-2">
         <Link2 class="size-4" />
-        Связи с адаптерами
+        {{ $t("productMarketplaceIntegrations.header") }}
       </p>
     </div>
 
@@ -870,8 +868,8 @@ export default {
     <!-- No category warning -->
     <EmptyState
       v-else-if="connections && !connections.categoryId"
-      title="Товар не привязан к категории"
-      description="Укажите категорию товара для экспорта на адаптеры"
+      :title="$t('productMarketplaceIntegrations.noCategoryTitle')"
+      :description="$t('productMarketplaceIntegrations.noCategoryDescription')"
     >
       <template #icon>
         <AlertTriangle />
@@ -881,15 +879,15 @@ export default {
     <!-- No connections -->
     <EmptyState
       v-else-if="!connections?.allConnections?.length"
-      title="Нет подключений к адаптерам"
-      description="Создайте подключение к адаптеру, чтобы экспортировать и синхронизировать товары"
+      :title="$t('productMarketplaceIntegrations.noConnectionsTitle')"
+      :description="$t('productMarketplaceIntegrations.noConnectionsDescription')"
     >
       <template #icon>
         <Link2 />
       </template>
       <Button variant="outline" class="mt-2" @click="$router.push(PAGE_MARKETPLACE)">
         <Settings class="mr-2 size-4" />
-        Перейти к адаптерам
+        {{ $t("productMarketplaceIntegrations.goToConnections") }}
       </Button>
     </EmptyState>
 
@@ -905,11 +903,13 @@ export default {
             <Upload class="size-4 text-primary" />
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-medium">Экспорт на все адаптеры</div>
+            <div class="text-sm font-medium">{{ $t("productMarketplaceIntegrations.exportToAllTitle") }}</div>
             <div class="text-xs text-muted-foreground">
-              {{ connectionsWithMapping.length }}
-              {{ connectionsWithMapping.length < 5 ? 'подключения готовы' : 'подключений готово' }}
-              к экспорту
+              {{
+                connectionsWithMapping.length < 5
+                  ? $t("productMarketplaceIntegrations.readyCountFew", { count: connectionsWithMapping.length })
+                  : $t("productMarketplaceIntegrations.readyCountMany", { count: connectionsWithMapping.length })
+              }}
             </div>
           </div>
         </div>
@@ -920,7 +920,7 @@ export default {
         >
           <Loader2 v-if="isExportingAll" class="size-4 mr-2 animate-spin" />
           <Upload v-else class="size-4 mr-2" />
-          Экспортировать
+          {{ $t("productMarketplaceIntegrations.export") }}
         </Button>
       </div>
 
@@ -940,7 +940,7 @@ export default {
           target="_blank"
           rel="noopener noreferrer"
           class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 hover:bg-primary/20 transition-colors"
-          title="Открыть на адаптере"
+          :title="$t('productMarketplaceIntegrations.openOnAdapter')"
         >
           <ExternalLink class="size-4 text-primary" />
         </a>
@@ -955,7 +955,7 @@ export default {
           <div class="flex items-center gap-2 mt-0.5">
             <code class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{{ conn.externalProductId }}</code>
             <span v-if="conn.externalSku" class="text-xs text-muted-foreground">
-              · арт. {{ conn.externalSku }}
+              {{ $t("productMarketplaceIntegrations.skuPrefix", { sku: conn.externalSku }) }}
             </span>
             <router-link
               v-if="getMappingRoute(conn)"
@@ -965,7 +965,7 @@ export default {
               {{ getSelectedMappingName(conn) }}
             </router-link>
             <span v-else-if="conn.mappingMissing" class="text-xs text-destructive">
-              маппинг удалён
+              {{ $t("productMarketplaceIntegrations.mappingDeleted") }}
             </span>
           </div>
         </div>
@@ -981,7 +981,7 @@ export default {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              <p>Размеры</p>
+              <p>{{ $t("productMarketplaceIntegrations.sizesTooltip") }}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -997,7 +997,7 @@ export default {
               :disabled="exportingConnectionId === conn.connectionId || conn.mappingMissing"
             >
               <Upload class="size-4 mr-2" />
-              Экспорт
+              {{ $t("productMarketplaceIntegrations.menuExport") }}
             </DropdownMenuItem>
             <DropdownMenuItem
               v-if="conn.canImport"
@@ -1005,12 +1005,12 @@ export default {
               :disabled="importingLinkId === conn.linkId"
             >
               <Download class="size-4 mr-2" />
-              Импорт
+              {{ $t("productMarketplaceIntegrations.menuImport") }}
             </DropdownMenuItem>
             <DropdownMenuSub v-if="conn.availableMappings?.length > 1 || (conn.mappingMissing && conn.availableMappings?.length > 0)">
               <DropdownMenuSubTrigger>
                 <Layers class="size-4 mr-2" />
-                Маппинг
+                {{ $t("productMarketplaceIntegrations.menuMapping") }}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuRadioGroup
@@ -1022,7 +1022,7 @@ export default {
                     :key="m.id"
                     :value="String(m.id)"
                   >
-                    {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                    {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
                   </DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
@@ -1030,7 +1030,7 @@ export default {
             <DropdownMenuSeparator />
             <DropdownMenuItem @click="openLinkDialog(conn, true)">
               <Link2 class="size-4 mr-2" />
-              Перепривязать
+              {{ $t("productMarketplaceIntegrations.menuRelink") }}
             </DropdownMenuItem>
             <DropdownMenuItem
               class="text-destructive focus:text-destructive"
@@ -1039,7 +1039,7 @@ export default {
             >
               <Loader2 v-if="unlinkingLinkId === conn.linkId" class="size-4 mr-2 animate-spin" />
               <Ban v-else class="size-4 mr-2" />
-              Отвязать
+              {{ $t("productMarketplaceIntegrations.menuUnlink") }}
             </DropdownMenuItem>
             <DropdownMenuSeparator v-if="conn.canArchive && conn.canExport" />
             <DropdownMenuItem
@@ -1047,7 +1047,7 @@ export default {
               @click="openRecreateDialog(conn)"
             >
               <RefreshCw class="size-4 mr-2" />
-              Пересоздать
+              {{ $t("productMarketplaceIntegrations.menuRecreate") }}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1056,19 +1056,19 @@ export default {
         <div v-if="variantsData[conn.connectionId]" class="border-t px-4 py-2">
           <div v-if="variantsData[conn.connectionId].loading" class="flex items-center gap-2 py-2">
             <Loader2 class="size-4 animate-spin" />
-            <span class="text-xs text-muted-foreground">Загрузка размеров...</span>
+            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.loadingSizes") }}</span>
           </div>
           <div v-else-if="variantsData[conn.connectionId].variants.length === 0" class="py-2">
-            <span class="text-xs text-muted-foreground">Нет размеров для этого подключения</span>
+            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.noSizesForConnection") }}</span>
           </div>
           <Table v-else>
             <TableHeader>
               <TableRow>
-                <TableHead class="text-xs h-8">Размер</TableHead>
+                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.sizeHeader") }}</TableHead>
                 <TableHead class="text-xs h-8">SKU</TableHead>
-                <TableHead class="text-xs h-8">Баркод</TableHead>
-                <TableHead class="text-xs h-8">Цена</TableHead>
-                <TableHead class="text-xs h-8">Остаток</TableHead>
+                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.barcodeHeader") }}</TableHead>
+                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.priceHeader") }}</TableHead>
+                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.stockHeader") }}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1106,7 +1106,7 @@ export default {
             <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
           <div class="flex items-center gap-2 mt-0.5">
-            <span class="text-xs text-muted-foreground">Не экспортирован</span>
+            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.notExported") }}</span>
             <router-link
               v-if="getMappingRoute(conn)"
               :to="getMappingRoute(conn)"
@@ -1118,7 +1118,7 @@ export default {
         </div>
         <Badge variant="outline" class="text-success border-success shrink-0">
           <CheckCircle class="size-3 mr-1" />
-          Готов
+          {{ $t("productMarketplaceIntegrations.ready") }}
         </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
@@ -1132,16 +1132,16 @@ export default {
               :disabled="exportingConnectionId === conn.connectionId"
             >
               <Upload class="size-4 mr-2" />
-              Экспортировать
+              {{ $t("productMarketplaceIntegrations.export") }}
             </DropdownMenuItem>
             <DropdownMenuItem @click="openLinkDialog(conn)">
               <Link2 class="size-4 mr-2" />
-              Привязать вручную
+              {{ $t("productMarketplaceIntegrations.linkManually") }}
             </DropdownMenuItem>
             <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
               <DropdownMenuSubTrigger>
                 <Layers class="size-4 mr-2" />
-                Маппинг
+                {{ $t("productMarketplaceIntegrations.menuMapping") }}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuRadioGroup
@@ -1153,7 +1153,7 @@ export default {
                     :key="m.id"
                     :value="String(m.id)"
                   >
-                    {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                    {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
                   </DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
@@ -1177,7 +1177,7 @@ export default {
             <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
           </div>
           <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="text-xs text-muted-foreground">Маппинг для «{{ connections.categoryName }}» не настроен</span>
+            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.mappingNotConfigured", { category: connections.categoryName }) }}</span>
             <router-link
               :to="{
                 name: PAGE_MARKETPLACE_CONNECTION,
@@ -1191,7 +1191,7 @@ export default {
               }"
               class="text-xs text-primary hover:underline"
             >
-              · настроить
+              {{ $t("productMarketplaceIntegrations.configure") }}
             </router-link>
           </div>
         </div>
@@ -1207,8 +1207,8 @@ export default {
       >
         <EmptyState
           size="sm"
-          title="Нет доступных адаптеров"
-          description="Подключите адаптер и создайте маппинг для категории товара, чтобы экспортировать его."
+          :title="$t('productMarketplaceIntegrations.noAvailableAdaptersTitle')"
+          :description="$t('productMarketplaceIntegrations.noAvailableAdaptersDescription')"
         >
           <template #icon>
             <Link2 />
@@ -1221,9 +1221,9 @@ export default {
     <Dialog v-model:open="showImportPreviewDialog">
       <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Подтверждение импорта</DialogTitle>
+          <DialogTitle>{{ $t("productMarketplaceIntegrations.importDialogTitle") }}</DialogTitle>
           <DialogDescription>
-            Следующие поля будут обновлены из адаптера
+            {{ $t("productMarketplaceIntegrations.importDialogDescription") }}
           </DialogDescription>
         </DialogHeader>
         <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
@@ -1237,11 +1237,11 @@ export default {
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="cancelImport">Отменить</Button>
+          <Button variant="outline" @click="cancelImport">{{ $t("productMarketplaceIntegrations.cancelAction") }}</Button>
           <Button @click="confirmImport" :disabled="isApplyingImport || allFieldsExcluded()">
             <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
-            Подтвердить
+            {{ $t("productMarketplaceIntegrations.confirmAction") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1251,9 +1251,9 @@ export default {
     <Dialog v-model:open="showBulkMappingDialog">
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Выберите маппинг</DialogTitle>
+          <DialogTitle>{{ $t("productMarketplaceIntegrations.bulkMappingDialogTitle") }}</DialogTitle>
           <DialogDescription>
-            Для некоторых подключений доступно несколько маппингов. Выберите нужный для каждого.
+            {{ $t("productMarketplaceIntegrations.bulkMappingDialogDescription") }}
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-4 py-4">
@@ -1268,7 +1268,7 @@ export default {
               @update:model-value="(val) => (bulkMappingSelections = { ...bulkMappingSelections, [conn.connectionId]: Number(val) })"
             >
               <SelectTrigger class="h-8 flex-1">
-                <SelectValue placeholder="Выберите маппинг" />
+                <SelectValue :placeholder="$t('productMarketplaceIntegrations.choosePlaceholder')" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -1276,17 +1276,17 @@ export default {
                   :key="m.id"
                   :value="String(m.id)"
                 >
-                  {{ m.name || m.externalCategoryName || `Маппинг #${m.id}` }}
+                  {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline">Отмена</Button></DialogClose>
+          <DialogClose as-child><Button variant="outline">{{ $t("common.cancel") }}</Button></DialogClose>
           <Button @click="confirmBulkMappingAndExport" :disabled="!allBulkMappingsSelected()">
             <Upload class="size-4 mr-2" />
-            Экспортировать
+            {{ $t("productMarketplaceIntegrations.export") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1296,29 +1296,29 @@ export default {
     <Dialog v-model:open="showRecreateDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Пересоздать товар</DialogTitle>
+          <DialogTitle>{{ $t("productMarketplaceIntegrations.recreateDialogTitle") }}</DialogTitle>
           <DialogDescription>
-            Товар будет создан заново на {{ recreateConn?.adapterName }} с новым артикулом. Старый товар будет архивирован.
+            {{ $t("productMarketplaceIntegrations.recreateDialogDescription", { adapter: recreateConn?.adapterName }) }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
           <div class="space-y-2">
-            <Label for="recreate-sku">Новый артикул</Label>
+            <Label for="recreate-sku">{{ $t("productMarketplaceIntegrations.newSkuLabel") }}</Label>
             <Input
               id="recreate-sku"
               v-model="recreateNewSku"
               maxlength="50"
-              placeholder="Введите новый артикул"
+              :placeholder="$t('productMarketplaceIntegrations.newSkuPlaceholder')"
               @keyup.enter="submitRecreate"
             />
           </div>
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline" :disabled="isRecreating">Отмена</Button></DialogClose>
+          <DialogClose as-child><Button variant="outline" :disabled="isRecreating">{{ $t("common.cancel") }}</Button></DialogClose>
           <Button @click="submitRecreate" :disabled="isRecreating || !recreateNewSku.trim()">
             <Loader2 v-if="isRecreating" class="size-4 mr-2 animate-spin" />
             <RefreshCw v-else class="size-4 mr-2" />
-            Пересоздать
+            {{ $t("productMarketplaceIntegrations.menuRecreate") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1328,22 +1328,26 @@ export default {
     <Dialog v-model:open="showLinkDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ isRelinking ? 'Перепривязать товар' : 'Привязать товар' }}</DialogTitle>
+          <DialogTitle>{{ isRelinking ? $t("productMarketplaceIntegrations.relinkProductTitle") : $t("productMarketplaceIntegrations.linkProductTitle") }}</DialogTitle>
           <DialogDescription>
-            {{ isRelinking ? 'Введите новый ID товара' : 'Введите ID существующего товара' }} на {{ linkConn?.adapterName }} для {{ isRelinking ? 'перепривязки' : 'ручной привязки' }}.
+            {{
+              isRelinking
+                ? $t("productMarketplaceIntegrations.relinkDescription", { adapter: linkConn?.adapterName })
+                : $t("productMarketplaceIntegrations.linkDescription", { adapter: linkConn?.adapterName })
+            }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
-          <Label for="link-external-id">ID товара на адаптере</Label>
+          <Label for="link-external-id">{{ $t("productMarketplaceIntegrations.externalIdLabel") }}</Label>
           <Input id="link-external-id" v-model="linkExternalId" maxlength="100"
-            placeholder="Например: 12345678" @keyup.enter="submitLink" />
+            :placeholder="$t('productMarketplaceIntegrations.externalIdPlaceholder')" @keyup.enter="submitLink" />
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline" :disabled="isLinking">Отмена</Button></DialogClose>
+          <DialogClose as-child><Button variant="outline" :disabled="isLinking">{{ $t("common.cancel") }}</Button></DialogClose>
           <Button @click="submitLink" :disabled="isLinking || !linkExternalId.trim()">
             <Loader2 v-if="isLinking" class="size-4 mr-2 animate-spin" />
             <Link2 v-else class="size-4 mr-2" />
-            {{ isRelinking ? 'Перепривязать' : 'Привязать' }}
+            {{ isRelinking ? $t("productMarketplaceIntegrations.relinkAction") : $t("productMarketplaceIntegrations.linkAction") }}
           </Button>
         </DialogFooter>
       </DialogContent>

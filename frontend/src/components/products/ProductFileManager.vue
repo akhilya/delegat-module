@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/popover";
 import { Tag } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
+import { t } from "@/i18n";
 
 const props = defineProps({
   files: { type: Array, required: true },
@@ -79,13 +80,13 @@ const route = useRoute();
 const router = useRouter();
 
 const isStoreScope = computed(() => props.scope === "store");
-const rootLabel = computed(() => isStoreScope.value ? "Хранилище" : "Файлы");
+const rootLabel = computed(() => isStoreScope.value ? t("products.productFileManager.storageRootLabel") : t("products.productFileManager.filesRootLabel"));
 const subjectLabel = computed(() => {
   if (props.storageLabel) return props.storageLabel;
-  if (isStoreScope.value) return "Общее хранилище магазина";
+  if (isStoreScope.value) return t("products.productFileManager.storeSharedStorageLabel");
   return props.productSku
-    ? `${props.productName || "Товар"} [${props.productSku}]`
-    : (props.productName || `Товар #${props.productId}`);
+    ? `${props.productName || t("products.productFileManager.productFallback")} [${props.productSku}]`
+    : (props.productName || t("products.productFileManager.productWithIdFallback", { id: props.productId }));
 });
 
 function productRequired() {
@@ -174,14 +175,14 @@ const newTagName = ref("");
 const newTagColor = ref("Red");
 // Values must match C# FileTagColor enum NAMES (JsonStringEnumConverter)
 const TAG_COLORS = [
-  { value: "Red", label: "Красный", bg: "bg-red-500", text: "text-white" },
-  { value: "Blue", label: "Синий", bg: "bg-blue-500", text: "text-white" },
-  { value: "Green", label: "Зелёный", bg: "bg-emerald-500", text: "text-white" },
-  { value: "Yellow", label: "Жёлтый", bg: "bg-yellow-300", text: "text-yellow-900" },
-  { value: "Orange", label: "Оранжевый", bg: "bg-orange-500", text: "text-white" },
-  { value: "Purple", label: "Фиолетовый", bg: "bg-purple-500", text: "text-white" },
-  { value: "Balck", label: "Чёрный", bg: "bg-neutral-800 dark:bg-neutral-300", text: "text-white dark:text-neutral-800" },
-  { value: "White", label: "Серый", bg: "bg-neutral-200 dark:bg-neutral-600", text: "text-neutral-700 dark:text-neutral-100" },
+  { value: "Red", get label() { return t("products.productFileManager.tagColorRed"); }, bg: "bg-red-500", text: "text-white" },
+  { value: "Blue", get label() { return t("products.productFileManager.tagColorBlue"); }, bg: "bg-blue-500", text: "text-white" },
+  { value: "Green", get label() { return t("products.productFileManager.tagColorGreen"); }, bg: "bg-emerald-500", text: "text-white" },
+  { value: "Yellow", get label() { return t("products.productFileManager.tagColorYellow"); }, bg: "bg-yellow-300", text: "text-yellow-900" },
+  { value: "Orange", get label() { return t("products.productFileManager.tagColorOrange"); }, bg: "bg-orange-500", text: "text-white" },
+  { value: "Purple", get label() { return t("products.productFileManager.tagColorPurple"); }, bg: "bg-purple-500", text: "text-white" },
+  { value: "Balck", get label() { return t("products.productFileManager.tagColorBlack"); }, bg: "bg-neutral-800 dark:bg-neutral-300", text: "text-white dark:text-neutral-800" },
+  { value: "White", get label() { return t("products.productFileManager.tagColorGray"); }, bg: "bg-neutral-200 dark:bg-neutral-600", text: "text-neutral-700 dark:text-neutral-100" },
 ];
 
 function tagBgClass(colorValue) {
@@ -328,11 +329,11 @@ async function bulkToggleTag(tagId) {
       for (const f of files) {
         await http.delete(fileTagUrl(f.id, tagId), { cache: false });
       }
-      displaySonnerSuccess(`Тэг убран с ${files.length} файлов`);
+      displaySonnerSuccess(t("products.productFileManager.tagRemovedFromFiles", { count: files.length }));
     } else {
       const fileIds = files.filter(f => !snapshot.get(f.id)?.some(t => t.id === tagId)).map(f => f.id);
       await http.post(bulkTagUrl(), { fileIds, tagId }, { cache: false });
-      displaySonnerSuccess(`Тэг назначен ${fileIds.length} файлам`);
+      displaySonnerSuccess(t("products.productFileManager.tagAssignedToFiles", { count: fileIds.length }));
     }
   } catch (error) {
     // Rollback to snapshot
@@ -361,7 +362,7 @@ const isUploading = computed(() => pendingUploads.value.some(u => u.status === '
 
 // Inline folder creation (Windows Explorer style)
 const inlineNewFolder = ref(false);
-const inlineNewFolderName = ref("Новая папка");
+const inlineNewFolderName = ref(t("products.productFileManager.newFolderDefaultName"));
 const inlineNewFolderInput = ref(null);
 const isCreatingFolder = ref(false);
 
@@ -494,7 +495,7 @@ function commitPathEdit() {
         f => (f.parentFolderId ?? null) === folderId && f.name.toLowerCase() === parts[i].toLowerCase()
       );
       if (!match) {
-        displaySonnerError(`Папка "${parts[i]}" не найдена`);
+        displaySonnerError(t("products.productFileManager.folderNotFound", { name: parts[i] }));
         return;
       }
       folderId = match.id;
@@ -575,7 +576,7 @@ function onDragStart(e, type, id) {
   const count = dragItems.value.length;
   if (count > 1) {
     const ghost = document.createElement("div");
-    ghost.textContent = `${count} элементов`;
+    ghost.textContent = t("products.productFileManager.dragItemsCount", { count });
     ghost.style.cssText = "position:fixed;top:-100px;padding:4px 12px;background:#333;color:#fff;border-radius:4px;font-size:13px";
     document.body.appendChild(ghost);
     e.dataTransfer.setDragImage(ghost, 0, 0);
@@ -679,8 +680,8 @@ async function uploadFiles(fileList) {
   // ADD_OPERATION deduplicates by ID — whoever adds first keeps the entry.
   const opId = crypto.randomUUID().replace(/-/g, "");
   const uploadTitle = totalFiles === 1
-    ? `Загрузка файла — ${subjectLabel.value}`
-    : `Загрузка ${totalFiles} файлов — ${subjectLabel.value}`;
+    ? t("products.productFileManager.uploadingFileTitle", { subject: subjectLabel.value })
+    : t("products.productFileManager.uploadingFilesTitle", { count: totalFiles, subject: subjectLabel.value });
 
   store.dispatch("operations/addOperation", {
     id: opId,
@@ -770,12 +771,12 @@ async function uploadFiles(fileList) {
         entry.status = 'cancelled';
         cancelledFiles++;
         updateOpProgress();
-        store.dispatch("operations/addLog", { id: opId, level: "warning", message: `${entry.name}: отменено` });
+        store.dispatch("operations/addLog", { id: opId, level: "warning", message: t("products.productFileManager.logCancelledEntry", { name: entry.name }) });
       } else {
         entry.status = 'error';
         failedFiles++;
         updateOpProgress();
-        store.dispatch("operations/addLog", { id: opId, level: "error", message: `${entry.name}: ${error?.response?.data?.message || error?.message || 'ошибка'}` });
+        store.dispatch("operations/addLog", { id: opId, level: "error", message: `${entry.name}: ${error?.response?.data?.message || error?.message || t("products.productFileManager.errorFallback")}` });
         displaySonnerError(error);
       }
     }
@@ -802,7 +803,7 @@ async function uploadFiles(fileList) {
   // we must not overwrite it.
   if (!batchAbort.signal.aborted) {
     const finalStatus = failedFiles > 0 ? (completedFiles > 0 ? "partial" : "failed") : "completed";
-    const finalSummary = `Загружено: ${completedFiles}` + (failedFiles > 0 ? `, ошибок: ${failedFiles}` : "");
+    const finalSummary = t("products.productFileManager.uploadedSummary", { count: completedFiles }) + (failedFiles > 0 ? t("products.productFileManager.uploadedSummaryErrorsSuffix", { count: failedFiles }) : "");
     store.dispatch("operations/finishOperation", {
       id: opId,
       status: finalStatus,
@@ -813,7 +814,7 @@ async function uploadFiles(fileList) {
     } catch { /* ignore */ }
   } else {
     // Batch was cancelled — persist cancelled status to backend
-    const summary = `Отменено. Загружено: ${completedFiles}, отменено: ${cancelledFiles}`;
+    const summary = t("products.productFileManager.uploadCancelledSummary", { completed: completedFiles, cancelled: cancelledFiles });
     try {
       await http.post(`/operations/${opId}/finish`, { status: "cancelled", summary }, { cache: false });
     } catch { /* ignore */ }
@@ -888,7 +889,7 @@ function closeContextMenu() {
 
 function startInlineCreate() {
   if (inlineNewFolder.value) return;
-  inlineNewFolderName.value = "Новая папка";
+  inlineNewFolderName.value = t("products.productFileManager.newFolderDefaultName");
   inlineNewFolder.value = true;
   nextTick(() => {
     const el = inlineNewFolderInput.value;
@@ -994,7 +995,7 @@ async function deleteFolder() {
       collectDescendantIds(deleteFolderTarget.value.id, removeIds);
     }
     folders.value = folders.value.filter((f) => !removeIds.includes(f.id));
-    displaySonnerSuccess("Папка удалена.");
+    displaySonnerSuccess(t("products.productFileManager.folderDeleted"));
     if (deleteFolderRecursive.value) emit("filesChanged");
   } catch (error) {
     displaySonnerError(error);
@@ -1075,10 +1076,10 @@ async function copyShareUrl() {
   try {
     await navigator.clipboard.writeText(shareUrl.value);
     shareCopied.value = true;
-    displaySonnerSuccess("Ссылка скопирована");
+    displaySonnerSuccess(t("products.productFileManager.linkCopied"));
     setTimeout(() => { shareCopied.value = false; }, 2000);
   } catch {
-    displaySonnerError("Не удалось скопировать");
+    displaySonnerError(t("products.productFileManager.copyFailed"));
   }
 }
 
@@ -1086,10 +1087,10 @@ async function copyPublicUrl(file) {
   try {
     await navigator.clipboard.writeText(`${window.location.origin}${file.publicUrl}`);
     publicUrlCopied.value = true;
-    displaySonnerSuccess("Ссылка скопирована");
+    displaySonnerSuccess(t("products.productFileManager.linkCopied"));
     setTimeout(() => { publicUrlCopied.value = false; }, 2000);
   } catch {
-    displaySonnerError("Не удалось скопировать");
+    displaySonnerError(t("products.productFileManager.copyFailed"));
   }
 }
 
@@ -1101,7 +1102,7 @@ async function downloadFolderArchive(folderId) {
   if (isDownloadingArchive.value) return;
   isDownloadingArchive.value = true;
   downloadingFolderId.value = folderId;
-  displaySonnerSuccess("Формируется архив...");
+  displaySonnerSuccess(t("products.productFileManager.archiveBuilding"));
   try {
     const response = await http({
       url: downloadFolderUrl(folderId),
@@ -1228,8 +1229,8 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
   const count = fileIds.length;
   const opId = crypto.randomUUID().replace(/-/g, "");
   const title = count === 1
-    ? `Удаление файла — ${subjectLabel.value}`
-    : `Удаление ${count} файлов — ${subjectLabel.value}`;
+    ? t("products.productFileManager.deletingFileTitle", { subject: subjectLabel.value })
+    : t("products.productFileManager.deletingFilesTitle", { count, subject: subjectLabel.value });
 
   // Register in Vuex first (wins SignalR race), then backend
   store.dispatch("operations/addOperation", {
@@ -1263,19 +1264,19 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
     store.dispatch("operations/finishOperation", {
       id: opId,
       status: "completed",
-      summary: `Удалено: ${count}`,
+      summary: t("products.productFileManager.deletedSummary", { count }),
     });
-    http.post(`/operations/${opId}/finish`, { status: "completed", summary: `Удалено: ${count}` }, { cache: false }).catch(() => {});
+    http.post(`/operations/${opId}/finish`, { status: "completed", summary: t("products.productFileManager.deletedSummary", { count }) }, { cache: false }).catch(() => {});
 
     emit('filesChanged');
   } catch (error) {
-    store.dispatch("operations/addLog", { id: opId, level: "error", message: error?.response?.data?.message || error?.message || "Ошибка" });
+    store.dispatch("operations/addLog", { id: opId, level: "error", message: error?.response?.data?.message || error?.message || t("products.productFileManager.errorFallback") });
     store.dispatch("operations/finishOperation", {
       id: opId,
       status: "failed",
-      summary: error?.response?.data?.message || "Ошибка удаления",
+      summary: error?.response?.data?.message || t("products.productFileManager.deleteErrorFallback"),
     });
-    http.post(`/operations/${opId}/finish`, { status: "failed", summary: error?.message || "Ошибка" }, { cache: false }).catch(() => {});
+    http.post(`/operations/${opId}/finish`, { status: "failed", summary: error?.message || t("products.productFileManager.errorFallback") }, { cache: false }).catch(() => {});
     displaySonnerError(error);
   }
 }
@@ -1354,25 +1355,25 @@ watch(() => props.productId, () => {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {{ pendingDeleteFileId ? 'Удалить файл?' : 'Удалить выбранные файлы?' }}
+            {{ pendingDeleteFileId ? t("products.productFileManager.deleteFileTitle") : t("products.productFileManager.deleteSelectedFilesTitle") }}
           </AlertDialogTitle>
           <AlertDialogDescription>
             <template v-if="pendingDeleteFileId">
-              Файл будет удалён безвозвратно.
+              {{ t("products.productFileManager.deleteFileIrreversible") }}
             </template>
             <template v-else>
-              {{ selectedItems.filter(i => i.type === 'file').length }} файлов будет удалено. Это действие нельзя отменить.
+              {{ t("products.productFileManager.deleteFilesCountIrreversible", { count: selectedItems.filter(i => i.type === 'file').length }) }}
             </template>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             class="bg-destructive text-white hover:bg-destructive/90"
             @click="confirmDeleteSelected"
             :disabled="isDeletingSelected"
           >
-            Удалить
+            {{ t("common.delete") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1395,7 +1396,7 @@ watch(() => props.productId, () => {
       >
         <div class="flex flex-col items-center gap-1 text-muted-foreground">
           <Upload class="size-8" />
-          <p class="text-sm font-medium">Перетащите файлы для загрузки</p>
+          <p class="text-sm font-medium">{{ t("products.productFileManager.dropFilesToUpload") }}</p>
         </div>
       </div>
 
@@ -1403,8 +1404,8 @@ watch(() => props.productId, () => {
         class="flex min-h-[24rem] items-center justify-center"
       >
         <EmptyState
-          title="Папка пуста"
-          description="Перетащите файлы сюда, загрузите их кнопкой или создайте папку."
+          :title="t('products.productFileManager.emptyFolderTitle')"
+          :description="t('products.productFileManager.emptyFolderDescription')"
         >
           <template #icon>
             <Folder />
@@ -1498,10 +1499,10 @@ watch(() => props.productId, () => {
               />
               <span v-else class="block truncate max-w-[200px] sm:max-w-xs lg:max-w-md" :title="folder.name">{{ folder.name }}</span>
             </td>
-            <td class="text-muted-foreground hidden sm:table-cell">Папка</td>
+            <td class="text-muted-foreground hidden sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</td>
             <td></td>
             <td class="text-muted-foreground">
-              {{ folder.fileCount }} {{ folder.fileCount === 1 ? 'файл' : 'файлов' }}
+              {{ folder.fileCount }} {{ folder.fileCount === 1 ? t("products.productFileManager.fileCountOne") : t("products.productFileManager.fileCountMany") }}
             </td>
             <td class="pr-3 w-10"></td>
           </tr>
@@ -1571,7 +1572,7 @@ watch(() => props.productId, () => {
                           variant="ghost"
                           size="icon"
                           :class="['size-5 min-h-0 rounded-full shrink-0 p-0 hover:ring-2 hover:ring-primary/30 transition-shadow', tagBgClass(tag.color)]"
-                          :title="'Сменить цвет'"
+                          :title="t('products.productFileManager.changeColorTitle')"
                           @click.stop="editingTagId = editingTagId === tag.id ? null : tag.id"
                         />
                         <!-- Tag name — click to toggle, dblclick to rename -->
@@ -1623,7 +1624,7 @@ watch(() => props.productId, () => {
                     <div class="flex items-center gap-1.5">
                       <Input
                         v-model="newTagName"
-                        placeholder="Новый тэг"
+                        :placeholder="t('products.productFileManager.newTagPlaceholder')"
                         maxlength="50"
                         class="h-8 text-sm"
                         @keydown.enter="createAndAssignTag(file.id)"
@@ -1644,7 +1645,7 @@ watch(() => props.productId, () => {
                   variant="ghost"
                   size="icon"
                   class="size-7 opacity-0 group-hover:opacity-100 text-green-500"
-                  title="Скопировать публичную ссылку"
+                  :title="t('products.productFileManager.copyPublicLinkTitle')"
                   @click.stop="copyPublicUrl(file)"
                 >
                   <Globe class="size-3.5" />
@@ -1726,7 +1727,7 @@ watch(() => props.productId, () => {
               @click="navigateToFolder(contextMenu.item.id); closeContextMenu()"
             >
               <FolderOpen class="size-4 text-muted-foreground" />
-              Открыть
+              {{ t("products.productFileManager.openAction") }}
             </Button>
             <Button
               variant="ghost"
@@ -1734,7 +1735,7 @@ watch(() => props.productId, () => {
               @click="downloadFolderArchive(contextMenu.item.id); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
-              Скачать архив
+              {{ t("products.productFileManager.downloadArchiveAction") }}
             </Button>
             <Button
               variant="ghost"
@@ -1742,7 +1743,7 @@ watch(() => props.productId, () => {
               @click="openShareDialog('folder', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
-              Поделиться
+              {{ t("products.productFileManager.shareAction") }}
             </Button>
             <Button
               variant="ghost"
@@ -1750,7 +1751,7 @@ watch(() => props.productId, () => {
               @click="startInlineRename('folder', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
-              Переименовать
+              {{ t("products.productFileManager.renameAction") }}
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
             <Button
@@ -1759,7 +1760,7 @@ watch(() => props.productId, () => {
               @click="openDeleteFolderDialog(contextMenu.item); closeContextMenu()"
             >
               <Trash2 class="size-4" />
-              Удалить
+              {{ t("common.delete") }}
             </Button>
           </template>
 
@@ -1772,7 +1773,7 @@ watch(() => props.productId, () => {
               @click="closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
-              Скачать
+              {{ t("common.download") }}
             </a>
             <Button
               variant="ghost"
@@ -1780,7 +1781,7 @@ watch(() => props.productId, () => {
               @click="openShareDialog('file', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
-              Поделиться
+              {{ t("products.productFileManager.shareAction") }}
             </Button>
             <Button
               variant="ghost"
@@ -1788,7 +1789,7 @@ watch(() => props.productId, () => {
               @click="startInlineRename('file', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
-              Переименовать
+              {{ t("products.productFileManager.renameAction") }}
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
             <Button
@@ -1797,7 +1798,7 @@ watch(() => props.productId, () => {
               @click.stop="deleteSingleFile(contextMenu.item.id); closeContextMenu()"
             >
               <Trash2 class="size-4" />
-              Удалить
+              {{ t("common.delete") }}
             </Button>
           </template>
 
@@ -1809,7 +1810,7 @@ watch(() => props.productId, () => {
               @click="startInlineCreate(); closeContextMenu()"
             >
               <Plus class="size-4 text-muted-foreground" />
-              Создать папку
+              {{ t("products.productFileManager.createFolderAction") }}
             </Button>
             <Button
               variant="ghost"
@@ -1817,7 +1818,7 @@ watch(() => props.productId, () => {
               @click="openFileDialog(); closeContextMenu()"
             >
               <Upload class="size-4 text-muted-foreground" />
-              Загрузить файлы
+              {{ t("products.productFileManager.uploadFilesAction") }}
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
             <Button
@@ -1826,7 +1827,7 @@ watch(() => props.productId, () => {
               @click="downloadFolderArchive(currentFolderId); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
-              Скачать архив
+              {{ t("products.productFileManager.downloadArchiveAction") }}
             </Button>
           </template>
         </div>
@@ -1838,7 +1839,7 @@ watch(() => props.productId, () => {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Удалить папку "{{ deleteFolderTarget?.name }}"?
+            {{ t("products.productFileManager.deleteFolderTitle", { name: deleteFolderTarget?.name }) }}
           </AlertDialogTitle>
         </AlertDialogHeader>
         <div
@@ -1851,16 +1852,16 @@ watch(() => props.productId, () => {
             id="recursive-delete"
           />
           <label for="recursive-delete" class="text-sm cursor-pointer">
-            Удалить содержимое ({{ deleteFolderTarget.fileCount }} файлов, {{ deleteFolderTarget.subfolderCount }} подпапок)
+            {{ t("products.productFileManager.deleteFolderContentsLabel", { fileCount: deleteFolderTarget.fileCount, subfolderCount: deleteFolderTarget.subfolderCount }) }}
           </label>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             @click="deleteFolder"
             :disabled="deleteFolderTarget && (deleteFolderTarget.fileCount > 0 || deleteFolderTarget.subfolderCount > 0) && !deleteFolderRecursive"
           >
-            Удалить
+            {{ t("common.delete") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1870,30 +1871,30 @@ watch(() => props.productId, () => {
     <Dialog :open="showShareDialog" @update:open="showShareDialog = $event">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ shareTarget?.type === 'folder' ? 'Поделиться папкой' : 'Поделиться файлом' }}</DialogTitle>
+          <DialogTitle>{{ shareTarget?.type === 'folder' ? t("products.productFileManager.shareFolderTitle") : t("products.productFileManager.shareFileTitle") }}</DialogTitle>
         </DialogHeader>
         <p class="text-sm text-muted-foreground -mt-1">
-          {{ shareTarget?.type === 'file' ? extractFileName(shareTarget.item) : (shareTarget?.item?.name ?? 'Все файлы') }}
+          {{ shareTarget?.type === 'file' ? extractFileName(shareTarget.item) : (shareTarget?.item?.name ?? t("products.productFileManager.allFilesFallback")) }}
         </p>
 
         <template v-if="!shareUrl">
           <Select v-model="shareTtlHours">
             <SelectTrigger>
-              <SelectValue placeholder="Срок действия" />
+              <SelectValue :placeholder="t('products.productFileManager.expirationPlaceholder')" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">1 час</SelectItem>
-              <SelectItem value="24">1 день</SelectItem>
-              <SelectItem value="168">7 дней</SelectItem>
-              <SelectItem value="720">30 дней</SelectItem>
-              <SelectItem v-if="shareTarget?.type === 'file'" value="permanent">Постоянно</SelectItem>
+              <SelectItem value="1">{{ t("products.productFileManager.ttl1Hour") }}</SelectItem>
+              <SelectItem value="24">{{ t("products.productFileManager.ttl1Day") }}</SelectItem>
+              <SelectItem value="168">{{ t("products.productFileManager.ttl7Days") }}</SelectItem>
+              <SelectItem value="720">{{ t("products.productFileManager.ttl30Days") }}</SelectItem>
+              <SelectItem v-if="shareTarget?.type === 'file'" value="permanent">{{ t("products.productFileManager.ttlPermanent") }}</SelectItem>
             </SelectContent>
           </Select>
           <DialogFooter>
-            <Button variant="outline" @click="showShareDialog = false">Отмена</Button>
+            <Button variant="outline" @click="showShareDialog = false">{{ t("common.cancel") }}</Button>
             <Button @click="createShareLink" :disabled="isCreatingShare">
               <Loader2 v-if="isCreatingShare" class="size-4 animate-spin mr-1" />
-              Создать ссылку
+              {{ t("products.productFileManager.createLinkAction") }}
             </Button>
           </DialogFooter>
         </template>
@@ -1906,7 +1907,7 @@ watch(() => props.productId, () => {
             </Button>
           </div>
           <DialogFooter>
-            <Button variant="outline" @click="showShareDialog = false">Закрыть</Button>
+            <Button variant="outline" @click="showShareDialog = false">{{ t("common.close") }}</Button>
           </DialogFooter>
         </template>
       </DialogContent>
@@ -1916,32 +1917,32 @@ watch(() => props.productId, () => {
     <div class="sticky bottom-0 flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl">
       <Button variant="outline" size="sm" @click="startInlineCreate">
         <Plus class="size-4 mr-1" />
-        Папка
+        {{ t("products.productFileManager.folderTypeLabel") }}
       </Button>
       <Button size="sm" @click="openFileDialog">
         <Upload class="size-4 mr-1" />
-        Загрузить
+        {{ t("common.upload") }}
       </Button>
       <Button v-if="isUploading" variant="destructive" size="sm" @click="cancelAllUploads">
         <X class="size-4 mr-1" />
-        Отменить
+        {{ t("products.productFileManager.cancelUploadsAction") }}
       </Button>
       <Button variant="outline" size="sm" @click="downloadFolderArchive(currentFolderId)" :disabled="isDownloadingArchive">
         <Loader2 v-if="isDownloadingArchive && downloadingFolderId === currentFolderId" class="size-4 animate-spin mr-1" />
         <ArrowDownToLine v-else class="size-4 mr-1" />
-        Скачать архив
+        {{ t("products.productFileManager.downloadArchiveAction") }}
       </Button>
       <template v-if="selection.size > 0">
-        <span class="ml-auto text-sm text-muted-foreground tabular-nums">{{ selection.size }} выбрано</span>
+        <span class="ml-auto text-sm text-muted-foreground tabular-nums">{{ t("products.productFileManager.selectedCount", { count: selection.size }) }}</span>
         <Button variant="outline" size="sm" @click="clearSelection">
           <X class="size-4 mr-1" />
-          Снять
+          {{ t("products.productFileManager.deselectAction") }}
         </Button>
         <Popover>
           <PopoverTrigger as-child>
             <Button variant="outline" size="sm">
               <Tag class="size-4 mr-1" />
-              Тэг
+              {{ t("products.productFileManager.tagLabel") }}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" class="w-56 p-0">
@@ -1958,13 +1959,13 @@ watch(() => props.productId, () => {
                 <span class="truncate flex-1 text-left">{{ tag.name }}</span>
                 <Check v-if="bulkAllHaveTag(tag.id)" class="size-4 text-primary shrink-0" />
               </Button>
-              <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4">Нет тэгов</div>
+              <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4">{{ t("products.productFileManager.noTagsLabel") }}</div>
             </div>
           </PopoverContent>
         </Popover>
         <Button variant="outline" size="sm" @click="deleteSelected">
           <Trash2 class="size-4 mr-1" />
-          Удалить
+          {{ t("common.delete") }}
         </Button>
       </template>
     </div>

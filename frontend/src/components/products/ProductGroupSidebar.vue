@@ -1,6 +1,7 @@
 <script setup>
 import { ref, nextTick } from "vue";
 import { Plus, Copy } from "lucide-vue-next";
+import { t } from "@/i18n";
 import { Loader2 } from "lucide-vue-next";
 import {
   ContextMenu,
@@ -56,7 +57,7 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
 
     <template v-else>
       <div class="shrink-0 border-b px-4 py-3">
-        <p class="text-sm font-medium">Товары в группе</p>
+        <p class="text-sm font-medium">{{ t("products.productGroupSidebar.title") }}</p>
         <p class="text-xs text-muted-foreground mt-0.5 truncate">
           {{ group.name }}
         </p>
@@ -119,7 +120,7 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
           <ContextMenuContent v-if="getDuplicateUrl">
             <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
               <Copy class="size-4 mr-2" />
-              Дублировать
+              {{ t("products.productGroupSidebar.duplicate") }}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>

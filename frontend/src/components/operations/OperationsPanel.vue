@@ -17,6 +17,7 @@ import {
 import OperationItem from "./OperationItem.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
+import { t } from "@/i18n";
 
 const store = useStore();
 
@@ -50,10 +51,10 @@ function loadMore() {
 async function handleRetry(id) {
   try {
     const result = await store.dispatch("operations/retryFailed", id);
-    displaySonnerSuccess(result.message || "Повторная обработка запущена");
+    displaySonnerSuccess(result.message || t("operations.retryStarted"));
   } catch (error) {
     displaySonnerError(
-      error.response?.data?.message || "Ошибка при повторе",
+      error.response?.data?.message || t("operations.retryError"),
     );
   }
 }
@@ -94,7 +95,7 @@ function handleRemove(id) {
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <h2 class="text-sm font-semibold">Операции</h2>
+          <h2 class="text-sm font-semibold">{{ t("operations.panelTitle") }}</h2>
           <div class="flex items-center gap-1">
             <AlertDialog v-if="hasCompleted">
               <AlertDialogTrigger as-child>
@@ -102,21 +103,21 @@ function handleRemove(id) {
                   variant="ghost"
                   size="icon"
                   class="h-7 w-7"
-                  title="Очистить завершённые"
+                  :title="t('operations.clearCompletedTitle')"
                 >
                   <Trash2 class="size-3.5" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Очистить завершённые операции?</AlertDialogTitle>
+                  <AlertDialogTitle>{{ t("operations.clearCompletedConfirmTitle") }}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Все завершённые, отменённые и ошибочные операции будут удалены из списка.
+                    {{ t("operations.clearCompletedConfirmDescription") }}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction @click="clearCompleted">Очистить</AlertDialogAction>
+                  <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
+                  <AlertDialogAction @click="clearCompleted">{{ t("operations.clearCompletedConfirm") }}</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -136,7 +137,7 @@ function handleRemove(id) {
           <!-- Active operations -->
           <template v-if="activeOperations.length > 0">
             <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
-              Активные
+              {{ t("operations.active") }}
             </div>
             <div class="space-y-2">
               <OperationItem
@@ -155,7 +156,7 @@ function handleRemove(id) {
           <!-- History operations -->
           <template v-if="historyOperations.length > 0">
             <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
-              История
+              {{ t("operations.history") }}
             </div>
             <div class="space-y-2">
               <OperationItem
@@ -176,7 +177,7 @@ function handleRemove(id) {
                 class="text-xs text-muted-foreground"
                 @click="loadMore"
               >
-                Загрузить ещё
+                {{ t("operations.loadMore") }}
               </Button>
             </div>
           </template>
@@ -187,7 +188,7 @@ function handleRemove(id) {
             class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2"
           >
             <Loader2 class="size-6 animate-spin" />
-            <span class="text-sm">Загрузка...</span>
+            <span class="text-sm">{{ t("operations.loading") }}</span>
           </div>
 
           <!-- Empty state -->
@@ -197,8 +198,8 @@ function handleRemove(id) {
           >
             <EmptyState
               size="sm"
-              title="Нет операций"
-              description="Здесь появится прогресс экспорта, импорта и AI-задач."
+              :title="t('operations.emptyTitle')"
+              :description="t('operations.emptyDescription')"
             >
               <template #icon>
                 <Activity />

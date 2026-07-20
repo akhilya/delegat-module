@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { t } from "@/i18n";
 import {
   Loader2,
   Plus,
@@ -63,28 +64,28 @@ import draggable from "vuedraggable";
 const LARGE_OPTIONS_THRESHOLD = 50;
 
 const ATTRIBUTE_TYPES = {
-  0: { label: "Текст", value: 0 },
-  1: { label: "Число", value: 1 },
-  2: { label: "Да/Нет", value: 2 },
-  3: { label: "Выбор", value: 3 },
-  4: { label: "Множественный выбор", value: 4 },
-  5: { label: "Штрихкод (Barcode)", value: 5 },
+  0: { label: t("pages.storeAttributesPage.types.text"), value: 0 },
+  1: { label: t("pages.storeAttributesPage.types.number"), value: 1 },
+  2: { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
+  3: { label: t("pages.storeAttributesPage.types.select"), value: 3 },
+  4: { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
+  5: { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
   // String keys for JSON enum serialization (JsonStringEnumConverter)
-  "Text": { label: "Текст", value: 0 },
-  "Number": { label: "Число", value: 1 },
-  "Boolean": { label: "Да/Нет", value: 2 },
-  "Select": { label: "Выбор", value: 3 },
-  "MultiSelect": { label: "Множественный выбор", value: 4 },
-  "Barcode": { label: "Штрихкод (Barcode)", value: 5 },
+  "Text": { label: t("pages.storeAttributesPage.types.text"), value: 0 },
+  "Number": { label: t("pages.storeAttributesPage.types.number"), value: 1 },
+  "Boolean": { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
+  "Select": { label: t("pages.storeAttributesPage.types.select"), value: 3 },
+  "MultiSelect": { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
+  "Barcode": { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
 };
 
 const ATTRIBUTE_TYPE_OPTIONS = [
-  { label: "Текст", value: 0 },
-  { label: "Число", value: 1 },
-  { label: "Да/Нет", value: 2 },
-  { label: "Выбор", value: 3 },
-  { label: "Множественный выбор", value: 4 },
-  { label: "Штрихкод (Barcode)", value: 5 },
+  { label: t("pages.storeAttributesPage.types.text"), value: 0 },
+  { label: t("pages.storeAttributesPage.types.number"), value: 1 },
+  { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
+  { label: t("pages.storeAttributesPage.types.select"), value: 3 },
+  { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
+  { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
 ];
 
 export default {
@@ -168,14 +169,14 @@ export default {
       ATTRIBUTE_TYPE_OPTIONS,
       LARGE_OPTIONS_THRESHOLD,
       breadcrumbs: [
-        { label: "Товары", to: PAGE_PRODUCTS },
-        { label: "Глобальные атрибуты" },
+        { label: this.$t("routes.products"), to: PAGE_PRODUCTS },
+        { label: this.$t("nav.globalAttributes") },
       ],
     };
   },
   computed: {
     attributeTypeLabel() {
-      return ATTRIBUTE_TYPES[this.attributeForm.type]?.label || "Текст";
+      return ATTRIBUTE_TYPES[this.attributeForm.type]?.label || this.$t("pages.storeAttributesPage.types.text");
     },
     showOptionsField() {
       const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
@@ -315,18 +316,23 @@ export default {
 
     generateKey() {
       if (!this.attributeForm.name) return;
-      // Convert name to snake_case key
+      // Convert name to snake_case key. Cyrillic chars are written as \uXXXX escapes
+      // below so this source file has no non-ASCII glyphs; runtime behavior is unchanged.
       this.attributeForm.key = this.attributeForm.name
         .toLowerCase()
-        .replace(/[^a-zа-яё0-9\s]/gi, "")
+        .replace(/[^a-z\u0400-\u04FF0-9\s]/gi, "")
         .replace(/\s+/g, "_")
-        .replace(/[а-яё]/gi, (char) => {
+        .replace(/[\u0400-\u04FF]/gi, (char) => {
           const translitMap = {
-            а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo",
-            ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m",
-            н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
-            ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
-            ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+            "\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g",
+            "\u0434": "d", "\u0435": "e", "\u0451": "yo", "\u0436": "zh",
+            "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k",
+            "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o",
+            "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t",
+            "\u0443": "u", "\u0444": "f", "\u0445": "h", "\u0446": "ts",
+            "\u0447": "ch", "\u0448": "sh", "\u0449": "sch", "\u044a": "",
+            "\u044b": "y", "\u044c": "", "\u044d": "e", "\u044e": "yu",
+            "\u044f": "ya",
           };
           return translitMap[char.toLowerCase()] || char;
         });
@@ -334,11 +340,11 @@ export default {
 
     async handleSaveAttribute() {
       if (!this.attributeForm.name.trim()) {
-        displaySonnerError("Введите название атрибута");
+        displaySonnerError(this.$t("pages.storeAttributesPage.validation.nameRequired"));
         return;
       }
       if (!this.attributeForm.key.trim()) {
-        displaySonnerError("Введите ключ атрибута");
+        displaySonnerError(this.$t("pages.storeAttributesPage.validation.keyRequired"));
         return;
       }
 
@@ -362,7 +368,7 @@ export default {
           id: this.editingAttribute.id,
           attribute: attributeData,
           onSuccess: () => {
-            displaySonnerSuccess("Атрибут обновлён");
+            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.updated"));
             this.showAttributeDialog = false;
             this.fetchAttributes();
           },
@@ -374,7 +380,7 @@ export default {
         await this.createStoreAttribute({
           attribute: attributeData,
           onSuccess: () => {
-            displaySonnerSuccess("Атрибут добавлен");
+            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.added"));
             this.showAttributeDialog = false;
             this.fetchAttributes();
           },
@@ -394,9 +400,9 @@ export default {
         onSuccess: (response) => {
           const deletedCount = response.data?.value?.deletedValuesCount || 0;
           if (deletedCount > 0) {
-            displaySonnerSuccess(`Атрибут удалён (${deletedCount} значений удалено)`);
+            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.deletedWithValues", { count: deletedCount }));
           } else {
-            displaySonnerSuccess("Атрибут удалён");
+            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.deleted"));
           }
           this.fetchAttributes();
         },
@@ -413,7 +419,7 @@ export default {
       await this.reorderStoreAttributes({
         attributeIds,
         onSuccess: () => {
-          displaySonnerSuccess("Порядок атрибутов сохранён");
+          displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.orderSaved"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -423,7 +429,7 @@ export default {
     },
 
     getAttributeTypeLabel(type) {
-      return ATTRIBUTE_TYPES[type]?.label || "Неизвестный тип";
+      return ATTRIBUTE_TYPES[type]?.label || this.$t("pages.storeAttributesPage.types.unknown");
     },
 
     getOptionsRaw() {
@@ -451,7 +457,7 @@ export default {
 
     applyImportedOptions(parsed) {
       if (!parsed.length) {
-        displaySonnerError("Файл не содержит вариантов");
+        displaySonnerError(this.$t("pages.storeAttributesPage.options.fileHasNoOptions"));
         return;
       }
 
@@ -470,7 +476,7 @@ export default {
 
       this.cachedOptionsCount = parsed.length;
       this.primeDefaultValueOptions();
-      displaySonnerSuccess(`Импортировано вариантов: ${parsed.length.toLocaleString()}`);
+      displaySonnerSuccess(this.$t("pages.storeAttributesPage.options.imported", { count: parsed.length.toLocaleString() }));
     },
 
     parseImportedOptionsText(text) {
@@ -520,13 +526,13 @@ export default {
     exportAttributeOptions() {
       const raw = this.getOptionsRaw();
       if (!raw) {
-        displaySonnerError("Нет вариантов для экспорта");
+        displaySonnerError(this.$t("pages.storeAttributesPage.options.noOptionsToExport"));
         return;
       }
 
       const parsed = this.parseOptions(raw);
       if (!parsed.length) {
-        displaySonnerError("Нет вариантов для экспорта");
+        displaySonnerError(this.$t("pages.storeAttributesPage.options.noOptionsToExport"));
         return;
       }
 
@@ -539,7 +545,7 @@ export default {
       anchor.download = `${key}-options.json`;
       anchor.click();
       URL.revokeObjectURL(url);
-      displaySonnerSuccess(`Экспортировано вариантов: ${parsed.length.toLocaleString()}`);
+      displaySonnerSuccess(this.$t("pages.storeAttributesPage.options.exported", { count: parsed.length.toLocaleString() }));
     },
 
     triggerOptionsImport() {
@@ -555,17 +561,17 @@ export default {
         try {
           const text = loadEvent.target?.result;
           if (typeof text !== "string") {
-            displaySonnerError("Не удалось прочитать файл");
+            displaySonnerError(this.$t("pages.storeAttributesPage.options.readFailed"));
             return;
           }
           const parsed = this.parseImportedOptionsText(text);
           this.applyImportedOptions(parsed);
         } catch {
-          displaySonnerError("Ошибка чтения файла");
+          displaySonnerError(this.$t("pages.storeAttributesPage.options.readError"));
         }
       };
       reader.onerror = () => {
-        displaySonnerError("Ошибка чтения файла");
+        displaySonnerError(this.$t("pages.storeAttributesPage.options.readError"));
       };
       reader.readAsText(file);
       event.target.value = "";
@@ -668,12 +674,12 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Глобальные атрибуты"
-      description="Атрибуты, применяемые ко всем товарам магазина независимо от категории"
+      :title="$t('pages.storeAttributesPage.header.title')"
+      :description="$t('pages.storeAttributesPage.header.description')"
     >
       <Button @click="openAddAttributeDialog">
         <Plus class="size-4 mr-2" />
-        Добавить атрибут
+        {{ $t("pages.storeAttributesPage.header.addButton") }}
       </Button>
     </PageHeader>
 
@@ -681,14 +687,14 @@ export default {
       :loading="isLoading"
       :empty="attributes.length === 0"
       :empty-icon="Settings2"
-      empty-title="Нет глобальных атрибутов"
-      empty-description="Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
+      :empty-title="$t('pages.storeAttributesPage.empty.title')"
+      :empty-description="$t('pages.storeAttributesPage.empty.description')"
       class="flex flex-col"
     >
       <template #empty-action>
           <Button @click="openAddAttributeDialog">
             <Plus class="size-4 mr-2" />
-            Добавить атрибут
+            {{ $t("pages.storeAttributesPage.header.addButton") }}
           </Button>
       </template>
 
@@ -698,12 +704,12 @@ export default {
               <TableHeader>
                 <TableRow class="hover:bg-transparent">
                   <TableHead class="w-9 px-3" />
-                  <TableHead class="px-3">Название</TableHead>
-                  <TableHead class="hidden sm:table-cell px-3">Ключ</TableHead>
-                  <TableHead class="px-3">Тип</TableHead>
-                  <TableHead class="hidden md:table-cell w-28 text-right px-3">Опции</TableHead>
-                  <TableHead class="w-16 text-center px-2">Обяз.</TableHead>
-                  <TableHead class="hidden lg:table-cell px-3">Описание</TableHead>
+                  <TableHead class="px-3">{{ $t("pages.storeAttributesPage.table.name") }}</TableHead>
+                  <TableHead class="hidden sm:table-cell px-3">{{ $t("pages.storeAttributesPage.table.key") }}</TableHead>
+                  <TableHead class="px-3">{{ $t("pages.storeAttributesPage.table.type") }}</TableHead>
+                  <TableHead class="hidden md:table-cell w-28 text-right px-3">{{ $t("pages.storeAttributesPage.table.options") }}</TableHead>
+                  <TableHead class="w-16 text-center px-2">{{ $t("pages.storeAttributesPage.table.requiredShort") }}</TableHead>
+                  <TableHead class="hidden lg:table-cell px-3">{{ $t("pages.storeAttributesPage.table.description") }}</TableHead>
                   <TableHead class="w-24 px-2" />
                 </TableRow>
               </TableHeader>
@@ -762,20 +768,19 @@ export default {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Удалить атрибут?</AlertDialogTitle>
+                              <AlertDialogTitle>{{ $t("pages.storeAttributesPage.deleteDialog.title") }}</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Вы уверены что хотите удалить атрибут "{{ attribute.name }}"?
-                                Все значения этого атрибута у товаров будут удалены.
+                                {{ $t("pages.storeAttributesPage.deleteDialog.description", { name: attribute.name }) }}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Отмена</AlertDialogCancel>
+                              <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                               <AlertDialogAction
                                 @click="handleDeleteAttribute(attribute.id)"
                                 :disabled="isDeletingAttribute"
                               >
                                 <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
-                                Удалить
+                                {{ $t("common.delete") }}
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -798,28 +803,28 @@ export default {
       >
         <DialogHeader class="shrink-0 border-b px-6 pt-6 pb-4">
           <DialogTitle>
-            {{ editingAttribute ? "Редактировать атрибут" : "Новый глобальный атрибут" }}
+            {{ editingAttribute ? $t("pages.storeAttributesPage.dialog.editTitle") : $t("pages.storeAttributesPage.dialog.newTitle") }}
           </DialogTitle>
           <DialogDescription>
-            Параметры поля для всех товаров магазина
+            {{ $t("pages.storeAttributesPage.dialog.description") }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <FieldGroup class="gap-6">
             <section class="space-y-4">
-              <h3 class="text-sm font-medium">Основное</h3>
+              <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionBasic") }}</h3>
               <div class="grid gap-4 sm:grid-cols-2">
-                <SettingsFormField label="Название" label-for="store-attr-name">
+                <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.nameLabel')" label-for="store-attr-name">
                   <Input
                     id="store-attr-name"
                     v-model="attributeForm.name"
-                    placeholder="Бренд, Страна, Артикул"
+                    :placeholder="$t('pages.storeAttributesPage.dialog.namePlaceholder')"
                     @input="!editingAttribute && generateKey()"
                   />
                 </SettingsFormField>
-                <SettingsFormField label="Ключ" label-for="store-attr-key">
-                  <template #description>Используется в API и экспорте</template>
+                <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.keyLabel')" label-for="store-attr-key">
+                  <template #description>{{ $t("pages.storeAttributesPage.dialog.keyDescription") }}</template>
                   <Input
                     id="store-attr-key"
                     v-model="attributeForm.key"
@@ -828,7 +833,7 @@ export default {
                   />
                 </SettingsFormField>
               </div>
-              <SettingsFormField label="Тип значения" label-for="store-attr-type">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.typeLabel')" label-for="store-attr-type">
                 <Select v-model="attributeForm.type">
                   <SelectTrigger id="store-attr-type" class="w-full">
                     <SelectValue :placeholder="attributeTypeLabel" />
@@ -848,7 +853,7 @@ export default {
 
             <section v-if="showOptionsField" class="space-y-3">
               <div class="flex items-center justify-between gap-3">
-                <h3 class="text-sm font-medium">Варианты</h3>
+                <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionOptions") }}</h3>
                 <div class="flex items-center gap-2">
                   <Button
                     type="button"
@@ -858,7 +863,7 @@ export default {
                     @click="exportAttributeOptions"
                   >
                     <Download class="size-3.5 mr-1.5" />
-                    Экспорт
+                    {{ $t("pages.storeAttributesPage.dialog.exportButton") }}
                   </Button>
                   <Button
                     type="button"
@@ -867,7 +872,7 @@ export default {
                     @click="triggerOptionsImport"
                   >
                     <Upload class="size-3.5 mr-1.5" />
-                    Импорт
+                    {{ $t("pages.storeAttributesPage.dialog.importButton") }}
                   </Button>
                 </div>
               </div>
@@ -888,10 +893,10 @@ export default {
                     <span class="font-medium tabular-nums">
                       {{ editingOptionsCount.toLocaleString() }}
                     </span>
-                    <span class="text-muted-foreground"> вариантов</span>
+                    <span class="text-muted-foreground"> {{ $t("pages.storeAttributesPage.dialog.optionsCountSuffix") }}</span>
                   </p>
                   <p class="text-xs text-muted-foreground mt-0.5">
-                    Список хранится в JSON — редактируйте через импорт и экспорт
+                    {{ $t("pages.storeAttributesPage.dialog.optionsStoredHint") }}
                   </p>
                 </div>
                 <Button
@@ -902,25 +907,25 @@ export default {
                   @click="clearAttributeOptions"
                 >
                   <Trash2 class="size-3.5 mr-1.5" />
-                  Очистить
+                  {{ $t("pages.storeAttributesPage.dialog.clearButton") }}
                 </Button>
               </div>
               <Textarea
                 v-else
                 v-model="attributeForm.options"
-                placeholder="Красный, Синий, Зелёный — или value:подпись"
+                :placeholder="$t('pages.storeAttributesPage.dialog.optionsPlaceholder')"
                 class="min-h-24 resize-none font-mono text-sm"
                 @input="onOptionsTextInput"
               />
               <p class="text-xs text-muted-foreground">
-                JSON, CSV или текст — по одному варианту на строку или через запятую
+                {{ $t("pages.storeAttributesPage.dialog.optionsTextareaHint") }}
               </p>
             </section>
 
             <section class="space-y-4">
-              <h3 class="text-sm font-medium">Дополнительно</h3>
+              <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionAdditional") }}</h3>
 
-              <SettingsFormField label="Значение по умолчанию" label-for="store-attr-default">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.defaultValueLabel')" label-for="store-attr-default">
                 <div
                   v-if="attributeForm.type === 2"
                   class="flex items-center gap-2 h-9"
@@ -931,7 +936,7 @@ export default {
                     @update:model-value="attributeForm.defaultValue = $event ? 'true' : 'false'"
                   />
                   <span class="text-sm text-muted-foreground">
-                    {{ attributeForm.defaultValue === "true" ? "Да" : "Нет" }}
+                    {{ attributeForm.defaultValue === "true" ? $t("common.yes") : $t("common.no") }}
                   </span>
                 </div>
                 <div
@@ -943,7 +948,7 @@ export default {
                     @update:model-value="attributeForm.defaultValue = $event"
                     :options="defaultValueSelectOptions"
                     :disabled="isLoadingDefaultValueOptions"
-                    placeholder="Не выбрано"
+                    :placeholder="$t('pages.storeAttributesPage.dialog.notSelectedPlaceholder')"
                     class="w-full"
                     @open="loadDefaultValueOptionsIfNeeded"
                   />
@@ -951,34 +956,34 @@ export default {
                     v-if="hasLargeOptions && !defaultValueOptionsReady"
                     class="text-xs text-muted-foreground"
                   >
-                    Список загрузится при открытии выбора
+                    {{ $t("pages.storeAttributesPage.dialog.optionsWillLoadHint") }}
                   </p>
                 </div>
                 <Input
                   v-else
                   id="store-attr-default"
                   v-model="attributeForm.defaultValue"
-                  :placeholder="attributeForm.type === 4 ? 'значение1, значение2' : 'Необязательно'"
+                  :placeholder="attributeForm.type === 4 ? $t('pages.storeAttributesPage.dialog.multiValuePlaceholder') : $t('pages.storeAttributesPage.dialog.optionalPlaceholder')"
                   :type="attributeForm.type === 1 ? 'number' : 'text'"
                 />
                 <template
                   v-if="attributeForm.type === 4 && editingOptionsCount"
                   #description
                 >
-                  Несколько значений через запятую
+                  {{ $t("pages.storeAttributesPage.dialog.multiValueHint") }}
                 </template>
               </SettingsFormField>
 
-              <SettingsFormField label="Описание" label-for="store-attr-description">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.descriptionLabel')" label-for="store-attr-description">
                 <Textarea
                   id="store-attr-description"
                   v-model="attributeForm.description"
-                  placeholder="Подсказка для пользователя на странице товара"
+                  :placeholder="$t('pages.storeAttributesPage.dialog.descriptionPlaceholder')"
                   class="min-h-20 resize-none"
                 />
               </SettingsFormField>
 
-              <SettingsFormField label="Описание в подсказке">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.descriptionInTooltipLabel')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="store-attr-description-tooltip"
@@ -986,14 +991,14 @@ export default {
                     @update:model-value="attributeForm.descriptionInTooltip = $event"
                   />
                   <Label for="store-attr-description-tooltip" class="font-normal text-muted-foreground">
-                    Скрывать длинное описание за иконкой на странице товара
+                    {{ $t("pages.storeAttributesPage.dialog.descriptionInTooltipHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
               <SettingsFormField
                 v-if="isTextAttributeType"
-                label="Многострочный текст"
+                :label="$t('pages.storeAttributesPage.dialog.multilineLabel')"
               >
                 <div class="flex items-center gap-2 h-9">
                   <Switch
@@ -1002,12 +1007,12 @@ export default {
                     @update:model-value="attributeForm.isMultiline = $event"
                   />
                   <Label for="store-attr-multiline" class="font-normal text-muted-foreground">
-                    Поле с переносами строк на странице товара
+                    {{ $t("pages.storeAttributesPage.dialog.multilineHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
-              <SettingsFormField label="На странице товара">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.showOnProductPageLabel')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="store-attr-visible"
@@ -1015,12 +1020,12 @@ export default {
                     @update:model-value="attributeForm.showOnProductPage = $event"
                   />
                   <Label for="store-attr-visible" class="font-normal text-muted-foreground">
-                    Показывать при редактировании товара
+                    {{ $t("pages.storeAttributesPage.dialog.showOnProductPageHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
 
-              <SettingsFormField label="Обязательное поле">
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.requiredFieldLabel')">
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="store-attr-required"
@@ -1028,7 +1033,7 @@ export default {
                     @update:model-value="attributeForm.isRequired = $event"
                   />
                   <Label for="store-attr-required" class="font-normal text-muted-foreground">
-                    Требовать заполнение при создании товара
+                    {{ $t("pages.storeAttributesPage.dialog.requiredFieldHint") }}
                   </Label>
                 </div>
               </SettingsFormField>
@@ -1038,11 +1043,11 @@ export default {
 
         <DialogFooter class="shrink-0 border-t px-6 py-4">
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
             <Loader2 v-if="isAddingAttribute" class="size-4 mr-2 animate-spin" />
-            {{ editingAttribute ? "Сохранить" : "Добавить" }}
+            {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>
         </DialogFooter>
       </DialogContent>

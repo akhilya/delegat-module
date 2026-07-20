@@ -83,9 +83,9 @@ export default {
     <TableHeader>
       <TableRow>
         <TableHead class="w-24 text-center">#</TableHead>
-        <TableHead>Название</TableHead>
-        <TableHead>Тип</TableHead>
-        <TableHead>Размер</TableHead>
+        <TableHead>{{ $t('components.productFilesTable.nameHeader') }}</TableHead>
+        <TableHead>{{ $t('components.productFilesTable.typeHeader') }}</TableHead>
+        <TableHead>{{ $t('components.productFilesTable.sizeHeader') }}</TableHead>
         <TableHead></TableHead>
         <TableHead class="w-20"></TableHead>
       </TableRow>
@@ -111,7 +111,7 @@ export default {
         <TableCell class="font-medium">
           <Button as="a" variant="link" :href="file.fullPath" target="_blank">
             <ArrowDownToLine class="size-4" />
-            скачать
+            {{ $t('components.productFilesTable.download') }}
           </Button>
         </TableCell>
         <TableCell class="w-20">
@@ -122,18 +122,17 @@ export default {
                 class="opacity-0 group-hover:opacity-100 duration-75"
               >
                 <Trash2 class="size-4" />
-                Удалить
+                {{ $t('common.delete') }}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader
-                >Вы уверены что хотите удалить файл
-                {{ extractFileName(file) }}?</AlertDialogHeader
+                >{{ $t('components.productFilesTable.deleteConfirmText', { name: extractFileName(file) }) }}</AlertDialogHeader
               >
               <AlertDialogFooter>
-                <AlertDialogCancel>Назад</AlertDialogCancel>
+                <AlertDialogCancel>{{ $t('common.back') }}</AlertDialogCancel>
                 <AlertDialogAction @click="$emit('onDelete', file.id)"
-                  >Подтвержить</AlertDialogAction
+                  >{{ $t('common.confirm') }}</AlertDialogAction
                 >
               </AlertDialogFooter>
             </AlertDialogContent>

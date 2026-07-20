@@ -2,12 +2,12 @@
   <Dialog v-model:open="isOpen">
     <DialogContent size="2xl" class="max-h-[85vh] overflow-hidden flex flex-col">
       <DialogHeader>
-        <DialogTitle>Массовое редактирование</DialogTitle>
+        <DialogTitle>{{ t("products.bulkEditDialog.title") }}</DialogTitle>
         <DialogDescription>
-          Выбрано товаров: {{ selectedProducts.length }}
+          {{ t("products.bulkEditDialog.selectedCount", { count: selectedProducts.length }) }}
           <template v-if="!hasSameCategory">
             <span class="text-yellow-600 ml-2">
-              (разные категории - поля категории недоступны)
+              {{ t("products.bulkEditDialog.differentCategoriesWarning") }}
             </span>
           </template>
         </DialogDescription>
@@ -18,11 +18,11 @@
           class="grid w-full"
           :class="hasSameCategory ? 'grid-cols-3' : 'grid-cols-2'"
         >
-          <TabsTrigger value="product">Поля товара</TabsTrigger>
+          <TabsTrigger value="product">{{ t("products.bulkEditDialog.productFieldsTab") }}</TabsTrigger>
           <TabsTrigger v-if="hasSameCategory" value="category"
-            >Поля категории</TabsTrigger
+            >{{ t("products.bulkEditDialog.categoryFieldsTab") }}</TabsTrigger
           >
-          <TabsTrigger value="global">Глобальные поля</TabsTrigger>
+          <TabsTrigger value="global">{{ t("products.bulkEditDialog.globalFieldsTab") }}</TabsTrigger>
         </TabsList>
 
         <div class="flex-1 overflow-y-auto mt-4">
@@ -41,13 +41,13 @@
                     for="name"
                     :class="{ 'text-muted-foreground': !enabledFields.name }"
                   >
-                    Название
+                    {{ t("common.name") }}
                   </Label>
                   <Input
                     id="name"
                     v-model="formData.name"
                     :disabled="!enabledFields.name"
-                    placeholder="Новое название для всех товаров"
+                    :placeholder="t('products.bulkEditDialog.namePlaceholder')"
                   />
                 </div>
               </div>
@@ -66,13 +66,13 @@
                       'text-muted-foreground': !enabledFields.description,
                     }"
                   >
-                    Описание
+                    {{ t("common.description") }}
                   </Label>
                   <Textarea
                     id="description"
                     v-model="formData.description"
                     :disabled="!enabledFields.description"
-                    placeholder="Новое описание для всех товаров"
+                    :placeholder="t('products.bulkEditDialog.descriptionPlaceholder')"
                     rows="3"
                   />
                 </div>
@@ -92,7 +92,7 @@
                       'text-muted-foreground': !enabledFields.storageQuantity,
                     }"
                   >
-                    Количество на складе
+                    {{ t("products.bulkEditDialog.storageQuantityLabel") }}
                   </Label>
                   <Input
                     id="storageQuantity"
@@ -115,10 +115,10 @@
                 <div class="flex-1 space-y-1">
                   <Label
                     for="price"
-                    :class="{ 'text-muted-foreground': !enabledFields.price }"
-                  >
-                    Цена
-                  </Label>
+                  :class="{ 'text-muted-foreground': !enabledFields.price }"
+                >
+                  {{ t("products.bulkEditDialog.priceLabel") }}
+                </Label>
                   <Input
                     id="price"
                     v-model.number="formData.price"
@@ -143,7 +143,7 @@
                     for="barcode"
                     :class="{ 'text-muted-foreground': !enabledFields.barcode && !generateBarcodes }"
                   >
-                    Штрихкод
+                    {{ t("products.bulkEditDialog.barcodeLabel") }}
                   </Label>
                   <BarcodeInput
                     v-model="formData.barcode"
@@ -160,7 +160,7 @@
                       for="generate-barcodes"
                       class="text-sm font-normal cursor-pointer"
                     >
-                      Сгенерировать всем у кого нет штрихкода
+                      {{ t("products.bulkEditDialog.generateBarcodesLabel") }}
                     </Label>
                   </div>
                 </div>
@@ -217,7 +217,7 @@
                       :disabled="!enabledCategoryAttributes[attr.id]"
                     />
                     <span class="text-sm text-muted-foreground">
-                      {{ categoryAttributeValues[attr.id] === 'true' ? 'Да' : 'Нет' }}
+                      {{ categoryAttributeValues[attr.id] === 'true' ? t("common.yes") : t("common.no") }}
                     </span>
                   </div>
 
@@ -260,7 +260,7 @@
               </div>
             </template>
             <div v-else class="text-center text-muted-foreground py-8">
-              У категории нет настроенных атрибутов
+              {{ t("products.bulkEditDialog.noCategoryAttributes") }}
             </div>
           </TabsContent>
 
@@ -308,7 +308,7 @@
                       :disabled="!enabledStoreAttributes[attr.id]"
                     />
                     <span class="text-sm text-muted-foreground">
-                      {{ storeAttributeValues[attr.id] === 'true' ? 'Да' : 'Нет' }}
+                      {{ storeAttributeValues[attr.id] === 'true' ? t("common.yes") : t("common.no") }}
                     </span>
                   </div>
 
@@ -351,20 +351,20 @@
               </div>
             </template>
             <div v-else class="text-center text-muted-foreground py-8">
-              Нет настроенных глобальных атрибутов
+              {{ t("products.bulkEditDialog.noGlobalAttributes") }}
             </div>
           </TabsContent>
         </div>
       </Tabs>
 
       <DialogFooter>
-        <DialogClose as-child><Button variant="outline">Отмена</Button></DialogClose>
+        <DialogClose as-child><Button variant="outline">{{ t("common.cancel") }}</Button></DialogClose>
         <Button
           @click="handleSubmit"
           :disabled="!hasAnyEnabled || isSubmitting"
         >
           <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-          Сохранить
+          {{ t("common.save") }}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -376,6 +376,7 @@
 import { ref, computed, watch, reactive } from "vue";
 import { useStore } from "vuex";
 import { Loader2 } from "lucide-vue-next";
+import { t } from "@/i18n";
 import {
   Dialog,
   DialogClose,
@@ -638,7 +639,7 @@ async function handleSubmit() {
   }
 
   if (Object.keys(updates).length === 0) {
-    toast.error("Выберите хотя бы одно поле для редактирования");
+    toast.error(t("products.bulkEditDialog.selectFieldToEdit"));
     return;
   }
 
@@ -649,13 +650,13 @@ async function handleSubmit() {
     updates,
     onSuccess: (response) => {
       const count = response.data?.value?.updatedCount || productIds.length;
-      toast.success(`Обновлено товаров: ${count}`);
+      toast.success(t("products.bulkEditDialog.updatedCount", { count }));
       isOpen.value = false;
       emit("saved");
     },
     onError: (error) => {
       toast.error(
-        error.response?.data?.message || "Не удалось обновить товары",
+        error.response?.data?.message || t("products.bulkEditDialog.updateFailed"),
       );
     },
   });

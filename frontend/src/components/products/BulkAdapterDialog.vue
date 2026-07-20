@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, computed } from "vue";
 import { http } from "@/main";
+import { t } from "@/i18n";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +25,8 @@ const emit = defineEmits(["update:modelValue"]);
 const ALL_ACTIONS = [
   {
     key: "export",
-    label: "Экспорт товаров",
-    description: "Отправить данные выбранных товаров в маркетплейс. Непривязанные — привяжутся автоматически.",
+    label: t("products.bulkAdapterDialog.actions.export.label"),
+    description: t("products.bulkAdapterDialog.actions.export.description"),
     capabilityKey: "exportProductBulk",
     needsLinks: false,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/products/export-batch`,
@@ -33,8 +34,8 @@ const ALL_ACTIONS = [
   },
   {
     key: "import",
-    label: "Импорт товаров",
-    description: "Получить обновления из маркетплейса для привязанных товаров.",
+    label: t("products.bulkAdapterDialog.actions.import.label"),
+    description: t("products.bulkAdapterDialog.actions.import.description"),
     capabilityKey: "importProduct",
     needsLinks: true,
     getEndpoint: (_connId) => `/marketplace/links/import-bulk`,
@@ -42,8 +43,8 @@ const ALL_ACTIONS = [
   },
   {
     key: "exportPrices",
-    label: "Экспорт цен",
-    description: "Отправить актуальные цены в маркетплейс для привязанных товаров.",
+    label: t("products.bulkAdapterDialog.actions.exportPrices.label"),
+    description: t("products.bulkAdapterDialog.actions.exportPrices.description"),
     capabilityKey: "exportPrices",
     needsLinks: true,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/prices/export`,
@@ -51,8 +52,8 @@ const ALL_ACTIONS = [
   },
   {
     key: "exportStocks",
-    label: "Экспорт остатков",
-    description: "Обновить количество товаров на маркетплейсе для привязанных товаров.",
+    label: t("products.bulkAdapterDialog.actions.exportStocks.label"),
+    description: t("products.bulkAdapterDialog.actions.exportStocks.description"),
     capabilityKey: "exportStocks",
     needsLinks: true,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/stocks/export`,
@@ -60,8 +61,8 @@ const ALL_ACTIONS = [
   },
   {
     key: "importPrices",
-    label: "Импорт цен",
-    description: "Получить актуальные цены из маркетплейса для привязанных товаров.",
+    label: t("products.bulkAdapterDialog.actions.importPrices.label"),
+    description: t("products.bulkAdapterDialog.actions.importPrices.description"),
     capabilityKey: "importPrices",
     needsLinks: true,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/prices/import`,
@@ -182,7 +183,7 @@ async function run() {
     const body = action.getBody(selectedProductIds.value, linkIds);
     const res = await http.post(action.getEndpoint(selectedConnectionId.value), body, { cache: false });
     const data = res.data?.value ?? res.data;
-    displaySonnerSuccess(data?.message ?? "Операция запущена");
+    displaySonnerSuccess(data?.message ?? t("products.bulkAdapterDialog.operationStarted"));
     emit("update:modelValue", false);
   } catch (e) {
     displaySonnerError(e);
@@ -196,19 +197,19 @@ async function run() {
   <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
     <DialogContent size="md">
       <DialogHeader>
-        <DialogTitle>Адаптеры — {{ selectedProductIds.length }} товаров</DialogTitle>
+        <DialogTitle>{{ t("products.bulkAdapterDialog.title", { count: selectedProductIds.length }) }}</DialogTitle>
         <DialogDescription>
-          Выберите адаптер и действие для синхронизации
+          {{ t("products.bulkAdapterDialog.description") }}
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4 py-1">
         <!-- Connection picker -->
         <div class="space-y-1.5">
-          <Label>Адаптер</Label>
+          <Label>{{ t("products.bulkAdapterDialog.adapterLabel") }}</Label>
           <Select v-model="selectedConnectionId" :disabled="isLoadingConnections">
             <SelectTrigger>
-              <SelectValue placeholder="Выберите адаптер..." />
+              <SelectValue :placeholder="t('products.bulkAdapterDialog.adapterPlaceholder')" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem v-for="conn in connections" :key="conn.id" :value="conn.id">
@@ -221,12 +222,12 @@ async function run() {
         <!-- Loading capabilities -->
         <div v-if="isLoadingCapabilities" class="flex items-center gap-2 text-sm text-muted-foreground py-1">
           <Loader2 class="size-4 animate-spin" />
-          Загрузка возможностей адаптера...
+          {{ t("products.bulkAdapterDialog.loadingCapabilities") }}
         </div>
 
         <!-- Action list -->
         <div v-else-if="availableActions.length > 0" class="space-y-1.5">
-          <Label>Действие</Label>
+          <Label>{{ t("products.bulkAdapterDialog.actionLabel") }}</Label>
           <div class="space-y-1.5">
             <Button
               v-for="action in availableActions"
@@ -252,29 +253,29 @@ async function run() {
         >
           <div v-if="isResolving" class="flex items-center gap-2 text-muted-foreground">
             <Loader2 class="size-3.5 animate-spin" />
-            Проверка привязок...
+            {{ t("products.bulkAdapterDialog.checkingLinks") }}
           </div>
           <template v-else>
             <div class="flex items-center justify-between">
-              <span class="text-muted-foreground">Привязаны к адаптеру</span>
+              <span class="text-muted-foreground">{{ t("products.bulkAdapterDialog.linkedLabel") }}</span>
               <Badge variant="secondary">{{ resolvedLinked.length }}</Badge>
             </div>
             <div v-if="resolvedUnlinked.length > 0" class="flex items-center justify-between">
-              <span class="text-muted-foreground">Не привязаны (будут пропущены)</span>
+              <span class="text-muted-foreground">{{ t("products.bulkAdapterDialog.unlinkedLabel") }}</span>
               <Badge variant="outline">{{ resolvedUnlinked.length }}</Badge>
             </div>
             <p v-if="resolvedLinked.length === 0" class="text-destructive text-xs mt-1">
-              Ни один из выбранных товаров не привязан к этому адаптеру
+              {{ t("products.bulkAdapterDialog.noneLinkedWarning") }}
             </p>
           </template>
         </div>
       </div>
 
       <DialogFooter>
-        <Button variant="outline" @click="emit('update:modelValue', false)">Отмена</Button>
+        <Button variant="outline" @click="emit('update:modelValue', false)">{{ t("common.cancel") }}</Button>
         <Button :disabled="!canRun" @click="run">
           <Loader2 v-if="isRunning" class="size-4 mr-2 animate-spin" />
-          {{ selectedAction?.label ?? 'Выполнить' }}
+          {{ selectedAction?.label ?? t("products.bulkAdapterDialog.runButton") }}
         </Button>
       </DialogFooter>
     </DialogContent>

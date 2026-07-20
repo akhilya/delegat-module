@@ -155,13 +155,13 @@ export default {
   },
   computed: {
     breadcrumbs() {
-      const items = [{ label: "Группы товаров", to: PAGE_PRODUCT_GROUPS }];
+      const items = [{ label: this.$t("routes.groups"), to: PAGE_PRODUCT_GROUPS }];
       if (this.isCreateMode) {
-        items.push({ label: "Новая группа" });
+        items.push({ label: this.$t("pages.productGroupEditPage.breadcrumbNewGroup") });
       } else if (this.group?.name) {
         items.push({ label: this.group.name });
       } else {
-        items.push({ label: "Редактирование" });
+        items.push({ label: this.$t("pages.productGroupEditPage.breadcrumbEditing") });
       }
       return items;
     },
@@ -183,10 +183,10 @@ export default {
       const n = this.members.length;
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return "товаров";
-      if (mod10 === 1) return "товар";
-      if (mod10 >= 2 && mod10 <= 4) return "товара";
-      return "товаров";
+      if (mod100 >= 11 && mod100 <= 14) return this.$t("pages.productGroupEditPage.productsCount.formMany");
+      if (mod10 === 1) return this.$t("pages.productGroupEditPage.productsCount.formOne");
+      if (mod10 >= 2 && mod10 <= 4) return this.$t("pages.productGroupEditPage.productsCount.formFew");
+      return this.$t("pages.productGroupEditPage.productsCount.formMany");
     },
     allVisibleProductsSelected() {
       const visible = this.availableProductsFiltered;
@@ -202,10 +202,10 @@ export default {
       const n = this.selectedProductsToAdd.length;
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return "товаров";
-      if (mod10 === 1) return "товар";
-      if (mod10 >= 2 && mod10 <= 4) return "товара";
-      return "товаров";
+      if (mod100 >= 11 && mod100 <= 14) return this.$t("pages.productGroupEditPage.productsCount.formMany");
+      if (mod10 === 1) return this.$t("pages.productGroupEditPage.productsCount.formOne");
+      if (mod10 >= 2 && mod10 <= 4) return this.$t("pages.productGroupEditPage.productsCount.formFew");
+      return this.$t("pages.productGroupEditPage.productsCount.formMany");
     },
     productSearchLastPage() {
       return Math.max(1, Math.ceil(this.productSearchTotalCount / this.productSearchPageSize));
@@ -320,18 +320,18 @@ export default {
     getGroupingTypeLabel(connectionId) {
       const grouping = this.connectionGrouping[connectionId];
       if (!grouping?.supported) return null;
-      if (grouping.fieldBased) return "Через поле карточки";
-      if (grouping.endpointBased) return "Через API слияния";
-      return "Поддерживается";
+      if (grouping.fieldBased) return this.$t("pages.productGroupEditPage.grouping.viaCardField");
+      if (grouping.endpointBased) return this.$t("pages.productGroupEditPage.grouping.viaMergeApi");
+      return this.$t("pages.productGroupEditPage.grouping.supported");
     },
 
     getExportButtonLabel(connection) {
       const linked = this.getSyncStatusForConnection(connection.id);
       const grouping = this.connectionGrouping[connection.id];
-      if (linked) return "Обновить привязку";
-      if (grouping?.fieldBased) return "Привязать группу";
-      if (grouping?.endpointBased) return "Объединить карточки";
-      return "Экспортировать";
+      if (linked) return this.$t("pages.productGroupEditPage.grouping.updateLink");
+      if (grouping?.fieldBased) return this.$t("pages.productGroupEditPage.grouping.linkGroup");
+      if (grouping?.endpointBased) return this.$t("pages.productGroupEditPage.grouping.mergeCards");
+      return this.$t("pages.productGroupEditPage.grouping.exportAction");
     },
 
     async fetchSyncStatus() {
@@ -352,7 +352,7 @@ export default {
 
     async handleSaveGroup() {
       if (!this.group.name.trim()) {
-        displaySonnerError("Введите название группы");
+        displaySonnerError(this.$t("pages.productGroupEditPage.toast.nameRequired"));
         return;
       }
 
@@ -364,7 +364,7 @@ export default {
           description: this.group.description?.trim() || null,
           productIds: [],
           onSuccess: (response) => {
-            displaySonnerSuccess("Группа создана");
+            displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.created"));
             this.$router.push(`/product-groups/${response.data.value.id}/edit`);
           },
           onError: (error) => {
@@ -377,7 +377,7 @@ export default {
           name: this.group.name.trim(),
           description: this.group.description?.trim() || null,
           onSuccess: () => {
-            displaySonnerSuccess("Группа сохранена");
+            displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.saved"));
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -463,7 +463,7 @@ export default {
         groupId: this.groupId,
         productIds,
         onSuccess: () => {
-          displaySonnerSuccess(`Добавлено ${productIds.length} товаров`);
+          displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.productsAdded", { count: productIds.length }));
           this.selectedProductsToAdd = [];
           this.showProductSearch = false;
           this.fetchGroup();
@@ -481,7 +481,7 @@ export default {
         groupId: this.groupId,
         productId,
         onSuccess: () => {
-          displaySonnerSuccess("Товар удалён из группы");
+          displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.productRemoved"));
           this.fetchGroup();
         },
         onError: (error) => {
@@ -507,7 +507,7 @@ export default {
           });
         }
       }
-      displaySonnerSuccess("Порядок сохранён");
+      displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.orderSaved"));
     },
 
     async handleExportGroup(connectionId) {
@@ -517,11 +517,11 @@ export default {
         connectionId,
         onSuccess: (response) => {
           const data = response.data.value;
-          const msg = data.message || data.externalGroupId || "Готово";
+          const msg = data.message || data.externalGroupId || this.$t("pages.productGroupEditPage.toast.exportDone");
           if (data.isFieldBased) {
-            displaySonnerSuccess(`Привязка создана. ${msg}`);
+            displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.linkCreated", { message: msg }));
           } else {
-            displaySonnerSuccess(`Карточки объединены на маркетплейсе. ${msg}`);
+            displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.cardsMerged", { message: msg }));
           }
           this.fetchSyncStatus();
         },
@@ -548,11 +548,11 @@ export default {
     getSyncStatusLabel(status) {
       switch (status) {
         case "Synced":
-          return "Синхронизировано";
+          return this.$t("pages.productGroupEditPage.syncStatus.synced");
         case "Pending":
-          return "Ожидает";
+          return this.$t("pages.productGroupEditPage.syncStatus.pending");
         case "Error":
-          return "Ошибка";
+          return this.$t("pages.productGroupEditPage.syncStatus.error");
         default:
           return status;
       }
@@ -599,14 +599,14 @@ export default {
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1 space-y-1">
             <h1 class="text-lg font-semibold">
-              {{ isCreateMode ? "Новая группа" : group.name }}
+              {{ isCreateMode ? $t("pages.productGroupEditPage.newGroupTitle") : group.name }}
             </h1>
             <p class="text-sm text-muted-foreground">
               <template v-if="isCreateMode">
-                Задайте название и описание — затем добавьте товары для объединения на маркетплейсе
+                {{ $t("pages.productGroupEditPage.newGroupHint") }}
               </template>
               <template v-else>
-                Название и описание группы в каталоге. Описание видно только внутри системы.
+                {{ $t("pages.productGroupEditPage.editGroupHint") }}
               </template>
             </p>
           </div>
@@ -617,25 +617,25 @@ export default {
           >
             <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
             <Save v-else class="size-4 mr-2" />
-            {{ isCreateMode ? "Создать группу" : "Сохранить" }}
+            {{ isCreateMode ? $t("pages.productGroupEditPage.actions.createGroup") : $t("common.save") }}
           </Button>
         </div>
 
         <!-- Block 1: Settings -->
         <div class="max-w-2xl space-y-4">
           <div class="space-y-4">
-            <SettingsFormField label="Название" label-for="group-name">
+            <SettingsFormField :label="$t('common.name')" label-for="group-name">
               <Input
                 id="group-name"
                 v-model="group.name"
-                placeholder="Введите название"
+                :placeholder="$t('pages.productGroupEditPage.fields.name.placeholder')"
               />
             </SettingsFormField>
-            <SettingsFormField label="Описание" label-for="group-description">
+            <SettingsFormField :label="$t('common.description')" label-for="group-description">
               <Textarea
                 id="group-description"
                 v-model="group.description"
-                placeholder="Необязательно"
+                :placeholder="$t('pages.productGroupEditPage.fields.description.placeholder')"
                 class="min-h-24 resize-none"
               />
             </SettingsFormField>
@@ -647,12 +647,13 @@ export default {
           <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">
             <CardHeader class="!px-0">
               <CardTitle class="text-base">
-                Товары в группе
+                {{ $t("pages.productGroupEditPage.sections.groupProducts.title") }}
               </CardTitle>
               <CardDescription>
-                {{ members.length }} {{ membersCountLabel }}.
-                Порядок строк определяет порядок вариантов в объединённой карточке —
-                перетащите строки, чтобы изменить порядок.
+                {{ $t("pages.productGroupEditPage.sections.groupProducts.description", {
+                  count: members.length,
+                  unit: membersCountLabel,
+                }) }}
               </CardDescription>
               <CardAction>
                 <Button
@@ -661,15 +662,15 @@ export default {
                   @click="openProductSearchDialog"
                 >
                   <Plus class="size-4 mr-2" />
-                  Добавить
+                  {{ $t("common.add") }}
                 </Button>
               </CardAction>
             </CardHeader>
             <CardContent class="!px-0 pb-6 pt-0">
               <EmptyState
                 v-if="members.length === 0"
-                title="Нет товаров"
-                description="Добавьте товары, которые должны объединяться на маркетплейсе в одну карточку"
+                :title="$t('pages.productGroupEditPage.membersEmpty.title')"
+                :description="$t('pages.productGroupEditPage.membersEmpty.description')"
                 class="py-10"
               >
                 <template #icon>
@@ -677,7 +678,7 @@ export default {
                 </template>
                 <Button variant="outline" @click="openProductSearchDialog">
                   <Plus class="size-4 mr-2" />
-                  Добавить товары
+                  {{ $t("pages.productGroupEditPage.actions.addProducts") }}
                 </Button>
               </EmptyState>
 
@@ -691,10 +692,10 @@ export default {
                     <TableRow class="hover:bg-transparent">
                       <TableHead class="w-9 px-3" />
                       <TableHead class="w-9 px-2 text-center">#</TableHead>
-                      <TableHead class="w-36 px-3">Артикул</TableHead>
+                      <TableHead class="w-36 px-3">{{ $t("pages.productGroupEditPage.table.sku") }}</TableHead>
                       <TableHead class="w-14 px-2" />
-                      <TableHead class="px-3">Название</TableHead>
-                      <TableHead class="hidden md:table-cell px-3">Категория</TableHead>
+                      <TableHead class="px-3">{{ $t("common.name") }}</TableHead>
+                      <TableHead class="hidden md:table-cell px-3">{{ $t("pages.productGroupEditPage.table.category") }}</TableHead>
                       <TableHead class="w-12 px-2" />
                     </TableRow>
                   </TableHeader>
@@ -756,13 +757,13 @@ export default {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Удалить товар из группы?</AlertDialogTitle>
+                                  <AlertDialogTitle>{{ $t("pages.productGroupEditPage.removeProductConfirm.title") }}</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Товар останется в каталоге, но будет исключён из группы.
+                                    {{ $t("pages.productGroupEditPage.removeProductConfirm.description") }}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                  <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                                   <AlertDialogAction
                                     @click="handleRemoveProduct(member.product.id)"
                                     :disabled="isRemovingProduct"
@@ -772,7 +773,7 @@ export default {
                                       v-if="isRemovingProduct"
                                       class="size-4 mr-2 animate-spin"
                                     />
-                                    Удалить
+                                    {{ $t("common.delete") }}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -792,18 +793,17 @@ export default {
           <Card class="border-0 shadow-none !gap-3 !py-0">
             <CardHeader class="!px-0">
               <CardTitle class="text-base">
-                Объединение на маркетплейсах
+                {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.title") }}
               </CardTitle>
               <CardDescription>
-                Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары.
-                Wildberries — через API слияния, если товары уже экспортированы.
+                {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.description") }}
               </CardDescription>
               <CardAction>
                 <Button
                   variant="outline"
                   size="icon"
                   class="size-8"
-                  title="Обновить статусы"
+                  :title="$t('pages.productGroupEditPage.sections.marketplaceMerge.refreshStatuses')"
                   @click="fetchSyncStatus"
                   :disabled="isLoadingSyncStatus"
                 >
@@ -816,7 +816,7 @@ export default {
                 v-if="connections.length === 0"
                 class="text-sm text-muted-foreground"
               >
-                Нет подключённых адаптеров. Подключите маркетплейс в разделе «Адаптеры».
+                {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.noConnections") }}
               </p>
 
               <div
@@ -824,13 +824,13 @@ export default {
                 class="flex items-center gap-2 text-sm text-muted-foreground py-2"
               >
                 <Loader2 class="size-4 animate-spin" />
-                Проверка возможностей адаптеров…
+                {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.checkingCapabilities") }}
               </div>
 
               <template v-else>
                 <section v-if="supportedConnections.length" class="space-y-2">
                   <p class="text-sm font-medium">
-                    Поддерживают объединение
+                    {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.supportedTitle") }}
                     <span class="font-normal text-muted-foreground">
                       · {{ supportedConnections.length }}
                     </span>
@@ -933,7 +933,7 @@ export default {
 
                 <section v-if="unsupportedConnections.length" class="space-y-2">
                   <p class="text-sm font-medium text-muted-foreground">
-                    Без поддержки объединения
+                    {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.unsupportedTitle") }}
                     <span class="font-normal">
                       · {{ unsupportedConnections.length }}
                     </span>
@@ -971,7 +971,7 @@ export default {
                           variant="outline"
                           class="shrink-0 font-normal text-muted-foreground"
                         >
-                          Не поддерживается
+                          {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.notSupported") }}
                         </Badge>
                       </li>
                     </ul>
@@ -993,11 +993,10 @@ export default {
         <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
           <DialogTitle class="flex items-center gap-2">
             <Plus class="size-5" />
-            Добавить товары в группу
+            {{ $t("pages.productGroupEditPage.addProductsDialog.title") }}
           </DialogTitle>
           <DialogDescription>
-            Найдите товары в каталоге и отметьте те, что войдут в группу «{{ group?.name }}».
-            Уже добавленные здесь не показываются.
+            {{ $t("pages.productGroupEditPage.addProductsDialog.description", { group: group?.name }) }}
           </DialogDescription>
         </DialogHeader>
 
@@ -1007,7 +1006,7 @@ export default {
               <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 v-model="productSearchQuery"
-                placeholder="Поиск по названию или артикулу..."
+                :placeholder="$t('pages.productGroupEditPage.addProductsDialog.searchPlaceholder')"
                 class="pl-9"
                 @keyup.enter="searchProducts(true)"
               />
@@ -1019,7 +1018,7 @@ export default {
             >
               <Loader2 v-if="isSearchingProducts" class="size-4 mr-2 animate-spin" />
               <Search v-else class="size-4 mr-2" />
-              Найти
+              {{ $t("pages.productGroupEditPage.addProductsDialog.searchAction") }}
             </Button>
           </div>
 
@@ -1032,7 +1031,7 @@ export default {
                 {{ selectedProductsToAdd.length }}
               </Badge>
               <span>
-                {{ selectedProductsCountLabel }} к добавлению
+                {{ $t("pages.productGroupEditPage.addProductsDialog.selectedToAdd", { unit: selectedProductsCountLabel }) }}
               </span>
             </div>
             <Button
@@ -1041,7 +1040,7 @@ export default {
               class="h-7 text-muted-foreground"
               @click="clearSelectedProducts"
             >
-              Сбросить выбор
+              {{ $t("pages.productGroupEditPage.addProductsDialog.clearSelection") }}
             </Button>
           </div>
         </div>
@@ -1055,27 +1054,27 @@ export default {
               <Checkbox
                 :model-value="allVisibleProductsSelected"
                 :indeterminate="someVisibleProductsSelected"
-                aria-label="Выбрать все на странице"
+                :aria-label="$t('pages.productGroupEditPage.addProductsDialog.selectAllOnPage')"
                 @update:model-value="toggleSelectAllVisible"
               />
             </div>
-            <span>Артикул</span>
+            <span>{{ $t("pages.productGroupEditPage.table.sku") }}</span>
             <span />
-            <span>Название</span>
-            <span class="hidden sm:block">Категория</span>
+            <span>{{ $t("common.name") }}</span>
+            <span class="hidden sm:block">{{ $t("pages.productGroupEditPage.table.category") }}</span>
           </div>
 
           <div class="min-h-0 flex-1 overflow-y-auto thin-scrollbar">
             <div v-if="isSearchingProducts" class="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 class="size-5 animate-spin" />
-              Ищем товары…
+              {{ $t("pages.productGroupEditPage.addProductsDialog.searching") }}
             </div>
 
             <EmptyState
               v-else-if="availableProductsFiltered.length === 0"
               size="sm"
-              title="Нет доступных товаров"
-              description="Все товары уже в группе или поиск не дал результатов. Попробуйте другой запрос."
+              :title="$t('pages.productGroupEditPage.addProductsDialog.noAvailableProductsTitle')"
+              :description="$t('pages.productGroupEditPage.addProductsDialog.noAvailableProductsDescription')"
               class="py-12"
             >
               <template #icon>
@@ -1130,9 +1129,9 @@ export default {
           class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/20 px-6 py-2.5"
         >
           <p class="text-xs text-muted-foreground">
-            {{ productSearchTotalCount }} в каталоге
+            {{ $t("pages.productGroupEditPage.addProductsDialog.totalInCatalog", { count: productSearchTotalCount }) }}
             <span v-if="availableProductsFiltered.length !== availableProducts.length">
-              · {{ availableProductsFiltered.length }} доступно на странице
+              · {{ $t("pages.productGroupEditPage.addProductsDialog.availableOnPage", { count: availableProductsFiltered.length }) }}
             </span>
           </p>
           <div class="flex items-center gap-1.5">
@@ -1144,7 +1143,7 @@ export default {
               size="sm"
               class="size-8 p-0"
               :disabled="productSearchIsFirstPage || isSearchingProducts"
-              aria-label="Первая страница"
+              :aria-label="$t('pages.productGroupEditPage.addProductsDialog.firstPage')"
               @click="goToProductSearchPage(1)"
             >
               <ChevronsLeft class="size-4" />
@@ -1154,7 +1153,7 @@ export default {
               size="sm"
               class="size-8 p-0"
               :disabled="productSearchIsFirstPage || isSearchingProducts"
-              aria-label="Предыдущая страница"
+              :aria-label="$t('pages.productGroupEditPage.addProductsDialog.prevPage')"
               @click="goToProductSearchPage(productSearchPage - 1)"
             >
               <ChevronLeft class="size-4" />
@@ -1164,7 +1163,7 @@ export default {
               size="sm"
               class="size-8 p-0"
               :disabled="productSearchIsLastPage || isSearchingProducts"
-              aria-label="Следующая страница"
+              :aria-label="$t('pages.productGroupEditPage.addProductsDialog.nextPage')"
               @click="goToProductSearchPage(productSearchPage + 1)"
             >
               <ChevronRight class="size-4" />
@@ -1174,7 +1173,7 @@ export default {
               size="sm"
               class="size-8 p-0"
               :disabled="productSearchIsLastPage || isSearchingProducts"
-              aria-label="Последняя страница"
+              :aria-label="$t('pages.productGroupEditPage.addProductsDialog.lastPage')"
               @click="goToProductSearchPage(productSearchLastPage)"
             >
               <ChevronsRight class="size-4" />
@@ -1184,11 +1183,11 @@ export default {
 
         <DialogFooter class="gap-2 border-t px-6 py-4 sm:justify-between">
           <p class="hidden text-xs text-muted-foreground sm:block">
-            Порядок в группе можно изменить перетаскиванием строк после добавления.
+            {{ $t("pages.productGroupEditPage.addProductsDialog.reorderHint") }}
           </p>
           <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:justify-end">
             <DialogClose as-child>
-              <Button variant="outline">Отмена</Button>
+              <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button
               :disabled="isAddingProducts || selectedProductsToAdd.length === 0"
@@ -1197,10 +1196,10 @@ export default {
               <Loader2 v-if="isAddingProducts" class="size-4 mr-2 animate-spin" />
               <Plus v-else class="size-4 mr-2" />
               <template v-if="selectedProductsToAdd.length > 0">
-                Добавить {{ selectedProductsToAdd.length }} {{ selectedProductsCountLabel }}
+                {{ $t("pages.productGroupEditPage.addProductsDialog.addCount", { count: selectedProductsToAdd.length, unit: selectedProductsCountLabel }) }}
               </template>
               <template v-else>
-                Добавить в группу
+                {{ $t("pages.productGroupEditPage.addProductsDialog.addToGroup") }}
               </template>
             </Button>
           </div>

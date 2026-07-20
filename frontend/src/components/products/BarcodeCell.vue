@@ -91,7 +91,7 @@ export default {
       <button
         type="button"
         class="flex flex-col items-center gap-0.5 rounded-md px-1 py-0.5 cursor-pointer transition-colors hover:bg-muted/60"
-        title="Нажмите для увеличения"
+        :title="$t('barcodeCell.clickToEnlarge')"
       >
         <svg ref="smallSvg" class="block h-8 w-[96px] max-w-full"></svg>
         <span class="text-[10px] font-mono leading-none tabular-nums text-foreground/80">
@@ -110,7 +110,7 @@ export default {
           @click="downloadBarcode"
         >
           <Download class="size-3.5 mr-1.5" />
-          Скачать PNG
+          {{ $t("barcodeCell.downloadPng") }}
         </Button>
       </div>
     </PopoverContent>

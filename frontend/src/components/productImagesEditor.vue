@@ -109,10 +109,10 @@ export default {
       <div class="flex items-center gap-2 px-4 h-11 border-b shrink-0">
         <p class="text-sm font-medium flex items-center gap-2">
           <Image class="size-4" />
-          Изображения товара
+          {{ $t('components.productImagesEditor.productImagesTitle') }}
         </p>
         <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
-        <span v-if="!isSaving" class="text-xs text-muted-foreground">— перетащите для сортировки</span>
+        <span v-if="!isSaving" class="text-xs text-muted-foreground">— {{ $t('components.productImagesEditor.dragToReorderHint') }}</span>
       </div>
       <draggableComponent
         :list="usedImages"
@@ -140,7 +140,7 @@ export default {
       <div class="flex items-center px-4 h-11 border-t border-b shrink-0">
         <p class="text-sm font-medium flex items-center gap-2">
           <ImageOff class="size-4" />
-          Остальные изображения
+          {{ $t('components.productImagesEditor.otherImagesTitle') }}
         </p>
       </div>
       <draggableComponent
