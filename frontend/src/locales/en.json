@@ -2572,7 +2572,7 @@
       "baseUrlOnlyPrefix": "You can specify just the base URL — the path",
       "baseUrlOnlySuffix": "will be added automatically",
       "proxyLabel": "Proxy",
-      "proxyPlaceholder": "http://user:pass@host:8080 or socks5://host:1080",
+      "proxyPlaceholder": "http://user:pass{'@'}host:8080 or socks5://host:1080",
       "proxyHint": "If the model's API isn't directly accessible — specify an HTTP or SOCKS5 proxy. The URI format supports login/password.",
       "apiKeyLabel": "API key",
       "fetchListButton": "Fetch list",

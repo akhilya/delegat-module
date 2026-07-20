@@ -2572,7 +2572,7 @@
       "baseUrlOnlyPrefix": "Можно указать только базовый URL — путь",
       "baseUrlOnlySuffix": "добавится автоматически",
       "proxyLabel": "Прокси",
-      "proxyPlaceholder": "http://user:pass@host:8080 или socks5://host:1080",
+      "proxyPlaceholder": "http://user:pass{'@'}host:8080 или socks5://host:1080",
       "proxyHint": "Если API модели недоступен напрямую — укажите HTTP или SOCKS5-прокси. Формат URI поддерживает логин/пароль.",
       "apiKeyLabel": "API ключ",
       "fetchListButton": "Получить список",

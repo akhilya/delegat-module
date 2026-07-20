@@ -47,21 +47,24 @@ const sizeClasses = {
 
 <template>
   <DialogPortal>
-    <DialogOverlay />
-    <DialogContent
-      data-slot="dialog-content"
-      v-bind="forwarded"
-      :class="
-        cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[var(--z-modal)] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200',
-          sizeClasses[props.size] ?? sizeClasses.lg,
-          props.class,
-        )
-      "
+    <DialogOverlay
+      class="flex items-start justify-center overflow-y-auto p-4 py-10"
     >
-      <slot />
+      <DialogContent
+        data-slot="dialog-content"
+        v-bind="forwarded"
+        :class="
+          cn(
+            'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-[var(--z-modal)] my-auto grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200',
+            sizeClasses[props.size] ?? sizeClasses.lg,
+            props.class,
+          )
+        "
+      >
+        <slot />
 
-      <DialogCloseButton />
-    </DialogContent>
+        <DialogCloseButton />
+      </DialogContent>
+    </DialogOverlay>
   </DialogPortal>
 </template>

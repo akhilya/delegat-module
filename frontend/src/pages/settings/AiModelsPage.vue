@@ -5,6 +5,7 @@ import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
@@ -50,7 +51,7 @@ export default {
     SettingsFormSection,
     SettingsFormField,
     EmptyState,
-    Button, Input, Label, Badge, Textarea, Switch,
+    Button, Input, PasswordInput, Label, Badge, Textarea, Switch,
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -512,7 +513,7 @@ export default {
     </AlertDialog>
 
     <Dialog v-model:open="isDialogOpen">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{{ editingModel ? $t("pages.aiModelsPage.editModelTitle") : $t("pages.aiModelsPage.addModelDialogTitle") }}</DialogTitle>
           <DialogDescription>
@@ -554,9 +555,10 @@ export default {
 
           <div class="grid gap-2">
             <Label>{{ $t("pages.aiModelsPage.proxyLabel") }} <span class="text-muted-foreground font-normal text-xs">{{ $t("pages.aiModelsPage.optionalSuffix") }}</span></Label>
-            <Input
+            <PasswordInput
               v-model="form.proxyUrl"
               :placeholder="$t('pages.aiModelsPage.proxyPlaceholder')"
+              autocomplete="off"
             />
             <p class="text-xs text-muted-foreground">
               {{ $t("pages.aiModelsPage.proxyHint") }}
@@ -565,7 +567,7 @@ export default {
 
           <div v-if="!editingModel" class="grid gap-2">
             <Label>{{ $t("pages.aiModelsPage.apiKeyLabel") }}</Label>
-            <Input v-model="form.apiKey" type="password" placeholder="sk-ant-..." />
+            <PasswordInput v-model="form.apiKey" placeholder="sk-ant-..." autocomplete="off" />
           </div>
 
           <div class="grid gap-2">
