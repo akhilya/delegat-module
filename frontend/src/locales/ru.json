@@ -2024,6 +2024,11 @@
         "confirmAction": "В корзину"
       },
       "unsavedChanges": "Несохранённые изменения",
+      "saveDisabled": {
+        "noChanges": "Нет несохранённых изменений",
+        "nameRequired": "Укажите название",
+        "attributeRequired": "Заполните обязательное поле «{name}»"
+      },
       "lightbox": {
         "prevPhoto": "Предыдущее фото",
         "productPhotoAlt": "Фото товара",
@@ -2258,6 +2263,12 @@
       },
       "actions": {
         "createProduct": "Создать товар"
+      },
+      "saveDisabled": {
+        "categoryRequired": "Выберите категорию",
+        "skuRequired": "Укажите артикул",
+        "nameRequired": "Укажите название",
+        "attributeRequired": "Заполните обязательное поле «{name}»"
       }
     },
     "productGroupsPage": {

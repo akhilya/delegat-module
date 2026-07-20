@@ -2024,6 +2024,11 @@
         "confirmAction": "Move to trash"
       },
       "unsavedChanges": "Unsaved changes",
+      "saveDisabled": {
+        "noChanges": "No unsaved changes",
+        "nameRequired": "Name is required",
+        "attributeRequired": "Fill in required field “{name}”"
+      },
       "lightbox": {
         "prevPhoto": "Previous photo",
         "productPhotoAlt": "Product photo",
@@ -2258,6 +2263,12 @@
       },
       "actions": {
         "createProduct": "Create product"
+      },
+      "saveDisabled": {
+        "categoryRequired": "Select a category",
+        "skuRequired": "SKU is required",
+        "nameRequired": "Name is required",
+        "attributeRequired": "Fill in required field “{name}”"
       }
     },
     "productGroupsPage": {

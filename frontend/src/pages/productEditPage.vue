@@ -78,6 +78,7 @@ import {
   buildAttributesSchema,
   categoryAttributeCacheToValues,
   formRecordToAttributeValues,
+  listMissingRequiredAttributes,
   mergeCategoryAttributesIntoCache,
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -102,6 +103,12 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "@/components/ui/number-field";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const GROUP_NONE = "__none__";
 
@@ -180,6 +187,10 @@ export default {
     NumberFieldDecrement,
     NumberFieldIncrement,
     NumberFieldInput,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
   },
   data() {
     return {
@@ -285,8 +296,6 @@ export default {
       },
     });
 
-    const isFormValid = computed(() => form.meta.value.valid);
-
     function pricePreview(amount) {
       return formatEquivalents(amount, storeCurrencies.value, storeBaseCurrency.value);
     }
@@ -373,6 +382,41 @@ export default {
     const isChangingGroup = ref(false);
     const descriptionRef = ref(null);
     const groupSidebarRef = ref(null);
+
+    const saveDisabledReasons = computed(() => {
+      const reasons = [];
+      if (!hasUnsavedChanges.value) {
+        reasons.push(t("pages.productEditPage.saveDisabled.noChanges"));
+      }
+      if (!String(form.values.product?.name ?? "").trim()) {
+        reasons.push(t("pages.productEditPage.saveDisabled.nameRequired"));
+      }
+      for (const attr of listMissingRequiredAttributes(
+        visibleCategoryAttributes.value,
+        form.values.categoryAttributes,
+      )) {
+        reasons.push(
+          t("pages.productEditPage.saveDisabled.attributeRequired", {
+            name: attr.name,
+          }),
+        );
+      }
+      for (const attr of listMissingRequiredAttributes(
+        visibleStoreAttributes.value,
+        form.values.storeAttributes,
+      )) {
+        reasons.push(
+          t("pages.productEditPage.saveDisabled.attributeRequired", {
+            name: attr.name,
+          }),
+        );
+      }
+      return reasons;
+    });
+
+    const isSaveDisabled = computed(
+      () => isSubmitting.value || saveDisabledReasons.value.length > 0,
+    );
 
 
     watch(
@@ -1039,7 +1083,8 @@ export default {
       form,
       onSubmit,
       isSubmitting,
-      isFormValid,
+      isSaveDisabled,
+      saveDisabledReasons,
       isProductLoading,
       files,
       deleteFile,
@@ -1681,16 +1726,34 @@ export default {
                 >
                   {{ $t("pages.productEditPage.unsavedChanges") }}
                 </p>
-                <Button
-                  type="submit"
-                  form="product-edit-form"
-                  size="sm"
-                  :disabled="isSubmitting || !hasUnsavedChanges || !isFormValid"
-                >
-                  <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-                  <Save v-else class="size-4 mr-2" />
-                  {{ $t("common.save") }}
-                </Button>
+                <TooltipProvider :delay-duration="200">
+                  <Tooltip :disabled="!isSaveDisabled || saveDisabledReasons.length === 0">
+                    <TooltipTrigger as-child>
+                      <span
+                        class="inline-flex"
+                        :tabindex="isSaveDisabled ? 0 : undefined"
+                      >
+                        <Button
+                          type="submit"
+                          form="product-edit-form"
+                          size="sm"
+                          :disabled="isSaveDisabled"
+                        >
+                          <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
+                          <Save v-else class="size-4 mr-2" />
+                          {{ $t("common.save") }}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" class="max-w-xs">
+                      <ul class="list-disc space-y-1 pl-4 text-left">
+                        <li v-for="reason in saveDisabledReasons" :key="reason">
+                          {{ reason }}
+                        </li>
+                      </ul>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           </Card>

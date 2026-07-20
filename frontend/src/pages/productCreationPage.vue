@@ -32,6 +32,7 @@ import {
   attributesToFormRecord,
   buildAttributesSchema,
   formRecordToAttributeValues,
+  listMissingRequiredAttributes,
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
@@ -55,6 +56,12 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "@/components/ui/number-field";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const GROUP_NONE = "__none__";
 
@@ -97,6 +104,10 @@ export default {
     NumberFieldDecrement,
     NumberFieldIncrement,
     NumberFieldInput,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
   },
   data() {
     return {
@@ -183,7 +194,43 @@ export default {
       },
     });
 
-    const isFormValid = computed(() => form.meta.value.valid);
+    const saveDisabledReasons = computed(() => {
+      const reasons = [];
+      if (!selectedCategoryId.value) {
+        reasons.push(t("pages.productCreationPage.saveDisabled.categoryRequired"));
+      }
+      if (!String(form.values.product?.sku ?? "").trim()) {
+        reasons.push(t("pages.productCreationPage.saveDisabled.skuRequired"));
+      }
+      if (!String(form.values.product?.name ?? "").trim()) {
+        reasons.push(t("pages.productCreationPage.saveDisabled.nameRequired"));
+      }
+      for (const attr of listMissingRequiredAttributes(
+        visibleCategoryAttributes.value,
+        form.values.categoryAttributes,
+      )) {
+        reasons.push(
+          t("pages.productCreationPage.saveDisabled.attributeRequired", {
+            name: attr.name,
+          }),
+        );
+      }
+      for (const attr of listMissingRequiredAttributes(
+        visibleStoreAttributes.value,
+        form.values.storeAttributes,
+      )) {
+        reasons.push(
+          t("pages.productCreationPage.saveDisabled.attributeRequired", {
+            name: attr.name,
+          }),
+        );
+      }
+      return reasons;
+    });
+
+    const isSaveDisabled = computed(
+      () => isSubmitting.value || saveDisabledReasons.value.length > 0,
+    );
 
     const productGroups = ref([]);
     const selectedGroupId = ref(null);
@@ -650,7 +697,8 @@ export default {
       form,
       onSubmit,
       isSubmitting,
-      isFormValid,
+      isSaveDisabled,
+      saveDisabledReasons,
       isLoadingCategories,
       categories,
       selectedCategoryId,
@@ -1060,7 +1108,36 @@ export default {
                   </CardContent>
                 </Card>
 
-                <div class="h-[4.75rem] shrink-0" aria-hidden="true" />
+                <div class="flex items-center justify-end pt-2 pb-6">
+                  <TooltipProvider :delay-duration="200">
+                    <Tooltip :disabled="!isSaveDisabled || saveDisabledReasons.length === 0">
+                      <TooltipTrigger as-child>
+                        <span
+                          class="inline-flex"
+                          :tabindex="isSaveDisabled ? 0 : undefined"
+                        >
+                          <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="isSaveDisabled"
+                            class="disabled:opacity-100 disabled:bg-primary/70"
+                          >
+                            <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
+                            <Plus v-else class="size-4 mr-2" />
+                            {{ $t("pages.productCreationPage.actions.createProduct") }}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" class="max-w-xs">
+                        <ul class="list-disc space-y-1 pl-4 text-left">
+                          <li v-for="reason in saveDisabledReasons" :key="reason">
+                            {{ reason }}
+                          </li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </form>
           </div>
@@ -1077,26 +1154,5 @@ export default {
         </div>
       </div>
     </PageSection>
-
-    <div class="fixed bottom-0 z-20 left-0 right-0 md:left-[var(--sidebar-width)] pointer-events-none pb-3">
-      <div class="adaptive-padding pointer-events-none">
-        <div class="w-full max-w-[90rem] flex items-stretch gap-4 lg:gap-5 pointer-events-none">
-          <div class="w-96 shrink-0 hidden lg:block" aria-hidden="true" />
-          <div class="flex-1 min-w-0 pointer-events-auto flex items-center justify-end gap-3">
-              <Button
-                type="submit"
-                form="product-create-form"
-                size="sm"
-                :disabled="isSubmitting || !selectedCategoryId || !isFormValid"
-              >
-                <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-                <Plus v-else class="size-4 mr-2" />
-                {{ $t("pages.productCreationPage.actions.createProduct") }}
-              </Button>
-          </div>
-          <div class="w-64 shrink-0 hidden lg:block" aria-hidden="true" />
-        </div>
-      </div>
-    </div>
   </Page>
 </template>

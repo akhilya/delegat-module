@@ -20,7 +20,10 @@ import {
   ATTRIBUTE_GROUP_OPTIONS,
   attributeGroupKeyForValue,
 } from "@/constants/attributeGroups";
-import { isAttributeType } from "@/lib/productAttributeValidation";
+import {
+  isAttributeType,
+  isEmptyAttributeValue,
+} from "@/lib/productAttributeValidation";
 import {
   labelsToStoredValues,
   parseAttributeOptions,
@@ -64,23 +67,6 @@ function collectInvalidIds(errors, prefix) {
   }
 
   return ids;
-}
-
-function isEmptyAttributeValue(attr, raw) {
-  if (isAttributeType(attr.type, "boolean")) return false;
-  if (raw === "" || raw == null) return true;
-  if (isAttributeType(attr.type, "multiselect")) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.length === 0;
-    } catch {
-      return String(raw)
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean).length === 0;
-    }
-  }
-  return false;
 }
 
 /** Required-but-empty attrs from form values (works when fields are unmounted). */

@@ -70,6 +70,38 @@ export function buildAttributesSchema(attributes) {
   return z.object(shape);
 }
 
+/** True when a required attribute value is missing / empty (booleans always count as filled). */
+export function isEmptyAttributeValue(attr, raw) {
+  if (isAttributeType(attr.type, "boolean")) return false;
+  if (raw === "" || raw == null) return true;
+  if (isAttributeType(attr.type, "multiselect")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length === 0;
+    } catch {
+      return String(raw)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean).length === 0;
+    }
+  }
+  return false;
+}
+
+/** Required visible attributes that still have an empty value in the form record. */
+export function listMissingRequiredAttributes(attributes, formRecord) {
+  const values = formRecord || {};
+  const missing = [];
+  for (const attr of attributes || []) {
+    if (attr.showOnProductPage === false) continue;
+    if (!attr.isRequired) continue;
+    const id = String(attr.id);
+    const raw = values[id] ?? values[attr.id];
+    if (isEmptyAttributeValue(attr, raw)) missing.push(attr);
+  }
+  return missing;
+}
+
 export function attributesToFormRecord(attributes, existingValues = [], idKey = "attributeId") {
   const valueMap = {};
 
