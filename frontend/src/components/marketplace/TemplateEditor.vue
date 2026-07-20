@@ -34,7 +34,7 @@ export default {
   emits: ["update:modelValue"],
   computed: {
     placeholderText() {
-      return `${BRACES_OPEN}value${BRACES_CLOSE}, высота: ${BRACES_OPEN}attr:5${BRACES_CLOSE}`;
+      return `${BRACES_OPEN}value${BRACES_CLOSE}, ${this.$t("marketplace.templateEditor.heightExampleLabel")}: ${BRACES_OPEN}attr:5${BRACES_CLOSE}`;
     },
     valueLabel() {
       return `${BRACES_OPEN}value${BRACES_CLOSE}`;
@@ -97,7 +97,7 @@ export default {
           class="h-auto flex items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
         >
           <Plus class="size-3" />
-          Вставить поле
+          {{ $t("marketplace.templateEditor.insertField") }}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-72 max-h-[350px] overflow-y-auto">
@@ -108,14 +108,14 @@ export default {
             @click="insertValue()"
           >
             <span class="font-mono text-xs text-muted-foreground shrink-0" v-text="valueLabel"></span>
-            <span class="ml-auto text-muted-foreground text-xs">значение поля</span>
+            <span class="ml-auto text-muted-foreground text-xs">{{ $t("marketplace.templateEditor.fieldValueHint") }}</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
 
         <!-- Product fields -->
         <template v-if="availableSources.productFields?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Поля товара</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.productFields") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="field in availableSources.productFields"
@@ -131,7 +131,7 @@ export default {
         </template>
 
         <template v-if="availableSources.stockFields?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Остатки</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.stockFields") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="field in availableSources.stockFields"
@@ -147,7 +147,7 @@ export default {
         </template>
 
         <template v-if="availableSources.priceFields?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Цена</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.priceFields") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="field in availableSources.priceFields"
@@ -164,7 +164,7 @@ export default {
 
         <!-- Category attributes -->
         <template v-if="availableSources.categoryAttributes?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Атрибуты категории</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.categoryAttributes") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="attr in availableSources.categoryAttributes"
@@ -181,7 +181,7 @@ export default {
 
         <!-- Store attributes -->
         <template v-if="availableSources.storeAttributes?.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Глобальные атрибуты</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.storeAttributes") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="attr in availableSources.storeAttributes"
@@ -198,7 +198,7 @@ export default {
 
         <!-- Extra placeholders (e.g. llmGenerate field pins) -->
         <template v-if="extraPlaceholders.length">
-          <DropdownMenuLabel class="text-xs py-0.5">Входные пины</DropdownMenuLabel>
+          <DropdownMenuLabel class="text-xs py-0.5">{{ $t("marketplace.templateEditor.inputPins") }}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuItem
               v-for="item in extraPlaceholders"

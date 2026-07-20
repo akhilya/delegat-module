@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from "vue";
 import { useStore } from "vuex";
+import { unrefElement } from "@vueuse/core";
 import {
   X, ArrowUp, Bot, CheckCircle2, ExternalLink, Loader2, Square, Copy, Check,
   ThumbsUp, ThumbsDown, Plus, Pencil, Trash2,
@@ -28,7 +29,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const store = useStore();
 const {
   timezone: storeTimezone,
@@ -59,7 +62,7 @@ const titleInputEl = ref(null);
 const confirmDeleteDialog = ref({ open: false, sessionId: null, resolve: null });
 
 // Tools panel: which categories are expanded
-const expandedCategories = ref(new Set(["Товары", "Маппинги", "Аналитика"]));
+const expandedCategories = ref(new Set(["products", "mappings", "analytics"]));
 
 const isOpen = computed(() => store.state.aiChat.isOpen);
 const isLoading = computed(() => store.state.aiChat.isLoading);
@@ -110,10 +113,10 @@ const groupedConversations = computed(() => {
   const weekAgo = addCalendarDays(today, -7);
 
   const groups = [
-    { label: "Сегодня", items: [] },
-    { label: "Вчера", items: [] },
-    { label: "Эта неделя", items: [] },
-    { label: "Ранее", items: [] },
+    { label: t("ai.today"), items: [] },
+    { label: t("ai.yesterday"), items: [] },
+    { label: t("ai.thisWeek"), items: [] },
+    { label: t("ai.earlier"), items: [] },
   ];
   for (const c of conversations.value) {
     const day = calendarDayKey(c.lastMessageAt, tz);
@@ -130,127 +133,81 @@ const groupedConversations = computed(() => {
 });
 
 // Keep in sync with backend ToolDispatcher + BuildAllToolDefinitions (AiChatService.cs).
-const toolCategories = [
-  { name: "Товары", icon: Boxes, tools: [
-    { name: "list_products", desc: "Список и поиск товаров" },
-    { name: "get_products_count", desc: "Количество по фильтру" },
-    { name: "get_product", desc: "Полные данные товара" },
-    { name: "create_product", desc: "Создать товар" },
-    { name: "create_products", desc: "Создать товары пачкой" },
-    { name: "update_product", desc: "Обновить поля" },
-    { name: "update_product_sku", desc: "Изменить SKU" },
-    { name: "update_product_prices", desc: "Массовое изменение цен" },
-    { name: "update_product_attribute", desc: "Атрибут для нескольких товаров" },
-    { name: "update_product_attributes", desc: "Несколько атрибутов пачкой" },
-    { name: "delete_products", desc: "Мягкое удаление" },
-    { name: "restore_products", desc: "Восстановить из корзины" },
-    { name: "list_trash", desc: "Корзина товаров" },
-    { name: "generate_barcodes", desc: "Сгенерировать EAN-13 штрихкоды" },
+const TOOL_CATEGORY_DEFS = [
+  { id: "products", icon: Boxes, tools: [
+    "list_products", "get_products_count", "get_product", "create_product",
+    "create_products", "update_product", "update_product_sku", "update_product_prices",
+    "update_product_attribute", "update_product_attributes", "delete_products",
+    "restore_products", "list_trash", "generate_barcodes",
   ]},
-  { name: "Категории", icon: FolderOpen, tools: [
-    { name: "list_categories", desc: "Список категорий" },
-    { name: "get_category", desc: "Категория с атрибутами" },
-    { name: "create_category", desc: "Создать категорию" },
-    { name: "update_category", desc: "Переименовать" },
-    { name: "delete_category", desc: "Удалить" },
-    { name: "list_category_fields", desc: "Атрибуты категории" },
-    { name: "add_category_field", desc: "Добавить атрибут" },
-    { name: "update_category_field", desc: "Изменить атрибут" },
-    { name: "delete_category_field", desc: "Удалить атрибут" },
-    { name: "find_categories_with_field", desc: "Найти категории с атрибутом" },
+  { id: "categories", icon: FolderOpen, tools: [
+    "list_categories", "get_category", "create_category", "update_category",
+    "delete_category", "list_category_fields", "add_category_field",
+    "update_category_field", "delete_category_field", "find_categories_with_field",
   ]},
-  { name: "Маппинги", icon: GitBranch, tools: [
-    { name: "list_mappings", desc: "Список маппингов" },
-    { name: "get_mapping", desc: "Детали + покрытие" },
-    { name: "create_mapping", desc: "Создать маппинг" },
-    { name: "update_mapping_name", desc: "Переименовать" },
-    { name: "delete_mapping", desc: "Удалить" },
-    { name: "duplicate_mapping", desc: "Скопировать" },
-    { name: "list_external_categories", desc: "Категории маркетплейса" },
-    { name: "get_external_fields", desc: "Поля карточки адаптера" },
-    { name: "get_price_fields", desc: "Поля цен адаптера" },
-    { name: "get_option_alignment_hints", desc: "Подсказки optionMap" },
-    { name: "search_field_options", desc: "Поиск в опциях поля" },
-    { name: "get_available_sources", desc: "Доступные источники" },
-    { name: "get_mapping_coverage", desc: "Анализ покрытия" },
-    { name: "connect_field", desc: "Подключить поле" },
-    { name: "connect_fields", desc: "Подключить несколько полей" },
-    { name: "set_field_static_value", desc: "Задать статическое значение" },
-    { name: "set_fields_static_value", desc: "Статические значения пачкой" },
-    { name: "add_field_modifier", desc: "Добавить трансформацию" },
-    { name: "remove_field_connection", desc: "Отключить поле" },
-    { name: "merge_adapter_fields", desc: "Объединить дубли полей" },
-    { name: "unmerge_adapter_fields", desc: "Разъединить поля" },
-    { name: "preview_mapping_for_product", desc: "Превью маппинга" },
-    { name: "find_products_without_mapping", desc: "Товары без назначенного маппинга" },
-    { name: "get_product_mapping_summary", desc: "Сводка: товары по маппингам" },
-    { name: "assign_product_mappings", desc: "Назначить маппинг товарам" },
+  { id: "mappings", icon: GitBranch, tools: [
+    "list_mappings", "get_mapping", "create_mapping", "update_mapping_name",
+    "delete_mapping", "duplicate_mapping", "list_external_categories",
+    "get_external_fields", "get_price_fields", "get_option_alignment_hints",
+    "search_field_options", "get_available_sources", "get_mapping_coverage",
+    "connect_field", "connect_fields", "set_field_static_value",
+    "set_fields_static_value", "add_field_modifier", "remove_field_connection",
+    "merge_adapter_fields", "unmerge_adapter_fields", "preview_mapping_for_product",
+    "find_products_without_mapping", "get_product_mapping_summary", "assign_product_mappings",
   ]},
-  { name: "Подключения", icon: Plug, tools: [
-    { name: "list_connections", desc: "Список подключений" },
-    { name: "get_connection", desc: "Детали подключения" },
-    { name: "test_connection", desc: "Проверить связь" },
-    { name: "get_connection_limits", desc: "Лимиты API" },
-    { name: "get_adapter_info", desc: "Мета-данные адаптера" },
+  { id: "connections", icon: Plug, tools: [
+    "list_connections", "get_connection", "test_connection",
+    "get_connection_limits", "get_adapter_info",
   ]},
-  { name: "Экспорт", icon: Upload, tools: [
-    { name: "export_products_batch", desc: "Экспорт товаров (batch)" },
-    { name: "export_prices", desc: "Экспорт цен" },
-    { name: "export_stocks", desc: "Экспорт остатков" },
-    { name: "get_batch_status", desc: "Статус задачи" },
-    { name: "list_product_links", desc: "Sync-ссылки товаров" },
+  { id: "export", icon: Upload, tools: [
+    "export_products_batch", "export_prices", "export_stocks",
+    "get_batch_status", "list_product_links",
   ]},
-  { name: "Импорт", icon: Download, tools: [
-    { name: "preview_marketplace_products", desc: "Товары на маркетплейсе" },
-    { name: "import_products", desc: "Импортировать товары" },
-    { name: "import_prices", desc: "Импортировать цены" },
-    { name: "import_stocks", desc: "Импортировать остатки" },
-    { name: "archive_product_on_marketplace", desc: "Архивировать на площадке" },
+  { id: "import", icon: Download, tools: [
+    "preview_marketplace_products", "import_products", "import_prices",
+    "import_stocks", "archive_product_on_marketplace",
   ]},
-  { name: "Группы", icon: Layers, tools: [
-    { name: "list_groups", desc: "Группы товаров" },
-    { name: "get_group", desc: "Детали группы" },
-    { name: "create_group", desc: "Создать группу" },
-    { name: "update_group", desc: "Переименовать" },
-    { name: "delete_group", desc: "Удалить группу" },
-    { name: "add_products_to_group", desc: "Добавить товары" },
-    { name: "remove_products_from_group", desc: "Убрать товары" },
+  { id: "groups", icon: Layers, tools: [
+    "list_groups", "get_group", "create_group", "update_group",
+    "delete_group", "add_products_to_group", "remove_products_from_group",
   ]},
-  { name: "Файлы", icon: HardDrive, tools: [
-    { name: "list_files", desc: "Список файлов" },
-    { name: "create_folder", desc: "Создать папку" },
-    { name: "rename_file", desc: "Переименовать файл" },
-    { name: "rename_folder", desc: "Переименовать папку" },
-    { name: "move_files", desc: "Переместить файлы" },
-    { name: "delete_files", desc: "Удалить файлы" },
-    { name: "delete_folder", desc: "Удалить папку" },
-    { name: "share_file", desc: "Создать публичную ссылку" },
+  { id: "files", icon: HardDrive, tools: [
+    "list_files", "create_folder", "rename_file", "rename_folder",
+    "move_files", "delete_files", "delete_folder", "share_file",
   ]},
-  { name: "Аналитика", icon: BarChart2, tools: [
-    { name: "get_store_stats", desc: "Статистика магазина" },
-    { name: "find_products_without_images", desc: "Без изображений" },
-    { name: "find_products_without_barcode", desc: "Без штрихкода" },
-    { name: "find_products_missing_field", desc: "С пустым атрибутом" },
-    { name: "find_products_with_sync_errors", desc: "С ошибками синхронизации" },
-    { name: "analyze_mapping_quality", desc: "Качество маппингов" },
-    { name: "get_image_download_status", desc: "Статус загрузки изображений" },
+  { id: "analytics", icon: BarChart2, tools: [
+    "get_store_stats", "find_products_without_images", "find_products_without_barcode",
+    "find_products_missing_field", "find_products_with_sync_errors",
+    "analyze_mapping_quality", "get_image_download_status",
   ]},
-  { name: "Магазин", icon: Globe, tools: [
-    { name: "list_store_attributes", desc: "Глобальные атрибуты магазина" },
+  { id: "store", icon: Globe, tools: [
+    "list_store_attributes",
   ]},
-  { name: "Служебные", icon: Sparkles, tools: [
-    { name: "propose_plan", desc: "Показать план перед выполнением" },
-    { name: "rollback_last_operation", desc: "Отменить последнее действие" },
-    { name: "navigate_to", desc: "Кнопка перехода на страницу" },
+  { id: "system", icon: Sparkles, tools: [
+    "propose_plan", "rollback_last_operation", "navigate_to",
   ]},
 ];
 
-const totalToolCount = toolCategories.reduce((s, c) => s + c.tools.length, 0);
+const toolCategories = computed(() =>
+  TOOL_CATEGORY_DEFS.map((cat) => ({
+    name: t(`ai.toolCategories.${cat.id}`),
+    id: cat.id,
+    icon: cat.icon,
+    tools: cat.tools.map((toolName) => ({
+      name: toolName,
+      desc: t(`ai.toolCatalog.${cat.id}.${toolName}`),
+    })),
+  })),
+);
 
-function toggleCategory(name) {
+const totalToolCount = computed(() =>
+  toolCategories.value.reduce((s, c) => s + c.tools.length, 0),
+);
+
+function toggleCategory(id) {
   const s = new Set(expandedCategories.value);
-  if (s.has(name)) s.delete(name);
-  else s.add(name);
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
   expandedCategories.value = s;
 }
 
@@ -341,16 +298,17 @@ function startEditTitle() {
   editingTitleValue.value = conversationTitle.value || "";
   isEditingTitle.value = true;
   nextTick(() => {
-    titleInputEl.value?.focus();
-    titleInputEl.value?.select();
+    const el = unrefElement(titleInputEl);
+    el?.focus?.();
+    el?.select?.();
   });
 }
 
 async function saveTitle() {
   isEditingTitle.value = false;
-  const t = editingTitleValue.value.trim();
-  if (t && t !== conversationTitle.value) {
-    await store.dispatch("aiChat/renameConversation", t);
+  const trimmed = editingTitleValue.value.trim();
+  if (trimmed && trimmed !== conversationTitle.value) {
+    await store.dispatch("aiChat/renameConversation", trimmed);
   }
 }
 
@@ -364,30 +322,39 @@ function formatRelativeDate(iso) {
   if (!key) return "—";
   const today = todayKey();
   const yesterday = addCalendarDays(today, -1);
-  if (key === today) return "Сегодня";
-  if (key === yesterday) return "Вчера";
+  if (key === today) return t("ai.today");
+  if (key === yesterday) return t("ai.yesterday");
   const [y, m, d] = key.split("-").map(Number);
   const [ty, tm, td] = today.split("-").map(Number);
   const diffDays = Math.round(
     (Date.UTC(ty, tm - 1, td) - Date.UTC(y, m - 1, d)) / 86400000,
   );
-  if (diffDays > 1 && diffDays < 7) return `${diffDays} дн. назад`;
+  if (diffDays > 1 && diffDays < 7) return t("ai.daysAgo", { n: diffDays });
   return relativeDayLabel(iso);
+}
+
+/** Template refs on shadcn wrappers are component instances — resolve to the real DOM node. */
+function inputDom() {
+  return unrefElement(inputEl) ?? null;
 }
 
 async function submit() {
   const text = inputText.value.trim();
   if (!text || isLoading.value || !hasEnabledModels.value) return;
   inputText.value = "";
+  // Start the request first so a DOM resize glitch can never block sending
+  const sendPromise = store.dispatch("aiChat/sendMessage", text);
   await nextTick();
-  if (inputEl.value) inputEl.value.style.height = "auto";
-  await store.dispatch("aiChat/sendMessage", text);
+  const el = inputDom();
+  if (el?.style) el.style.height = "auto";
+  await sendPromise;
 }
 
 function autoResize() {
-  if (!inputEl.value) return;
-  inputEl.value.style.height = "auto";
-  inputEl.value.style.height = Math.min(inputEl.value.scrollHeight, 120) + "px";
+  const el = inputDom();
+  if (!el?.style) return;
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
 }
 
 watch(() => messages.value.length, async () => {
@@ -477,7 +444,7 @@ function renderMarkdown(text) {
             variant="ghost"
             size="icon"
             class="size-7"
-            title="История диалогов"
+            :title="t('ai.historyTooltip')"
             @click="openHistory"
           >
             <History class="size-3.5" />
@@ -486,7 +453,7 @@ function renderMarkdown(text) {
             variant="ghost"
             size="icon"
             class="size-7"
-            title="Новый диалог"
+            :title="t('ai.newChatTooltip')"
             @click="newConversation"
           >
             <Plus class="size-3.5" />
@@ -495,7 +462,7 @@ function renderMarkdown(text) {
             variant="ghost"
             size="icon"
             class="size-7"
-            title="Инструменты ассистента"
+            :title="t('ai.toolsTooltip')"
             @click="openTools"
           >
             <Wrench class="size-3.5" />
@@ -509,7 +476,7 @@ function renderMarkdown(text) {
               ref="titleInputEl"
               v-model="editingTitleValue"
               class="pointer-events-auto h-8 text-sm font-medium text-center bg-background border border-input rounded-md shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 w-full max-w-[200px] leading-tight py-1 px-2"
-              placeholder="Название диалога"
+              :placeholder="t('ai.conversationTitlePlaceholder')"
               maxlength="100"
               @blur="saveTitle"
               @keydown.enter.prevent="saveTitle"
@@ -521,11 +488,11 @@ function renderMarkdown(text) {
               v-if="messages.length > 0"
               variant="ghost"
               class="pointer-events-auto group/title h-auto flex items-center gap-1 max-w-[180px] px-2 py-1 font-normal hover:bg-accent"
-              :title="conversationTitle ? 'Переименовать' : undefined"
+              :title="conversationTitle ? t('ai.renameTooltip') : undefined"
               @click="conversationTitle ? startEditTitle() : undefined"
             >
               <span class="text-sm font-medium truncate text-foreground/80 group-hover/title:text-foreground transition-colors">
-                {{ conversationTitle || "Новый диалог" }}
+                {{ conversationTitle || t("ai.newConversation") }}
               </span>
               <Pencil v-if="conversationTitle" class="size-3 opacity-0 group-hover/title:opacity-40 transition-opacity shrink-0" />
             </Button>
@@ -537,7 +504,7 @@ function renderMarkdown(text) {
           variant="ghost"
           size="icon"
           class="size-7 ml-auto z-10 text-muted-foreground"
-          title="Закрыть"
+          :title="t('ai.closeTooltip')"
           @click="close"
         >
           <X class="size-4" />
@@ -553,17 +520,17 @@ function renderMarkdown(text) {
           variant="ghost"
           size="icon"
           class="size-7 text-muted-foreground"
-          title="Назад к чату"
+          :title="t('ai.backToChat')"
           @click="backToChat"
         >
           <ChevronLeft class="size-4" />
         </Button>
-        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">История диалогов</span>
+        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">{{ t("ai.conversationHistory") }}</span>
         <Button
           variant="ghost"
           size="icon"
           class="size-7 text-muted-foreground"
-          title="Новый диалог"
+          :title="t('ai.newChatTooltip')"
           @click="newConversation"
         >
           <Plus class="size-3.5" />
@@ -572,7 +539,7 @@ function renderMarkdown(text) {
           variant="ghost"
           size="icon"
           class="size-7 text-muted-foreground"
-          title="Закрыть"
+          :title="t('ai.closeTooltip')"
           @click="close"
         >
           <X class="size-4" />
@@ -588,17 +555,17 @@ function renderMarkdown(text) {
           variant="ghost"
           size="icon"
           class="size-7 text-muted-foreground"
-          title="Назад к чату"
+          :title="t('ai.backToChat')"
           @click="backToChat"
         >
           <ChevronLeft class="size-4" />
         </Button>
-        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">Инструменты</span>
+        <span class="text-sm font-medium text-foreground/80 flex-1 ml-1">{{ t("ai.toolsTitle") }}</span>
         <Button
           variant="ghost"
           size="icon"
           class="size-7 text-muted-foreground"
-          title="Закрыть"
+          :title="t('ai.closeTooltip')"
           @click="close"
         >
           <X class="size-4" />
@@ -615,13 +582,13 @@ function renderMarkdown(text) {
         <!-- Empty state -->
         <div v-else-if="!conversations.length" class="flex flex-col items-center justify-center py-10 gap-2 text-center px-6">
           <MessageSquare class="size-8 text-muted-foreground/30" />
-          <p class="text-sm text-muted-foreground">Нет сохранённых диалогов</p>
+          <p class="text-sm text-muted-foreground">{{ t("ai.noConversations") }}</p>
           <Button
             variant="link"
             class="mt-1 h-auto p-0 flex items-center gap-1.5 text-xs"
             @click="newConversation"
           >
-            <Plus class="size-3.5" /> Начать новый
+            <Plus class="size-3.5" /> {{ t("ai.startNew") }}
           </Button>
         </div>
 
@@ -640,16 +607,16 @@ function renderMarkdown(text) {
             >
               <MessageSquare class="size-3.5 shrink-0 text-muted-foreground/50" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm truncate leading-snug">{{ c.title || "Без названия" }}</p>
+                <p class="text-sm truncate leading-snug">{{ c.title || t("ai.untitled") }}</p>
                 <p class="text-[10px] text-muted-foreground mt-0.5">
-                  {{ formatRelativeDate(c.lastMessageAt) }} · {{ c.messageCount }} сообщ.
+                  {{ formatRelativeDate(c.lastMessageAt) }} · {{ c.messageCount }} {{ t("ai.messagesCountSuffix") }}
                 </p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 class="shrink-0 opacity-0 group-hover:opacity-100 size-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                title="Удалить диалог"
+                :title="t('ai.deleteConversationTooltip')"
                 @click="openConfirmDelete($event, c.sessionId)"
               >
                 <Trash2 class="size-3.5" />
@@ -663,28 +630,28 @@ function renderMarkdown(text) {
       <div v-else-if="activeView === 'tools'" class="flex-1 overflow-y-auto">
         <div class="px-3 pt-3 pb-1">
           <p class="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-            {{ totalToolCount }} инструментов · {{ toolCategories.length }} категорий
+            {{ t("ai.toolsCountLabel", { count: totalToolCount, categories: toolCategories.length }) }}
           </p>
         </div>
         <div class="px-2 pb-3 space-y-0.5">
-          <div v-for="cat in toolCategories" :key="cat.name" class="rounded-md overflow-hidden">
+          <div v-for="cat in toolCategories" :key="cat.id" class="rounded-md overflow-hidden">
             <!-- Category header -->
             <Button
               variant="ghost"
               class="w-full h-auto justify-start flex items-center gap-2 px-2 py-1.5 font-normal rounded-md"
-              @click="toggleCategory(cat.name)"
+              @click="toggleCategory(cat.id)"
             >
               <component :is="cat.icon" class="size-3.5 shrink-0 text-muted-foreground" />
               <span class="text-xs font-medium flex-1">{{ cat.name }}</span>
               <span class="text-[10px] text-muted-foreground tabular-nums">{{ cat.tools.length }}</span>
               <ChevronDown
                 class="size-3 text-muted-foreground/60 transition-transform duration-150"
-                :class="{ 'rotate-180': expandedCategories.has(cat.name) }"
+                :class="{ 'rotate-180': expandedCategories.has(cat.id) }"
               />
             </Button>
             <!-- Tool rows -->
             <div
-              v-show="expandedCategories.has(cat.name)"
+              v-show="expandedCategories.has(cat.id)"
               class="px-2 pb-2 pt-0.5 flex flex-col gap-px"
             >
               <TooltipProvider
@@ -729,13 +696,13 @@ function renderMarkdown(text) {
             <Bot class="size-6 text-muted-foreground" />
           </div>
           <div>
-            <p class="text-sm font-medium">{{ hasEnabledModels ? "Привет!" : "AI недоступен" }}</p>
+            <p class="text-sm font-medium">{{ hasEnabledModels ? t("ai.greeting") : t("ai.unavailable") }}</p>
             <p class="mx-auto mt-1 max-w-[260px] text-xs text-muted-foreground">
               <template v-if="hasEnabledModels">
-                Управляю товарами, категориями, маппингами и экспортом.
+                {{ t("ai.capabilitiesDescription") }}
               </template>
               <template v-else>
-                Нет подключённых или включённых AI-моделей. Администратор может включить модели в Настройки → ИИ.
+                {{ t("ai.noModelsEnabled") }}
               </template>
             </p>
           </div>
@@ -745,9 +712,9 @@ function renderMarkdown(text) {
           >
             <Button
               v-for="example in [
-                'Покажи статистику магазина',
-                'Заполни незаполненные поля маппинга',
-                'Найди товары без цены',
+                t('ai.exampleStats'),
+                t('ai.exampleFillMapping'),
+                t('ai.exampleFindNoPrice'),
               ]"
               :key="example"
               variant="outline"
@@ -771,7 +738,7 @@ function renderMarkdown(text) {
               variant="ghost"
               size="icon"
               class="size-7 opacity-0 group-hover:opacity-100 text-muted-foreground"
-              :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
+              :title="copiedId === msg.id ? t('ai.copied') : t('common.copy')"
               @click="copyText(msg.id, msg.content)"
             >
               <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
@@ -842,7 +809,7 @@ function renderMarkdown(text) {
                 variant="ghost"
                 size="icon"
                 class="size-7 text-muted-foreground"
-                :title="copiedId === msg.id ? 'Скопировано' : 'Копировать'"
+                :title="copiedId === msg.id ? t('ai.copied') : t('common.copy')"
                 @click="copyText(msg.id, messageClipboard(msg))"
               >
                 <Check v-if="copiedId === msg.id" class="size-3.5 text-green-600" />
@@ -853,7 +820,7 @@ function renderMarkdown(text) {
                 size="icon"
                 class="size-7"
                 :class="msg.feedbackRating === 1 ? 'text-green-600' : 'text-muted-foreground hover:text-green-600'"
-                title="Хороший ответ"
+                :title="t('ai.goodResponse')"
                 @click="sendFeedback(msg, 1)"
               >
                 <ThumbsUp class="size-3.5" />
@@ -863,7 +830,7 @@ function renderMarkdown(text) {
                 size="icon"
                 class="size-7"
                 :class="msg.feedbackRating === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'"
-                title="Плохой ответ"
+                :title="t('ai.badResponse')"
                 @click="sendFeedback(msg, -1)"
               >
                 <ThumbsDown class="size-3.5" />
@@ -880,7 +847,7 @@ function renderMarkdown(text) {
             ref="inputEl"
             v-model="inputText"
             class="min-h-[44px] max-h-[120px] resize-none border-0 bg-transparent px-4 pt-3 pb-1 shadow-none focus-visible:ring-0 font-[inherit] leading-relaxed"
-            :placeholder="hasEnabledModels ? 'Введите запрос...' : 'Нет включённых AI-моделей'"
+            :placeholder="hasEnabledModels ? t('ai.inputPlaceholder') : t('ai.noModelsPlaceholder')"
             rows="1"
             :disabled="isLoading || !hasEnabledModels"
             @keydown.enter.exact.prevent="submit"
@@ -897,7 +864,7 @@ function renderMarkdown(text) {
                        text-muted-foreground/50 hover:text-muted-foreground focus:ring-0
                        w-auto bg-transparent [&>svg]:size-2.5 [&>svg]:opacity-50"
               >
-                <SelectValue :placeholder="lastModelName ?? 'модель'" />
+                <SelectValue :placeholder="lastModelName ?? t('ai.modelPlaceholder')" />
               </SelectTrigger>
               <SelectContent align="start" side="top" class="min-w-[160px]">
                 <SelectItem
@@ -913,16 +880,16 @@ function renderMarkdown(text) {
             <span
               v-else
               class="text-[10px] text-muted-foreground/60 font-mono select-none leading-none max-w-[200px] truncate"
-              title="Нет включённых AI-моделей"
+              :title="t('ai.noModelsPlaceholder')"
             >
-              нет включённых моделей
+              {{ t("ai.noEnabledModels") }}
             </span>
             <Button
               v-if="isLoading"
               variant="secondary"
               size="icon"
               class="size-7 rounded-full shrink-0"
-              title="Остановить генерацию"
+              :title="t('ai.stopGeneration')"
               @click="stopGeneration"
             >
               <Square class="size-3" />
@@ -933,7 +900,7 @@ function renderMarkdown(text) {
               class="size-7 rounded-full shrink-0"
               :variant="inputText.trim() ? 'default' : 'secondary'"
               :disabled="!inputText.trim() || !hasEnabledModels"
-              :title="hasEnabledModels ? 'Отправить' : 'Нет включённых AI-моделей'"
+              :title="hasEnabledModels ? t('ai.send') : t('ai.noModelsPlaceholder')"
               @click="submit"
             >
               <ArrowUp class="size-4" />
@@ -951,15 +918,15 @@ function renderMarkdown(text) {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить диалог?</AlertDialogTitle>
-          <AlertDialogDescription>Это действие необратимо — история сообщений будет удалена.</AlertDialogDescription>
+          <AlertDialogTitle>{{ t("ai.deleteConversationTitle") }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ t("ai.deleteConversationDescription") }}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel @click="confirmDeleteDialog.open = false">Отмена</AlertDialogCancel>
+          <AlertDialogCancel @click="confirmDeleteDialog.open = false">{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             @click="confirmDeleteConversation"
-          >Удалить</AlertDialogAction>
+          >{{ t("common.delete") }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

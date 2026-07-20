@@ -10,8 +10,9 @@ import {
   Plus,
   Minus,
 } from "lucide-vue-next";
-import { OP_SPECS, opSummary, pinColor } from "../graphModel.js";
+import { OP_SPECS, opSummary, opLabel, opInputLabels, pinColor } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
+import { t } from "@/i18n";
 
 const props = defineProps({
   id: String,
@@ -38,6 +39,8 @@ const multiInputs = computed(() =>
 );
 const summary = computed(() => opSummary(props.type, props.data));
 const outColor = computed(() => pinColor(spec.value.output || "string"));
+const label = computed(() => opLabel(props.type));
+const inputLabels = computed(() => opInputLabels(props.type));
 
 const ICONS = { Braces, List, GitBranch, Binary, Equal };
 const icon = computed(() => ICONS[spec.value.icon] || Braces);
@@ -85,8 +88,8 @@ const collapsed = computed(() => !!props.data.collapsed);
 
     <div class="vf-card__head">
       <component :is="icon" class="size-3.5 text-muted-foreground" />
-      <span class="vf-card__kind" :title="summary || spec.label">{{
-        collapsed && summary ? summary : spec.label
+      <span class="vf-card__kind" :title="summary || label">{{
+        collapsed && summary ? summary : label
       }}</span>
     </div>
     <template v-if="!collapsed">
@@ -94,19 +97,19 @@ const collapsed = computed(() => !!props.data.collapsed);
         {{ summary }}
       </div>
       <div
-        v-if="isFixed && spec.inputLabels?.length"
+        v-if="isFixed && inputLabels.length"
         class="vf-pin-label"
         style="margin-top: 4px"
       >
-        {{ spec.inputLabels.join(" · ") }}
+        {{ inputLabels.join(" · ") }}
       </div>
 
       <div v-if="isMulti" class="vf-combine__inputs">
-        <span class="vf-pin-label">входов: {{ count }}</span>
+        <span class="vf-pin-label">{{ t("marketplace.graph.inputsCount", { count }) }}</span>
         <button
           type="button"
           class="vf-iconbtn nodrag"
-          title="Убрать вход"
+          :title="t('marketplace.graph.removeInput')"
           @mousedown.stop
           @click="removeInput"
         >
@@ -115,7 +118,7 @@ const collapsed = computed(() => !!props.data.collapsed);
         <button
           type="button"
           class="vf-iconbtn nodrag"
-          title="Добавить вход"
+          :title="t('marketplace.graph.addInput')"
           @mousedown.stop
           @click="addInput"
         >

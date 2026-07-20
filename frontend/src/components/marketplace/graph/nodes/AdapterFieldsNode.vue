@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
 import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
 import { mergeProductFieldSources, pinColor } from "../graphModel.js";
+import { t } from "@/i18n";
 
 const props = defineProps({
   id: String,
@@ -26,13 +27,13 @@ const storeAttributes = computed(() => avail.value.storeAttributes || []);
 function boundLabel(f) {
   const s = f.source;
   if (!s) return "";
-  if (s.type === "groupName") return "Название группы";
+  if (s.type === "groupName") return t("marketplace.graph.groupNameLabel");
   if (s.type === "productField")
     return productFields.value.find((x) => x.key === s.field)?.displayName || s.field;
   if (s.type === "attribute")
-    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
   if (s.type === "storeAttribute")
-    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
   return "";
 }
 
@@ -43,35 +44,35 @@ function pillStyle(type) {
 
 function aliasTitle(f) {
   const primary = aliasPrimaryLabel(f);
-  return `Объединено с «${primary}»: при экспорте получает его значение, при импорте игнорируется`;
+  return t("marketplace.graph.aliasMergedTitle", { primary });
 }
 
 function fanOutTitle(f) {
   if (f.source) {
-    return "Этот источник уже используется другим полем — возможен конфликт данных. Если поля дублируют друг друга — объедините их в настройках поля.";
+    return t("marketplace.graph.fanOutSourceUsed");
   }
-  return "Импорт отключён: этот источник уже используется несколькими полями адаптера. Если поля дублируют друг друга — объедините их в настройках поля.";
+  return t("marketplace.graph.fanOutImportDisabled");
 }
 
 function sourceTitle(f) {
-  return `${boundLabel(f)} — нажмите для настройки`;
+  return t("marketplace.graph.sourceClickTitle", { label: boundLabel(f) });
 }
 
 /** Tooltip for adapter field: description, unit, key. */
 function fieldTooltip(f) {
   const parts = [];
   if (f.description) parts.push(String(f.description).trim());
-  if (f.unit) parts.push(`Ед. изм.: ${f.unit}`);
+  if (f.unit) parts.push(t("marketplace.graph.unitLabel", { unit: f.unit }));
   if (f.minValue != null || f.maxValue != null) {
     const range = [
-      f.minValue != null ? `от ${f.minValue}` : null,
-      f.maxValue != null ? `до ${f.maxValue}` : null,
+      f.minValue != null ? t("marketplace.graph.rangeFrom", { value: f.minValue }) : null,
+      f.maxValue != null ? t("marketplace.graph.rangeTo", { value: f.maxValue }) : null,
     ]
       .filter(Boolean)
       .join(" ");
     if (range) parts.push(range);
   }
-  parts.push(`Ключ: ${f.fieldKey}`);
+  parts.push(t("marketplace.graph.keyLabel", { key: f.fieldKey }));
   return parts.filter(Boolean).join("\n");
 }
 
@@ -107,7 +108,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
     <div class="vf-adapter__head">
       <Target class="size-3.5 text-primary" />
-      <span class="vf-card__kind">Поля адаптера</span>
+      <span class="vf-card__kind">{{ t("marketplace.graph.adapterHeader") }}</span>
       <span class="vf-pin-label">{{ fields.length }}</span>
     </div>
 

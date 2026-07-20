@@ -121,7 +121,7 @@ export default {
 
     async handleAddMember() {
       if (!this.selectedUserId) {
-        displaySonnerError("Выберите пользователя");
+        displaySonnerError(this.$t("pages.storeDetailPage.selectUserError"));
         return;
       }
 
@@ -131,7 +131,7 @@ export default {
         userId: parseInt(this.selectedUserId),
         onSuccess: (response) => {
           this.store = response.data.value;
-          displaySonnerSuccess("Участник добавлен");
+          displaySonnerSuccess(this.$t("pages.storeDetailPage.memberAdded"));
           this.showAddDialog = false;
           this.selectedUserId = null;
         },
@@ -145,10 +145,10 @@ export default {
     async handleRemoveMember(userId) {
       const member = this.store?.members?.find((m) => m.id === userId);
       const ok = await confirm({
-        title: "Удалить участника?",
+        title: this.$t("pages.storeDetailPage.removeMemberTitle"),
         description: member
-          ? `Пользователь «${member.userName}» потеряет доступ к магазину.`
-          : "Участник потеряет доступ к магазину.",
+          ? this.$t("pages.storeDetailPage.removeMemberDescriptionNamed", { name: member.userName })
+          : this.$t("pages.storeDetailPage.removeMemberDescription"),
       });
       if (!ok) return;
 
@@ -158,7 +158,7 @@ export default {
         userId,
         onSuccess: (response) => {
           this.store = response.data.value;
-          displaySonnerSuccess("Участник удалён");
+          displaySonnerSuccess(this.$t("pages.storeDetailPage.memberRemoved"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -177,31 +177,31 @@ export default {
 <template>
   <div>
     <PageHeader
-      :title="store?.name || 'Магазин'"
-      :description="store ? `Участников: ${store.members.length}` : 'Настройки участников магазина'"
+      :title="store?.name || $t('routes.store')"
+      :description="store ? $t('pages.storeDetailPage.membersCountDescription', { count: store.members.length }) : $t('pages.storeDetailPage.membersSettingsDescription')"
     >
       <Dialog v-if="store" v-model:open="showAddDialog">
         <DialogTrigger as-child>
           <Button :disabled="availableUsers.length === 0">
             <UserPlus class="mr-2 size-4" />
-            Добавить участника
+            {{ $t("pages.storeDetailPage.addMember") }}
           </Button>
         </DialogTrigger>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Добавить участника</DialogTitle>
+            <DialogTitle>{{ $t("pages.storeDetailPage.addMember") }}</DialogTitle>
             <DialogDescription>
-              Выберите пользователя для добавления в магазин
+              {{ $t("pages.storeDetailPage.addMemberDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
           <div class="py-4">
             <Select v-model="selectedUserId">
               <SelectTrigger>
-                <SelectValue placeholder="Выберите пользователя..." />
+                <SelectValue :placeholder="$t('pages.storeDetailPage.selectUserPlaceholder')" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel>Пользователи</SelectLabel>
+                  <SelectLabel>{{ $t("pages.storeDetailPage.usersLabel") }}</SelectLabel>
                   <SelectItem
                     v-for="user in availableUsers"
                     :key="user.id"
@@ -215,11 +215,11 @@ export default {
           </div>
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline">Отмена</Button>
+              <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
               <Loader2 v-if="isAddingMember" class="mr-2 size-4 animate-spin" />
-              Добавить
+              {{ $t("common.add") }}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -231,8 +231,8 @@ export default {
 
         <EmptyState
           v-if="store.members.length === 0"
-          title="Нет участников"
-          description="Пригласите участников через токены, чтобы они могли работать с товарами магазина"
+          :title="$t('pages.storeDetailPage.emptyTitle')"
+          :description="$t('pages.storeDetailPage.emptyDescription')"
         >
           <template #icon>
             <Users />
@@ -244,7 +244,7 @@ export default {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
-                <TableHead>Имя пользователя</TableHead>
+                <TableHead>{{ $t("pages.storeDetailPage.columnUserName") }}</TableHead>
                 <TableHead class="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>

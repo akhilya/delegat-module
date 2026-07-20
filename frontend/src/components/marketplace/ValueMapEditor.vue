@@ -113,16 +113,16 @@ export default {
 
 <template>
   <div class="space-y-2">
-    <Label class="text-xs font-medium">Соответствия: вариант → valueId</Label>
+    <Label class="text-xs font-medium">{{ $t("marketplace.valueMapEditor.title") }}</Label>
 
     <p
       v-if="!sourceOptions.length"
       class="text-[11px] text-muted-foreground"
     >
-      Слева — варианты источника (атрибут категории). Подключите блок к атрибуту с вариантами.
+      {{ $t("marketplace.valueMapEditor.sourceOptionsHint") }}
     </p>
     <p class="text-[11px] text-muted-foreground">
-      Справа — valueId поля адаптера (вводится вручную). Подпись показывается, если valueId совпадает с известной опцией.
+      {{ $t("marketplace.valueMapEditor.valueIdHint") }}
     </p>
 
     <div
@@ -137,7 +137,7 @@ export default {
         :model-value="row.from || ''"
         :disabled="!sourceOptions.length"
         @update:modelValue="(v) => onFromChange(index, v)"
-        placeholder="Вариант источника"
+        :placeholder="$t('marketplace.valueMapEditor.sourceOptionPlaceholder')"
         :search-threshold="3"
       />
       <ArrowRight class="size-3 shrink-0 text-muted-foreground" />
@@ -168,7 +168,7 @@ export default {
 
     <Button variant="outline" size="sm" class="w-full h-7 text-xs" @click="addRow">
       <Plus class="size-3 mr-1" />
-      Добавить соответствие
+      {{ $t("marketplace.valueMapEditor.addMapping") }}
     </Button>
 
     <div
@@ -177,17 +177,16 @@ export default {
     >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>
-        Не указаны соответствия для {{ unmappedOptions.length }} из
-        {{ sourceFieldOptions.length }} значений источника
+        {{ $t("marketplace.valueMapEditor.unmappedWarning", { mapped: unmappedOptions.length, total: sourceFieldOptions.length }) }}
       </span>
     </div>
 
     <div class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">valueId по умолчанию (если нет соответствия)</Label>
+      <Label class="text-xs">{{ $t("marketplace.valueMapEditor.defaultValueLabel") }}</Label>
       <Input
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"
-        placeholder="Оставить как есть"
+        :placeholder="$t('marketplace.valueMapEditor.defaultValuePlaceholder')"
         class="h-7 text-xs font-mono"
       />
       <p

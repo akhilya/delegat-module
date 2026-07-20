@@ -132,7 +132,7 @@ export default {
       const file = event.target.files[0];
       if (file) {
         if (!file.name.endsWith('.dll')) {
-          displaySonnerError("Выберите файл с расширением .dll");
+          displaySonnerError(this.$t("marketplace.pluginsPage.selectDllFile"));
           return;
         }
         this.selectedFile = file;
@@ -141,7 +141,7 @@ export default {
 
     async handleUpload() {
       if (!this.selectedFile) {
-        displaySonnerError("Выберите файл плагина");
+        displaySonnerError(this.$t("marketplace.pluginsPage.selectPluginFile"));
         return;
       }
 
@@ -153,7 +153,7 @@ export default {
       await this.uploadPlugin({
         formData,
         onSuccess: () => {
-          displaySonnerSuccess("Плагин загружен");
+          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginUploaded"));
           this.resetUploadForm();
           this.showUploadDialog = false;
           this.fetchData();
@@ -172,7 +172,7 @@ export default {
       await this.deletePlugin({
         pluginKey,
         onSuccess: () => {
-          displaySonnerSuccess("Плагин удалён");
+          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginDeleted"));
           this.fetchData();
         },
         onError: (error) => {
@@ -189,7 +189,7 @@ export default {
       await this.reloadPlugin({
         pluginKey,
         onSuccess: () => {
-          displaySonnerSuccess("Плагин перезагружен");
+          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginReloaded"));
           this.fetchData();
         },
         onError: (error) => {
@@ -237,27 +237,27 @@ export default {
 <template>
   <div>
     <PageHeader
-      title="Плагины"
-      description="Управление DLL-плагинами для интеграции с адаптерами"
+      :title="$t('marketplace.pluginsPage.title')"
+      :description="$t('marketplace.pluginsPage.description')"
     >
       <Dialog v-model:open="showUploadDialog">
         <DialogTrigger as-child>
           <Button>
             <Upload class="size-4 mr-2" />
-            Загрузить плагин
+            {{ $t("marketplace.pluginsPage.uploadPlugin") }}
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Загрузить плагин</DialogTitle>
+            <DialogTitle>{{ $t("marketplace.pluginsPage.uploadPlugin") }}</DialogTitle>
             <DialogDescription>
-              Выберите DLL файл плагина для загрузки
+              {{ $t("marketplace.pluginsPage.selectDllFileToUpload") }}
             </DialogDescription>
           </DialogHeader>
 
           <div class="py-4 space-y-4">
             <div class="space-y-2">
-              <Label>Файл плагина (.dll)</Label>
+              <Label>{{ $t("marketplace.pluginsPage.pluginFileLabel") }}</Label>
               <div class="border-2 border-dashed rounded-lg p-6 text-center">
                 <input
                   ref="fileInput"
@@ -269,14 +269,14 @@ export default {
                 <div v-if="!selectedFile" class="space-y-2">
                   <Package class="size-12 mx-auto text-muted-foreground" />
                   <p class="text-sm text-muted-foreground">
-                    Перетащите файл сюда или
+                    {{ $t("marketplace.pluginsPage.dragFileHere") }}
                   </p>
                   <Button
                     variant="outline"
                     size="sm"
                     @click="$refs.fileInput.click()"
                   >
-                    Выберите файл
+                    {{ $t("marketplace.pluginsPage.chooseFile") }}
                   </Button>
                 </div>
                 <div v-else class="space-y-2">
@@ -290,7 +290,7 @@ export default {
                     size="sm"
                     @click="resetUploadForm"
                   >
-                    Выбрать другой
+                    {{ $t("marketplace.pluginsPage.chooseAnother") }}
                   </Button>
                 </div>
               </div>
@@ -298,20 +298,20 @@ export default {
 
             <div class="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
               <Info class="size-4 inline mr-2" />
-              Плагин должен реализовывать интерфейс IMarketplacePlugin из SDK
+              {{ $t("marketplace.pluginsPage.sdkInterfaceHint") }}
             </div>
           </div>
 
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline" @click="resetUploadForm">Отмена</Button>
+              <Button variant="outline" @click="resetUploadForm">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button
               @click="handleUpload"
               :disabled="isUploading || !selectedFile"
             >
               <Loader2 v-if="isUploading" class="size-4 mr-2 animate-spin" />
-              Загрузить
+              {{ $t("common.upload") }}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -322,13 +322,13 @@ export default {
       :loading="isLoading"
       :empty="plugins.length === 0"
       :empty-icon="Puzzle"
-      empty-title="Нет установленных плагинов"
-      empty-description="Загрузите DLL-плагин для интеграции с адаптером"
+      :empty-title="$t('marketplace.pluginsPage.emptyTitle')"
+      :empty-description="$t('marketplace.pluginsPage.emptyDescription')"
     >
       <template #empty-action>
         <Button @click="showUploadDialog = true">
           <Upload class="size-4 mr-2" />
-          Загрузить плагин
+          {{ $t("marketplace.pluginsPage.uploadPlugin") }}
         </Button>
       </template>
 
@@ -337,13 +337,13 @@ export default {
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
-                <TableHead class="px-3">Плагин</TableHead>
-                <TableHead class="hidden md:table-cell px-3">Ключ</TableHead>
-                <TableHead class="w-24 px-3">Версия</TableHead>
-                <TableHead class="w-32 px-3">Статус</TableHead>
-                <TableHead class="hidden lg:table-cell px-3">Файл</TableHead>
-                <TableHead class="hidden xl:table-cell px-3">Загружен</TableHead>
-                <TableHead class="w-28 px-3">Тип</TableHead>
+                <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
+                <TableHead class="hidden md:table-cell px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
+                <TableHead class="w-24 px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
+                <TableHead class="w-32 px-3">{{ $t("common.status") }}</TableHead>
+                <TableHead class="hidden lg:table-cell px-3">{{ $t("marketplace.pluginsPage.file") }}</TableHead>
+                <TableHead class="hidden xl:table-cell px-3">{{ $t("marketplace.pluginsPage.loaded") }}</TableHead>
+                <TableHead class="w-28 px-3">{{ $t("marketplace.pluginsPage.type") }}</TableHead>
                 <TableHead class="w-24 px-2" />
               </TableRow>
             </TableHeader>
@@ -391,7 +391,7 @@ export default {
                 </TableCell>
                 <TableCell class="px-3 align-top">
                   <Badge :variant="plugin.isSystem ? 'secondary' : 'outline'">
-                    {{ plugin.isSystem ? "Системный" : "Пользовательский" }}
+                    {{ plugin.isSystem ? $t("marketplace.pluginsPage.systemType") : $t("marketplace.pluginsPage.userType") }}
                   </Badge>
                 </TableCell>
                 <TableCell class="px-2 align-top">
@@ -402,7 +402,7 @@ export default {
                       class="size-8"
                       @click="handleReload(plugin.key)"
                       :disabled="isReloading === plugin.key"
-                      title="Перезагрузить"
+                      :title="$t('marketplace.pluginsPage.reload')"
                     >
                       <Loader2
                         v-if="isReloading === plugin.key"
@@ -416,29 +416,26 @@ export default {
                           variant="ghost"
                           size="icon"
                           class="size-8"
-                          title="Удалить"
+                          :title="$t('common.delete')"
                         >
                           <Trash2 class="size-4 text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Удалить плагин?</AlertDialogTitle>
+                          <AlertDialogTitle>{{ $t("marketplace.pluginsPage.deletePluginTitle") }}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Вы уверены что хотите удалить плагин "{{
-                              plugin.displayName
-                            }}"? Подключения, использующие этот плагин, перестанут
-                            работать.
+                            {{ $t("marketplace.pluginsPage.deletePluginDescription", { name: plugin.displayName }) }}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Отмена</AlertDialogCancel>
+                          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                           <AlertDialogAction
                             @click="handleDelete(plugin.key)"
                             :disabled="isDeleting"
                           >
                             <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                            Удалить
+                            {{ $t("common.delete") }}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>

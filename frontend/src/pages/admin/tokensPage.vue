@@ -75,7 +75,7 @@ export default {
         onSuccess: (response) => {
           const newToken = response.data.value.token;
           this.lastCreatedToken = newToken;
-          displaySonnerSuccess("Токен создан");
+          displaySonnerSuccess(this.$t("pages.tokensPage.tokenCreated"));
           this.fetchTokens();
         },
         onError: (error) => {
@@ -89,12 +89,12 @@ export default {
       try {
         await navigator.clipboard.writeText(token);
         this.copiedToken = token;
-        displaySonnerSuccess("Токен скопирован");
+        displaySonnerSuccess(this.$t("pages.tokensPage.tokenCopied"));
         setTimeout(() => {
           this.copiedToken = null;
         }, 2000);
       } catch (err) {
-        displaySonnerError("Не удалось скопировать");
+        displaySonnerError(this.$t("common.copyFailed"));
       }
     },
 
@@ -112,11 +112,11 @@ export default {
 
 <template>
   <div>
-    <PageHeader title="Токены приглашения" description="Управление токенами для регистрации пользователей">
+    <PageHeader :title="$t('pages.tokensPage.title')" :description="$t('pages.tokensPage.description')">
       <Button @click="handleCreateToken" :disabled="isCreating">
         <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
         <Plus v-else class="size-4 mr-2" />
-        Создать токен
+        {{ $t("pages.tokensPage.createToken") }}
       </Button>
     </PageHeader>
 
@@ -126,7 +126,7 @@ export default {
       class="mb-4 rounded-md bg-success-muted p-4"
     >
       <p class="text-sm text-success-foreground mb-2 font-medium">
-        Новый токен создан:
+        {{ $t("pages.tokensPage.newTokenCreated") }}
       </p>
       <div class="flex items-center gap-2">
         <code class="flex-1 p-2 bg-white dark:bg-gray-900 rounded border text-sm font-mono">
@@ -147,13 +147,13 @@ export default {
       :loading="isLoading"
       :empty="tokens.length === 0"
       :empty-icon="Key"
-      empty-title="Нет токенов"
-      empty-description="Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину"
+      :empty-title="$t('pages.tokensPage.emptyTitle')"
+      :empty-description="$t('pages.tokensPage.emptyDescription')"
     >
       <template #empty-action>
         <Button @click="handleCreateToken" :disabled="isCreating">
           <Plus class="size-4 mr-2" />
-          Создать токен
+          {{ $t("pages.tokensPage.createToken") }}
         </Button>
       </template>
 
@@ -162,11 +162,11 @@ export default {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Токен</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Создан</TableHead>
-              <TableHead>Использован</TableHead>
-              <TableHead>Кем</TableHead>
+              <TableHead>{{ $t("pages.tokensPage.columnToken") }}</TableHead>
+              <TableHead>{{ $t("pages.tokensPage.columnStatus") }}</TableHead>
+              <TableHead>{{ $t("pages.tokensPage.columnCreated") }}</TableHead>
+              <TableHead>{{ $t("pages.tokensPage.columnUsed") }}</TableHead>
+              <TableHead>{{ $t("pages.tokensPage.columnUsedBy") }}</TableHead>
               <TableHead class="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -180,10 +180,10 @@ export default {
               <TableCell>
                 <Badge v-if="token.used" variant="secondary">
                   <UserCheck class="size-3 mr-1" />
-                  Использован
+                  {{ $t("pages.tokensPage.statusUsed") }}
                 </Badge>
                 <Badge v-else variant="default">
-                  Активный
+                  {{ $t("pages.tokensPage.statusActive") }}
                 </Badge>
               </TableCell>
               <TableCell class="text-muted-foreground text-sm">

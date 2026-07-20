@@ -84,16 +84,16 @@ export default {
     },
     breadcrumbs() {
       return [
-        { label: "Адаптеры", to: PAGE_MARKETPLACE },
+        { label: this.$t("marketplace.categoryImportPage.adapters"), to: PAGE_MARKETPLACE },
         {
-          label: this.connection?.name || "Подключение",
+          label: this.connection?.name || this.$t("marketplace.categoryImportPage.connection"),
           to: `/adapter/${this.connectionId}?tab=mappings`,
         },
-        { label: "Импорт категории" },
+        { label: this.$t("marketplace.categoryImportPage.importCategory") },
       ];
     },
     adapterLabel() {
-      return this.connection?.adapterKey || "адаптера";
+      return this.connection?.adapterKey || this.$t("marketplace.categoryImportPage.adapterGenitive");
     },
     importAttributeFields() {
       return this.importExternalFields.filter((f) => !f.isBaseField);
@@ -122,7 +122,7 @@ export default {
     localCategoryOptions() {
       return this.localCategories.map((c) => ({
         value: c.id,
-        label: `${c.name} (${c.attributesCount} атр.)`,
+        label: `${c.name} (${this.$t("marketplace.categoryImportPage.attrsAbbrCount", { count: c.attributesCount })})`,
       }));
     },
   },
@@ -147,7 +147,7 @@ export default {
         connectionId: this.connectionId,
         onSuccess: (response) => {
           this.connection = extractResponseData(response);
-          setPageTitle(`Импорт · ${this.connection.name}`);
+          setPageTitle(`${this.$t("marketplace.categoryImportPage.importShort")} · ${this.connection.name}`);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -279,12 +279,12 @@ export default {
 
     async handleImportCategory() {
       if (!this.importCategoryId) {
-        displaySonnerError("Выберите категорию адаптера");
+        displaySonnerError(this.$t("marketplace.categoryImportPage.selectAdapterCategory"));
         return;
       }
 
       if (this.importMode === "existing" && !this.importTargetCategoryId) {
-        displaySonnerError("Выберите существующую категорию");
+        displaySonnerError(this.$t("marketplace.categoryImportPage.selectExistingCategory"));
         return;
       }
 
@@ -307,7 +307,7 @@ export default {
         },
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
-          displaySonnerSuccess(result.message || "Категория импортирована");
+          displaySonnerSuccess(result.message || this.$t("marketplace.categoryImportPage.categoryImported"));
           this.$router.push(`/adapter/${this.connectionId}?tab=mappings`);
         },
         onError: (error) => {
@@ -333,11 +333,11 @@ export default {
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="min-w-0 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-lg font-semibold">Импорт категории</h1>
+              <h1 class="text-lg font-semibold">{{ $t("marketplace.categoryImportPage.importCategory") }}</h1>
               <Badge variant="outline">{{ connection.name }}</Badge>
             </div>
             <p class="text-sm text-muted-foreground">
-              Выберите категорию {{ adapterLabel }}, настройте поля и импортируйте её в локальный каталог.
+              {{ $t("marketplace.categoryImportPage.pageDescription", { adapterLabel }) }}
             </p>
           </div>
           <Button
@@ -347,9 +347,9 @@ export default {
           >
             <Loader2 v-if="isImporting" class="size-4 mr-2 animate-spin" />
             <Download v-else class="size-4 mr-2" />
-            Импортировать
+            {{ $t("marketplace.categoryImportPage.import") }}
             <template v-if="importSelectedFieldKeys.length > 0">
-              · {{ importSelectedFieldKeys.length }} атр.
+              · {{ $t("marketplace.categoryImportPage.attrsAbbrCount", { count: importSelectedFieldKeys.length }) }}
             </template>
           </Button>
         </div>
@@ -359,17 +359,17 @@ export default {
           class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
         >
           <FolderTree class="size-4 shrink-0 text-muted-foreground" />
-          <span class="text-muted-foreground">Источник:</span>
+          <span class="text-muted-foreground">{{ $t("marketplace.categoryImportPage.source") }}</span>
           <span class="font-medium">{{ selectedCategoryLabel }}</span>
           <ArrowRight class="size-4 text-muted-foreground" />
-          <span class="text-muted-foreground">Локальный каталог</span>
+          <span class="text-muted-foreground">{{ $t("marketplace.categoryImportPage.localCatalog") }}</span>
         </div>
 
         <div class="grid gap-4 xl:grid-cols-2 xl:gap-5">
           <SettingsFormSection
             class="!max-w-none min-w-0"
-            title="Категория адаптера"
-            description="Найдите категорию в дереве или укажите её ID вручную."
+            :title="$t('marketplace.categoryImportPage.adapterCategory')"
+            :description="$t('marketplace.categoryImportPage.adapterCategoryDescription')"
           >
             <div class="flex gap-2">
               <div class="relative min-w-0 flex-1">
@@ -378,7 +378,7 @@ export default {
                 />
                 <Input
                   v-model="externalCategorySearch"
-                  placeholder="Поиск по названию..."
+                  :placeholder="$t('marketplace.categoryImportPage.searchByNamePlaceholder')"
                   class="pl-9"
                   @keyup.enter="searchExternalCategories"
                 />
@@ -386,7 +386,7 @@ export default {
               <Button
                 variant="outline"
                 size="icon"
-                aria-label="Найти категории"
+                :aria-label="$t('marketplace.categoryImportPage.findCategories')"
                 @click="searchExternalCategories"
               >
                 <Search class="size-4" />
@@ -426,7 +426,7 @@ export default {
               @click="navigateBack"
             >
               <ChevronLeft class="size-4 mr-2" />
-              Назад
+              {{ $t("common.back") }}
             </Button>
 
             <div
@@ -444,8 +444,8 @@ export default {
               >
                 <EmptyState
                   size="sm"
-                  title="Категории не найдены"
-                  description="Измените поисковый запрос или поднимитесь на уровень выше."
+                  :title="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
+                  :description="$t('marketplace.categoryImportPage.categoriesNotFoundDescription')"
                 >
                   <template #icon>
                     <Search />
@@ -483,17 +483,17 @@ export default {
             </div>
 
             <SettingsFormField
-              label="ID категории"
+              :label="$t('marketplace.categoryImportPage.categoryIdLabel')"
               label-for="import-category-id"
             >
               <Input
                 id="import-category-id"
                 v-model="importCategoryId"
-                placeholder="Выберите категорию выше или введите ID"
+                :placeholder="$t('marketplace.categoryImportPage.categoryIdPlaceholder')"
                 @change="onManualCategoryIdChange"
               />
               <template #description>
-                Можно указать ID вручную, если категории нет в списке.
+                {{ $t("marketplace.categoryImportPage.categoryIdDescription") }}
               </template>
             </SettingsFormField>
           </SettingsFormSection>
@@ -505,8 +505,8 @@ export default {
             >
               <EmptyState
                 size="sm"
-                title="Выберите категорию"
-                description="Сначала укажите категорию адаптера слева — здесь появятся настройки импорта."
+                :title="$t('marketplace.categoryImportPage.selectCategoryTitle')"
+                :description="$t('marketplace.categoryImportPage.selectCategoryDescription')"
               >
                 <template #icon>
                   <FolderTree />
@@ -519,14 +519,14 @@ export default {
               class="flex min-h-48 flex-col items-center justify-center gap-2 rounded-lg border py-8 text-muted-foreground"
             >
               <Loader2 class="size-6 animate-spin" />
-              <span class="text-sm">Загрузка полей категории...</span>
+              <span class="text-sm">{{ $t("marketplace.categoryImportPage.loadingCategoryFields") }}</span>
             </div>
 
             <template v-else-if="hasImportConfig">
               <SettingsFormSection
                 class="!max-w-none"
-                title="Куда импортировать"
-                description="Создайте новую локальную категорию или дополните существующую."
+                :title="$t('marketplace.categoryImportPage.whereToImportTitle')"
+                :description="$t('marketplace.categoryImportPage.whereToImportDescription')"
               >
                 <RadioGroup v-model="importMode" class="gap-4">
                   <div class="space-y-3">
@@ -537,14 +537,14 @@ export default {
                         class="flex cursor-pointer items-center gap-2 text-sm font-medium"
                       >
                         <Sparkles class="size-4 text-warning" />
-                        Создать новую категорию
+                        {{ $t("marketplace.categoryImportPage.createNewCategory") }}
                       </label>
                     </div>
                     <div v-if="importMode === 'new'" class="pl-7">
-                      <SettingsFormField label="Название категории">
+                      <SettingsFormField :label="$t('marketplace.categoryImportPage.categoryNameLabel')">
                         <Input
                           v-model="importCategoryName"
-                          placeholder="Оставьте пустым — возьмём название из адаптера"
+                          :placeholder="$t('marketplace.categoryImportPage.categoryNamePlaceholder')"
                         />
                       </SettingsFormField>
                     </div>
@@ -558,17 +558,17 @@ export default {
                         class="flex cursor-pointer items-center gap-2 text-sm font-medium"
                       >
                         <Link2 class="size-4 text-muted-foreground" />
-                        В существующую категорию
+                        {{ $t("marketplace.categoryImportPage.intoExistingCategory") }}
                       </label>
                     </div>
                     <div v-if="importMode === 'existing'" class="pl-7">
-                      <SettingsFormField label="Локальная категория">
+                      <SettingsFormField :label="$t('marketplace.categoryImportPage.localCategoryLabel')">
                         <SearchableSelect
                           :model-value="importTargetCategoryId"
                           :options="localCategoryOptions"
-                          placeholder="Выберите категорию..."
-                          search-placeholder="Поиск категории..."
-                          empty-text="Категории не найдены"
+                          :placeholder="$t('marketplace.categoryImportPage.selectCategoryPlaceholder')"
+                          :search-placeholder="$t('marketplace.categoryImportPage.searchCategoryPlaceholder')"
+                          :empty-text="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
                           @update:model-value="importTargetCategoryId = $event"
                         />
                       </SettingsFormField>
@@ -581,21 +581,20 @@ export default {
                   class="rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
                 >
                   <span class="font-medium text-foreground">
-                    {{ importBaseFields.length }} базовых полей
+                    {{ $t("marketplace.categoryImportPage.baseFieldsCount", { count: importBaseFields.length }) }}
                   </span>
-                  — SKU, название, описание, цена, остатки и изображения — будут
-                  автоматически связаны с полями товара.
+                  {{ $t("marketplace.categoryImportPage.baseFieldsHint") }}
                 </p>
               </SettingsFormSection>
 
               <SettingsFormSection
                 class="!max-w-none"
-                :title="`Атрибуты для импорта (${importSelectedFieldKeys.length} / ${importAttributeFields.length})`"
-                description="Выберите дополнительные поля категории, которые нужно перенести."
+                :title="$t('marketplace.categoryImportPage.attributesForImportTitle', { selected: importSelectedFieldKeys.length, total: importAttributeFields.length })"
+                :description="$t('marketplace.categoryImportPage.attributesForImportDescription')"
               >
                 <div class="flex justify-end">
                   <Button variant="ghost" size="sm" @click="toggleAllFields">
-                    {{ allAttributeFieldsSelected ? "Снять все" : "Выбрать все" }}
+                    {{ allAttributeFieldsSelected ? $t("marketplace.categoryImportPage.deselectAll") : $t("marketplace.categoryImportPage.selectAll") }}
                   </Button>
                 </div>
 
@@ -603,7 +602,7 @@ export default {
                   v-if="importAttributeFields.length === 0"
                   class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground"
                 >
-                  Нет дополнительных атрибутов для импорта
+                  {{ $t("marketplace.categoryImportPage.noAdditionalAttributes") }}
                 </div>
 
                 <div
@@ -641,13 +640,13 @@ export default {
                         variant="destructive"
                         class="text-xs font-normal"
                       >
-                        обяз.
+                        {{ $t("marketplace.categoryImportPage.requiredAbbr") }}
                       </Badge>
                       <span
                         v-if="field.optionsCount > 0"
                         class="text-xs tabular-nums text-muted-foreground"
                       >
-                        {{ field.optionsCount }} опц.
+                        {{ $t("marketplace.categoryImportPage.optionsAbbrCount", { count: field.optionsCount }) }}
                       </span>
                     </div>
                   </button>

@@ -12,6 +12,7 @@
  * GraphNode / GraphNodeData (Services/Marketplace/Graph/MappingGraph.cs).
  */
 import { MODIFIER_CATALOG, getModifierLabel } from "../modifierCatalog.js";
+import { t, tm } from "@/i18n";
 
 // ---- Pin types & colors --------------------------------------------------
 
@@ -26,20 +27,20 @@ export const PIN_COLORS = {
   any: "#9ca3af", // gray
 };
 
-export const PIN_TYPE_LABELS = {
-  string: "Текст",
-  select: "Выбор",
-  number: "Число",
-  integer: "Целое",
-  boolean: "Логическое",
-  multiselect: "Список",
-  array: "Список",
-  any: "Любой",
+const PIN_TYPE_LABEL_KEYS = {
+  string: "text",
+  select: "select",
+  number: "number",
+  integer: "integer",
+  boolean: "boolean",
+  multiselect: "list",
+  array: "list",
+  any: "any",
 };
 
 export const pinColor = (type) => PIN_COLORS[type] || PIN_COLORS.any;
 export const pinTypeLabel = (type) =>
-  PIN_TYPE_LABELS[type] || PIN_TYPE_LABELS.any;
+  t(`marketplace.graph.pinTypes.${PIN_TYPE_LABEL_KEYS[type] || PIN_TYPE_LABEL_KEYS.any}`);
 
 /**
  * Output pin type of a modifier node given its input type.
@@ -110,30 +111,27 @@ export const SOURCE_NODE_TYPES = [
  */
 export const OP_SPECS = {
   formatString: {
-    label: "Формат строки",
-    aliases: ["format", "sprintf", "template", "шаблон", "format string"],
+    aliases: ["format", "sprintf", "template", "format string"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
     accepts: null, // any
     params: [
-      { key: "template", type: "text", label: "Шаблон", default: "{0}x{1}" },
+      { key: "template", type: "text", default: "{0}x{1}" },
     ],
   },
   join: {
-    label: "Объединить",
-    aliases: ["join", "concat", "merge", "combine", "склеить", "соединить"],
+    aliases: ["join", "concat", "merge", "combine"],
     icon: "Braces",
     inputs: "multi",
     output: "string",
     accepts: null,
     params: [
-      { key: "delimiter", type: "text", label: "Разделитель", default: "x" },
+      { key: "delimiter", type: "text", default: "x" },
     ],
   },
   makeArray: {
-    label: "Создать массив",
-    aliases: ["array", "create", "new array", "make array", "список", "коллекция"],
+    aliases: ["array", "create", "new array", "make array", "collection"],
     icon: "List",
     inputs: "multi",
     output: "array",
@@ -141,38 +139,33 @@ export const OP_SPECS = {
     params: [],
   },
   arrayAppend: {
-    label: "Добавить в массив",
-    aliases: ["push", "append", "add", "insert", "добавить"],
+    aliases: ["push", "append", "add", "insert"],
     icon: "List",
     inputs: 2,
-    inputLabels: ["массив", "элемент"],
     output: "array",
     accepts: null,
     params: [],
   },
   splitToArray: {
-    label: "Разбить в массив",
-    aliases: ["split", "explode", "parse", "separate", "разделить", "разбить"],
+    aliases: ["split", "explode", "parse", "separate"],
     icon: "List",
     inputs: "single",
     output: "array",
     accepts: ["string", "text", "select"],
     params: [
-      { key: "delimiter", type: "text", label: "Разделитель", default: "," },
+      { key: "delimiter", type: "text", default: "," },
     ],
   },
   arrayIndex: {
-    label: "Элемент по индексу",
-    aliases: ["index", "get", "nth", "at", "взять", "получить", "element"],
+    aliases: ["index", "get", "nth", "at", "element"],
     icon: "List",
     inputs: "single",
     output: "string",
     accepts: ["array", "multiselect"],
-    params: [{ key: "index", type: "number", label: "Индекс", default: 0 }],
+    params: [{ key: "index", type: "number", default: 0 }],
   },
   arrayLength: {
-    label: "Длина массива",
-    aliases: ["length", "count", "size", "len", "количество"],
+    aliases: ["length", "count", "size", "len"],
     icon: "List",
     inputs: "single",
     output: "number",
@@ -182,19 +175,16 @@ export const OP_SPECS = {
 
   // ---- General-purpose logic / predicate blocks (pure functions) ----
   ifElse: {
-    label: "Если",
-    aliases: ["if", "condition", "ternary", "when", "условие", "тернар"],
+    aliases: ["if", "condition", "ternary", "when"],
     icon: "GitBranch",
     category: "logic",
     inputs: 3,
-    inputLabels: ["условие", "если да", "если нет"],
     output: "any",
     accepts: null,
     params: [],
   },
   not: {
-    label: "Не",
-    aliases: ["not", "negate", "invert", "!", "логическое не"],
+    aliases: ["not", "negate", "invert", "!"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -203,8 +193,7 @@ export const OP_SPECS = {
     params: [],
   },
   and: {
-    label: "И",
-    aliases: ["and", "&&", "all", "both", "все"],
+    aliases: ["and", "&&", "all", "both"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -213,8 +202,7 @@ export const OP_SPECS = {
     params: [],
   },
   or: {
-    label: "Или",
-    aliases: ["or", "||", "any", "OR", "один из"],
+    aliases: ["or", "||", "any", "OR", "either"],
     icon: "Binary",
     category: "logic",
     inputs: "multi",
@@ -223,63 +211,52 @@ export const OP_SPECS = {
     params: [],
   },
   equals: {
-    label: "Равно",
-    aliases: ["equals", "equal", "==", "compare", "eq", "сравнить"],
+    aliases: ["equals", "equal", "==", "compare", "eq"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
-    inputLabels: ["A", "B"],
     output: "boolean",
     accepts: null,
     params: [],
   },
   notEquals: {
-    label: "Не равно",
-    aliases: ["not equal", "!=", "different", "neq", "не равно"],
+    aliases: ["not equal", "!=", "different", "neq"],
     icon: "Equal",
     category: "logic",
     inputs: 2,
-    inputLabels: ["A", "B"],
     output: "boolean",
     accepts: null,
     params: [],
   },
   greaterThan: {
-    label: "Больше",
-    aliases: ["greater", ">", "more than", "gt", "больше чем"],
+    aliases: ["greater", ">", "more than", "gt"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
-    inputLabels: ["A", "B"],
     output: "boolean",
     accepts: ["number", "integer"],
     params: [],
   },
   lessThan: {
-    label: "Меньше",
-    aliases: ["less", "<", "less than", "lt", "меньше чем"],
+    aliases: ["less", "<", "less than", "lt"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
-    inputLabels: ["A", "B"],
     output: "boolean",
     accepts: ["number", "integer"],
     params: [],
   },
   contains: {
-    label: "Содержит",
-    aliases: ["contains", "includes", "indexOf", "has", "search", "поиск", "include"],
+    aliases: ["contains", "includes", "indexOf", "has", "search", "include"],
     icon: "Binary",
     category: "logic",
     inputs: 2,
-    inputLabels: ["где", "что"],
     output: "boolean",
     accepts: null,
     params: [],
   },
   isEmpty: {
-    label: "Пусто",
-    aliases: ["empty", "null", "nil", "undefined", "is empty", "нет значения", "isnull"],
+    aliases: ["empty", "null", "nil", "undefined", "is empty", "isnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -288,8 +265,7 @@ export const OP_SPECS = {
     params: [],
   },
   isValid: {
-    label: "Заполнено",
-    aliases: ["filled", "not empty", "has value", "not null", "непусто", "isnotnull"],
+    aliases: ["filled", "not empty", "has value", "not null", "isnotnull"],
     icon: "Binary",
     category: "logic",
     inputs: "single",
@@ -299,6 +275,22 @@ export const OP_SPECS = {
   },
 };
 export const OP_NODE_TYPES = Object.keys(OP_SPECS);
+
+/** Translated display label for an op-node type (was OP_SPECS[type].label). */
+export function opLabel(type) {
+  return t(`marketplace.graph.opSpecs.${type}.label`);
+}
+
+/** Translated label for an op-node's own param (was param.label). */
+export function opParamLabel(type, paramKey) {
+  return t(`marketplace.graph.opSpecs.${type}.params.${paramKey}`);
+}
+
+/** Translated input pin labels for fixed/multi-input op nodes (was spec.inputLabels). */
+export function opInputLabels(type) {
+  const arr = tm(`marketplace.graph.opSpecs.${type}.inputLabels`);
+  return Array.isArray(arr) ? arr : [];
+}
 
 let _seq = 0;
 export function genId(prefix = "n") {
@@ -326,7 +318,7 @@ function normalizeSourceType(sourceType) {
 const COL_W = 280;
 const ROW_H = 150;
 
-/** Fixed id of the single "Поля адаптера" sink node. */
+/** Fixed id of the single "adapter fields" sink node. */
 export const ADAPTER_NODE_ID = "adapter-fields";
 /** Fixed id of the dedicated price-API sink node. */
 export const ADAPTER_PRICE_NODE_ID = "adapter-price-fields";
@@ -476,7 +468,7 @@ export function autoMigrate(fieldMappings, sources = {}) {
     edges.push(makeEdge(prevId, ADAPTER_NODE_ID, `f:${fm.externalFieldKey}`));
   });
 
-  // Single "Поля адаптера" sink: one input pin per marketplace field.
+  // Single "adapter fields" sink: one input pin per marketplace field.
   nodes.push({
     id: ADAPTER_NODE_ID,
     type: "adapterFields",
@@ -532,14 +524,14 @@ function makeSourceNode(fm, position, sources) {
       });
     case "GroupName":
       return node("groupName", position, {
-        label: "Название группы",
+        label: t("marketplace.graph.groupNameLabel"),
         valueType,
       });
     case "Static":
     default:
       return node("static", position, {
         staticValue: fm.staticValue,
-        label: fm.staticValue || "Статическое значение",
+        label: fm.staticValue || t("marketplace.graph.staticValueLabel"),
         valueType,
       });
   }
@@ -566,7 +558,7 @@ function makeEdge(source, target, targetHandle = "in") {
 
 function attributeLabel(id, list) {
   const found = (list || []).find((a) => a.id === id);
-  return found ? found.name : `Атрибут #${id ?? "?"}`;
+  return found ? found.name : t("marketplace.graph.attributeFallback", { id: id ?? "?" });
 }
 
 export function mergeProductFieldSources(sources) {
@@ -586,7 +578,7 @@ function productFieldLabel(key, sources) {
 function productFieldType(key, sources) {
   const found = mergeProductFieldSources(sources).find((f) => f.key === key);
   if (found?.type) return found.type;
-  if (key === "images") return "array"; // Изображения = Массив<Текст>
+  if (key === "images") return "array"; // Images = Array<Text>
   return null;
 }
 
@@ -610,45 +602,45 @@ export function createSourceNode(kind, position, payload = {}) {
       });
     case "groupName":
       return node("groupName", position, {
-        label: "Название группы",
+        label: t("marketplace.graph.groupNameLabel"),
         valueType: "string",
       });
     case "storeFileUrl":
       return node("storeFileUrl", position, {
         storeFileId: payload.id ?? null,
-        label: payload.fileName || "Файл магазина",
+        label: payload.fileName || t("marketplace.graph.storeFileLabel"),
         valueType: "string",
       });
     case "storeFileContent":
       return node("storeFileContent", position, {
         storeFileId: payload.id ?? null,
-        label: payload.fileName || "Файл магазина",
+        label: payload.fileName || t("marketplace.graph.storeFileLabel"),
         valueType: "string",
       });
     case "productFileByName":
       return node("productFileByName", position, {
         fileName: payload.fileName || "",
-        label: payload.fileName || "Файл товара по имени",
+        label: payload.fileName || t("marketplace.graph.productFileByNameLabel"),
         valueType: "string",
       });
     case "productFileContentByName":
       return node("productFileContentByName", position, {
         fileName: payload.fileName || "",
-        label: payload.fileName || "Файл товара по имени",
+        label: payload.fileName || t("marketplace.graph.productFileByNameLabel"),
         valueType: "string",
       });
     case "productFilesByExtension":
       return node("productFilesByExtension", position, {
         fileExtension: payload.fileExtension || "",
         label: payload.fileExtension
-          ? `Файлы *.${payload.fileExtension}`
-          : "Файлы товара по расширению",
+          ? `${t("marketplace.graph.productFilesByExtensionPrefix")}${payload.fileExtension}`
+          : t("marketplace.graph.productFilesByExtensionLabel"),
         valueType: "array",
       });
     case "static":
     default:
-      // Also backs the typed literal nodes (Число / Текст / Логическое / Список) via valueType.
-      // When payload.isAdapterValue is true, creates a "Стандартное значение" node with
+      // Also backs the typed literal nodes (Number / Text / Boolean / List) via valueType.
+      // When payload.isAdapterValue is true, creates a "standard value" node with
       // options populated from the adapter field's parsedOptions. Stored as "static" for
       // backend compatibility — backend evaluates staticValue as a plain constant.
       return node("static", position, {
@@ -873,12 +865,14 @@ export function validateGraph(nodes, edges) {
       );
       (n.data?.fields || []).forEach((f) => {
         if (f.isRequired && !f.source && !connected.has(f.fieldKey)) {
-          const block =
-            n.type === "adapterPriceFields" ? "цен" : "адаптера";
+          const key =
+            n.type === "adapterPriceFields"
+              ? "marketplace.graph.validation.fieldNotConnectedPrice"
+              : "marketplace.graph.validation.fieldNotConnectedAdapter";
           issues.push({
             level: "warning",
             nodeId: n.id,
-            message: `Поле ${block} «${f.label || f.fieldKey}» не подключено`,
+            message: t(key, { label: f.label || f.fieldKey }),
           });
         }
       });
@@ -891,7 +885,7 @@ export function validateGraph(nodes, edges) {
       issues.push({
         level: "warning",
         nodeId: n.id,
-        message: "Узел без входа",
+        message: t("marketplace.graph.validation.nodeWithoutInput"),
       });
     }
 
@@ -899,7 +893,7 @@ export function validateGraph(nodes, edges) {
       issues.push({
         level: "error",
         nodeId: n.id,
-        message: `Неизвестный модификатор: ${n.data?.modifierType}`,
+        message: t("marketplace.graph.validation.unknownModifier", { type: n.data?.modifierType }),
       });
     }
   });
@@ -907,7 +901,7 @@ export function validateGraph(nodes, edges) {
   if (hasCycle(nodes, edges)) {
     issues.push({
       level: "error",
-      message: "Граф содержит цикл — он не будет выполнен",
+      message: t("marketplace.graph.validation.graphHasCycle"),
     });
   }
 
@@ -1157,9 +1151,9 @@ export function analyzeFields(nodes, edges) {
           ? "groupName"
           : `${s.type}:${JSON.stringify(s)}`;
         if (s.type === "productField") {
-          // productField-пил двунаправленный по умолчанию.
-          // explicitImport=true позволяет fan-out-детектору выбрать его "победителем",
-          // даже если другие graph-пути к тому же productField явно export-only.
+          // productField bindings are bidirectional by default.
+          // explicitImport=true lets the fan-out detector pick this one as the "winner",
+          // even if other graph paths to the same productField are explicitly export-only.
           putEntry(adapter.id, key, { importable: true, reversible: true, connected: true, _sk: sk, explicitImport: true });
           projections.push({
             externalFieldKey: key,
@@ -1354,7 +1348,7 @@ export function adapterSourceLabels(nodes, edges) {
       } else {
         // fan-in / op — name the producing node
         label =
-          OP_SPECS[cur.type]?.label ||
+          (OP_SPECS[cur.type] ? opLabel(cur.type) : null) ||
           (cur.type === "modifier"
             ? MODIFIER_CATALOG[cur.data?.modifierType]?.displayName
             : null) ||

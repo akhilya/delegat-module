@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { Handle, Position } from "@vue-flow/core";
 import { Wand2, AlertTriangle } from "lucide-vue-next";
 import { MODIFIER_CATALOG } from "../../modifierCatalog.js";
@@ -12,6 +13,7 @@ import {
 } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
 
+const { t } = useI18n();
 
 const props = defineProps({
   id: String,
@@ -21,7 +23,7 @@ const props = defineProps({
 
 const catalog = computed(() => MODIFIER_CATALOG[props.data.modifierType]);
 const title = computed(
-  () => catalog.value?.displayName || props.data.modifierType || "Модификатор",
+  () => catalog.value?.displayName || props.data.modifierType || t("marketplace.graph.modifierFallback"),
 );
 const summary = computed(() =>
   catalog.value ? catalog.value.summary(props.data.params || {}) : "",
@@ -98,12 +100,12 @@ const paramPinRowOffset = computed(
       <AlertTriangle
         v-if="irreversible"
         class="vf-card__warn cursor-help"
-        title="Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть."
+        :title="t('marketplace.graph.irreversibleWarning')"
       />
     </div>
 
     <div v-if="hasPins && !collapsed" class="vf-mod__pins">
-      <div class="vf-mod__pin-row vf-mod__pin-row--value">значение</div>
+      <div class="vf-mod__pin-row vf-mod__pin-row--value">{{ t('marketplace.graph.valueRowLabel') }}</div>
       <div
         v-for="pin in fieldPins"
         :key="pin.id"

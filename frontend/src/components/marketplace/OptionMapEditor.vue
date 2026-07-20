@@ -149,13 +149,13 @@ export default {
 
 <template>
   <div class="space-y-2">
-    <Label class="text-xs font-medium">Соответствия: вариант → вариант адаптера</Label>
+    <Label class="text-xs font-medium">{{ $t("marketplace.optionMapEditor.title") }}</Label>
 
     <p
       v-if="!sourceOptions.length"
       class="text-[11px] text-muted-foreground"
     >
-      Слева — варианты источника. Подключите блок к атрибуту категории с вариантами.
+      {{ $t("marketplace.optionMapEditor.sourceOptionsHint") }}
     </p>
 
     <div
@@ -164,7 +164,7 @@ export default {
     >
       <Select :model-value="NONE" @update:model-value="onFieldPick">
         <SelectTrigger class="h-7 text-xs">
-          <SelectValue placeholder="Загрузить варианты из поля адаптера..." />
+          <SelectValue :placeholder="$t('marketplace.optionMapEditor.loadFromFieldPlaceholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem
@@ -178,7 +178,7 @@ export default {
         </SelectContent>
       </Select>
       <p class="text-[11px] text-muted-foreground">
-        Или подключите блок к полю адаптера — варианты подтянутся автоматически.
+        {{ $t("marketplace.optionMapEditor.loadFromFieldHint") }}
       </p>
     </div>
 
@@ -193,7 +193,7 @@ export default {
         :model-value="row.from || ''"
         :disabled="!sourceOptions.length"
         @update:modelValue="(v) => onFromChange(index, v)"
-        placeholder="Вариант источника"
+        :placeholder="$t('marketplace.optionMapEditor.sourceOptionPlaceholder')"
         :search-threshold="3"
       />
       <ArrowRight class="size-3 shrink-0 text-muted-foreground" />
@@ -203,7 +203,7 @@ export default {
         :model-value="row.to || ''"
         :disabled="!selectOptions.length"
         @update:modelValue="(v) => onToChange(index, v)"
-        placeholder="Вариант адаптера"
+        :placeholder="$t('marketplace.optionMapEditor.adapterOptionPlaceholder')"
         :search-threshold="3"
       />
       <Button
@@ -218,7 +218,7 @@ export default {
 
     <Button variant="outline" size="sm" class="w-full h-7 text-xs" @click="addRow">
       <Plus class="size-3 mr-1" />
-      Добавить соответствие
+      {{ $t("marketplace.optionMapEditor.addMapping") }}
     </Button>
 
     <div
@@ -227,28 +227,27 @@ export default {
     >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>
-        Не указаны соответствия для {{ unmappedOptions.length }} из
-        {{ sourceFieldOptions.length }} значений категории
+        {{ $t("marketplace.optionMapEditor.unmappedWarning", { mapped: unmappedOptions.length, total: sourceFieldOptions.length }) }}
       </span>
     </div>
 
     <div v-if="selectOptions.length > 0" class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">Вариант по умолчанию (если нет соответствия)</Label>
+      <Label class="text-xs">{{ $t("marketplace.optionMapEditor.defaultOptionLabel") }}</Label>
       <SearchableSelect
         class="h-7 text-xs"
         :options="selectOptions"
         :model-value="localDefault || ''"
         @update:modelValue="onDefaultChange"
-        placeholder="Оставить как есть"
+        :placeholder="$t('marketplace.optionMapEditor.defaultValuePlaceholder')"
         :search-threshold="3"
       />
     </div>
     <div v-else class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">По умолчанию (если нет соответствия)</Label>
+      <Label class="text-xs">{{ $t("marketplace.optionMapEditor.defaultValueLabel") }}</Label>
       <Input
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"
-        placeholder="Оставить как есть"
+        :placeholder="$t('marketplace.optionMapEditor.defaultValuePlaceholder')"
         class="h-7 text-xs"
       />
     </div>

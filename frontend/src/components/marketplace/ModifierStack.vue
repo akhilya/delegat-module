@@ -223,7 +223,7 @@ export default {
           :model-value="mod.enabled !== false"
           @update:modelValue="(v) => onToggleEnabled(index, v)"
           class="shrink-0"
-          title="Включить/выключить модификатор"
+          :title="$t('marketplaceStack.toggleModifier')"
         />
         <span :class="['text-sm font-medium flex-1 truncate', mod.enabled === false && 'line-through text-muted-foreground']">
           {{ getCatalog(mod.type)?.displayName || mod.type }}
@@ -231,10 +231,10 @@ export default {
         <span
           v-if="!isReversible(mod.type)"
           class="inline-flex items-center gap-0.5 text-warning shrink-0"
-          title="При импорте значение не будет восстановлено"
+          :title="$t('marketplaceStack.irreversibleHint')"
         >
           <AlertTriangle class="size-3" />
-          <span class="text-xs leading-none">необратимый</span>
+          <span class="text-xs leading-none">{{ $t("marketplaceStack.irreversibleBadge") }}</span>
         </span>
         <div v-if="!disabled" class="flex items-center gap-0.5 shrink-0">
           <Button
@@ -244,7 +244,7 @@ export default {
             class="size-6 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             :disabled="index === 0"
             @click="moveModifier(index, -1)"
-            title="Переместить вверх"
+            :title="$t('marketplaceStack.moveUp')"
           >
             <ChevronUp class="size-3.5" />
           </Button>
@@ -255,7 +255,7 @@ export default {
             class="size-6 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             :disabled="index === modifiers.length - 1"
             @click="moveModifier(index, 1)"
-            title="Переместить вниз"
+            :title="$t('marketplaceStack.moveDown')"
           >
             <ChevronDown class="size-3.5" />
           </Button>
@@ -265,7 +265,7 @@ export default {
             size="icon"
             class="size-6 p-0.5 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             @click="removeModifier(index)"
-            title="Удалить модификатор"
+            :title="$t('marketplaceStack.removeModifier')"
           >
             <X class="size-3.5" />
           </Button>
@@ -322,7 +322,7 @@ export default {
                   :model-value="tagInputValues[getTagInputKey(index, param.key)] || ''"
                   @update:modelValue="(v) => (tagInputValues[getTagInputKey(index, param.key)] = v)"
                   @keydown.enter.prevent="addTag(index, param.key)"
-                  placeholder="Введите значение…"
+                  :placeholder="$t('marketplaceStack.enterValuePlaceholder')"
                   class="h-7 text-xs flex-1"
                 />
                 <Button
@@ -366,7 +366,7 @@ export default {
                 @update:modelValue="(v) => onParamChange(index, param.key, v ? Number(v) : undefined)"
               >
                 <SelectTrigger class="h-7 text-xs">
-                  <SelectValue placeholder="Выберите модель" />
+                  <SelectValue :placeholder="$t('marketplaceStack.chooseModelPlaceholder')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
@@ -458,7 +458,7 @@ export default {
           class="w-full h-auto flex items-center justify-center gap-1.5 px-3 py-2 border-dashed text-sm text-muted-foreground hover:border-foreground/40 hover:text-foreground"
         >
           <Plus class="size-4" />
-          Добавить модификатор
+          {{ $t("marketplaceStack.addModifier") }}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-56">

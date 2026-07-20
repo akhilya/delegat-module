@@ -1,6 +1,9 @@
 <script setup>
 import { AlertTriangle, CheckCircle2, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 defineProps({
   plan: { type: Object, required: true },
@@ -35,21 +38,21 @@ defineEmits(["confirm", "cancel"]);
 
     <!-- Affected count -->
     <div v-if="plan.affectedCount" class="text-xs text-muted-foreground mb-2">
-      Затронуто: <span class="text-foreground font-medium">{{ plan.affectedCount }}</span>
+      {{ t("ai.planAffected") }} <span class="text-foreground font-medium">{{ plan.affectedCount }}</span>
     </div>
 
     <!-- Actions / Status -->
     <div v-if="!confirmed && !cancelled" class="flex gap-2 mt-2">
-      <Button size="sm" class="h-7 text-xs" @click="$emit('confirm')">Выполнить</Button>
-      <Button variant="ghost" size="sm" class="h-7 text-xs" @click="$emit('cancel')">Отмена</Button>
+      <Button size="sm" class="h-7 text-xs" @click="$emit('confirm')">{{ t("ai.planExecute") }}</Button>
+      <Button variant="ghost" size="sm" class="h-7 text-xs" @click="$emit('cancel')">{{ t("common.cancel") }}</Button>
     </div>
     <div v-else-if="confirmed" class="flex items-center gap-1 text-xs text-muted-foreground mt-1">
       <CheckCircle2 class="size-3 text-green-600" />
-      <span>Выполняю…</span>
+      <span>{{ t("ai.planExecuting") }}</span>
     </div>
     <div v-else-if="cancelled" class="flex items-center gap-1 text-xs text-muted-foreground mt-1">
       <X class="size-3" />
-      <span>Отменено</span>
+      <span>{{ t("ai.planCancelled") }}</span>
     </div>
   </div>
 </template>

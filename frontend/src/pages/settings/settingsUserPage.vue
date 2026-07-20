@@ -11,6 +11,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2, Copy, Trash2, KeyRound, ExternalLink } from "lucide-vue-next";
+import { t } from "@/i18n";
 
 const me = ref(null);
 const isLoading = ref(false);
@@ -59,7 +60,7 @@ async function fetchApiKeys() {
 async function saveProfile() {
   const userName = userNameDraft.value.trim();
   if (!userName) {
-    displaySonnerError("Имя пользователя не может быть пустым");
+    displaySonnerError(t("pages.settingsUserPage.userNameEmptyError"));
     return;
   }
 
@@ -68,7 +69,7 @@ async function saveProfile() {
     const response = await http.patch("/users/me", { userName }, { cache: false });
     me.value = response.data?.value || response.data;
     userNameDraft.value = me.value?.userName || "";
-    displaySonnerSuccess("Профиль обновлён");
+    displaySonnerSuccess(t("pages.settingsUserPage.profileUpdated"));
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -86,7 +87,7 @@ async function changePassword() {
     me.value = response.data?.value || response.data;
     currentPassword.value = "";
     newPassword.value = "";
-    displaySonnerSuccess("Пароль обновлён");
+    displaySonnerSuccess(t("pages.settingsUserPage.passwordUpdated"));
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -97,7 +98,7 @@ async function changePassword() {
 async function createApiKey() {
   const name = newKeyName.value.trim();
   if (!name) {
-    displaySonnerError("Укажите название ключа");
+    displaySonnerError(t("pages.settingsUserPage.keyNameRequiredError"));
     return;
   }
 
@@ -107,7 +108,7 @@ async function createApiKey() {
     createdPlaintext.value = response.data?.plaintext || null;
     newKeyName.value = "";
     await fetchApiKeys();
-    displaySonnerSuccess("API-ключ создан — скопируйте его сейчас");
+    displaySonnerSuccess(t("pages.settingsUserPage.apiKeyCreated"));
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -116,13 +117,13 @@ async function createApiKey() {
 }
 
 async function revokeApiKey(id) {
-  if (!confirm("Отозвать этот API-ключ? Интеграции перестанут работать.")) return;
+  if (!confirm(t("pages.settingsUserPage.revokeKeyConfirm"))) return;
   revokingId.value = id;
   try {
     await http.delete(`/api-keys/${id}`, { cache: false });
     if (createdPlaintext.value) createdPlaintext.value = null;
     await fetchApiKeys();
-    displaySonnerSuccess("Ключ отозван");
+    displaySonnerSuccess(t("pages.settingsUserPage.keyRevoked"));
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -134,9 +135,9 @@ async function copyPlaintext() {
   if (!createdPlaintext.value) return;
   try {
     await navigator.clipboard.writeText(createdPlaintext.value);
-    displaySonnerSuccess("Ключ скопирован");
+    displaySonnerSuccess(t("pages.settingsUserPage.keyCopied"));
   } catch {
-    displaySonnerError("Не удалось скопировать");
+    displaySonnerError(t("common.copyFailed"));
   }
 }
 
@@ -149,18 +150,18 @@ onMounted(() => {
 <template>
   <div class="flex flex-col">
     <PageHeader
-      title="Пользователь"
-      description="Персональные параметры текущей учётной записи"
+      :title="$t('nav.user')"
+      :description="$t('pages.settingsUserPage.description')"
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
       <FieldGroup class="max-w-xl gap-5">
-        <SettingsFormField label="Имя пользователя" label-for="user-name">
+        <SettingsFormField :label="$t('auth.userName')" label-for="user-name">
           <Input
             id="user-name"
             v-model="userNameDraft"
             :disabled="isSavingProfile"
-            placeholder="Имя пользователя"
+            :placeholder="$t('auth.userName')"
           />
         </SettingsFormField>
         <Button
@@ -169,13 +170,13 @@ onMounted(() => {
           @click="saveProfile"
         >
           <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
-          Сохранить профиль
+          {{ $t("pages.settingsUserPage.saveProfileButton") }}
         </Button>
       </FieldGroup>
 
-      <SettingsFormSection title="Пароль" class="mt-8">
+      <SettingsFormSection :title="$t('auth.password')" class="mt-8">
         <div class="grid gap-5 sm:max-w-2xl sm:grid-cols-2">
-          <SettingsFormField label="Текущий пароль" label-for="current-password">
+          <SettingsFormField :label="$t('pages.settingsUserPage.currentPasswordLabel')" label-for="current-password">
             <PasswordInput
               id="current-password"
               v-model="currentPassword"
@@ -184,7 +185,7 @@ onMounted(() => {
             />
           </SettingsFormField>
 
-          <SettingsFormField label="Новый пароль" label-for="new-password">
+          <SettingsFormField :label="$t('pages.settingsUserPage.newPasswordLabel')" label-for="new-password">
             <PasswordInput
               id="new-password"
               v-model="newPassword"
@@ -200,16 +201,16 @@ onMounted(() => {
             @click="changePassword"
           >
             <Loader2 v-if="isChangingPassword" class="mr-2 size-4 animate-spin" />
-            Сменить пароль
+            {{ $t("pages.settingsUserPage.changePasswordButton") }}
           </Button>
         </template>
       </SettingsFormSection>
 
       <SettingsFormSection title="Public API" class="mt-8">
         <p class="mb-4 max-w-2xl text-sm text-muted-foreground">
-          Ключи для внешних интеграций (ERP, 1С, n8n). Авторизация:
+          {{ $t("pages.settingsUserPage.apiKeysIntroPrefix") }}
           <code class="text-xs">Authorization: Bearer dk_…</code>.
-          Полный ключ показывается только при создании.
+          {{ $t("pages.settingsUserPage.apiKeysIntroSuffix") }}
         </p>
         <p class="mb-4 max-w-2xl text-sm">
           <a
@@ -218,7 +219,7 @@ onMounted(() => {
             rel="noopener noreferrer"
             class="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
           >
-            Открыть Swagger (Public API v1)
+            {{ $t("pages.settingsUserPage.openSwaggerLink") }}
             <ExternalLink class="size-3.5" />
           </a>
           <span class="text-muted-foreground"> · </span>
@@ -229,34 +230,34 @@ onMounted(() => {
           v-if="createdPlaintext"
           class="mb-5 flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 sm:max-w-2xl"
         >
-          <div class="text-sm font-medium">Скопируйте ключ — повторно он не отобразится</div>
+          <div class="text-sm font-medium">{{ $t("pages.settingsUserPage.copyKeyWarning") }}</div>
           <div class="flex flex-wrap items-center gap-2">
             <code class="break-all text-xs">{{ createdPlaintext }}</code>
             <Button variant="outline" size="sm" @click="copyPlaintext">
               <Copy class="mr-1 size-3.5" />
-              Копировать
+              {{ $t("common.copy") }}
             </Button>
           </div>
         </div>
 
         <div class="mb-5 flex flex-wrap items-end gap-3 sm:max-w-2xl">
-          <SettingsFormField label="Название ключа" label-for="api-key-name" class="min-w-[220px] flex-1">
+          <SettingsFormField :label="$t('pages.settingsUserPage.keyNameLabel')" label-for="api-key-name" class="min-w-[220px] flex-1">
             <Input
               id="api-key-name"
               v-model="newKeyName"
-              placeholder="Например: 1С"
+              :placeholder="$t('pages.settingsUserPage.keyNamePlaceholder')"
               :disabled="isCreatingKey"
             />
           </SettingsFormField>
           <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
             <Loader2 v-if="isCreatingKey" class="mr-2 size-4 animate-spin" />
             <KeyRound v-else class="mr-2 size-4" />
-            Создать ключ
+            {{ $t("pages.settingsUserPage.createKeyButton") }}
           </Button>
         </div>
 
-        <div v-if="apiKeysLoading" class="text-sm text-muted-foreground">Загрузка ключей…</div>
-        <div v-else-if="!apiKeys.length" class="text-sm text-muted-foreground">Ключей пока нет</div>
+        <div v-if="apiKeysLoading" class="text-sm text-muted-foreground">{{ $t("pages.settingsUserPage.loadingKeys") }}</div>
+        <div v-else-if="!apiKeys.length" class="text-sm text-muted-foreground">{{ $t("pages.settingsUserPage.noKeysYet") }}</div>
         <ul v-else class="divide-y rounded-md border sm:max-w-2xl">
           <li
             v-for="key in apiKeys"
@@ -267,8 +268,8 @@ onMounted(() => {
               <div class="font-medium">{{ key.name }}</div>
               <div class="text-xs text-muted-foreground">
                 {{ key.displayHint }}
-                <span v-if="key.isRevoked"> · отозван</span>
-                <span v-else-if="key.lastUsedAt"> · использован {{ new Date(key.lastUsedAt).toLocaleString() }}</span>
+                <span v-if="key.isRevoked"> · {{ $t("pages.settingsUserPage.revokedSuffix") }}</span>
+                <span v-else-if="key.lastUsedAt"> · {{ $t("pages.settingsUserPage.usedSuffix", { date: new Date(key.lastUsedAt).toLocaleString() }) }}</span>
               </div>
             </div>
             <Button

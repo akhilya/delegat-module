@@ -168,7 +168,7 @@ export default {
       // Cache for lazily-loaded attribute options (keyed "category:<id>" or "store:<id>")
       attributeOptionsCache: {},
       attributeOptionsLoading: {},
-      // Для добавления нового поля
+      // For manually adding a new field
       showAddField: false,
       newField: {
         externalFieldKey: "",
@@ -181,19 +181,19 @@ export default {
   computed: {
     breadcrumbs() {
       const items = [
-        { label: "Адаптеры", to: "/adapter" },
+        { label: this.$t("marketplace.fieldMappingPage.adapters"), to: "/adapter" },
         {
-          label: this.mappingInfo?.connectionName || "Подключение",
+          label: this.mappingInfo?.connectionName || this.$t("marketplace.fieldMappingPage.connection"),
           to: `/adapter/${this.connectionId}`,
         },
         {
-          label: "Маппинги",
+          label: this.$t("marketplace.fieldMappingPage.mappings"),
           to: `/adapter/${this.connectionId}?tab=mappings`,
         },
       ];
       if (this.mappingInfo) {
         items.push({
-          label: this.mappingInfo.externalCategoryName || "Категория",
+          label: this.mappingInfo.externalCategoryName || this.$t("marketplace.fieldMappingPage.category"),
         });
       }
       return items;
@@ -587,7 +587,7 @@ export default {
         case "Static":
           return !!fieldMapping.staticValue;
         case "GroupName":
-          return true; // GroupName не требует дополнительных параметров
+          return true; // GroupName does not require any additional parameters
         default:
           return false;
       }
@@ -612,15 +612,15 @@ export default {
     getSourceTypeLabel(sourceType) {
       switch (sourceType) {
         case "ProductField":
-          return "Поле товара";
+          return this.$t("marketplace.fieldMappingPage.sourceType.productField");
         case "CategoryAttribute":
-          return "Атрибут категории";
+          return this.$t("marketplace.fieldMappingPage.sourceType.categoryAttribute");
         case "StoreAttribute":
-          return "Атрибут магазина";
+          return this.$t("marketplace.fieldMappingPage.sourceType.storeAttribute");
         case "Static":
-          return "Статическое значение";
+          return this.$t("marketplace.fieldMappingPage.sourceType.staticValue");
         case "GroupName":
-          return "Название группы";
+          return this.$t("marketplace.fieldMappingPage.sourceType.groupName");
         default:
           return sourceType;
       }
@@ -632,26 +632,26 @@ export default {
           const pf = mergeProductFieldSources(this.availableSources).find(
             (f) => f.key === fieldMapping.sourceField,
           );
-          return pf?.displayName || fieldMapping.sourceField || "Не выбрано";
+          return pf?.displayName || fieldMapping.sourceField || this.$t("marketplace.fieldMappingPage.notSelected");
         }
         case "CategoryAttribute": {
           const ca = this.availableSources.categoryAttributes?.find(
             (a) => a.id === fieldMapping.sourceAttributeId,
           );
-          return ca?.name || "Не выбрано";
+          return ca?.name || this.$t("marketplace.fieldMappingPage.notSelected");
         }
         case "StoreAttribute": {
           const sa = this.availableSources.storeAttributes?.find(
             (a) => a.id === fieldMapping.sourceAttributeId,
           );
-          return sa?.name || "Не выбрано";
+          return sa?.name || this.$t("marketplace.fieldMappingPage.notSelected");
         }
         case "Static":
-          return fieldMapping.staticValue || "Не задано";
+          return fieldMapping.staticValue || this.$t("marketplace.fieldMappingPage.notSet");
         case "GroupName":
-          return "Название группы товаров";
+          return this.$t("marketplace.fieldMappingPage.productGroupName");
         default:
-          return "Не настроено";
+          return this.$t("marketplace.fieldMappingPage.notConfigured");
       }
     },
 
@@ -675,7 +675,7 @@ export default {
         mappingId: this.mappingId,
         fieldMappings: mappingsToSave,
         onSuccess: () => {
-          displaySonnerSuccess("Маппинги сохранены");
+          displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.mappingsSaved"));
           this.hasChanges = false;
         },
         onError: (error) => {
@@ -765,7 +765,7 @@ export default {
           const data = extractResponseData(response, {});
           this.previewProducts = (data.items || []).map((p) => ({
             value: String(p.id),
-            label: `${p.name || p.sku || "Без названия"} (ID: ${p.id})`,
+            label: `${p.name || p.sku || this.$t("marketplace.fieldMappingPage.untitled")} (ID: ${p.id})`,
           }));
         },
         onError: () => {},
@@ -776,7 +776,7 @@ export default {
       this.$store.commit("aiChat/setPageContext", {
         page: "fieldMapping",
         mappingId: parseInt(this.mappingId),
-        mappingName: this.mappingInfo?.name || `Маппинг #${this.mappingId}`,
+        mappingName: this.mappingInfo?.name || this.$t("marketplace.fieldMappingPage.mappingHash", { id: this.mappingId }),
         connectionId: parseInt(this.connectionId),
         connectionName: this.mappingInfo?.connectionName || "",
         previewProductId: this.previewProductId || null,
@@ -823,7 +823,7 @@ export default {
       this.updateAiPageContext();
     },
 
-    // Graph editor pushes its preview outputs up so the Сводка sheet (previewSummary)
+    // Graph editor pushes its preview outputs up so the summary sheet (previewSummary)
     // reflects the graph instead of the legacy table preview.
     onGraphPreview({ outputs }) {
       const next = {};
@@ -910,18 +910,18 @@ export default {
           data: { name: this.settingsName || null },
         });
         this.mappingInfo.name = this.settingsName || null;
-        displaySonnerSuccess("Настройки сохранены");
+        displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.settingsSaved"));
         this.showMappingSettings = false;
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || "Ошибка сохранения",
+          error.response?.data?.message || this.$t("marketplace.fieldMappingPage.saveError"),
         );
       } finally {
         this.isSavingSettings = false;
       }
     },
 
-    // Добавление нового поля вручную
+    // Add a new field manually
     openAddFieldDialog() {
       this.newField = {
         externalFieldKey: "",
@@ -938,22 +938,22 @@ export default {
 
     addNewField() {
       if (!this.newField.externalFieldKey.trim()) {
-        displaySonnerError({ message: "Введите ключ поля" });
+        displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.enterFieldKey") });
         return;
       }
 
-      // Проверяем что такого ключа ещё нет
+      // Check that this key doesn't already exist
       const exists = this.fieldMappings.some(
         (fm) => fm.externalFieldKey === this.newField.externalFieldKey,
       );
       if (exists) {
-        displaySonnerError({ message: "Поле с таким ключом уже существует" });
+        displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.fieldKeyExists") });
         return;
       }
 
-      // Добавляем новое поле
+      // Add the new field
       const newMapping = {
-        id: null, // Будет создан на сервере
+        id: null, // Will be created on the server
         externalFieldKey: this.newField.externalFieldKey.trim(),
         externalFieldName:
           this.newField.externalFieldName.trim() ||
@@ -964,7 +964,7 @@ export default {
         sourceField: null,
         sourceAttributeId: null,
         staticValue: this.newField.staticValue || null,
-        isCustom: true, // Маркер что это поле добавлено вручную
+        isCustom: true, // Marker that this field was added manually
       };
 
       this.fieldMappings.push(newMapping);
@@ -975,7 +975,7 @@ export default {
     removeField(fieldMapping) {
       if (!fieldMapping.isCustom && fieldMapping.id) {
         displaySonnerError({
-          message: "Нельзя удалить поле адаптера. Можно только отключить.",
+          message: this.$t("marketplace.fieldMappingPage.cannotDeleteAdapterField"),
         });
         return;
       }
@@ -1021,7 +1021,7 @@ export default {
         try {
           const imported = JSON.parse(e.target.result);
           if (!Array.isArray(imported)) {
-            displaySonnerError({ message: "Неверный формат файла" });
+            displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.invalidFileFormat") });
             return;
           }
           let updated = 0;
@@ -1048,9 +1048,9 @@ export default {
             updated++;
           }
           this.hasChanges = true;
-          displaySonnerSuccess(`Импортировано: ${updated} полей`);
+          displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.importedFieldsCount", { count: updated }));
         } catch {
-          displaySonnerError({ message: "Ошибка чтения файла" });
+          displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.fileReadError") });
         }
       };
       reader.readAsText(file);
@@ -1088,7 +1088,7 @@ export default {
             variant="ghost"
             size="icon"
             class="size-8 shrink-0"
-            aria-label="Дополнительные действия"
+            :aria-label="$t('marketplace.fieldMappingPage.moreActions')"
           >
             <MoreVertical class="size-4" />
           </Button>
@@ -1096,20 +1096,20 @@ export default {
         <DropdownMenuContent align="end" class="w-56">
           <DropdownMenuItem @select="showAutoArrangeConfirm = true">
             <LayoutGrid class="size-4 mr-2" />
-            Авторасстановка
+            {{ $t("marketplace.fieldMappingPage.autoArrange") }}
           </DropdownMenuItem>
           <DropdownMenuItem @select="onSyncAdapterFields">
             <RefreshCw class="size-4 mr-2" />
-            Проверить актуальность полей
+            {{ $t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem @select="onExportMapping">
             <Download class="size-4 mr-2" />
-            Экспорт
+            {{ $t("marketplace.fieldMappingPage.export") }}
           </DropdownMenuItem>
           <DropdownMenuItem @select="onImportMapping">
             <Upload class="size-4 mr-2" />
-            Импорт
+            {{ $t("marketplace.fieldMappingPage.import") }}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1121,18 +1121,18 @@ export default {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Переставить блоки?</AlertDialogTitle>
+          <AlertDialogTitle>{{ $t("marketplace.fieldMappingPage.rearrangeBlocksTitle") }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Все блоки будут автоматически перестроены — текущее расположение будет потеряно.
+            {{ $t("marketplace.fieldMappingPage.rearrangeBlocksDescription") }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             class="bg-primary text-primary-foreground hover:bg-primary/90"
             @click="confirmAutoArrange"
           >
-            Переставить
+            {{ $t("marketplace.fieldMappingPage.rearrange") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1168,15 +1168,12 @@ export default {
       </template>
     </PageSection>
 
-    <!-- Сводка предпросмотра -->
+    <!-- Preview summary -->
     <Sheet v-model:open="showPreviewSheet">
       <SheetContent side="right" class="overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>Предпросмотр</SheetTitle>
-          <SheetDescription
-            >Сводка всех полей. Изменённые значения выделены
-            цветом.</SheetDescription
-          >
+          <SheetTitle>{{ $t("marketplace.fieldMappingPage.previewTitle") }}</SheetTitle>
+          <SheetDescription>{{ $t("marketplace.fieldMappingPage.previewSheetDescription") }}</SheetDescription>
         </SheetHeader>
 
         <div class="mt-4 space-y-2">
@@ -1207,10 +1204,10 @@ export default {
                   }}</span>
                   <TabsList class="h-6 p-0.5">
                     <TabsTrigger value="visual" class="text-[11px] h-5 px-2"
-                      >Просмотр</TabsTrigger
+                      >{{ $t("marketplace.fieldMappingPage.visualTab") }}</TabsTrigger
                     >
                     <TabsTrigger value="raw" class="text-[11px] h-5 px-2"
-                      >Данные</TabsTrigger
+                      >{{ $t("marketplace.fieldMappingPage.rawDataTab") }}</TabsTrigger
                     >
                   </TabsList>
                 </div>
@@ -1237,21 +1234,19 @@ export default {
                     </div>
                   </div>
                   <p class="text-[10px] text-muted-foreground mt-2">
-                    {{ parseImageUrls(item.resultValue).length }} изображений.
-                    Если не отображаются — URL может быть недоступен из
-                    браузера.
+                    {{ $t("marketplace.fieldMappingPage.imagesCountHint", { count: parseImageUrls(item.resultValue).length }) }}
                   </p>
                 </TabsContent>
                 <TabsContent value="raw" class="mt-0 space-y-1 text-xs">
                   <div class="flex gap-2 min-w-0">
-                    <span class="text-muted-foreground shrink-0">Исх:</span>
+                    <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
                     <span
                       class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
                       >{{ item.sourceValue ?? "—" }}</span
                     >
                   </div>
                   <div class="flex gap-2 min-w-0">
-                    <span class="text-muted-foreground shrink-0">Рез:</span>
+                    <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
                     <span
                       class="font-medium font-mono break-all whitespace-pre-wrap"
                       >{{ item.resultValue ?? "—" }}</span
@@ -1266,14 +1261,14 @@ export default {
               </div>
               <div class="space-y-1 text-xs">
                 <div class="flex gap-2 min-w-0">
-                  <span class="text-muted-foreground shrink-0">Исх:</span>
+                  <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
                   <span
                     class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
                     >{{ item.sourceValue ?? "—" }}</span
                   >
                 </div>
                 <div class="flex gap-2 min-w-0">
-                  <span class="text-muted-foreground shrink-0">Рез:</span>
+                  <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
                   <span
                     class="font-medium font-mono break-all whitespace-pre-wrap"
                     >{{ item.resultValue ?? "—" }}</span
@@ -1285,34 +1280,34 @@ export default {
           <EmptyState
             v-if="previewSummary.length === 0"
             size="sm"
-            title="Нет активных полей"
-            description="Подключите поля адаптера к источникам, чтобы увидеть предпросмотр значений."
+            :title="$t('marketplace.fieldMappingPage.noActiveFieldsTitle')"
+            :description="$t('marketplace.fieldMappingPage.noActiveFieldsDescription')"
           />
         </div>
       </SheetContent>
     </Sheet>
 
-    <!-- Диалог добавления нового поля -->
+    <!-- Add new field dialog -->
     <!-- Mapping Settings Dialog -->
     <Dialog v-model:open="showMappingSettings">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Настройки маппинга</DialogTitle>
-          <DialogDescription>Настройте параметры маппинга</DialogDescription>
+          <DialogTitle>{{ $t("marketplace.fieldMappingPage.mappingSettingsTitle") }}</DialogTitle>
+          <DialogDescription>{{ $t("marketplace.fieldMappingPage.mappingSettingsDescription") }}</DialogDescription>
         </DialogHeader>
         <div class="space-y-4 py-4">
           <div class="space-y-2">
-            <Label>Название</Label>
-            <Input v-model="settingsName" placeholder="Название маппинга" />
+            <Label>{{ $t("common.name") }}</Label>
+            <Input v-model="settingsName" :placeholder="$t('marketplace.fieldMappingPage.mappingNamePlaceholder')" />
           </div>
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="saveMappingSettings" :disabled="isSavingSettings">
             <Loader2 v-if="isSavingSettings" class="size-4 mr-2 animate-spin" />
-            Сохранить
+            {{ $t("common.save") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1321,57 +1316,57 @@ export default {
     <Dialog v-model:open="showAddField">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Добавить поле</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.fieldMappingPage.addFieldTitle") }}</DialogTitle>
           <DialogDescription>
-            Добавьте поле с произвольным ключом для адаптера
+            {{ $t("marketplace.fieldMappingPage.addFieldDescription") }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="space-y-4 py-4">
           <div class="space-y-2">
-            <Label>Ключ поля *</Label>
+            <Label>{{ $t("marketplace.fieldMappingPage.fieldKeyLabel") }}</Label>
             <Input
               v-model="newField.externalFieldKey"
-              placeholder="например: custom_field"
+              :placeholder="$t('marketplace.fieldMappingPage.fieldKeyPlaceholder')"
             />
           </div>
           <div class="space-y-2">
-            <Label>Название (опционально)</Label>
+            <Label>{{ $t("marketplace.fieldMappingPage.nameOptionalLabel") }}</Label>
             <Input
               v-model="newField.externalFieldName"
-              placeholder="Отображаемое название"
+              :placeholder="$t('marketplace.fieldMappingPage.displayNamePlaceholder')"
             />
           </div>
           <div class="space-y-2">
-            <Label>Тип источника</Label>
+            <Label>{{ $t("marketplace.fieldMappingPage.sourceTypeLabel") }}</Label>
             <Select v-model="newField.sourceType">
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Static">Статическое значение</SelectItem>
-                <SelectItem value="ProductField">Поле товара</SelectItem>
+                <SelectItem value="Static">{{ $t("marketplace.fieldMappingPage.sourceType.staticValue") }}</SelectItem>
+                <SelectItem value="ProductField">{{ $t("marketplace.fieldMappingPage.sourceType.productField") }}</SelectItem>
                 <SelectItem value="CategoryAttribute"
-                  >Атрибут категории</SelectItem
+                  >{{ $t("marketplace.fieldMappingPage.sourceType.categoryAttribute") }}</SelectItem
                 >
-                <SelectItem value="StoreAttribute">Атрибут магазина</SelectItem>
-                <SelectItem value="GroupName">Название группы</SelectItem>
+                <SelectItem value="StoreAttribute">{{ $t("marketplace.fieldMappingPage.sourceType.storeAttribute") }}</SelectItem>
+                <SelectItem value="GroupName">{{ $t("marketplace.fieldMappingPage.sourceType.groupName") }}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div v-if="newField.sourceType === 'Static'" class="space-y-2">
-            <Label>Значение</Label>
-            <Input v-model="newField.staticValue" placeholder="Значение поля" />
+            <Label>{{ $t("marketplace.graph.inspector.valueLabel") }}</Label>
+            <Input v-model="newField.staticValue" :placeholder="$t('marketplace.fieldMappingPage.fieldValuePlaceholder')" />
           </div>
         </div>
 
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="addNewField">
             <Plus class="size-4 mr-2" />
-            Добавить
+            {{ $t("common.add") }}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 /**
  * Modifier catalog — defines all available modifiers, their display names,
  * categories, applicable field types, and parameter schemas.
@@ -9,70 +11,70 @@ export const MODIFIER_CATALOG = {
   // Text modifiers
   truncate: {
     type: "truncate",
-    displayName: "Обрезать",
+    get displayName() { return t("marketplace.modifiers.truncate.name"); },
     aliases: ["truncate", "cut", "substr", "crop", "limit text"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "maxLength", label: "Макс. длина", type: "number", required: true, default: 60 },
+      { key: "maxLength", get label() { return t("marketplace.modifiers.truncate.maxLength"); }, type: "number", required: true, default: 60 },
     ],
-    summary: (p) => `до ${p.maxLength || "?"} символов`,
+    summary: (p) => t("marketplace.modifiers.truncate.summary", { n: p.maxLength || "?" }),
   },
   split: {
     type: "split",
-    displayName: "Разделить",
-    aliases: ["split", "explode", "separate", "delimiter", "разделить"],
+    get displayName() { return t("marketplace.modifiers.split.name"); },
+    aliases: ["split", "explode", "separate", "delimiter"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "delimiter", label: "Разделитель", type: "text", required: true, default: "," },
-      { key: "index", label: "Индекс части", type: "number", required: true, default: 0 },
+      { key: "delimiter", get label() { return t("marketplace.modifiers.split.delimiter"); }, type: "text", required: true, default: "," },
+      { key: "index", get label() { return t("marketplace.modifiers.split.indexPart"); }, type: "number", required: true, default: 0 },
     ],
-    summary: (p) => `по "${p.delimiter || ","}" [${p.index || 0}]`,
+    summary: (p) => t("marketplace.modifiers.split.summary", { d: p.delimiter || ",", i: p.index || 0 }),
   },
   replace: {
     type: "replace",
-    displayName: "Заменить",
+    get displayName() { return t("marketplace.modifiers.replace.name"); },
     aliases: ["replace", "substitute", "regex", "regexp", "swap"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "search", label: "Искать", type: "text", required: true, default: "" },
-      { key: "replacement", label: "Заменить на", type: "text", required: false, default: "" },
+      { key: "search", get label() { return t("marketplace.modifiers.replace.search"); }, type: "text", required: true, default: "" },
+      { key: "replacement", get label() { return t("marketplace.modifiers.replace.replacement"); }, type: "text", required: false, default: "" },
     ],
     summary: (p) => `"${p.search || ""}" → "${p.replacement || ""}"`,
   },
   append: {
     type: "append",
-    displayName: "Добавить в конец",
-    aliases: ["append", "suffix", "postfix", "add after", "после"],
+    get displayName() { return t("marketplace.modifiers.append.name"); },
+    aliases: ["append", "suffix", "postfix", "add after"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "suffix", label: "Суффикс", type: "text", required: true, default: "" },
+      { key: "suffix", get label() { return t("marketplace.modifiers.append.suffix"); }, type: "text", required: true, default: "" },
     ],
     summary: (p) => `+ "${p.suffix || ""}"`,
   },
   prepend: {
     type: "prepend",
-    displayName: "Добавить в начало",
-    aliases: ["prepend", "prefix", "add before", "перед"],
+    get displayName() { return t("marketplace.modifiers.prepend.name"); },
+    aliases: ["prepend", "prefix", "add before"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "prefix", label: "Префикс", type: "text", required: true, default: "" },
+      { key: "prefix", get label() { return t("marketplace.modifiers.prepend.prefix"); }, type: "text", required: true, default: "" },
     ],
     summary: (p) => `"${p.prefix || ""}" +`,
   },
   uppercase: {
     type: "uppercase",
-    displayName: "В верхний регистр",
-    aliases: ["uppercase", "upper", "caps", "toupper", "заглавные"],
+    get displayName() { return t("marketplace.modifiers.uppercase.name"); },
+    aliases: ["uppercase", "upper", "caps", "toupper"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -81,8 +83,8 @@ export const MODIFIER_CATALOG = {
   },
   lowercase: {
     type: "lowercase",
-    displayName: "В нижний регистр",
-    aliases: ["lowercase", "lower", "small", "tolower", "строчные"],
+    get displayName() { return t("marketplace.modifiers.lowercase.name"); },
+    aliases: ["lowercase", "lower", "small", "tolower"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -91,8 +93,8 @@ export const MODIFIER_CATALOG = {
   },
   trim: {
     type: "trim",
-    displayName: "Убрать пробелы",
-    aliases: ["trim", "strip", "whitespace", "spaces", "пробел", "ltrim", "rtrim"],
+    get displayName() { return t("marketplace.modifiers.trim.name"); },
+    aliases: ["trim", "strip", "whitespace", "spaces", "ltrim", "rtrim"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -103,56 +105,56 @@ export const MODIFIER_CATALOG = {
   // Number modifiers
   multiply: {
     type: "multiply",
-    displayName: "Умножить",
-    aliases: ["multiply", "times", "*", "product", "умнож"],
+    get displayName() { return t("marketplace.modifiers.multiply.name"); },
+    aliases: ["multiply", "times", "*", "product"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
     params: [
-      { key: "factor", label: "Множитель", type: "number", required: true, default: 1 },
+      { key: "factor", get label() { return t("marketplace.modifiers.multiply.factor"); }, type: "number", required: true, default: 1 },
     ],
     summary: (p) => `× ${p.factor ?? "?"}`,
   },
   divide: {
     type: "divide",
-    displayName: "Разделить",
-    aliases: ["divide", "division", "/", "quot", "делить"],
+    get displayName() { return t("marketplace.modifiers.divide.name"); },
+    aliases: ["divide", "division", "/", "quot"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
     params: [
-      { key: "divisor", label: "Делитель", type: "number", required: true, default: 1 },
+      { key: "divisor", get label() { return t("marketplace.modifiers.divide.divisor"); }, type: "number", required: true, default: 1 },
     ],
     summary: (p) => `÷ ${p.divisor ?? "?"}`,
   },
   add: {
     type: "add",
-    displayName: "Прибавить",
-    aliases: ["add", "plus", "+", "sum", "increment", "сложить"],
+    get displayName() { return t("marketplace.modifiers.add.name"); },
+    aliases: ["add", "plus", "+", "sum", "increment"],
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
     params: [
-      { key: "addend", label: "Слагаемое", type: "number", required: true, default: 0 },
+      { key: "addend", get label() { return t("marketplace.modifiers.add.addend"); }, type: "number", required: true, default: 0 },
     ],
     summary: (p) => `+ ${p.addend ?? "?"}`,
   },
   round: {
     type: "round",
-    displayName: "Округлить",
+    get displayName() { return t("marketplace.modifiers.round.name"); },
     aliases: ["round", "math.round"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
     params: [
-      { key: "decimals", label: "Знаков после запятой", type: "number", required: true, default: 0 },
+      { key: "decimals", get label() { return t("marketplace.modifiers.round.decimals"); }, type: "number", required: true, default: 0 },
     ],
-    summary: (p) => `до ${p.decimals ?? 0} знаков`,
+    summary: (p) => t("marketplace.modifiers.round.summary", { n: p.decimals ?? 0 }),
   },
   floor: {
     type: "floor",
-    displayName: "Округлить вниз",
-    aliases: ["floor", "round down", "вниз", "math.floor"],
+    get displayName() { return t("marketplace.modifiers.floor.name"); },
+    aliases: ["floor", "round down", "math.floor"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -161,8 +163,8 @@ export const MODIFIER_CATALOG = {
   },
   ceiling: {
     type: "ceiling",
-    displayName: "Округлить вверх",
-    aliases: ["ceil", "ceiling", "round up", "вверх", "math.ceil"],
+    get displayName() { return t("marketplace.modifiers.ceiling.name"); },
+    aliases: ["ceil", "ceiling", "round up", "math.ceil"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
@@ -171,14 +173,14 @@ export const MODIFIER_CATALOG = {
   },
   clamp: {
     type: "clamp",
-    displayName: "Ограничить диапазон",
-    aliases: ["clamp", "min max", "range", "between", "диапазон"],
+    get displayName() { return t("marketplace.modifiers.clamp.name"); },
+    aliases: ["clamp", "min max", "range", "between"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer"],
     params: [
-      { key: "min", label: "Минимум", type: "number", required: true, default: 0 },
-      { key: "max", label: "Максимум", type: "number", required: true, default: 100 },
+      { key: "min", get label() { return t("marketplace.modifiers.clamp.min"); }, type: "number", required: true, default: 0 },
+      { key: "max", get label() { return t("marketplace.modifiers.clamp.max"); }, type: "number", required: true, default: 100 },
     ],
     summary: (p) => `[${p.min ?? "?"}, ${p.max ?? "?"}]`,
   },
@@ -186,113 +188,113 @@ export const MODIFIER_CATALOG = {
   // Select modifiers
   valueMap: {
     type: "valueMap",
-    displayName: "Маппинг значений (→ valueId)",
-    aliases: ["map", "mapping", "lookup", "translate", "dict", "словарь", "convert"],
+    get displayName() { return t("marketplace.modifiers.valueMap.name"); },
+    aliases: ["map", "mapping", "lookup", "translate", "dict", "convert"],
     category: "select",
     reversible: true,
     applicableTypes: ["select", "multiselect"],
     params: [
-      { key: "mappings", label: "Соответствия", type: "valueMap", required: true, default: [] },
-      { key: "default", label: "По умолчанию", type: "text", required: false, default: "" },
+      { key: "mappings", get label() { return t("marketplace.modifiers.valueMap.mappings"); }, type: "valueMap", required: true, default: [] },
+      { key: "default", get label() { return t("marketplace.modifiers.valueMap.default"); }, type: "text", required: false, default: "" },
     ],
     summary: (p) => {
       const count = Array.isArray(p.mappings) ? p.mappings.length : 0;
-      return count ? `${count} → valueId` : "пусто";
+      return count ? `${count} → valueId` : t("marketplace.modifiers.common.empty");
     },
   },
   optionMap: {
     type: "optionMap",
-    displayName: "Маппинг значений по вариантам",
-    aliases: ["option map", "enum map", "варианты", "options", "translate"],
+    get displayName() { return t("marketplace.modifiers.optionMap.name"); },
+    aliases: ["option map", "enum map", "options", "translate"],
     category: "select",
     reversible: true,
     applicableTypes: ["select", "multiselect"],
     params: [
-      { key: "mappings", label: "Соответствия", type: "optionMap", required: true, default: [] },
-      { key: "default", label: "По умолчанию", type: "text", required: false, default: "" },
+      { key: "mappings", get label() { return t("marketplace.modifiers.valueMap.mappings"); }, type: "optionMap", required: true, default: [] },
+      { key: "default", get label() { return t("marketplace.modifiers.valueMap.default"); }, type: "text", required: false, default: "" },
     ],
     summary: (p) => {
       const count = Array.isArray(p.mappings) ? p.mappings.length : 0;
-      return count ? `${count} вариантов` : "пусто";
+      return count ? t("marketplace.modifiers.optionMap.summaryCount", { count }) : t("marketplace.modifiers.common.empty");
     },
   },
 
   llmGenerate: {
     type: "llmGenerate",
-    displayName: "AI-генерация",
-    aliases: ["llm", "ai generate", "gpt", "генерация", "ai"],
+    get displayName() { return t("marketplace.modifiers.llmGenerate.name"); },
+    aliases: ["llm", "ai generate", "gpt", "generate", "ai"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text", "select", "number", "any"],
     params: [
-      { key: "prompt", label: "Промпт", type: "template", required: true, default: "{{value}}" },
+      { key: "prompt", get label() { return t("marketplace.modifiers.llmGenerate.prompt"); }, type: "template", required: true, default: "{{value}}" },
       {
         key: "systemPrompt",
-        label: "Системный промпт",
+        get label() { return t("marketplace.modifiers.llmGenerate.systemPrompt"); },
         type: "template",
         required: false,
         default:
           "You generate concise marketplace field values. Respond with plain text only — no markdown, no quotes, no preamble.",
       },
-      { key: "modelId", label: "Модель", type: "aiModel", required: true, default: null },
+      { key: "modelId", get label() { return t("marketplace.modifiers.llmGenerate.model"); }, type: "aiModel", required: true, default: null },
       { key: "seed", label: "Seed", type: "number", required: false, default: null },
-      { key: "cacheEnabled", label: "Кэшировать", type: "checkbox", required: false, default: true },
-      { key: "perProduct", label: "Уникально для каждого товара", type: "checkbox", required: false, default: false },
+      { key: "cacheEnabled", get label() { return t("marketplace.modifiers.llmGenerate.cacheEnabled"); }, type: "checkbox", required: false, default: true },
+      { key: "perProduct", get label() { return t("marketplace.modifiers.llmGenerate.perProduct"); }, type: "checkbox", required: false, default: false },
     ],
     summary: (p) => {
       const prompt = p.prompt || "";
-      return prompt.length > 24 ? prompt.substring(0, 24) + "…" : prompt || "промпт";
+      return prompt.length > 24 ? prompt.substring(0, 24) + "…" : prompt || t("marketplace.modifiers.llmGenerate.summaryPlaceholder");
     },
   },
 
   randomInt: {
     type: "randomInt",
-    displayName: "Случайное целое",
-    aliases: ["random int", "rand int", "случайное число"],
+    get displayName() { return t("marketplace.modifiers.randomInt.name"); },
+    aliases: ["random int", "rand int"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer", "string", "any"],
     params: [
-      { key: "min", label: "Минимум", type: "number", required: true, default: 0 },
-      { key: "max", label: "Максимум", type: "number", required: true, default: 100 },
+      { key: "min", get label() { return t("marketplace.modifiers.clamp.min"); }, type: "number", required: true, default: 0 },
+      { key: "max", get label() { return t("marketplace.modifiers.clamp.max"); }, type: "number", required: true, default: 100 },
       { key: "seed", label: "Seed", type: "number", required: false, default: null },
     ],
     summary: (p) => `[${p.min ?? 0}, ${p.max ?? 100}]`,
   },
   randomFloat: {
     type: "randomFloat",
-    displayName: "Случайное дробное",
+    get displayName() { return t("marketplace.modifiers.randomFloat.name"); },
     aliases: ["random float", "rand float"],
     category: "number",
     reversible: false,
     applicableTypes: ["number", "integer", "string", "any"],
     params: [
-      { key: "min", label: "Минимум", type: "number", required: true, default: 0 },
-      { key: "max", label: "Максимум", type: "number", required: true, default: 1 },
-      { key: "decimals", label: "Знаков", type: "number", required: false, default: 2 },
+      { key: "min", get label() { return t("marketplace.modifiers.clamp.min"); }, type: "number", required: true, default: 0 },
+      { key: "max", get label() { return t("marketplace.modifiers.clamp.max"); }, type: "number", required: true, default: 1 },
+      { key: "decimals", get label() { return t("marketplace.modifiers.randomFloat.decimals"); }, type: "number", required: false, default: 2 },
       { key: "seed", label: "Seed", type: "number", required: false, default: null },
     ],
     summary: (p) => `[${p.min ?? 0}, ${p.max ?? 1}]`,
   },
   randomPick: {
     type: "randomPick",
-    displayName: "Случайный выбор",
-    aliases: ["random pick", "choice", "выбор"],
+    get displayName() { return t("marketplace.modifiers.randomPick.name"); },
+    aliases: ["random pick", "choice"],
     category: "any",
     reversible: false,
     applicableTypes: null,
     params: [
-      { key: "choices", label: "Варианты", type: "tagInput", required: false, default: [] },
+      { key: "choices", get label() { return t("marketplace.modifiers.randomPick.choices"); }, type: "tagInput", required: false, default: [] },
       { key: "seed", label: "Seed", type: "number", required: false, default: null },
     ],
     summary: (p) => {
       const n = Array.isArray(p.choices) ? p.choices.length : 0;
-      return n ? `из ${n}` : "из входа";
+      return n ? t("marketplace.modifiers.randomPick.summaryOf", { n }) : t("marketplace.modifiers.randomPick.summaryOfInput");
     },
   },
   randomUuid: {
     type: "randomUuid",
-    displayName: "Случайный UUID",
+    get displayName() { return t("marketplace.modifiers.randomUuid.name"); },
     aliases: ["uuid", "guid", "random uuid"],
     category: "any",
     reversible: false,
@@ -305,44 +307,53 @@ export const MODIFIER_CATALOG = {
 
   toText: {
     type: "toText",
-    displayName: "Преобразовать в текст",
-    aliases: ["to text", "to string", "stringify", "tostring", "cast", "в текст"],
+    get displayName() { return t("marketplace.modifiers.toText.name"); },
+    aliases: ["to text", "to string", "stringify", "tostring", "cast"],
     category: "any",
     reversible: true,
     applicableTypes: ["select", "multiselect", "number", "integer"],
     params: [
       {
         key: "useLabel",
-        label: "Словесное преобразование (лейбл вместо кода)",
+        get label() { return t("marketplace.modifiers.toText.useLabel"); },
         type: "checkbox",
         required: false,
         default: false,
       },
     ],
-    summary: (p) => (p.useLabel ? "с лейблами" : ""),
+    summary: (p) => (p.useLabel ? t("marketplace.modifiers.toText.summaryWithLabels") : ""),
   },
 
   forceType: {
     type: "forceType",
-    displayName: "Принудительный тип",
-    aliases: ["cast", "force type", "convert", "typecast", "тип"],
+    get displayName() { return t("marketplace.modifiers.forceType.name"); },
+    aliases: ["cast", "force type", "convert", "typecast"],
     category: "any",
     reversible: true,
     applicableTypes: null,
     params: [
       {
-        key: "type", label: "Отправить как", type: "select", required: true,
+        key: "type",
+        get label() { return t("marketplace.modifiers.forceType.sendAs"); },
+        type: "select", required: true,
         default: "string",
-        options: [
-          { value: "string", label: "Текст" },
-          { value: "number", label: "Число" },
-          { value: "integer", label: "Целое число" },
-          { value: "boolean", label: "Логическое" },
-        ],
+        get options() {
+          return [
+            { value: "string", label: t("marketplace.modifiers.forceType.optionString") },
+            { value: "number", label: t("marketplace.modifiers.forceType.optionNumber") },
+            { value: "integer", label: t("marketplace.modifiers.forceType.optionInteger") },
+            { value: "boolean", label: t("marketplace.modifiers.forceType.optionBoolean") },
+          ];
+        },
       },
     ],
     summary: (p) => {
-      const labels = { string: "текст", number: "число", integer: "целое", boolean: "логич." };
+      const labels = {
+        string: t("marketplace.modifiers.forceType.summaryText"),
+        number: t("marketplace.modifiers.forceType.summaryNumber"),
+        integer: t("marketplace.modifiers.forceType.summaryInteger"),
+        boolean: t("marketplace.modifiers.forceType.summaryBoolean"),
+      };
       return labels[p.type] || p.type || "";
     },
   },
@@ -350,38 +361,38 @@ export const MODIFIER_CATALOG = {
   // Template
   template: {
     type: "template",
-    displayName: "Подставить поля товара",
-    aliases: ["template", "interpolate", "substitute", "format", "шаблон", "fields", "подстав"],
+    get displayName() { return t("marketplace.modifiers.template.name"); },
+    aliases: ["template", "interpolate", "substitute", "format", "fields"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
     params: [
-      { key: "template", label: "Шаблон", type: "template", required: true, default: "{{value}}" },
+      { key: "template", get label() { return t("marketplace.modifiers.template.template"); }, type: "template", required: true, default: "{{value}}" },
     ],
     summary: (p) => {
-      const t = p.template || "";
-      return t.length > 30 ? t.substring(0, 30) + "…" : t;
+      const tpl = p.template || "";
+      return tpl.length > 30 ? tpl.substring(0, 30) + "…" : tpl;
     },
   },
 
   // Universal modifiers
   defaultValue: {
     type: "defaultValue",
-    displayName: "Значение по умолчанию",
-    aliases: ["default", "fallback", "null coalesce", "если пусто", "or else", "если нет"],
+    get displayName() { return t("marketplace.modifiers.defaultValue.name"); },
+    aliases: ["default", "fallback", "null coalesce", "or else"],
     category: "any",
     reversible: false,
     applicableTypes: null, // applicable to all types
     params: [
-      { key: "value", label: "Значение", type: "text", required: true, default: "" },
+      { key: "value", get label() { return t("marketplace.modifiers.defaultValue.value"); }, type: "text", required: true, default: "" },
     ],
     summary: (p) => `"${p.value || ""}"`,
   },
   // Array modifiers
   takeFirst: {
     type: "takeFirst",
-    displayName: "Взять первый",
-    aliases: ["first", "head", "take first", "первый"],
+    get displayName() { return t("marketplace.modifiers.takeFirst.name"); },
+    aliases: ["first", "head", "take first"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -390,32 +401,32 @@ export const MODIFIER_CATALOG = {
   },
   limit: {
     type: "limit",
-    displayName: "Ограничить количество",
+    get displayName() { return t("marketplace.modifiers.limit.name"); },
     aliases: ["limit", "take", "top", "slice", "max count"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
     params: [
-      { key: "count", label: "Количество", type: "number", required: true, default: 5 },
+      { key: "count", get label() { return t("marketplace.modifiers.limit.count"); }, type: "number", required: true, default: 5 },
     ],
-    summary: (p) => `до ${p.count ?? 5}`,
+    summary: (p) => t("marketplace.modifiers.limit.summary", { n: p.count ?? 5 }),
   },
   skip: {
     type: "skip",
-    displayName: "Пропустить первые",
-    aliases: ["skip", "drop", "offset", "пропуст"],
+    get displayName() { return t("marketplace.modifiers.skip.name"); },
+    aliases: ["skip", "drop", "offset"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
     params: [
-      { key: "count", label: "Пропустить", type: "number", required: true, default: 1 },
+      { key: "count", get label() { return t("marketplace.modifiers.skip.count"); }, type: "number", required: true, default: 1 },
     ],
-    summary: (p) => `${p.count ?? 1} шт.`,
+    summary: (p) => t("marketplace.modifiers.skip.summary", { n: p.count ?? 1 }),
   },
   reverse: {
     type: "reverse",
-    displayName: "Перевернуть порядок",
-    aliases: ["reverse", "invert", "flip", "перевернуть", "backwards"],
+    get displayName() { return t("marketplace.modifiers.reverse.name"); },
+    aliases: ["reverse", "invert", "flip", "backwards"],
     category: "array",
     reversible: true,
     applicableTypes: ["multiselect", "array"],
@@ -424,20 +435,20 @@ export const MODIFIER_CATALOG = {
   },
   join: {
     type: "join",
-    displayName: "Объединить в строку",
-    aliases: ["join", "join array", "concat array", "соединить"],
+    get displayName() { return t("marketplace.modifiers.join.name"); },
+    aliases: ["join", "join array", "concat array"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
     params: [
-      { key: "delimiter", label: "Разделитель", type: "text", required: false, default: ", " },
+      { key: "delimiter", get label() { return t("marketplace.modifiers.split.delimiter"); }, type: "text", required: false, default: ", " },
     ],
     summary: (p) => `"${p.delimiter ?? ", "}"`,
   },
   sort: {
     type: "sort",
-    displayName: "Сортировать",
-    aliases: ["sort", "order", "arrange", "sorted", "alphabetical", "упорядочить"],
+    get displayName() { return t("marketplace.modifiers.sort.name"); },
+    aliases: ["sort", "order", "arrange", "sorted", "alphabetical"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
@@ -446,13 +457,13 @@ export const MODIFIER_CATALOG = {
   },
   addItems: {
     type: "addItems",
-    displayName: "Добавить элементы",
-    aliases: ["add items", "push", "extend", "concat arrays", "добавить элементы"],
+    get displayName() { return t("marketplace.modifiers.addItems.name"); },
+    aliases: ["add items", "push", "extend", "concat arrays"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
     params: [
-      { key: "items", label: "Элементы", type: "tagInput", required: false, default: [] },
+      { key: "items", get label() { return t("marketplace.modifiers.addItems.items"); }, type: "tagInput", required: false, default: [] },
     ],
     summary: (p) => {
       const items = Array.isArray(p.items) ? p.items : [];
@@ -461,13 +472,13 @@ export const MODIFIER_CATALOG = {
   },
   removeItems: {
     type: "removeItems",
-    displayName: "Удалить элементы",
-    aliases: ["remove", "filter", "exclude", "delete", "убрать", "удалить", "minus"],
+    get displayName() { return t("marketplace.modifiers.removeItems.name"); },
+    aliases: ["remove", "filter", "exclude", "delete", "minus"],
     category: "array",
     reversible: false,
     applicableTypes: ["multiselect", "array"],
     params: [
-      { key: "items", label: "Элементы", type: "tagInput", required: false, default: [] },
+      { key: "items", get label() { return t("marketplace.modifiers.addItems.items"); }, type: "tagInput", required: false, default: [] },
     ],
     summary: (p) => {
       const items = Array.isArray(p.items) ? p.items : [];
@@ -477,12 +488,12 @@ export const MODIFIER_CATALOG = {
 };
 
 export const MODIFIER_CATEGORIES = {
-  text: { label: "Текст", icon: "Type" },
-  number: { label: "Число", icon: "Hash" },
-  select: { label: "Выбор", icon: "List" },
-  array: { label: "Массив", icon: "List" },
-  any: { label: "Универсальные", icon: "Sparkles" },
-  random: { label: "Случайные", icon: "Dices" },
+  text: { get label() { return t("marketplace.modifierCategories.text"); }, icon: "Type" },
+  number: { get label() { return t("marketplace.modifierCategories.number"); }, icon: "Hash" },
+  select: { get label() { return t("marketplace.modifierCategories.select"); }, icon: "List" },
+  array: { get label() { return t("marketplace.modifierCategories.array"); }, icon: "List" },
+  any: { get label() { return t("marketplace.modifierCategories.any"); }, icon: "Sparkles" },
+  random: { get label() { return t("marketplace.modifierCategories.random"); }, icon: "Dices" },
 };
 
 /**

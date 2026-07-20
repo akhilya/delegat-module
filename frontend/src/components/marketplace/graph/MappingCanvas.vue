@@ -34,6 +34,7 @@ import {
 import NodeContextMenu from "./NodeContextMenu.vue";
 import NodeInspector from "./NodeInspector.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
+import { t } from "@/i18n";
 
 import SourceNode from "./nodes/SourceNode.vue";
 import ModifierNode from "./nodes/ModifierNode.vue";
@@ -649,7 +650,7 @@ function normalizeAiModelOption(m) {
   const id = m?.id ?? m?.Id;
   if (id == null) return null;
   const name = m?.name ?? m?.Name ?? m?.modelId ?? m?.ModelId;
-  return { value: id, label: name || `Модель #${id}` };
+  return { value: id, label: name || t("marketplace.canvas.aiModelFallback", { id }) };
 }
 
 const aiModelOptions = computed(() =>
@@ -663,7 +664,7 @@ function loadPickerModels() {
 }
 
 const templateFieldRefs = computed(() => {
-  const refs = [{ group: "value", label: "Исходное значение", snippet: "{{value}}" }];
+  const refs = [{ group: "value", label: t("marketplace.canvas.sourceValueLabel"), snippet: "{{value}}" }];
   for (const pf of mergeProductFieldSources(props.availableSources)) {
     const group = (props.availableSources.stockFields || []).some((f) => f.key === pf.key)
       ? "stock"
@@ -755,7 +756,7 @@ onConnect((conn) => {
   if (dupes.length) removeEdges(dupes.map((e) => e.id));
   addEdges([{ ...conn, id: genId("e") }]);
 
-  // When a "Стандартное значение" node connects to an adapter field that has predefined
+  // When a "standard value" node connects to an adapter field that has predefined
   // options, auto-populate the node's options and valueType from the field definition.
   if (
     (conn.target === ADAPTER_NODE_ID || conn.target === ADAPTER_PRICE_NODE_ID) &&
@@ -1170,8 +1171,8 @@ async function syncAdapterFieldSchema() {
     const message =
       result?.message ||
       (result?.totalAdded > 0
-        ? `Добавлено полей: ${result.totalAdded}`
-        : "Схема актуальна — новых полей нет");
+        ? t("marketplace.canvas.fieldsAddedCount", { count: result.totalAdded })
+        : t("marketplace.canvas.schemaUpToDate"));
     displaySonnerSuccess(message);
     emit("fields-synced");
   } catch (e) {
@@ -1190,7 +1191,7 @@ defineExpose({
   triggerImportFile,
 });
 
-// ---- Context menu (ПКМ / Tab) ----
+// ---- Context menu (right-click / Tab) ----
 
 function onPointerDown(e) {
   if (e.button === 2) {
@@ -1208,7 +1209,7 @@ function onPointerMove(e) {
 }
 
 function openMenuAt(clientX, clientY) {
-  pendingConnect.value = null; // plain ПКМ/Tab — not a wire drop
+  pendingConnect.value = null; // plain right-click/Tab — not a wire drop
   const rect = flowWrap.value?.getBoundingClientRect();
   menu.value = {
     open: true,
@@ -1277,7 +1278,7 @@ function onKeydown(e) {
     return; // don't hijack typing in the inspector / menu search
 
   // Clipboard shortcuts (Ctrl/Cmd + C / V / D). Use e.code (physical key) so they work
-  // regardless of the active keyboard layout — with a Cyrillic layout e.key would be "с"/"м"/"в".
+  // regardless of the active keyboard layout — with a non-Latin layout e.key would differ.
   if (e.ctrlKey || e.metaKey) {
     if (e.code === "KeyZ") {
       e.preventDefault();
@@ -1542,7 +1543,7 @@ async function save() {
       fields: projections,
     });
     dirty.value = false;
-    displaySonnerSuccess("Граф сохранён");
+    displaySonnerSuccess(t("marketplace.canvas.graphSaved"));
   } catch (e) {
     displaySonnerError(e);
   } finally {
@@ -1650,7 +1651,7 @@ function exportMappingFile() {
   a.download = `mapping-${props.mappingId}-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  displaySonnerSuccess("Маппинг экспортирован");
+  displaySonnerSuccess(t("marketplace.canvas.mappingExported"));
 }
 
 function triggerImportFile() {
@@ -1665,7 +1666,7 @@ async function importMappingFile(event) {
     const data = JSON.parse(await file.text());
     const graph = data.graph ?? data;
     if (!graph?.nodes || !Array.isArray(graph.nodes))
-      throw new Error("Неверный формат: ожидается объект с nodes и edges");
+      throw new Error(t("marketplace.canvas.invalidFileFormat"));
 
     const ensured = ensurePriceNode(
       graph.nodes,
@@ -1694,7 +1695,7 @@ async function importMappingFile(event) {
     fitView({ padding: 0.2 });
     dirty.value = true;
     schedulePreview();
-    displaySonnerSuccess("Маппинг импортирован — нажмите «Сохранить»");
+    displaySonnerSuccess(t("marketplace.canvas.mappingImported"));
   } catch (e) {
     displaySonnerError(e);
   }
@@ -1721,7 +1722,7 @@ async function importMappingFile(event) {
         <Button size="sm" :disabled="saving || errorCount > 0" @click="save">
           <Loader2 v-if="saving" class="mr-1.5 size-4 animate-spin" />
           <Save v-else class="mr-1.5 size-4" />
-          Сохранить
+          {{ t("marketplace.canvas.save") }}
         </Button>
         <span class="mx-0.5 h-5 w-px bg-border" />
         <SearchableSelect
@@ -1729,23 +1730,23 @@ async function importMappingFile(event) {
           :options="previewProducts"
           :model-value="previewProductId ? String(previewProductId) : ''"
           @update:modelValue="emit('select-preview', $event)"
-          placeholder="Товар для предпросмотра…"
+          :placeholder="t('marketplace.canvas.previewPlaceholder')"
         />
         <span
           v-if="previewing"
           class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
         >
-          <Loader2 class="size-3.5 animate-spin" /> предпросмотр…
+          <Loader2 class="size-3.5 animate-spin" /> {{ t("marketplace.canvas.previewing") }}
         </span>
         <Button
           v-if="previewProductId"
           size="sm"
           variant="ghost"
           @click="emit('clear-preview')"
-          title="Сбросить товар предпросмотра"
+          :title="t('marketplace.canvas.resetPreviewTitle')"
         >
           <EyeOff class="mr-1.5 size-4" />
-          Сбросить
+          {{ t("marketplace.canvas.resetPreview") }}
         </Button>
         <input
           ref="importFileInput"
@@ -1762,7 +1763,7 @@ async function importMappingFile(event) {
 
       <div v-if="debugMode" class="vf-debug-panel">
         <div class="vf-debug-section">
-          <b>Анализ полей</b>
+          <b>{{ t("marketplace.canvas.fieldsAnalysis") }}</b>
           <div
             v-for="(v, k) in debugInfo.analysis"
             :key="k"
@@ -1771,10 +1772,10 @@ async function importMappingFile(event) {
             <span class="badge">{{ v.importable ? "IMPORT" : "EXPORT" }}</span>
             {{ k }}: connected={{ v.connected }}, rev={{ v.reversible }}<span v-if="v.fanOut" style="color:#f59e0b;margin-left:4px">⚠ fan-out</span>
           </div>
-          <div v-if="!Object.keys(debugInfo.analysis).length" class="text-xs opacity-50">нет полей</div>
+          <div v-if="!Object.keys(debugInfo.analysis).length" class="text-xs opacity-50">{{ t("marketplace.canvas.noFields") }}</div>
         </div>
         <div class="vf-debug-section">
-          <b>Рёбра ({{ debugInfo.edges.length }})</b>
+          <b>{{ t("marketplace.canvas.edges") }} ({{ debugInfo.edges.length }})</b>
           <div
             v-for="e in debugInfo.edges"
             :key="e.id"
@@ -1784,7 +1785,7 @@ async function importMappingFile(event) {
             <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
           </div>
         </div>
-        <div class="vf-debug-hint">Shift+Tab — скрыть</div>
+        <div class="vf-debug-hint">{{ t("marketplace.canvas.hideDebug") }}</div>
       </div>
 
       <VueFlow
@@ -1803,7 +1804,7 @@ async function importMappingFile(event) {
         <Controls :show-interactive="false">
           <button
             class="vue-flow__controls-button"
-            :title="animateWires ? 'Выключить анимацию проводов' : 'Включить анимацию проводов'"
+            :title="animateWires ? t('marketplace.canvas.disableWireAnimation') : t('marketplace.canvas.enableWireAnimation')"
             :style="animateWires ? {} : { opacity: 0.4 }"
             @click="animateWires = !animateWires"
           >
@@ -1812,7 +1813,7 @@ async function importMappingFile(event) {
           <template #control-fit-view>
             <button
               class="vue-flow__controls-button"
-              :title="maximized ? 'Свернуть (F)' : 'На весь экран (F)'"
+              :title="maximized ? t('marketplace.canvas.collapse') : t('marketplace.canvas.fullscreen')"
               @click="toggleMaximize"
             >
               <svg v-if="maximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -2091,7 +2092,7 @@ async function importMappingFile(event) {
   background: var(--accent);
 }
 
-/* Single "Поля адаптера" sink node — metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
+/* Single "adapter fields" sink node — metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
   min-width: 300px;
   max-width: 420px;

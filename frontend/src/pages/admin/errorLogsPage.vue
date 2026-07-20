@@ -99,20 +99,25 @@ export default {
     },
     summaryLabel() {
       const n = this.logs.length;
-      if (n === 0) return "Ошибок нет";
-      return `${n} запис${n === 1 ? "ь" : n < 5 ? "и" : "ей"}`;
+      if (n === 0) return this.$t("pages.errorLogsPage.summaryNone");
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      let formKey = "many";
+      if (mod10 === 1 && mod100 !== 11) formKey = "one";
+      else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) formKey = "few";
+      return this.$t(`pages.errorLogsPage.summaryCount.${formKey}`, { count: n });
     },
     detailMeta() {
       if (!this.selected) return [];
       return [
-        { label: "Время", value: this.formatLogDate(this.selected.createdAt) },
-        { label: "Метод", value: this.selected.method },
+        { label: this.$t("pages.errorLogsPage.metaTime"), value: this.formatLogDate(this.selected.createdAt) },
+        { label: this.$t("pages.errorLogsPage.metaMethod"), value: this.selected.method },
         {
-          label: "Пользователь",
+          label: this.$t("pages.errorLogsPage.metaUser"),
           value: this.selected.userName || this.selected.userId || "—",
         },
         {
-          label: "Тип",
+          label: this.$t("pages.errorLogsPage.metaType"),
           value: this.selected.exceptionType || "—",
         },
       ];
@@ -150,13 +155,13 @@ export default {
 
     buildLogDetails(log) {
       return [
-        `Время: ${formatLogDate(log.createdAt)}`,
-        `Статус: ${log.statusCode}`,
-        `Метод: ${log.method}`,
-        `Путь: ${this.formatPath(log)}`,
-        `Сообщение: ${log.message || "—"}`,
-        `Тип ошибки: ${log.exceptionType || "—"}`,
-        `Пользователь: ${log.userName || log.userId || "—"}`,
+        `${this.$t("pages.errorLogsPage.metaTime")}: ${this.formatLogDate(log.createdAt)}`,
+        `${this.$t("pages.errorLogsPage.clipboardStatus")}: ${log.statusCode}`,
+        `${this.$t("pages.errorLogsPage.metaMethod")}: ${log.method}`,
+        `${this.$t("pages.errorLogsPage.clipboardPath")}: ${this.formatPath(log)}`,
+        `${this.$t("pages.errorLogsPage.messageLabel")}: ${log.message || "—"}`,
+        `${this.$t("pages.errorLogsPage.clipboardErrorType")}: ${log.exceptionType || "—"}`,
+        `${this.$t("pages.errorLogsPage.metaUser")}: ${log.userName || log.userId || "—"}`,
         `Trace ID: ${log.traceIdentifier || "—"}`,
         "",
         "Stack trace:",
@@ -168,19 +173,19 @@ export default {
       try {
         await navigator.clipboard.writeText(this.buildLogDetails(log));
         this.copiedLogId = log.id;
-        displaySonnerSuccess("Детали ошибки скопированы");
+        displaySonnerSuccess(this.$t("pages.errorLogsPage.copySuccess"));
         window.setTimeout(() => {
           if (this.copiedLogId === log.id) this.copiedLogId = null;
         }, 1500);
       } catch {
-        displaySonnerError("Не удалось скопировать детали ошибки");
+        displaySonnerError(this.$t("pages.errorLogsPage.copyError"));
       }
     },
 
     async removeLog(log) {
       const ok = await confirm({
-        title: "Удалить лог ошибки?",
-        description: "Запись будет удалена безвозвратно.",
+        title: this.$t("pages.errorLogsPage.deleteConfirmTitle"),
+        description: this.$t("pages.errorLogsPage.deleteConfirmDescription"),
       });
       if (!ok) return;
 
@@ -193,7 +198,7 @@ export default {
             this.detailOpen = false;
             this.selected = null;
           }
-          displaySonnerSuccess("Лог удалён");
+          displaySonnerSuccess(this.$t("pages.errorLogsPage.deleteSuccess"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -211,13 +216,13 @@ export default {
 <template>
   <div>
     <PageHeader
-      title="Логи ошибок"
-      description="Последние сохранённые серверные ошибки"
+      :title="$t('routes.errorLogs')"
+      :description="$t('pages.errorLogsPage.description')"
     >
       <Button variant="outline" :disabled="isLoading" @click="fetchLogs">
         <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
         <RefreshCw v-else class="mr-2 size-4" />
-        Обновить
+        {{ $t("common.refresh") }}
       </Button>
     </PageHeader>
 
@@ -225,7 +230,7 @@ export default {
       <Input
         v-model="query"
         class="h-9 w-full sm:max-w-sm"
-        placeholder="Поиск по сообщению, пути, пользователю…"
+        :placeholder="$t('pages.errorLogsPage.searchPlaceholder')"
       />
     </LogToolbar>
 
@@ -234,23 +239,25 @@ export default {
       :empty="!isLoading && filteredLogs.length === 0"
       :empty-icon="AlertTriangle"
       :empty-title="
-        query.trim() && logs.length ? 'Ничего не найдено' : 'Ошибок нет'
+        query.trim() && logs.length
+          ? $t('pages.errorLogsPage.emptyNotFoundTitle')
+          : $t('pages.errorLogsPage.emptyNoErrorsTitle')
       "
       :empty-description="
         query.trim() && logs.length
-          ? 'Попробуйте изменить поисковый запрос'
-          : 'Новые неожиданные ошибки backend появятся здесь автоматически'
+          ? $t('pages.errorLogsPage.emptyNotFoundDescription')
+          : $t('pages.errorLogsPage.emptyNoErrorsDescription')
       "
     >
       <LogTableFrame>
         <Table class="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead class="w-40">Дата и время</TableHead>
-              <TableHead class="w-20">Метод</TableHead>
-              <TableHead class="min-w-0">Ошибка</TableHead>
-              <TableHead class="w-36">Пользователь</TableHead>
-              <TableHead class="w-20 text-right">Код</TableHead>
+              <TableHead class="w-40">{{ $t("pages.errorLogsPage.columnDate") }}</TableHead>
+              <TableHead class="w-20">{{ $t("pages.errorLogsPage.columnMethod") }}</TableHead>
+              <TableHead class="min-w-0">{{ $t("pages.errorLogsPage.columnError") }}</TableHead>
+              <TableHead class="w-36">{{ $t("pages.errorLogsPage.columnUser") }}</TableHead>
+              <TableHead class="w-20 text-right">{{ $t("pages.errorLogsPage.columnCode") }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -295,7 +302,7 @@ export default {
           <span class="tabular-nums">
             {{ filteredLogs.length
             }}<template v-if="query.trim()">
-              из {{ logs.length }}</template
+              {{ $t("pages.errorLogsPage.ofTotal", { total: logs.length }) }}</template
             >
           </span>
         </template>
@@ -307,7 +314,7 @@ export default {
       :title="
         selected
           ? `${selected.method} · ${selected.statusCode}`
-          : 'Ошибка'
+          : $t('pages.errorLogsPage.detailFallbackTitle')
       "
       :description="selected ? formatPath(selected) : '…'"
     >
@@ -320,7 +327,7 @@ export default {
         >
           <Check v-if="copiedLogId === selected.id" class="mr-1.5 size-3.5" />
           <Copy v-else class="mr-1.5 size-3.5" />
-          Копировать всё
+          {{ $t("pages.errorLogsPage.copyAll") }}
         </Button>
         <Button
           variant="destructive"
@@ -334,7 +341,7 @@ export default {
             class="mr-1.5 size-3.5 animate-spin"
           />
           <Trash2 v-else class="mr-1.5 size-3.5" />
-          Удалить
+          {{ $t("common.delete") }}
         </Button>
       </template>
 
@@ -344,19 +351,19 @@ export default {
       >
         <LogMetaGrid :items="detailMeta" />
         <div class="flex items-center justify-between gap-2 text-sm">
-          <span class="text-muted-foreground">Код</span>
+          <span class="text-muted-foreground">{{ $t("pages.errorLogsPage.codeLabel") }}</span>
           <Badge :variant="httpStatusVariant(selected.statusCode)">
             {{ selected.statusCode }}
           </Badge>
         </div>
         <LogCodeBlock
-          label="Сообщение"
+          :label="$t('pages.errorLogsPage.messageLabel')"
           :text="selected.message || '—'"
           tone="destructive"
           max-height-class="max-h-28"
         />
         <LogCodeBlock
-          label="Запрос"
+          :label="$t('pages.errorLogsPage.requestLabel')"
           :text="formatPath(selected)"
           max-height-class="max-h-24"
         />

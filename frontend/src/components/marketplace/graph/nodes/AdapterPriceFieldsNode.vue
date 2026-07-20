@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
 import { Banknote, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
 import { mergeProductFieldSources, pinColor } from "../graphModel.js";
+import { t } from "@/i18n";
 
 const props = defineProps({
   id: String,
@@ -26,13 +27,13 @@ const storeAttributes = computed(() => avail.value.storeAttributes || []);
 function boundLabel(f) {
   const s = f.source;
   if (!s) return "";
-  if (s.type === "groupName") return "Название группы";
+  if (s.type === "groupName") return t("marketplace.graph.groupNameLabel");
   if (s.type === "productField")
     return productFields.value.find((x) => x.key === s.field)?.displayName || s.field;
   if (s.type === "attribute")
-    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
   if (s.type === "storeAttribute")
-    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || `атрибут #${s.attributeId}`;
+    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
   return "";
 }
 
@@ -44,8 +45,8 @@ function pillStyle(type) {
 function fieldTooltip(f) {
   const parts = [];
   if (f.description) parts.push(String(f.description).trim());
-  if (f.unit) parts.push(`Ед. изм.: ${f.unit}`);
-  parts.push(`Ключ: ${f.fieldKey}`);
+  if (f.unit) parts.push(t("marketplace.graph.unitLabel", { unit: f.unit }));
+  parts.push(t("marketplace.graph.keyLabel", { key: f.fieldKey }));
   return parts.filter(Boolean).join("\n");
 }
 
@@ -81,7 +82,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
     <div class="vf-adapter__head">
       <Banknote class="size-3.5 text-primary" />
-      <span class="vf-card__kind">Поля цен</span>
+      <span class="vf-card__kind">{{ t("marketplace.graph.priceHeader") }}</span>
       <span class="vf-pin-label">{{ fields.length }}</span>
     </div>
 
@@ -100,7 +101,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         <span
           v-if="f.aliasOf"
           class="vf-adapter__pill vf-adapter__pill--alias"
-          :title="`Объединено с «${aliasPrimaryLabel(f)}»`"
+          :title="t('marketplace.graph.aliasMergedShortTitle', { primary: aliasPrimaryLabel(f) })"
           @click.stop="data.openField?.(f.fieldKey)"
         >
           = {{ aliasPrimaryLabel(f) }}
@@ -115,14 +116,14 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         <AlertTriangle
           v-if="analysis[f.fieldKey]?.fanOut"
           class="size-2.5 shrink-0 cursor-help text-amber-500"
-          title="Источник уже используется другим полем цен."
+          :title="t('marketplace.graph.fanOutPriceUsed')"
         />
 
         <span
           v-if="f.source"
           class="vf-adapter__pill"
           :style="pillStyle(f.outputType)"
-          :title="`${boundLabel(f)} — нажмите для настройки`"
+          :title="t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })"
           @click.stop="data.openField?.(f.fieldKey)"
         >{{ boundLabel(f) }}</span>
       </div>

@@ -102,7 +102,7 @@ export default {
 
     <Button size="sm" class="w-full" @click="applyChanges">
       <Check class="size-3 mr-1" />
-      Применить
+      {{ $t("common.apply") }}
     </Button>
   </div>
 </template>

@@ -3,7 +3,9 @@ import { computed } from "vue";
 import { useStore } from "vuex";
 import { Sparkles, Loader2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const store = useStore();
 const isLoading = computed(() => store.state.aiChat.isLoading);
 const isOpen = computed(() => store.state.aiChat.isOpen);
@@ -24,7 +26,7 @@ function toggle() {
       size="icon"
       class="fixed bottom-20 z-[9994] size-12 rounded-full shadow-lg transition-[right] duration-200 ease-in-out"
       :style="{ right: fabRight + 'px' }"
-      :title="isOpen ? 'Закрыть AI Ассистент' : 'AI Ассистент'"
+      :title="isOpen ? t('ai.closeAssistant') : t('ai.openAssistant')"
       @click="toggle"
     >
       <Loader2 v-if="isLoading" class="size-5 animate-spin" />

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   Database,
   Tag,
@@ -27,12 +28,15 @@ import {
   OP_SPECS,
   descriptorOutputType,
   typeCompatible,
+  opLabel,
 } from "./graphModel.js";
+
+const { t } = useI18n();
 
 const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   // When set (drag-from-pin), restrict to blocks that fit the dragged pin's type.
-  // Null/"any" ⇒ show everything (plain ПКМ/Tab).
+  // Null/"any" ⇒ show everything (plain right-click/Tab).
   filterType: { type: String, default: null },
   // "source" = dragged from an OUTPUT pin (offer consumers that accept the type);
   // "target" = dragged from an INPUT pin (offer producers whose output fits the type).
@@ -87,21 +91,21 @@ const sourceItems = computed(() => {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "товар"),
+    }, "product"),
   );
   (s.stockFields || []).forEach((f) =>
     push(Database, f.displayName || f.key, {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "остат", "stock", "склад"),
+    }, "stock"),
   );
   (s.priceFields || []).forEach((f) =>
     push(Database, f.displayName || f.key, {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "цен", "price"),
+    }, "price"),
   );
   (s.categoryAttributes || []).forEach((a) =>
     push(Tag, a.name, { group: "source", kind: "attribute", payload: a }),
@@ -113,7 +117,7 @@ const sourceItems = computed(() => {
       payload: a,
     }),
   );
-  push(Boxes, "Название группы", { group: "source", kind: "groupName" }, "group name", "group");
+  push(Boxes, t("marketplace.graph.contextMenu.groupNameItem"), { group: "source", kind: "groupName" }, "group name", "group");
   return out;
 });
 
@@ -128,16 +132,17 @@ const literalItems = computed(() => {
     };
     if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
-  push(Hash, "Число", "number", "0", "number", "int", "float", "цифра");
-  push(Type, "Текст", "string", "", "text", "string", "str", "строка");
-  push(ToggleLeft, "Логическое", "boolean", "false", "boolean", "bool", "true", "false", "flag", "флаг");
-  push(List, "Список", "array", "", "array", "list", "массив", "arr");
+  push(Hash, t("marketplace.graph.contextMenu.numberLiteral"), "number", "0", "number", "int", "float");
+  push(Type, t("marketplace.graph.contextMenu.textLiteral"), "string", "", "text", "string", "str");
+  push(ToggleLeft, t("marketplace.graph.contextMenu.booleanLiteral"), "boolean", "false", "boolean", "bool", "true", "false", "flag");
+  push(List, t("marketplace.graph.contextMenu.arrayLiteral"), "array", "", "array", "list", "arr");
   // Adapter value: static node backed by the adapter field's parsedOptions.
   // Options are populated on connect or manually in the inspector.
-  if (match("Стандартное значение", "default", "enum", "preset", "select", "выбор") && srcVisible({ group: "source", kind: "static" })) {
+  const adapterValueLabel = t("marketplace.graph.contextMenu.adapterValueItem");
+  if (match(adapterValueLabel, "default", "enum", "preset", "select") && srcVisible({ group: "source", kind: "static" })) {
     out.push({
       icon: ListChecks,
-      label: "Стандартное значение",
+      label: adapterValueLabel,
       desc: { group: "source", kind: "static", payload: { isAdapterValue: true, valueType: "string", staticValue: "", label: "" } },
     });
   }
@@ -151,9 +156,9 @@ const productFileItems = computed(() => {
     const desc = { group: "source", kind };
     if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
-  push(Link, "Файл товара по имени · ссылка", "productFileByName", "file", "url", "link", "image", "файл");
-  push(FileText, "Файл товара по имени · текст", "productFileContentByName", "file", "text", "content", "файл", "содержимое");
-  push(Files, "Файлы товара по расширению", "productFilesByExtension", "extension", "ext", "files", "расширение");
+  push(Link, t("marketplace.graph.contextMenu.productFileByNameLink"), "productFileByName", "file", "url", "link", "image");
+  push(FileText, t("marketplace.graph.contextMenu.productFileContentByNameText"), "productFileContentByName", "file", "text", "content");
+  push(Files, t("marketplace.graph.contextMenu.productFilesByExtensionItem"), "productFilesByExtension", "extension", "ext", "files");
   return out;
 });
 
@@ -167,8 +172,8 @@ const storageItems = computed(() => {
   };
   // Pre-pick a file only when there's exactly one (otherwise chosen in the inspector).
   const only = files.length === 1 ? files[0] : null;
-  push(HardDrive, "Файл магазина · ссылка", "storeFileUrl", "store", "storage", "хранилище", "file", "url");
-  push(FileText, "Файл магазина · текст", "storeFileContent", "store", "storage", "хранилище", "file", "text");
+  push(HardDrive, t("marketplace.graph.contextMenu.storeFileUrlItem"), "storeFileUrl", "store", "storage", "file", "url");
+  push(FileText, t("marketplace.graph.contextMenu.storeFileContentItem"), "storeFileContent", "store", "storage", "file", "text");
   if (only)
     out.forEach(
       (it) =>
@@ -183,12 +188,12 @@ const opEntries = (logic) =>
     .filter(
       ([type, sp]) =>
         (sp.category === "logic") === logic &&
-        match(sp.label, ...(sp.aliases || [])) &&
+        match(opLabel(type), ...(sp.aliases || [])) &&
         opVisible({ group: "op", opType: type }, sp.accepts),
     )
     .map(([type, sp]) => ({
       icon: OP_ICONS[sp.icon] || Braces,
-      label: sp.label,
+      label: opLabel(type),
       desc: { group: "op", opType: type },
     }));
 const opItems = computed(() => opEntries(false));
@@ -215,16 +220,16 @@ const modifierGroups = computed(() => {
 // Unified, ordered, collapsible groups.
 const groups = computed(() =>
   [
-    { key: "sources", label: "Источники", items: sourceItems.value },
-    { key: "literals", label: "Значения", items: literalItems.value },
-    { key: "storage", label: "Хранилище", items: storageItems.value },
+    { key: "sources", label: t("marketplace.graph.contextMenu.groups.sources"), items: sourceItems.value },
+    { key: "literals", label: t("marketplace.graph.contextMenu.groups.literals"), items: literalItems.value },
+    { key: "storage", label: t("marketplace.graph.contextMenu.groups.storage"), items: storageItems.value },
     {
       key: "productFiles",
-      label: "Файлы товара",
+      label: t("marketplace.graph.contextMenu.groups.productFiles"),
       items: productFileItems.value,
     },
-    { key: "ops", label: "Операции", items: opItems.value },
-    { key: "logic", label: "Логика", items: logicItems.value },
+    { key: "ops", label: t("marketplace.graph.contextMenu.groups.ops"), items: opItems.value },
+    { key: "logic", label: t("marketplace.graph.contextMenu.groups.logic"), items: logicItems.value },
     ...modifierGroups.value,
   ].filter((g) => g.items.length),
 );
@@ -255,7 +260,7 @@ const pick = (desc) => {
     <input
       ref="inputEl"
       v-model="search"
-      placeholder="Поиск узлов…"
+      :placeholder="t('marketplace.graph.contextMenu.searchPlaceholder')"
       class="vf-ctx__search"
       @keydown.esc="emit('close')"
     />
@@ -281,7 +286,7 @@ const pick = (desc) => {
         </button>
       </template>
 
-      <div v-if="empty" class="vf-ctx__empty">Ничего не найдено</div>
+      <div v-if="empty" class="vf-ctx__empty">{{ t("marketplace.graph.contextMenu.empty") }}</div>
     </div>
   </div>
 </template>

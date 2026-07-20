@@ -98,8 +98,8 @@ export default {
   },
   computed: {
     summaryLabel() {
-      if (this.errorCount === 0) return "Ошибок нет";
-      return `${this.errorCount} с ошибкой`;
+      if (this.errorCount === 0) return this.$t("marketplace.adapterLogsPage.noErrors");
+      return this.$t("marketplace.adapterLogsPage.errorCount", { count: this.errorCount });
     },
     adapterOptions() {
       const keys = new Set(
@@ -113,11 +113,11 @@ export default {
     detailMeta() {
       if (!this.detail) return [];
       return [
-        { label: "Время", value: this.formatLogDate(this.detail.createdAt) },
-        { label: "Длительность", value: `${this.detail.durationMs} мс` },
-        { label: "Адаптер", value: this.detail.adapterKey },
+        { label: this.$t("marketplace.adapterLogsPage.dateTime"), value: this.formatLogDate(this.detail.createdAt) },
+        { label: this.$t("marketplace.adapterLogsPage.duration"), value: this.$t("marketplace.adapterLogsPage.durationMs", { ms: this.detail.durationMs }) },
+        { label: this.$t("marketplace.adapterLogsPage.adapter"), value: this.detail.adapterKey },
         {
-          label: "Подключение",
+          label: this.$t("marketplace.adapterLogsPage.connection"),
           value: this.connectionLabel(this.detail.connectionId),
         },
       ];
@@ -226,13 +226,13 @@ export default {
 <template>
   <div>
     <PageHeader
-      title="Логи адаптеров"
-      description="Исходящие HTTP-запросы к API маркетплейсов"
+      :title="$t('marketplace.adapterLogsPage.title')"
+      :description="$t('marketplace.adapterLogsPage.description')"
     >
       <Button variant="outline" :disabled="isLoading" @click="refresh">
         <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
         <RefreshCw v-else class="mr-2 size-4" />
-        Обновить
+        {{ $t("common.refresh") }}
       </Button>
     </PageHeader>
 
@@ -242,10 +242,10 @@ export default {
         @update:model-value="(v) => setFilter('connectionId', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-52">
-          <SelectValue placeholder="Подключение" />
+          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.connection')" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem :value="NONE">Все подключения</SelectItem>
+          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.allConnections") }}</SelectItem>
           <SelectItem
             v-for="c in connections"
             :key="c.id"
@@ -261,10 +261,10 @@ export default {
         @update:model-value="(v) => setFilter('adapterKey', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-40">
-          <SelectValue placeholder="Адаптер" />
+          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.adapter')" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem :value="NONE">Все адаптеры</SelectItem>
+          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.allAdapters") }}</SelectItem>
           <SelectItem v-for="k in adapterOptions" :key="k" :value="k">
             {{ k }}
           </SelectItem>
@@ -276,10 +276,10 @@ export default {
         @update:model-value="(v) => setFilter('method', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-32">
-          <SelectValue placeholder="Метод" />
+          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.method')" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem :value="NONE">Любой</SelectItem>
+          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.anyMethod") }}</SelectItem>
           <SelectItem value="GET">GET</SelectItem>
           <SelectItem value="POST">POST</SelectItem>
           <SelectItem value="PUT">PUT</SelectItem>
@@ -292,21 +292,21 @@ export default {
         @update:model-value="(v) => setFilter('statusClass', v)"
       >
         <SelectTrigger class="h-9 w-full sm:w-36">
-          <SelectValue placeholder="Код" />
+          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.code')" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem :value="NONE">Любой код</SelectItem>
+          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.anyCode") }}</SelectItem>
           <SelectItem value="2xx">2xx</SelectItem>
           <SelectItem value="4xx">4xx</SelectItem>
           <SelectItem value="5xx">5xx</SelectItem>
-          <SelectItem value="error">Ошибки</SelectItem>
+          <SelectItem value="error">{{ $t("marketplace.adapterLogsPage.errors") }}</SelectItem>
         </SelectContent>
       </Select>
 
       <Input
         v-model="filters.q"
         class="h-9 w-full sm:max-w-xs"
-        placeholder="Поиск по path…"
+        :placeholder="$t('marketplace.adapterLogsPage.searchByPath')"
         @keydown.enter="refresh"
       />
     </LogToolbar>
@@ -315,19 +315,19 @@ export default {
       :loading="isLoading && items.length === 0"
       :empty="!isLoading && items.length === 0"
       :empty-icon="ScrollText"
-      empty-title="Запросов пока нет"
-      empty-description="После вызовов API адаптеров записи появятся здесь автоматически"
+      :empty-title="$t('marketplace.adapterLogsPage.emptyTitle')"
+      :empty-description="$t('marketplace.adapterLogsPage.emptyDescription')"
     >
       <LogTableFrame>
         <Table class="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead class="w-40">Дата и время</TableHead>
-              <TableHead class="w-20">Метод</TableHead>
-              <TableHead class="min-w-0">Ресурс</TableHead>
-              <TableHead class="w-36">Адаптер</TableHead>
-              <TableHead class="w-24 text-right">Ответ</TableHead>
-              <TableHead class="w-20 text-right">Код</TableHead>
+              <TableHead class="w-40">{{ $t("marketplace.adapterLogsPage.dateTime") }}</TableHead>
+              <TableHead class="w-20">{{ $t("marketplace.adapterLogsPage.method") }}</TableHead>
+              <TableHead class="min-w-0">{{ $t("marketplace.adapterLogsPage.resource") }}</TableHead>
+              <TableHead class="w-36">{{ $t("marketplace.adapterLogsPage.adapter") }}</TableHead>
+              <TableHead class="w-24 text-right">{{ $t("marketplace.adapterLogsPage.response") }}</TableHead>
+              <TableHead class="w-20 text-right">{{ $t("marketplace.adapterLogsPage.code") }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -362,7 +362,7 @@ export default {
               <TableCell
                 class="text-right text-sm text-muted-foreground tabular-nums"
               >
-                {{ row.durationMs }} мс
+                {{ $t("marketplace.adapterLogsPage.durationMs", { ms: row.durationMs }) }}
               </TableCell>
               <TableCell class="text-right">
                 <Badge :variant="httpStatusVariant(row.statusCode)">
@@ -374,7 +374,7 @@ export default {
         </Table>
 
         <template v-if="items.length" #footer>
-          <span class="tabular-nums">{{ items.length }} из {{ total }}</span>
+          <span class="tabular-nums">{{ $t("marketplace.adapterLogsPage.itemsOfTotal", { count: items.length, total }) }}</span>
           <Button
             v-if="hasMore"
             variant="outline"
@@ -382,7 +382,7 @@ export default {
             :disabled="isLoading"
             @click="loadMore"
           >
-            Ещё
+            {{ $t("marketplace.adapterLogsPage.loadMore") }}
           </Button>
         </template>
       </LogTableFrame>
@@ -392,7 +392,7 @@ export default {
       v-model:open="detailOpen"
       :loading="isDetailLoading"
       :title="
-        detail ? `${detail.method} · ${detail.statusCode}` : 'Запрос'
+        detail ? `${detail.method} · ${detail.statusCode}` : $t('marketplace.adapterLogsPage.request')
       "
       :description="detail?.path || '…'"
     >
@@ -402,9 +402,9 @@ export default {
         class="flex min-h-0 flex-1 flex-col"
       >
         <TabsList class="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Обзор</TabsTrigger>
-          <TabsTrigger value="request">Запрос</TabsTrigger>
-          <TabsTrigger value="response">Ответ</TabsTrigger>
+          <TabsTrigger value="overview">{{ $t("marketplace.adapterLogsPage.overview") }}</TabsTrigger>
+          <TabsTrigger value="request">{{ $t("marketplace.adapterLogsPage.request") }}</TabsTrigger>
+          <TabsTrigger value="response">{{ $t("marketplace.adapterLogsPage.response") }}</TabsTrigger>
         </TabsList>
 
         <div class="mt-4 min-h-0 flex-1 overflow-y-auto pb-2">
@@ -415,7 +415,7 @@ export default {
               </template>
             </LogMetaGrid>
             <div class="flex items-center justify-between gap-2 text-sm">
-              <span class="text-muted-foreground">Код</span>
+              <span class="text-muted-foreground">{{ $t("marketplace.adapterLogsPage.code") }}</span>
               <Badge :variant="httpStatusVariant(detail.statusCode)">
                 {{ detail.statusCode }}
               </Badge>
@@ -423,7 +423,7 @@ export default {
             <LogCodeBlock label="URL" :text="detail.url" max-height-class="max-h-28" />
             <LogCodeBlock
               v-if="detail.errorMessage"
-              label="Ошибка"
+              :label="$t('marketplace.adapterLogsPage.error')"
               :text="detail.errorMessage"
               tone="destructive"
               max-height-class="max-h-40"
@@ -439,13 +439,13 @@ export default {
 
           <TabsContent value="request" class="mt-0 space-y-3">
             <LogCodeBlock
-              label="Заголовки"
+              :label="$t('marketplace.adapterLogsPage.headers')"
               :text="detail.requestHeadersJson"
               json
               max-height-class="max-h-40"
             />
             <LogCodeBlock
-              label="Тело"
+              :label="$t('marketplace.adapterLogsPage.body')"
               :text="detail.requestBody"
               json
             />
@@ -453,13 +453,13 @@ export default {
 
           <TabsContent value="response" class="mt-0 space-y-3">
             <LogCodeBlock
-              label="Заголовки"
+              :label="$t('marketplace.adapterLogsPage.headers')"
               :text="detail.responseHeadersJson"
               json
               max-height-class="max-h-40"
             />
             <LogCodeBlock
-              label="Тело"
+              :label="$t('marketplace.adapterLogsPage.body')"
               :text="detail.responseBody"
               json
             />

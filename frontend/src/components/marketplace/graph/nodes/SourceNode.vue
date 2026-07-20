@@ -19,6 +19,7 @@ import {
 } from "lucide-vue-next";
 import { pinColor, pinTypeLabel } from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
+import { t } from "@/i18n";
 
 const props = defineProps({
   id: String,
@@ -27,33 +28,33 @@ const props = defineProps({
   selected: Boolean,
 });
 
-const META = {
-  attribute: { icon: Tag, kind: "Атрибут категории" },
-  storeAttribute: { icon: Store, kind: "Атрибут магазина" },
-  productField: { icon: Database, kind: "Поле товара" },
-  static: { icon: Type, kind: "Значение" },
-  groupName: { icon: Boxes, kind: "Группа товара" },
-  storeFileUrl: { icon: HardDrive, kind: "Файл магазина · ссылка" },
-  storeFileContent: { icon: FileText, kind: "Файл магазина · текст" },
-  productFileByName: { icon: Link, kind: "Файл товара · ссылка" },
-  productFileContentByName: { icon: FileText, kind: "Файл товара · текст" },
-  productFilesByExtension: { icon: Files, kind: "Файлы товара · расширение" },
-};
+const META = computed(() => ({
+  attribute: { icon: Tag, kind: t("marketplace.graph.nodeKinds.attribute") },
+  storeAttribute: { icon: Store, kind: t("marketplace.graph.nodeKinds.storeAttribute") },
+  productField: { icon: Database, kind: t("marketplace.graph.nodeKinds.productField") },
+  static: { icon: Type, kind: t("marketplace.graph.nodeKinds.static") },
+  groupName: { icon: Boxes, kind: t("marketplace.graph.nodeKinds.groupName") },
+  storeFileUrl: { icon: HardDrive, kind: t("marketplace.graph.nodeKinds.storeFileUrl") },
+  storeFileContent: { icon: FileText, kind: t("marketplace.graph.nodeKinds.storeFileContent") },
+  productFileByName: { icon: Link, kind: t("marketplace.graph.nodeKinds.productFileByName") },
+  productFileContentByName: { icon: FileText, kind: t("marketplace.graph.nodeKinds.productFileContentByName") },
+  productFilesByExtension: { icon: Files, kind: t("marketplace.graph.nodeKinds.productFilesByExtension") },
+}));
 
 // Typed literal nodes are backed by `static` + valueType — label/icon them by their type.
-const LITERAL = {
-  number: { icon: Hash, kind: "Число" },
-  boolean: { icon: ToggleLeft, kind: "Логическое" },
-  array: { icon: List, kind: "Список" },
-  string: { icon: Type, kind: "Текст" },
-};
+const LITERAL = computed(() => ({
+  number: { icon: Hash, kind: t("marketplace.graph.literalKinds.number") },
+  boolean: { icon: ToggleLeft, kind: t("marketplace.graph.literalKinds.boolean") },
+  array: { icon: List, kind: t("marketplace.graph.literalKinds.array") },
+  string: { icon: Type, kind: t("marketplace.graph.literalKinds.string") },
+}));
 
 const info = computed(() => {
   if (props.type === "static") {
-    if (props.data.isAdapterValue) return { icon: ListChecks, kind: "Стандартное значение" };
-    return LITERAL[props.data.valueType] || { icon: Type, kind: "Значение" };
+    if (props.data.isAdapterValue) return { icon: ListChecks, kind: t("marketplace.graph.nodeKinds.adapterValue") };
+    return LITERAL.value[props.data.valueType] || { icon: Type, kind: t("marketplace.graph.nodeKinds.static") };
   }
-  return META[props.type] || META.static;
+  return META.value[props.type] || META.value.static;
 });
 const outType = computed(() => props.data.valueType || "any");
 const collapsed = computed(() => !!props.data.collapsed);
@@ -79,7 +80,7 @@ const collapsed = computed(() => !!props.data.collapsed);
           data.importable === false
         "
         class="ml-auto size-3 shrink-0 text-muted-foreground/60"
-        title="Только экспорт"
+        :title="t('marketplace.graph.exportOnlyTitle')"
       />
     </div>
     <template v-if="!collapsed">

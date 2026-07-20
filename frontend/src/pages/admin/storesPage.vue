@@ -156,7 +156,7 @@ export default {
 
     async handleCreateStore() {
       if (!this.newStoreName.trim()) {
-        displaySonnerError("Введите название магазина");
+        displaySonnerError(this.$t("pages.storesPage.nameRequiredError"));
         return;
       }
 
@@ -165,7 +165,7 @@ export default {
         name: this.newStoreName.trim(),
         addAllUsers: this.addAllUsers,
         onSuccess: (response) => {
-          displaySonnerSuccess("Магазин создан");
+          displaySonnerSuccess(this.$t("pages.storesPage.storeCreated"));
           this.newStoreName = "";
           this.addAllUsers = true;
           this.showCreateDialog = false;
@@ -257,7 +257,7 @@ export default {
     async saveStore() {
       if (!this.editingStore) return;
       if (!this.editForm.name.trim()) {
-        displaySonnerError("Название магазина не может быть пустым");
+        displaySonnerError(this.$t("pages.storesPage.nameEmptyError"));
         return;
       }
 
@@ -272,7 +272,7 @@ export default {
           extendedPriceParameters: this.editForm.extendedPriceParameters,
         },
         onSuccess: async () => {
-          displaySonnerSuccess("Магазин обновлён");
+          displaySonnerSuccess(this.$t("pages.storesPage.storeUpdated"));
           this.closeEditDialog();
           await this.fetchStores();
         },
@@ -285,12 +285,12 @@ export default {
 
     async addCurrency() {
       if (!this.editingStore || !this.newCurrencyCode || !this.newCurrencyRate) {
-        displaySonnerError("Выберите валюту и укажите курс");
+        displaySonnerError(this.$t("pages.storesPage.currencySelectError"));
         return;
       }
       const rate = Number(this.newCurrencyRate);
       if (!rate || rate <= 0) {
-        displaySonnerError("Курс должен быть больше нуля");
+        displaySonnerError(this.$t("pages.storesPage.rateInvalidError"));
         return;
       }
       await this.addStoreCurrency({
@@ -300,7 +300,7 @@ export default {
           this.storeCurrencies = r.data;
           this.newCurrencyCode = "";
           this.newCurrencyRate = "";
-          displaySonnerSuccess("Валюта добавлена");
+          displaySonnerSuccess(this.$t("pages.storesPage.currencyAdded"));
         },
         onError: displaySonnerError,
       });
@@ -326,7 +326,7 @@ export default {
         code,
         onSuccess: (r) => {
           this.storeCurrencies = r.data;
-          displaySonnerSuccess("Валюта удалена");
+          displaySonnerSuccess(this.$t("pages.storesPage.currencyRemoved"));
         },
         onError: displaySonnerError,
       });
@@ -341,44 +341,44 @@ export default {
 
 <template>
   <div>
-    <PageHeader title="Магазины" description="Управление магазинами системы">
+    <PageHeader :title="$t('routes.stores')" :description="$t('pages.storesPage.description')">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
             <Plus class="size-4 mr-2" />
-            Создать магазин
+            {{ $t("pages.storesPage.createStore") }}
           </Button>
         </DialogTrigger>
           <DialogContent size="md">
             <DialogHeader>
-              <DialogTitle>Новый магазин</DialogTitle>
+              <DialogTitle>{{ $t("pages.storesPage.newStoreDialogTitle") }}</DialogTitle>
               <DialogDescription>
-                Введите название для нового магазина
+                {{ $t("pages.storesPage.newStoreDialogDescription") }}
               </DialogDescription>
             </DialogHeader>
             <div class="py-4 space-y-4">
               <Input
                 v-model="newStoreName"
-                placeholder="Название магазина"
+                :placeholder="$t('pages.storesPage.storeNamePlaceholder')"
                 @keyup.enter="handleCreateStore"
               />
               <label class="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm cursor-pointer">
                 <Checkbox v-model="addAllUsers" class="mt-0.5" />
                 <span class="grid gap-1">
-                  <span class="font-medium leading-none">Добавить всех текущих пользователей</span>
+                  <span class="font-medium leading-none">{{ $t("pages.storesPage.addAllUsersLabel") }}</span>
                   <span class="text-xs text-muted-foreground">
-                    Если выключить, участником нового магазина станет только текущий администратор.
+                    {{ $t("pages.storesPage.addAllUsersHint") }}
                   </span>
                 </span>
               </label>
             </div>
             <DialogFooter>
               <DialogClose as-child>
-                <Button variant="outline">Отмена</Button>
+                <Button variant="outline">{{ $t("common.cancel") }}</Button>
               </DialogClose>
               <Button @click="handleCreateStore" :disabled="isCreating">
                 <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
-                Создать
+                {{ $t("common.create") }}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -389,13 +389,13 @@ export default {
       :loading="isLoading"
       :empty="stores.length === 0"
       :empty-icon="Store"
-      empty-title="Нет магазинов"
-      empty-description="Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами"
+      :empty-title="$t('pages.storesPage.emptyTitle')"
+      :empty-description="$t('pages.storesPage.emptyDescription')"
     >
       <template #empty-action>
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
-          Создать магазин
+          {{ $t("pages.storesPage.createStore") }}
         </Button>
       </template>
 
@@ -405,9 +405,9 @@ export default {
           <TableHeader>
             <TableRow>
               <TableHead class="w-24">ID</TableHead>
-              <TableHead>Магазин</TableHead>
-              <TableHead class="w-40">Участники</TableHead>
-              <TableHead class="w-40">Админы магазина</TableHead>
+              <TableHead>{{ $t("pages.storesPage.columnStore") }}</TableHead>
+              <TableHead class="w-40">{{ $t("pages.storesPage.columnMembers") }}</TableHead>
+              <TableHead class="w-40">{{ $t("pages.storesPage.columnStoreAdmins") }}</TableHead>
               <TableHead class="w-20"></TableHead>
             </TableRow>
           </TableHeader>
@@ -432,7 +432,7 @@ export default {
               <TableCell class="text-right">
                 <Button variant="ghost" size="icon" @click="openEditDialog(store)">
                   <Pencil class="size-4" />
-                  <span class="sr-only">Редактировать магазин</span>
+                  <span class="sr-only">{{ $t("pages.storesPage.editStoreSr") }}</span>
                 </Button>
               </TableCell>
             </TableRow>
@@ -445,9 +445,9 @@ export default {
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent size="2xl">
         <DialogHeader>
-          <DialogTitle>Настройки магазина</DialogTitle>
+          <DialogTitle>{{ $t("pages.storesPage.editDialogTitle") }}</DialogTitle>
           <DialogDescription>
-            Измените название, участников и администраторов магазина.
+            {{ $t("pages.storesPage.editDialogDescription") }}
           </DialogDescription>
         </DialogHeader>
 
@@ -457,17 +457,17 @@ export default {
 
         <div v-else class="grid gap-5 max-h-[70vh] overflow-y-auto pr-1">
           <div class="grid gap-2">
-            <label class="text-sm font-medium" for="store-name">Название</label>
+            <label class="text-sm font-medium" for="store-name">{{ $t("common.name") }}</label>
             <Input id="store-name" v-model="editForm.name" :disabled="isSaving" />
           </div>
 
           <div class="grid gap-3 rounded-lg border p-4">
-            <h3 class="text-sm font-semibold">Региональные настройки</h3>
+            <h3 class="text-sm font-semibold">{{ $t("pages.storesPage.regionalSettingsTitle") }}</h3>
             <div class="grid gap-2">
-              <label class="text-sm text-muted-foreground">Часовой пояс</label>
+              <label class="text-sm text-muted-foreground">{{ $t("pages.storesPage.timezoneLabel") }}</label>
               <Select v-model="editForm.timezone" :disabled="isSaving">
                 <SelectTrigger>
-                  <SelectValue placeholder="Часовой пояс" />
+                  <SelectValue :placeholder="$t('pages.storesPage.timezoneLabel')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="tz in timezoneOptions" :key="tz.value" :value="tz.value">
@@ -479,29 +479,28 @@ export default {
           </div>
 
           <div class="grid gap-3 rounded-lg border p-4">
-            <h3 class="text-sm font-semibold">Цены</h3>
+            <h3 class="text-sm font-semibold">{{ $t("pages.storesPage.pricesTitle") }}</h3>
             <label class="flex items-center justify-between gap-3 cursor-pointer">
-              <span class="text-sm">Расширенные параметры цены</span>
+              <span class="text-sm">{{ $t("pages.storesPage.extendedPriceParamsLabel") }}</span>
               <Switch v-model="editForm.extendedPriceParameters" :disabled="isSaving" />
             </label>
             <p class="text-xs text-muted-foreground">
-              Основная цена товаров и привязки маппинга не изменятся при переключении.
+              {{ $t("pages.storesPage.extendedPriceParamsHint") }}
             </p>
           </div>
 
           <div class="grid gap-3 rounded-lg border p-4">
-            <h3 class="text-sm font-semibold">Валюты</h3>
+            <h3 class="text-sm font-semibold">{{ $t("pages.storesPage.currenciesTitle") }}</h3>
             <p class="text-xs text-muted-foreground">
-              Все цены хранятся в {{ storeBaseCurrency || "базовой валюте магазина" }}.
-              Курсы используются для ввода, превью и экспорта.
+              {{ $t("pages.storesPage.currenciesHint", { base: storeBaseCurrency || $t("pages.storesPage.baseCurrencyFallback") }) }}
             </p>
             <div class="overflow-hidden rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Валюта</TableHead>
-                    <TableHead>Курс ({{ storeBaseCurrency || "база" }} за 1 ед.)</TableHead>
-                    <TableHead>Обновлён</TableHead>
+                    <TableHead>{{ $t("pages.storesPage.columnCurrency") }}</TableHead>
+                    <TableHead>{{ $t("pages.storesPage.columnRate", { base: storeBaseCurrency || $t("pages.storesPage.baseFallback") }) }}</TableHead>
+                    <TableHead>{{ $t("pages.storesPage.columnUpdated") }}</TableHead>
                     <TableHead class="w-12" />
                   </TableRow>
                 </TableHeader>
@@ -509,7 +508,7 @@ export default {
                   <TableRow>
                     <TableCell class="font-medium">{{ storeBaseCurrency || "—" }}</TableCell>
                     <TableCell class="text-muted-foreground">1.000000</TableCell>
-                    <TableCell class="text-muted-foreground text-xs">базовая</TableCell>
+                    <TableCell class="text-muted-foreground text-xs">{{ $t("pages.storesPage.baseTag") }}</TableCell>
                     <TableCell />
                   </TableRow>
                   <TableRow v-for="cur in extraCurrencies" :key="cur.code">
@@ -540,7 +539,7 @@ export default {
             <div v-if="availableCurrencyOptions.length" class="flex flex-wrap items-end gap-2">
               <Select v-model="newCurrencyCode" :disabled="isSaving">
                 <SelectTrigger class="w-[180px]">
-                  <SelectValue placeholder="Добавить валюту" />
+                  <SelectValue :placeholder="$t('pages.storesPage.addCurrencyPlaceholder')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="c in availableCurrencyOptions" :key="c.code" :value="c.code">
@@ -553,11 +552,11 @@ export default {
                 type="number"
                 step="0.01"
                 min="0"
-                :placeholder="`Курс к ${storeBaseCurrency || 'базе'}`"
+                :placeholder="$t('pages.storesPage.rateToPlaceholder', { base: storeBaseCurrency || $t('pages.storesPage.baseFallback') })"
                 class="w-[140px]"
                 :disabled="isSaving"
               />
-              <Button variant="outline" size="sm" :disabled="isSaving" @click="addCurrency">Добавить</Button>
+              <Button variant="outline" size="sm" :disabled="isSaving" @click="addCurrency">{{ $t("common.add") }}</Button>
             </div>
           </div>
 
@@ -565,9 +564,9 @@ export default {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Пользователь</TableHead>
-                  <TableHead class="w-32">Участник</TableHead>
-                  <TableHead class="w-40">Админ магазина</TableHead>
+                  <TableHead>{{ $t("nav.user") }}</TableHead>
+                  <TableHead class="w-32">{{ $t("pages.storesPage.columnMemberSingular") }}</TableHead>
+                  <TableHead class="w-40">{{ $t("pages.storesPage.columnStoreAdminSingular") }}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -597,11 +596,11 @@ export default {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" :disabled="isSaving" @click="closeEditDialog">Отмена</Button>
+          <Button variant="outline" :disabled="isSaving" @click="closeEditDialog">{{ $t("common.cancel") }}</Button>
           <Button :disabled="isSaving || !editingStore" @click="saveStore">
             <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
             <Save v-else class="mr-2 size-4" />
-            Сохранить
+            {{ $t("common.save") }}
           </Button>
         </DialogFooter>
       </DialogContent>

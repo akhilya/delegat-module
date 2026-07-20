@@ -371,30 +371,6 @@ export default {
       isLoadingLimits: false,
       limitsRefreshTimer: null,
       showLimitsDialog: false,
-
-      capabilityLabels: {
-        getCategories: "Получение категорий",
-        getCategoryFields: "Поля категорий",
-        createCategory: "Создание категорий",
-        importProduct: "Импорт товара",
-        importAllProducts: "Импорт всех товаров",
-        importProductBatch: "Пакетный импорт",
-        exportProduct: "Экспорт товара",
-        exportProductBulk: "Массовый экспорт",
-        updateSku: "Обновление артикула",
-        importPrices: "Импорт цен",
-        exportPrices: "Экспорт цен",
-        importStocks: "Импорт остатков",
-        exportStocks: "Экспорт остатков",
-        getOrders: "Получение заказов",
-        updateOrderStatus: "Обновление статуса заказа",
-        fieldBasedGrouping: "Группировка через поле",
-        endpointBasedGrouping: "Группировка через API",
-        importGroups: "Импорт групп",
-        deleteGroups: "Удаление групп",
-        modifyGroupMembership: "Изменение состава групп",
-        archiveProduct: "Архивирование товара",
-      },
     };
   },
   watch: {
@@ -428,7 +404,7 @@ export default {
         this.fetchLocalProducts();
       }, 500);
     },
-    // Обновляем данные после завершения операции (если она была для этого подключения)
+    // Refresh data after an operation completes (if it belonged to this connection)
     "$store.state.operations.operations": {
       handler(newOps, oldOps) {
         if (!newOps || !oldOps) return;
@@ -450,12 +426,44 @@ export default {
     connectionId() {
       return parseInt(this.$route.params.connId);
     },
+    capabilityLabels() {
+      return {
+        getCategories: this.$t("marketplace.connectionPage.capabilities.getCategories"),
+        getCategoryFields: this.$t("marketplace.connectionPage.capabilities.getCategoryFields"),
+        createCategory: this.$t("marketplace.connectionPage.capabilities.createCategory"),
+        importProduct: this.$t("marketplace.connectionPage.capabilities.importProduct"),
+        importAllProducts: this.$t("marketplace.connectionPage.capabilities.importAllProducts"),
+        importProductBatch: this.$t("marketplace.connectionPage.capabilities.importProductBatch"),
+        exportProduct: this.$t("marketplace.connectionPage.capabilities.exportProduct"),
+        exportProductBulk: this.$t("marketplace.connectionPage.capabilities.exportProductBulk"),
+        updateSku: this.$t("marketplace.connectionPage.capabilities.updateSku"),
+        importPrices: this.$t("marketplace.connectionPage.capabilities.importPrices"),
+        exportPrices: this.$t("marketplace.connectionPage.capabilities.exportPrices"),
+        importStocks: this.$t("marketplace.connectionPage.capabilities.importStocks"),
+        exportStocks: this.$t("marketplace.connectionPage.capabilities.exportStocks"),
+        getOrders: this.$t("marketplace.connectionPage.capabilities.getOrders"),
+        updateOrderStatus: this.$t("marketplace.connectionPage.capabilities.updateOrderStatus"),
+        fieldBasedGrouping: this.$t("marketplace.connectionPage.capabilities.fieldBasedGrouping"),
+        endpointBasedGrouping: this.$t("marketplace.connectionPage.capabilities.endpointBasedGrouping"),
+        importGroups: this.$t("marketplace.connectionPage.capabilities.importGroups"),
+        deleteGroups: this.$t("marketplace.connectionPage.capabilities.deleteGroups"),
+        modifyGroupMembership: this.$t("marketplace.connectionPage.capabilities.modifyGroupMembership"),
+        archiveProduct: this.$t("marketplace.connectionPage.capabilities.archiveProduct"),
+      };
+    },
     breadcrumbs() {
-      const tabLabels = { settings: "Настройки", mappings: "Маппинги", products: "Товары" };
+      const tabLabels = {
+        settings: this.$t("marketplace.connectionPage.tabs.settings"),
+        mappings: this.$t("marketplace.connectionPage.tabs.mappings"),
+        products: this.$t("marketplace.connectionPage.tabs.products"),
+      };
       return [
-        { label: "Адаптеры", to: PAGE_MARKETPLACE },
-        { label: this.connection?.name || "Подключение", to: this.$route.fullPath.split("?")[0] },
-        { label: tabLabels[this.activeTab] || "Настройки" },
+        { label: this.$t("marketplace.connectionPage.breadcrumbs.adapters"), to: PAGE_MARKETPLACE },
+        {
+          label: this.connection?.name || this.$t("marketplace.connectionPage.breadcrumbs.connectionFallback"),
+          to: this.$route.fullPath.split("?")[0],
+        },
+        { label: tabLabels[this.activeTab] || tabLabels.settings },
       ];
     },
     selectedAdapterSchema() {
@@ -570,7 +578,9 @@ export default {
       const groups = {};
       for (const product of this.selectedUnlinkedItems) {
         const catId = product.externalCategoryId || "__none__";
-        const catName = product.externalCategoryName || "Без категории";
+        const catName =
+          product.externalCategoryName ||
+          this.$t("marketplace.connectionPage.categories.uncategorized");
         if (!groups[catId]) {
           groups[catId] = {
             externalCategoryId: catId === "__none__" ? null : catId,
@@ -587,7 +597,9 @@ export default {
       if (!this.mappingSelectionProducts.length) return [];
       const groups = {};
       for (const p of this.mappingSelectionProducts) {
-        const key = p.categoryName || "Без категории";
+        const key =
+          p.categoryName ||
+          this.$t("marketplace.connectionPage.categories.uncategorized");
         if (!groups[key]) {
           groups[key] = {
             categoryName: key,
@@ -636,7 +648,11 @@ export default {
       return this.bulkImportPreviewData.items
         .filter((item) => item.hasChanges)
         .map((item) => ({
-          label: item.productName || `Связь #${item.linkId}`,
+          label:
+            item.productName ||
+            this.$t("marketplace.connectionPage.mappingSelection.linkFallback", {
+              id: item.linkId,
+            }),
           fields: item.updatedFields.map((field) => ({
             key: field,
             label: this.getImportFieldLabel(field),
@@ -784,12 +800,12 @@ export default {
     },
 
     getUsageLoadLabel(usage, limit) {
-      if (limit < 0) return "Безлимит";
-      if (limit <= 0) return "—";
+      if (limit < 0) return this.$t("marketplace.connectionPage.limits.unlimited");
+      if (limit <= 0) return this.$t("common.emDash");
       const ratio = usage / limit;
-      if (ratio < 0.5) return "Норма";
-      if (ratio < 0.8) return "Высокая";
-      return "Критическая";
+      if (ratio < 0.5) return this.$t("marketplace.connectionPage.limits.loadNormal");
+      if (ratio < 0.8) return this.$t("marketplace.connectionPage.limits.loadHigh");
+      return this.$t("marketplace.connectionPage.limits.loadCritical");
     },
 
     formatQuotaResetTime(resetsAt) {
@@ -929,7 +945,9 @@ export default {
         connectionId: this.connectionId,
         data,
         onSuccess: () => {
-          displaySonnerSuccess("Подключение сохранено");
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.connectionSaved"),
+          );
           this.parseCredentials();
         },
         onError: (error) => {
@@ -948,11 +966,13 @@ export default {
           this.testResult = extractResponseData(response, {});
           if (this.testResult.success) {
             displaySonnerSuccess(
-              this.testResult.message || "Подключение успешно",
+              this.testResult.message ||
+                this.$t("marketplace.connectionPage.notifications.testSuccess"),
             );
           } else {
             displaySonnerError(
-              this.testResult.errorMessage || "Ошибка подключения",
+              this.testResult.errorMessage ||
+                this.$t("marketplace.connectionPage.notifications.testError"),
             );
           }
         },
@@ -968,7 +988,9 @@ export default {
         !this.newMapping.localCategoryId ||
         !this.newMapping.externalCategoryId
       ) {
-        displaySonnerError("Выберите обе категории");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectBothCategories"),
+        );
         return;
       }
 
@@ -980,7 +1002,9 @@ export default {
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
           this.fetchMappings();
-          displaySonnerSuccess("Маппинг создан");
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.mappingCreated"),
+          );
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -991,12 +1015,16 @@ export default {
 
     async handleCreateExternalCategoryMapping() {
       if (!this.newMapping.localCategoryId) {
-        displaySonnerError("Выберите локальную категорию");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLocalCategory"),
+        );
         return;
       }
 
       if (!this.capabilities?.capabilities?.createCategory) {
-        displaySonnerError("Адаптер не поддерживает создание категорий");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.createCategoryUnsupported"),
+        );
         return;
       }
 
@@ -1012,7 +1040,9 @@ export default {
           mappingName: this.newMapping.name,
         },
         onSuccess: () => {
-          displaySonnerSuccess("Категория создана и связана");
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.categoryCreatedAndLinked"),
+          );
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
           this.fetchMappings();
@@ -1063,10 +1093,16 @@ export default {
           const detached = response?.data?.detachedProducts || 0;
           displaySonnerSuccess(
             reassigned > 0
-              ? `Маппинг удалён, товары перенесены: ${reassigned}`
+              ? this.$t(
+                  "marketplace.connectionPage.notifications.mappingDeletedReassigned",
+                  { count: reassigned },
+                )
               : detached > 0
-                ? `Маппинг удалён, товаров без маппинга: ${detached}`
-                : "Маппинг удалён",
+                ? this.$t(
+                    "marketplace.connectionPage.notifications.mappingDeletedDetached",
+                    { count: detached },
+                  )
+                : this.$t("marketplace.connectionPage.notifications.mappingDeleted"),
           );
           this.showDeleteMappingDialog = false;
           this.deleteMappingTarget = null;
@@ -1097,7 +1133,13 @@ export default {
       }
       if (!this.deleteMappingReplacementId) {
         displaySonnerError({
-          response: { data: { title: "Выберите маппинг, на который перенести товары" } },
+          response: {
+            data: {
+              title: this.$t(
+                "marketplace.connectionPage.notifications.selectReplacementMapping",
+              ),
+            },
+          },
         });
         return;
       }
@@ -1124,11 +1166,14 @@ export default {
           connectionId: this.connectionId,
           mappingId,
         });
-        displaySonnerSuccess("Маппинг продублирован");
+        displaySonnerSuccess(
+          this.$t("marketplace.connectionPage.notifications.mappingDuplicated"),
+        );
         this.fetchMappings();
       } catch (err) {
         displaySonnerError(
-          "Ошибка дублирования: " +
+          this.$t("marketplace.connectionPage.notifications.duplicateError") +
+            ": " +
             (err.response?.data?.message || err.message || err),
         );
       }
@@ -1149,12 +1194,15 @@ export default {
           mappingId: this.renameMappingId,
           data: { name: this.renameMappingValue || null },
         });
-        displaySonnerSuccess("Маппинг переименован");
+        displaySonnerSuccess(
+          this.$t("marketplace.connectionPage.notifications.mappingRenamed"),
+        );
         this.showRenameMappingDialog = false;
         this.fetchMappings();
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || "Ошибка переименования",
+          error.response?.data?.message ||
+            this.$t("marketplace.connectionPage.notifications.renameError"),
         );
       } finally {
         this.isRenamingMapping = false;
@@ -1176,12 +1224,15 @@ export default {
           mappingId: this.mappingSettingsId,
           data: { name: this.mappingSettingsName || null },
         });
-        displaySonnerSuccess("Настройки сохранены");
+        displaySonnerSuccess(
+          this.$t("marketplace.connectionPage.notifications.settingsSaved"),
+        );
         this.showMappingSettingsDialog = false;
         this.fetchMappings();
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || "Ошибка сохранения",
+          error.response?.data?.message ||
+            this.$t("marketplace.connectionPage.notifications.saveError"),
         );
       } finally {
         this.isSavingMappingSettings = false;
@@ -1421,7 +1472,9 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (!result.hasChanges) {
-            displaySonnerSuccess("Изменений не обнаружено");
+            displaySonnerSuccess(
+              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
+            );
           } else {
             this.singleImportPreviewData = result;
             this.previewLinkId = product.linkId;
@@ -1448,10 +1501,14 @@ export default {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
             displaySonnerSuccess(
-              `Обновлено: ${result.updatedFields.join(", ")}`,
+              this.$t("marketplace.connectionPage.notifications.fieldsUpdated", {
+                fields: result.updatedFields.join(", "),
+              }),
             );
           } else {
-            displaySonnerSuccess("Изменений не обнаружено");
+            displaySonnerSuccess(
+              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
+            );
           }
           this.fetchProducts(true);
         },
@@ -1513,7 +1570,9 @@ export default {
       await this.exportFromLink({
         linkId: product.linkId,
         onSuccess: () => {
-          displaySonnerSuccess("Товар экспортирован на адаптер");
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.productExported"),
+          );
           this.fetchProducts(true);
         },
         onError: (error) => {
@@ -1527,9 +1586,9 @@ export default {
       if (!product.isLinked || !product.linkId || this.unlinkingLinkId) return;
 
       const ok = await confirm({
-        title: "Отвязать товар?",
-        description: "Товар будет отвязан от адаптера. Связь с маркетплейсом исчезнет.",
-        confirmLabel: "Отвязать",
+        title: this.$t("marketplace.connectionPage.confirm.unlinkTitle"),
+        description: this.$t("marketplace.connectionPage.confirm.unlinkDescription"),
+        confirmLabel: this.$t("marketplace.connectionPage.confirm.unlinkConfirm"),
       });
       if (!ok) return;
 
@@ -1537,7 +1596,9 @@ export default {
       await this.unlinkProduct({
         linkId: product.linkId,
         onSuccess: () => {
-          displaySonnerSuccess("Товар отвязан от адаптера");
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.productUnlinked"),
+          );
           this.selectedItems = this.selectedItems.filter(
             (id) => id !== product.externalId,
           );
@@ -1554,7 +1615,9 @@ export default {
     // Import dialog
     async openImportDialog() {
       if (this.selectedUnlinkedItems.length === 0) {
-        displaySonnerError("Выберите несвязанные товары");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectUnlinkedProducts"),
+        );
         return;
       }
 
@@ -1670,7 +1733,9 @@ export default {
         await http.post("/operations/start", {
           operationId,
           type: "batch-import",
-          title: `Импорт ${totalProducts} товаров`,
+          title: this.$t("marketplace.connectionPage.operations.importTitle", {
+            count: totalProducts,
+          }),
           batchType: "import",
           connectionId: this.connectionId,
           connectionName,
@@ -1730,7 +1795,11 @@ export default {
                   createdCategoryId = result.localCategoryId;
                 },
                 onError: (error) => {
-                  displaySonnerError(`Ошибка создания категории: ${error}`);
+                  displaySonnerError(
+                    this.$t("marketplace.connectionPage.notifications.categoryCreateError", {
+                      error,
+                    }),
+                  );
                 },
               });
             } else {
@@ -1742,7 +1811,11 @@ export default {
                   createdCategoryId = result.id;
                 },
                 onError: (error) => {
-                  displaySonnerError(`Ошибка создания категории: ${error}`);
+                  displaySonnerError(
+                    this.$t("marketplace.connectionPage.notifications.categoryCreateError", {
+                      error,
+                    }),
+                  );
                 },
               });
             }
@@ -1779,13 +1852,19 @@ export default {
             const result = extractResponseData(response, {});
             if (result.batchId) {
               displaySonnerSuccess(
-                `Добавлено в очередь: ${result.queued} товаров`,
+                this.$t("marketplace.connectionPage.notifications.queuedForImport", {
+                  count: result.queued,
+                }),
               );
               this.showImportDialog = false;
               this.selectedItems = [];
             } else {
               displaySonnerSuccess(
-                `Создано: ${result.imported || 0}, пропущено: ${result.skipped || 0}, ошибок: ${result.failed || 0}`,
+                this.$t("marketplace.connectionPage.notifications.importSummary", {
+                  created: result.imported || 0,
+                  skipped: result.skipped || 0,
+                  failed: result.failed || 0,
+                }),
               );
               this.showImportDialog = false;
               this.selectedItems = [];
@@ -1807,7 +1886,9 @@ export default {
     async handleImportBulk() {
       if (this.isImportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
-        displaySonnerError("Выберите связанные товары");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+        );
         return;
       }
 
@@ -1820,7 +1901,9 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.totalWithChanges === 0) {
-            displaySonnerSuccess("Изменений не обнаружено");
+            displaySonnerSuccess(
+              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
+            );
           } else {
             this.bulkImportPreviewData = result;
             this.bulkPreviewLinkIds = linkIds;
@@ -1845,7 +1928,10 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Импортировано: ${result.successCount || 0}, ошибок: ${result.failedCount || 0}`,
+            this.$t("marketplace.connectionPage.notifications.bulkImportSummary", {
+              success: result.successCount || 0,
+              failed: result.failedCount || 0,
+            }),
           );
           this.selectedItems = [];
         },
@@ -1867,7 +1953,9 @@ export default {
     async handleExportBulk() {
       if (this.isExportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
-        displaySonnerError("Выберите связанные товары");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+        );
         return;
       }
 
@@ -1894,7 +1982,8 @@ export default {
         }
       } catch (error) {
         displaySonnerError(
-          "Ошибка проверки маппингов: " +
+          this.$t("marketplace.connectionPage.notifications.mappingCheckError") +
+            ": " +
             (error.response?.data?.message || error.message),
         );
         return;
@@ -1918,7 +2007,8 @@ export default {
         this.selectedItems = [];
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || "Ошибка создания пакета экспорта",
+          error.response?.data?.message ||
+            this.$t("marketplace.connectionPage.notifications.exportBatchError"),
         );
       } finally {
         this.isExportingBulk = false;
@@ -1928,7 +2018,9 @@ export default {
     async handleExportPricesBulk() {
       if (this.isExportingPrices) return;
       if (this.selectedLinkedItems.length === 0) {
-        displaySonnerError("Выберите связанные товары");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+        );
         return;
       }
 
@@ -1941,7 +2033,10 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано цен: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`,
+            this.$t("marketplace.connectionPage.notifications.pricesExportSummary", {
+              updated: result.updatedCount || 0,
+              skipped: result.skippedCount || 0,
+            }),
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -1956,7 +2051,9 @@ export default {
     async handleExportStocksBulk() {
       if (this.isExportingStocks) return;
       if (this.selectedLinkedItems.length === 0) {
-        displaySonnerError("Выберите связанные товары");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+        );
         return;
       }
 
@@ -1969,7 +2066,10 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            `Экспортировано остатков: ${result.updatedCount || 0}, пропущено: ${result.skippedCount || 0}`,
+            this.$t("marketplace.connectionPage.notifications.stocksExportSummary", {
+              updated: result.updatedCount || 0,
+              skipped: result.skippedCount || 0,
+            }),
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -2109,7 +2209,9 @@ export default {
       if (this.isExportingNewBulk) return;
       const productIds = this.selectedLocalIds;
       if (productIds.length === 0) {
-        displaySonnerError("Выберите товары для экспорта");
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectProductsToExport"),
+        );
         return;
       }
 
@@ -2134,7 +2236,8 @@ export default {
         }
       } catch (error) {
         displaySonnerError(
-          "Ошибка проверки маппингов: " +
+          this.$t("marketplace.connectionPage.notifications.mappingCheckError") +
+            ": " +
             (error.response?.data?.message || error.message),
         );
         return;
@@ -2158,7 +2261,8 @@ export default {
         this.selectedLocalItemsMap = {};
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || "Ошибка создания пакета экспорта",
+          error.response?.data?.message ||
+            this.$t("marketplace.connectionPage.notifications.exportBatchError"),
         );
       } finally {
         this.isExportingNewBulk = false;
@@ -2173,7 +2277,9 @@ export default {
       );
       if (unselected.length > 0) {
         displaySonnerError(
-          `Выберите маппинг для всех товаров (осталось: ${unselected.length})`,
+          this.$t("marketplace.connectionPage.notifications.selectMappingForAll", {
+            count: unselected.length,
+          }),
         );
         return;
       }
@@ -2202,7 +2308,10 @@ export default {
         }
       } catch (error) {
         displaySonnerError(
-          "Ошибка сохранения выбора маппингов: " +
+          this.$t(
+            "marketplace.connectionPage.notifications.saveMappingSelectionsError",
+          ) +
+            ": " +
             (error.response?.data?.message || error.message),
         );
       } finally {
@@ -2227,17 +2336,17 @@ export default {
 
     getImportFieldLabel(field) {
       const labels = {
-        name: "Название",
-        description: "Описание",
-        price: "Цена",
-        storageQuantity: "Остаток",
+        name: this.$t("common.name"),
+        description: this.$t("common.description"),
+        price: this.$t("marketplace.connectionPage.fields.price"),
+        storageQuantity: this.$t("marketplace.connectionPage.fields.storageQuantity"),
       };
       if (field.startsWith("attr:")) return field.substring(5);
       return labels[field] || field;
     },
 
     formatImportFieldValue(field, value) {
-      if (value === null || value === undefined) return "—";
+      if (value === null || value === undefined) return this.$t("common.emDash");
       if (field === "price") return this.formatPrice(value);
       if (field === "description") {
         const str = String(value);
@@ -2251,7 +2360,7 @@ export default {
         return {
           variant: "secondary",
           icon: Package,
-          label: "Не связан",
+          label: this.$t("marketplace.connectionPage.status.unlinked"),
           color: "text-muted-foreground",
         };
       }
@@ -2259,7 +2368,7 @@ export default {
         return {
           variant: "destructive",
           icon: AlertTriangle,
-          label: "Нет маппинга",
+          label: this.$t("marketplace.connectionPage.status.noMapping"),
           color: "text-error",
         };
       }
@@ -2268,35 +2377,35 @@ export default {
           return {
             variant: "default",
             icon: CheckCircle,
-            label: "Синхронизирован",
+            label: this.$t("marketplace.connectionPage.status.synced"),
             color: "text-success",
           };
         case "NotSynced":
           return {
             variant: "secondary",
             icon: AlertTriangle,
-            label: "Не синхронизирован",
+            label: this.$t("marketplace.connectionPage.status.notSynced"),
             color: "text-muted-foreground",
           };
         case "SyncError":
           return {
             variant: "destructive",
             icon: XCircle,
-            label: "Ошибка",
+            label: this.$t("marketplace.connectionPage.status.syncError"),
             color: "text-error",
           };
         case "Modified":
           return {
             variant: "outline",
             icon: AlertTriangle,
-            label: "Изменён",
+            label: this.$t("marketplace.connectionPage.status.modified"),
             color: "text-warning",
           };
         default:
           return {
             variant: "secondary",
             icon: Package,
-            label: product.linkStatus || "—",
+            label: product.linkStatus || this.$t("common.emDash"),
             color: "text-muted-foreground",
           };
       }
@@ -2309,7 +2418,7 @@ export default {
     },
 
     formatPrice(price) {
-      if (price === null || price === undefined) return "—";
+      if (price === null || price === undefined) return this.$t("common.emDash");
       return formatMoney(price, this.storeBaseCurrency);
     },
   },
@@ -2380,10 +2489,10 @@ export default {
       <template v-if="connection" #center>
         <Tabs v-model="activeTab">
           <TabsList>
-            <TabsTrigger value="settings">Настройки</TabsTrigger>
-            <TabsTrigger value="mappings">Маппинги</TabsTrigger>
+            <TabsTrigger value="settings">{{ $t("marketplace.connectionPage.tabs.settings") }}</TabsTrigger>
+            <TabsTrigger value="mappings">{{ $t("marketplace.connectionPage.tabs.mappings") }}</TabsTrigger>
             <TabsTrigger value="products" @click="onProductsTabActivated">
-              Товары
+              {{ $t("marketplace.connectionPage.tabs.products") }}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -2399,39 +2508,39 @@ export default {
               <h1 class="text-lg font-semibold break-words">{{ connection.name }}</h1>
               <Badge variant="outline">{{ adapterDisplayName }}</Badge>
               <Badge :variant="connection.isActive ? 'secondary' : 'outline'">
-                {{ connection.isActive ? "Активно" : "Неактивно" }}
+                {{ connection.isActive ? $t("marketplace.connectionPage.status.active") : $t("marketplace.connectionPage.status.inactive") }}
               </Badge>
             </div>
             <p class="text-sm text-muted-foreground">
-              Подключение к адаптеру: настройки, маппинги категорий и синхронизация товаров.
+              {{ $t("marketplace.connectionPage.header.subtitle") }}
             </p>
           </div>
           <div v-if="activeTab === 'settings'" class="flex flex-wrap gap-2 shrink-0">
             <Button @click="handleSave" :disabled="isSaving">
               <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
               <Save v-else class="size-4 mr-2" />
-              Сохранить
+              {{ $t("common.save") }}
             </Button>
             <Button variant="outline" @click="handleTest" :disabled="isTesting">
               <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
               <TestTube v-else class="size-4 mr-2" />
-              Тест
+              {{ $t("marketplace.connectionPage.header.test") }}
             </Button>
             <Dialog v-model:open="showLimitsDialog">
               <DialogTrigger as-child>
                 <Button variant="outline" :disabled="!limitsData">
                   <Activity class="size-4 mr-2" />
-                  API лимиты
+                  {{ $t("marketplace.connectionPage.limits.title") }}
                 </Button>
               </DialogTrigger>
                     <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle class="flex items-center gap-2">
                           <Activity class="size-5" />
-                          API лимиты
+                          {{ $t("marketplace.connectionPage.limits.title") }}
                         </DialogTitle>
                         <DialogDescription>
-                          Текущая нагрузка и квоты запросов к API адаптера
+                          {{ $t("marketplace.connectionPage.limits.subtitle") }}
                         </DialogDescription>
                       </DialogHeader>
 
@@ -2446,8 +2555,8 @@ export default {
                         v-else-if="limitsData && !limitsData.supported"
                         size="sm"
                         class="py-6"
-                        title="Лимиты недоступны"
-                        description="Этот адаптер не поддерживает отслеживание API-лимитов."
+                        :title="$t('marketplace.connectionPage.limits.unavailableTitle')"
+                        :description="$t('marketplace.connectionPage.limits.unavailableDescription')"
                       >
                         <template #icon>
                           <Activity />
@@ -2463,7 +2572,7 @@ export default {
                             <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
                               <span class="flex items-center gap-2">
                                 <Gauge class="size-4 text-muted-foreground" />
-                                Запросов в секунду
+                                {{ $t("marketplace.connectionPage.limits.requestsPerSecond") }}
                               </span>
                               <Badge variant="secondary" class="font-normal tabular-nums">
                                 {{ limitsData.currentWindowRequests }} /
@@ -2473,12 +2582,12 @@ export default {
                           </CardHeader>
                           <CardContent class="space-y-3">
                             <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                              <span>Текущее окно</span>
+                              <span>{{ $t("marketplace.connectionPage.limits.currentWindow") }}</span>
                               <span>{{ getUsageLoadLabel(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond) }}</span>
                             </div>
                             <Progress :model-value="rpsUsagePercent" :max="100" />
                             <p class="text-xs text-muted-foreground">
-                              Всего запросов с момента запуска:
+                              {{ $t("marketplace.connectionPage.limits.totalRequestsSinceStart") }}
                               {{ limitsData.totalRequestsSinceStart.toLocaleString("ru-RU") }}
                             </p>
                           </CardContent>
@@ -2497,7 +2606,7 @@ export default {
                                 <span class="truncate">{{ quota.displayName }}</span>
                                 <Badge variant="secondary" class="shrink-0 font-normal tabular-nums">
                                   <template v-if="quota.limit < 0">
-                                    {{ quota.usage.toLocaleString("ru-RU") }} · безлимит
+                                    {{ quota.usage.toLocaleString("ru-RU") }} · {{ $t("marketplace.connectionPage.limits.unlimited") }}
                                   </template>
                                   <template v-else>
                                     {{ quota.usage.toLocaleString("ru-RU") }} /
@@ -2512,7 +2621,7 @@ export default {
                                 class="space-y-2"
                               >
                                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                                  <span>Использование</span>
+                                  <span>{{ $t("marketplace.connectionPage.limits.usage") }}</span>
                                   <span>{{ getUsageLoadLabel(quota.usage, quota.limit) }}</span>
                                 </div>
                                 <Progress
@@ -2524,7 +2633,7 @@ export default {
                                 v-if="quota.resetsAt"
                                 class="text-xs text-muted-foreground"
                               >
-                                Сброс: {{ formatQuotaResetTime(quota.resetsAt) }}
+                                {{ $t("marketplace.connectionPage.limits.reset") }}: {{ formatQuotaResetTime(quota.resetsAt) }}
                               </p>
                             </CardContent>
                           </Card>
@@ -2538,12 +2647,12 @@ export default {
         <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col min-h-0">
           <TabsContent value="settings" class="mt-0">
             <div class="max-w-2xl">
-              <SettingsFormSection title="Подключение">
-                <SettingsFormField label="Название" label-for="connection-name">
+              <SettingsFormSection :title="$t('marketplace.connectionPage.settings.connectionTitle')">
+                <SettingsFormField :label="$t('common.name')" label-for="connection-name">
                   <Input id="connection-name" v-model="connection.name" />
                 </SettingsFormField>
 
-                <SettingsFormField label="Активное подключение" label-for="active" inline>
+                <SettingsFormField :label="$t('marketplace.connectionPage.settings.activeConnection')" label-for="active" inline>
                   <Switch
                     id="active"
                     :model-value="connection.isActive"
@@ -2554,14 +2663,13 @@ export default {
 
               <SettingsFormSection
                 v-if="credentialFields?.length"
-                title="Данные для подключения"
+                :title="$t('marketplace.connectionPage.settings.credentialsTitle')"
               >
                 <p
                   v-if="connection?.hasCredentials"
                   class="text-sm text-muted-foreground mb-4"
                 >
-                  Учётные данные уже сохранены. Оставьте поля пустыми, чтобы не
-                  менять их, или введите новые значения для замены.
+                  {{ $t("marketplace.connectionPage.settings.credentialsHint") }}
                 </p>
                 <SettingsFormField
                   v-for="field in credentialFields"
@@ -2591,7 +2699,7 @@ export default {
 
               <SettingsFormSection
                 v-if="capabilities"
-                title="Возможности адаптера"
+                :title="$t('marketplace.connectionPage.settings.capabilitiesTitle')"
               >
                 <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
                   <div
@@ -2631,13 +2739,13 @@ export default {
                   >
                     {{
                       testResult.success
-                        ? testResult.message || "Подключение успешно"
-                        : testResult.errorMessage || "Ошибка подключения"
+                        ? testResult.message || $t("marketplace.connectionPage.notifications.testSuccess")
+                        : testResult.errorMessage || $t("marketplace.connectionPage.notifications.testError")
                     }}
                   </span>
                   <AiErrorExplainer
-                    v-if="!testResult.success && (testResult.errorMessage || 'Ошибка подключения')"
-                    :error-message="testResult.errorMessage || 'Ошибка подключения'"
+                    v-if="!testResult.success && (testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError'))"
+                    :error-message="testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError')"
                     :context="`test_connection`"
                     :connection-id="connection?.id"
                   />
@@ -2651,7 +2759,7 @@ export default {
             <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <p class="text-sm font-medium flex items-center gap-2">
                   <FolderTree class="size-4" />
-                  Маппинги категорий
+                  {{ $t("marketplace.connectionPage.mappings.title") }}
                   <span class="text-muted-foreground font-normal tabular-nums">
                     ({{ categoryMappings.length }})
                   </span>
@@ -2664,7 +2772,7 @@ export default {
                   <DialogTrigger as-child>
                     <Button variant="outline">
                       <Link class="size-4 mr-2" />
-                      Создать маппинг
+                      {{ $t("marketplace.connectionPage.mappings.createMapping") }}
                     </Button>
                   </DialogTrigger>
                   <DialogContent
@@ -2674,34 +2782,34 @@ export default {
                     <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
                       <DialogTitle class="flex items-center gap-2">
                         <Link class="size-5" />
-                        Создать маппинг
+                        {{ $t("marketplace.connectionPage.mappings.createMapping") }}
                       </DialogTitle>
                       <DialogDescription>
-                        Свяжите локальную категорию с категорией {{ adapterDisplayName }} для экспорта и импорта товаров.
+                        {{ $t("marketplace.connectionPage.mappings.createMappingDescription", { adapter: adapterDisplayName }) }}
                       </DialogDescription>
                     </DialogHeader>
 
                     <div class="px-6 pb-4">
-                      <SettingsFormField label="Название маппинга">
+                      <SettingsFormField :label="$t('marketplace.connectionPage.mappings.mappingNameLabel')">
                         <Input
                           v-model="newMapping.name"
-                          placeholder="Например: Стандарт, Премиум..."
+                          :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
                         />
                         <template #description>
-                          Необязательно. Помогает различать несколько маппингов одной категории.
+                          {{ $t("marketplace.connectionPage.mappings.mappingNameHint") }}
                         </template>
                       </SettingsFormField>
                     </div>
 
                     <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-y px-6">
                       <div class="flex min-h-0 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">Локальная категория</p>
+                        <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.localCategory") }}</p>
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
                           <div
                             v-if="!localCategories.length"
                             class="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground"
                           >
-                            Нет категорий
+                            {{ $t("marketplace.connectionPage.mappings.noCategories") }}
                           </div>
                           <div
                             v-else
@@ -2721,7 +2829,7 @@ export default {
                                 variant="secondary"
                                 class="ml-2 shrink-0 font-normal tabular-nums"
                               >
-                                {{ cat.attributesCount }} атр.
+                                {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: cat.attributesCount }) }}
                               </Badge>
                             </button>
                           </div>
@@ -2730,16 +2838,16 @@ export default {
                           v-if="selectedLocalCategory"
                           class="text-xs text-muted-foreground"
                         >
-                          Выбрано:
+                          {{ $t("marketplace.connectionPage.mappings.selected") }}
                           <span class="font-medium text-foreground">{{ selectedLocalCategory.name }}</span>
                           <span v-if="selectedLocalCategory.attributesCount">
-                            · {{ selectedLocalCategory.attributesCount }} атр.
+                            · {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: selectedLocalCategory.attributesCount }) }}
                           </span>
                         </p>
                       </div>
 
                       <div class="flex min-h-0 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">Категория {{ adapterDisplayName }}</p>
+                        <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.categoryOf", { adapter: adapterDisplayName }) }}</p>
 
                         <div class="flex gap-2">
                           <div class="relative min-w-0 flex-1">
@@ -2748,7 +2856,7 @@ export default {
                             />
                             <Input
                               v-model="externalCategorySearch"
-                              placeholder="Поиск по названию..."
+                              :placeholder="$t('marketplace.connectionPage.mappings.searchByNamePlaceholder')"
                               class="pl-9"
                               @keyup.enter="searchExternalCategories"
                             />
@@ -2756,7 +2864,7 @@ export default {
                           <Button
                             variant="outline"
                             size="icon"
-                            aria-label="Найти категории"
+                            :aria-label="$t('marketplace.connectionPage.mappings.findCategoriesAria')"
                             @click="searchExternalCategories"
                           >
                             <Search class="size-4" />
@@ -2796,7 +2904,7 @@ export default {
                           @click="navigateBack"
                         >
                           <ChevronLeft class="size-4 mr-2" />
-                          Назад
+                          {{ $t("common.back") }}
                         </Button>
 
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
@@ -2812,11 +2920,11 @@ export default {
                           >
                             <EmptyState
                               size="sm"
-                              title="Категории не найдены"
+                              :title="$t('marketplace.connectionPage.mappings.categoriesNotFoundTitle')"
                               :description="
                                 capabilities?.capabilities?.createCategory && selectedLocalCategory
-                                  ? `Измените запрос или создайте категорию в ${adapterDisplayName}.`
-                                  : 'Измените поисковый запрос.'
+                                  ? $t('marketplace.connectionPage.mappings.categoriesNotFoundHintWithCreate', { adapter: adapterDisplayName })
+                                  : $t('marketplace.connectionPage.mappings.categoriesNotFoundHint')
                               "
                             >
                               <template #icon>
@@ -2831,7 +2939,7 @@ export default {
                               >
                                 <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
                                 <FolderTree v-else class="size-4 mr-2" />
-                                {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
+                                {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
                               </Button>
                             </EmptyState>
                           </div>
@@ -2868,7 +2976,7 @@ export default {
                           v-if="newMapping.externalCategoryId"
                           class="text-xs text-muted-foreground"
                         >
-                          Выбрано:
+                          {{ $t("marketplace.connectionPage.mappings.selected") }}
                           <span class="font-medium text-foreground">
                             {{ newMapping.externalCategoryName || newMapping.externalCategoryId }}
                           </span>
@@ -2878,7 +2986,7 @@ export default {
 
                     <DialogFooter class="gap-2 px-6 py-4">
                       <DialogClose as-child>
-                        <Button variant="outline">Отмена</Button>
+                        <Button variant="outline">{{ $t("common.cancel") }}</Button>
                       </DialogClose>
                       <Button
                         v-if="capabilities?.capabilities?.createCategory"
@@ -2888,7 +2996,7 @@ export default {
                       >
                         <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
                         <FolderTree v-else class="size-4 mr-2" />
-                        {{ isCreatingExternalCategory ? "Создание..." : `Создать в ${adapterDisplayName}` }}
+                        {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
                       </Button>
                       <Button
                         @click="handleCreateMapping"
@@ -2898,7 +3006,7 @@ export default {
                           v-if="isCreatingMapping"
                           class="size-4 mr-2 animate-spin"
                         />
-                        {{ isCreatingMapping ? "Связывание..." : "Связать" }}
+                        {{ isCreatingMapping ? $t("marketplace.connectionPage.mappings.linking") : $t("marketplace.connectionPage.mappings.link") }}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -2910,7 +3018,7 @@ export default {
                   "
                 >
                   <Plus class="size-4 mr-2" />
-                  Импортировать категорию
+                  {{ $t("marketplace.connectionPage.mappings.importCategory") }}
                 </Button>
               </div>
             </div>
@@ -2918,8 +3026,8 @@ export default {
             <EmptyState
               v-if="categoryMappings.length === 0"
               class="py-10"
-                title="Пока нет маппингов"
-              :description="`Маппинг связывает локальную категорию с категорией ${adapterDisplayName} и управляет полями при экспорте и импорте.`"
+                :title="$t('marketplace.connectionPage.mappings.noMappingsYetTitle')"
+              :description="$t('marketplace.connectionPage.mappings.noMappingsYetDescription', { adapter: adapterDisplayName })"
             >
               <template #icon>
                 <FolderTree />
@@ -2928,11 +3036,11 @@ export default {
                 @click="$router.push(`/adapter/${connectionId}/categories/import`)"
               >
                 <Download class="size-4 mr-2" />
-                Импортировать категорию
+                {{ $t("marketplace.connectionPage.mappings.importCategory") }}
               </Button>
               <Button variant="outline" @click="showCreateMappingDialog = true">
                 <Plus class="size-4 mr-2" />
-                Создать маппинг
+                {{ $t("marketplace.connectionPage.mappings.createMapping") }}
               </Button>
             </EmptyState>
 
@@ -2941,12 +3049,12 @@ export default {
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader>
                     <TableRow class="hover:bg-transparent">
-                      <TableHead class="px-3">Локальная категория</TableHead>
+                      <TableHead class="px-3">{{ $t("marketplace.connectionPage.mappings.localCategory") }}</TableHead>
                       <TableHead class="hidden sm:table-cell px-3">
-                        Категория {{ adapterDisplayName }}
+                        {{ $t("marketplace.connectionPage.mappings.categoryOf", { adapter: adapterDisplayName }) }}
                       </TableHead>
-                      <TableHead class="hidden md:table-cell px-3">Название</TableHead>
-                      <TableHead class="w-24 text-right px-3">Товары</TableHead>
+                      <TableHead class="hidden md:table-cell px-3">{{ $t("common.name") }}</TableHead>
+                      <TableHead class="w-24 text-right px-3">{{ $t("marketplace.connectionPage.tabs.products") }}</TableHead>
                       <TableHead class="w-12 px-2" />
                     </TableRow>
                   </TableHeader>
@@ -2973,7 +3081,7 @@ export default {
                         {{ mapping.externalCategoryName || mapping.externalCategoryId }}
                       </TableCell>
                       <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
-                        {{ mapping.name || "—" }}
+                        {{ mapping.name || $t("common.emDash") }}
                       </TableCell>
                       <TableCell class="text-right tabular-nums text-muted-foreground">
                         {{ mapping.linkedProductsCount || 0 }}
@@ -2985,7 +3093,7 @@ export default {
                               variant="ghost"
                               size="icon"
                               class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              aria-label="Действия с маппингом"
+                              :aria-label="$t('marketplace.connectionPage.mappings.mappingActionsAria')"
                               @click.stop
                             >
                               <EllipsisVertical class="size-4" />
@@ -2993,17 +3101,17 @@ export default {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
-                              Переименовать
+                              {{ $t("marketplace.connectionPage.mappings.rename") }}
                             </DropdownMenuItem>
                             <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
-                              Дублировать
+                              {{ $t("marketplace.connectionPage.mappings.duplicate") }}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               class="text-destructive"
                               @click.stop="handleDeleteMapping(mapping)"
                             >
-                              Удалить
+                              {{ $t("common.delete") }}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -3023,14 +3131,14 @@ export default {
                   :variant="productsViewMode === 'external' ? 'default' : 'outline'"
                   @click="switchProductsView('external')"
                 >
-                  Товары адаптера
+                  {{ $t("marketplace.connectionPage.products.adapterProducts") }}
                 </Button>
                 <Button
                   size="sm"
                   :variant="productsViewMode === 'local' ? 'default' : 'outline'"
                   @click="switchProductsView('local')"
                 >
-                  Локальные для экспорта
+                  {{ $t("marketplace.connectionPage.products.localForExport") }}
                 </Button>
                 <div class="relative flex-1 min-w-[12rem]">
                 <Search
@@ -3039,13 +3147,13 @@ export default {
                 <Input
                   v-if="productsViewMode === 'external'"
                   v-model="searchQuery"
-                  placeholder="Поиск по SKU (точное совпадение)"
+                  :placeholder="$t('marketplace.connectionPage.products.searchBySkuPlaceholder')"
                   class="pl-10"
                 />
                 <Input
                   v-else
                   v-model="localSearchQuery"
-                  placeholder="Поиск по названию или SKU..."
+                  :placeholder="$t('marketplace.connectionPage.products.searchByNameOrSkuPlaceholder')"
                   class="pl-10"
                 />
               </div>
@@ -3053,7 +3161,7 @@ export default {
                 v-if="productsViewMode === 'local'"
                 class="text-sm text-muted-foreground whitespace-nowrap"
               >
-                Найдено: {{ localTotalCount }}
+                {{ $t("marketplace.connectionPage.products.foundCount", { count: localTotalCount }) }}
               </div>
             </div>
 
@@ -3081,13 +3189,13 @@ export default {
                           @update:model-value="toggleSelectAll"
                         />
                       </TableHead>
-                      <TableHead>Название</TableHead>
-                      <TableHead>Внешний ID</TableHead>
-                      <TableHead>Локальный SKU</TableHead>
-                      <TableHead class="text-right">Цена</TableHead>
-                      <TableHead class="text-right">Остаток</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead class="w-[100px]">Действия</TableHead>
+                      <TableHead>{{ $t("common.name") }}</TableHead>
+                      <TableHead>{{ $t("marketplace.connectionPage.products.externalIdHeader") }}</TableHead>
+                      <TableHead>{{ $t("marketplace.connectionPage.products.localSkuHeader") }}</TableHead>
+                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.price") }}</TableHead>
+                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.storageQuantity") }}</TableHead>
+                      <TableHead>{{ $t("common.status") }}</TableHead>
+                      <TableHead class="w-[100px]">{{ $t("common.actions") }}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3165,7 +3273,7 @@ export default {
                             "
                             class="text-xs text-muted-foreground"
                           >
-                            Адаптер: {{ formatPrice(product.externalPrice) }}
+                            {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ formatPrice(product.externalPrice) }}
                           </div>
                         </div>
                         <span v-else class="text-muted-foreground">—</span>
@@ -3182,7 +3290,7 @@ export default {
                             "
                             class="text-xs text-muted-foreground"
                           >
-                            Адаптер: {{ product.externalStock }}
+                            {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ product.externalStock }}
                           </div>
                         </div>
                         <span v-else class="text-muted-foreground">—</span>
@@ -3210,8 +3318,8 @@ export default {
                             size="sm"
                             @click="handleImportSingle(product)"
                             :disabled="importingLinkId === product.linkId"
-                            title="Импорт с адаптера"
-                            aria-label="Импорт с адаптера"
+                            :title="$t('marketplace.connectionPage.products.importFromAdapter')"
+                            :aria-label="$t('marketplace.connectionPage.products.importFromAdapter')"
                           >
                             <Loader2
                               v-if="importingLinkId === product.linkId"
@@ -3227,8 +3335,8 @@ export default {
                               exportingLinkId === product.linkId ||
                               product.mappingMissing
                             "
-                            title="Экспорт на адаптер"
-                            aria-label="Экспорт на адаптер"
+                            :title="$t('marketplace.connectionPage.products.exportToAdapter')"
+                            :aria-label="$t('marketplace.connectionPage.products.exportToAdapter')"
                           >
                             <Loader2
                               v-if="exportingLinkId === product.linkId"
@@ -3242,8 +3350,8 @@ export default {
                             class="text-destructive hover:text-destructive"
                             @click="handleUnlinkProduct(product)"
                             :disabled="unlinkingLinkId === product.linkId"
-                            title="Отвязать товар"
-                            aria-label="Отвязать товар"
+                            :title="$t('marketplace.connectionPage.products.unlinkProduct')"
+                            :aria-label="$t('marketplace.connectionPage.products.unlinkProduct')"
                           >
                             <Loader2
                               v-if="unlinkingLinkId === product.linkId"
@@ -3260,8 +3368,8 @@ export default {
                       <TableCell colspan="8">
                         <EmptyState
                           size="sm"
-                          title="Нет товаров"
-                          description="Товары появятся здесь после экспорта или привязки к адаптеру."
+                          :title="$t('marketplace.connectionPage.products.noProductsTitle')"
+                          :description="$t('marketplace.connectionPage.products.noProductsDescription')"
                         >
                           <template #icon>
                             <Package />
@@ -3283,7 +3391,7 @@ export default {
                       v-if="isLoadingMore"
                       class="size-4 mr-2 animate-spin"
                     />
-                    {{ isLoadingMore ? "Загрузка..." : "Загрузить ещё" }}
+                    {{ isLoadingMore ? $t("common.loading") : $t("marketplace.connectionPage.products.loadMore") }}
                   </Button>
                 </div>
               </div>
@@ -3294,16 +3402,16 @@ export default {
                 class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
               >
                 <div class="text-sm text-muted-foreground">
-                  Выбрано: {{ selectedItems.length }}
+                  {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedItems.length }}
                   <span v-if="hasSelectedLinked && hasSelectedUnlinked">
-                    ({{ selectedLinkedItems.length }} связанных,
-                    {{ selectedUnlinkedItems.length }} несвязанных)
+                    ({{ $t("marketplace.connectionPage.products.linkedCount", { count: selectedLinkedItems.length }) }},
+                    {{ $t("marketplace.connectionPage.products.unlinkedCount", { count: selectedUnlinkedItems.length }) }})
                   </span>
                   <span v-else-if="hasSelectedLinked">
-                    ({{ selectedLinkedItems.length }} связанных)
+                    ({{ $t("marketplace.connectionPage.products.linkedCount", { count: selectedLinkedItems.length }) }})
                   </span>
                   <span v-else-if="hasSelectedUnlinked">
-                    ({{ selectedUnlinkedItems.length }} несвязанных)
+                    ({{ $t("marketplace.connectionPage.products.unlinkedCount", { count: selectedUnlinkedItems.length }) }})
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
@@ -3319,7 +3427,7 @@ export default {
                       class="size-4 mr-2 animate-spin"
                     />
                     <Plus v-else class="size-4 mr-2" />
-                    Создать локальные ({{ selectedUnlinkedItems.length }})
+                    {{ $t("marketplace.connectionPage.products.createLocal", { count: selectedUnlinkedItems.length }) }}
                   </Button>
 
                   <!-- Import from marketplace for linked -->
@@ -3334,7 +3442,7 @@ export default {
                       class="size-4 mr-2 animate-spin"
                     />
                     <Download v-else class="size-4 mr-2" />
-                    Импорт ({{ selectedLinkedItems.length }})
+                    {{ $t("marketplace.connectionPage.products.importCount", { count: selectedLinkedItems.length }) }}
                   </Button>
 
                   <!-- Export to marketplace for linked -->
@@ -3349,7 +3457,7 @@ export default {
                       class="size-4 mr-2 animate-spin"
                     />
                     <Upload v-else class="size-4 mr-2" />
-                    Экспорт ({{ selectedLinkedItems.length }})
+                    {{ $t("marketplace.connectionPage.products.exportCount", { count: selectedLinkedItems.length }) }}
                   </Button>
 
                   <!-- Export prices -->
@@ -3364,7 +3472,7 @@ export default {
                       class="size-4 mr-2 animate-spin"
                     />
                     <DollarSign v-else class="size-4 mr-2" />
-                    Экспорт цен
+                    {{ $t("marketplace.connectionPage.products.exportPrices") }}
                   </Button>
 
                   <!-- Export stocks -->
@@ -3378,7 +3486,7 @@ export default {
                       class="size-4 mr-2 animate-spin"
                     />
                     <Boxes v-else class="size-4 mr-2" />
-                    Экспорт остатков
+                    {{ $t("marketplace.connectionPage.products.exportStocks") }}
                   </Button>
                 </div>
               </div>
@@ -3406,11 +3514,11 @@ export default {
                           @update:model-value="toggleSelectAllLocal"
                         />
                       </TableHead>
-                      <TableHead>Название</TableHead>
+                      <TableHead>{{ $t("common.name") }}</TableHead>
                       <TableHead>SKU</TableHead>
-                      <TableHead class="text-right">Цена</TableHead>
-                      <TableHead class="text-right">Остаток</TableHead>
-                      <TableHead>Категория</TableHead>
+                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.price") }}</TableHead>
+                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.storageQuantity") }}</TableHead>
+                      <TableHead>{{ $t("marketplace.connectionPage.products.categoryHeader") }}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3458,8 +3566,8 @@ export default {
                       <TableCell colspan="6">
                         <EmptyState
                           size="sm"
-                          title="Нет товаров для экспорта"
-                          description="Все товары уже экспортированы, или для их категорий нет маппингов."
+                          :title="$t('marketplace.connectionPage.products.noProductsToExportTitle')"
+                          :description="$t('marketplace.connectionPage.products.noProductsToExportDescription')"
                         >
                           <template #icon>
                             <Package />
@@ -3477,7 +3585,7 @@ export default {
                 class="shrink-0 flex items-center justify-between px-4 py-3"
               >
                 <div class="flex items-center gap-2">
-                  <p class="text-sm text-muted-foreground">по</p>
+                  <p class="text-sm text-muted-foreground">{{ $t("marketplace.connectionPage.products.pageSizeLabel") }}</p>
                   <Select
                     :model-value="String(localPageSize)"
                     @update:model-value="
@@ -3502,7 +3610,7 @@ export default {
                     </SelectContent>
                   </Select>
                   <p class="text-sm text-muted-foreground">
-                    Всего: {{ localTotalCount }}
+                    {{ $t("marketplace.connectionPage.products.totalLabel") }} {{ localTotalCount }}
                   </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -3566,7 +3674,7 @@ export default {
                 class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
               >
                 <div class="text-sm text-muted-foreground">
-                  Выбрано: {{ selectedLocalIds.length }}
+                  {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedLocalIds.length }}
                 </div>
                 <Button
                   @click="handleExportNewBulk"
@@ -3577,7 +3685,7 @@ export default {
                     class="size-4 mr-2 animate-spin"
                   />
                   <Upload v-else class="size-4 mr-2" />
-                  Экспортировать на адаптер ({{ selectedLocalIds.length }})
+                  {{ $t("marketplace.connectionPage.products.exportToAdapterCount", { count: selectedLocalIds.length }) }}
                 </Button>
               </div>
             </template>
@@ -3592,9 +3700,9 @@ export default {
     <Dialog v-model:open="showSingleImportPreviewDialog">
       <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Подтверждение импорта</DialogTitle>
+          <DialogTitle>{{ $t("productMarketplaceIntegrations.importDialogTitle") }}</DialogTitle>
           <DialogDescription>
-            Следующие поля будут обновлены из адаптера
+            {{ $t("productMarketplaceIntegrations.importDialogDescription") }}
           </DialogDescription>
         </DialogHeader>
         <div
@@ -3611,7 +3719,7 @@ export default {
         <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline" @click="cancelSingleImport"
-              >Отмена</Button
+              >{{ $t("common.cancel") }}</Button
             >
           </DialogClose>
           <Button
@@ -3625,7 +3733,7 @@ export default {
               class="size-4 mr-2 animate-spin"
             />
             <Download v-else class="size-4 mr-2" />
-            Подтвердить
+            {{ $t("productMarketplaceIntegrations.confirmAction") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3635,14 +3743,12 @@ export default {
     <Dialog v-model:open="showBulkImportPreviewDialog">
       <DialogScrollContent class="sm:max-w-4xl max-h-[85vh]">
         <DialogHeader>
-          <DialogTitle>Подтверждение массового импорта</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.confirmBulkImportTitle") }}</DialogTitle>
           <DialogDescription v-if="bulkImportPreviewData">
-            Будет обновлено {{ bulkImportPreviewData.totalWithChanges }} из
-            {{
-              bulkImportPreviewData.totalWithChanges +
-              bulkImportPreviewData.totalWithoutChanges
-            }}
-            товаров
+            {{ $t("marketplace.connectionPage.dialogs.bulkImportWillUpdate", {
+              count: bulkImportPreviewData.totalWithChanges,
+              total: bulkImportPreviewData.totalWithChanges + bulkImportPreviewData.totalWithoutChanges,
+            }) }}
           </DialogDescription>
         </DialogHeader>
         <div
@@ -3653,7 +3759,7 @@ export default {
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline" @click="cancelBulkImport">Отмена</Button>
+            <Button variant="outline" @click="cancelBulkImport">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="confirmBulkImport" :disabled="isApplyingBulkImport">
             <Loader2
@@ -3661,7 +3767,7 @@ export default {
               class="size-4 mr-2 animate-spin"
             />
             <Download v-else class="size-4 mr-2" />
-            Подтвердить
+            {{ $t("productMarketplaceIntegrations.confirmAction") }}
           </Button>
         </DialogFooter>
       </DialogScrollContent>
@@ -3671,9 +3777,9 @@ export default {
     <Dialog v-model:open="showImportDialog">
       <DialogContent size="2xl" class="max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Импорт товаров</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.importProductsTitle") }}</DialogTitle>
           <DialogDescription>
-            Выберите локальную категорию для каждой категории адаптера
+            {{ $t("marketplace.connectionPage.dialogs.importProductsDescription") }}
           </DialogDescription>
         </DialogHeader>
 
@@ -3683,7 +3789,7 @@ export default {
 
         <div v-else class="flex-1 overflow-auto space-y-4 py-4">
           <div class="text-sm text-muted-foreground mb-4">
-            Выбрано товаров: {{ selectedUnlinkedItems.length }}
+            {{ $t("marketplace.connectionPage.dialogs.selectedProductsCount", { count: selectedUnlinkedItems.length }) }}
           </div>
 
           <div
@@ -3695,7 +3801,7 @@ export default {
               <FolderOpen class="size-4 text-muted-foreground" />
               <span class="font-medium">{{ group.externalCategoryName }}</span>
               <Badge variant="secondary" class="ml-auto">
-                {{ group.products.length }} товаров
+                {{ $t("marketplace.connectionPage.dialogs.productsCount", { count: group.products.length }) }}
               </Badge>
             </div>
 
@@ -3703,7 +3809,7 @@ export default {
 
             <div class="space-y-3">
               <Label class="text-sm text-muted-foreground"
-                >Локальная категория:</Label
+                >{{ $t("marketplace.connectionPage.dialogs.localCategoryColon") }}</Label
               >
 
               <RadioGroup
@@ -3730,7 +3836,7 @@ export default {
                     class="flex items-center gap-2 cursor-pointer"
                   >
                     <Link2 class="size-4 text-muted-foreground shrink-0" />
-                    <span>Выбрать существующую:</span>
+                    <span>{{ $t("marketplace.connectionPage.dialogs.selectExistingColon") }}</span>
                   </Label>
                   <Select
                     :model-value="
@@ -3751,7 +3857,7 @@ export default {
                     "
                   >
                     <SelectTrigger class="w-[180px]">
-                      <SelectValue placeholder="Выберите категорию" />
+                      <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.choosePlaceholder')" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem
@@ -3768,7 +3874,7 @@ export default {
                           "
                           class="text-success ml-1"
                         >
-                          (маппинг)
+                          ({{ $t("marketplace.connectionPage.dialogs.mappingParenthetical") }})
                         </span>
                       </SelectItem>
                     </SelectContent>
@@ -3787,11 +3893,13 @@ export default {
                   >
                     <Sparkles class="size-4 text-warning mt-0.5 shrink-0" />
                     <span v-if="group.externalCategoryId"
-                      >Создать новую из адаптера: "{{
-                        group.externalCategoryName
-                      }}"</span
+                      >{{
+                        $t("marketplace.connectionPage.import.createNewFromAdapter", {
+                          name: group.externalCategoryName,
+                        })
+                      }}</span
                     >
-                    <span v-else>Создать новую категорию:</span>
+                    <span v-else>{{ $t("marketplace.connectionPage.import.createNewCategory") }}</span>
                   </Label>
                   <Input
                     v-if="
@@ -3805,7 +3913,7 @@ export default {
                         group.externalCategoryId || '__none__'
                       ].newCategoryName
                     "
-                    placeholder="Название категории"
+                    :placeholder="$t('marketplace.connectionPage.import.categoryNamePlaceholder')"
                     class="w-[180px]"
                   />
                 </div>
@@ -3821,7 +3929,7 @@ export default {
                     class="flex items-center gap-2 cursor-pointer"
                   >
                     <Ban class="size-4 text-muted-foreground shrink-0" />
-                    <span>Без категории</span>
+                    <span>{{ $t("marketplace.connectionPage.import.noCategory") }}</span>
                   </Label>
                 </div>
               </RadioGroup>
@@ -3831,7 +3939,7 @@ export default {
 
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button
             @click="handleImportWithCategories"
@@ -3842,7 +3950,7 @@ export default {
               class="size-4 mr-2 animate-spin"
             />
             <Download v-else class="size-4 mr-2" />
-            Импортировать ({{ selectedUnlinkedItems.length }})
+            {{ $t("marketplace.connectionPage.import.importCount", { count: selectedUnlinkedItems.length }) }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3851,16 +3959,15 @@ export default {
     <AlertDialog v-model:open="showDuplicateMappingDialog">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Дублировать маппинг?</AlertDialogTitle>
+          <AlertDialogTitle>{{ $t("marketplace.connectionPage.dialogs.duplicateMappingTitle") }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Будет создана полная копия этого маппинга со всеми настройками
-            графа.
+            {{ $t("marketplace.connectionPage.dialogs.duplicateMappingDescription") }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction @click="confirmDuplicateMapping">
-            Дублировать
+            {{ $t("marketplace.connectionPage.dialogs.duplicateAction") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -3870,28 +3977,28 @@ export default {
     <Dialog v-model:open="showRenameMappingDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Переименовать маппинг</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.renameMappingTitle") }}</DialogTitle>
           <DialogDescription
-            >Укажите новое название для маппинга</DialogDescription
+            >{{ $t("marketplace.connectionPage.dialogs.renameMappingDescription") }}</DialogDescription
           >
         </DialogHeader>
         <div class="py-4">
           <Input
             v-model="renameMappingValue"
-            placeholder="Название маппинга"
+            :placeholder="$t('marketplace.connectionPage.dialogs.mappingNamePlaceholder')"
             @keyup.enter="handleRenameMapping"
           />
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
             <Loader2
               v-if="isRenamingMapping"
               class="size-4 mr-2 animate-spin"
             />
-            Сохранить
+            {{ $t("common.save") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3902,23 +4009,28 @@ export default {
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>
-            Удалить маппинг
-            «{{ deleteMappingTarget?.name || deleteMappingTarget?.localCategoryName }}»?
+            {{
+              $t("marketplace.connectionPage.dialogs.deleteMappingTitle", {
+                name: deleteMappingTarget?.name || deleteMappingTarget?.localCategoryName,
+              })
+            }}
           </DialogTitle>
           <DialogDescription>
-            С ним связано товаров:
             {{
-              deleteMappingImpact?.linkedProductsCount ||
-              deleteMappingTarget?.linkedProductsCount ||
-              0
-            }}. Выберите, что с ними сделать.
+              $t("marketplace.connectionPage.dialogs.deleteMappingLinkedProducts", {
+                count:
+                  deleteMappingImpact?.linkedProductsCount ||
+                  deleteMappingTarget?.linkedProductsCount ||
+                  0,
+              })
+            }}
           </DialogDescription>
         </DialogHeader>
 
         <div
           class="space-y-2 py-2"
           role="radiogroup"
-          aria-label="Что сделать с товарами"
+          :aria-label="$t('marketplace.connectionPage.dialogs.whatToDoWithProductsAria')"
         >
           <!-- Safe path: only rendered when an alternative mapping exists -->
           <Button
@@ -3946,11 +4058,10 @@ export default {
               />
               <div class="min-w-0 flex-1 space-y-1.5">
                 <div class="text-sm font-medium">
-                  Перенести товары на другой маппинг
+                  {{ $t("marketplace.connectionPage.dialogs.moveProductsToAnotherMapping") }}
                 </div>
                 <p class="text-xs text-muted-foreground">
-                  Связи переключатся на выбранный маппинг, экспорт продолжит
-                  работать.
+                  {{ $t("marketplace.connectionPage.dialogs.moveProductsHint") }}
                 </p>
                 <Select
                   v-if="deleteMappingMode === 'reassign'"
@@ -3960,7 +4071,7 @@ export default {
                   "
                 >
                   <SelectTrigger class="h-9 w-full" @click.stop>
-                    <SelectValue placeholder="Маппинг для переноса" />
+                    <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.mappingToTransferPlaceholder')" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
@@ -3968,7 +4079,7 @@ export default {
                       :key="mapping.id"
                       :value="mapping.id.toString()"
                     >
-                      {{ mapping.name || `Маппинг #${mapping.id}` }}
+                      {{ mapping.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: mapping.id }) }}
                       <span class="text-muted-foreground ml-1">
                         ({{
                           mapping.externalCategoryName ||
@@ -4005,17 +4116,15 @@ export default {
                 ]"
               />
               <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="text-sm font-medium">Удалить без переноса</div>
+                <div class="text-sm font-medium">{{ $t("marketplace.connectionPage.dialogs.deleteWithoutMoving") }}</div>
                 <p class="text-xs text-muted-foreground">
-                  Товары останутся связанными с маркетплейсом, но потеряют
-                  маппинг — экспорт будет недоступен, пока не назначите новый.
+                  {{ $t("marketplace.connectionPage.dialogs.deleteWithoutMovingHint") }}
                 </p>
                 <p
                   v-if="deleteMappingReplacementOptions.length === 0"
                   class="text-xs text-muted-foreground"
                 >
-                  Перенести некуда: другого маппинга для этой категории нет.
-                  Чтобы перенести, сначала создайте или продублируйте маппинг.
+                  {{ $t("marketplace.connectionPage.dialogs.noReplacementMappingHint") }}
                 </p>
               </div>
             </div>
@@ -4023,7 +4132,7 @@ export default {
 
           <div v-if="deleteMappingImpact?.products?.length" class="pt-1">
             <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-              Связанные товары
+              {{ $t("marketplace.connectionPage.dialogs.linkedProducts") }}
             </div>
             <div class="max-h-28 divide-y overflow-y-auto rounded-md border">
               <div
@@ -4032,7 +4141,7 @@ export default {
                 class="flex items-baseline justify-between gap-2 px-3 py-1.5 text-xs"
               >
                 <span class="truncate">
-                  {{ product.name || `Товар #${product.id}` }}
+                  {{ product.name || $t("marketplace.connectionPage.dialogs.productFallback", { id: product.id }) }}
                 </span>
                 <span class="shrink-0 font-mono text-muted-foreground">
                   {{ product.sku || `ID ${product.id}` }}
@@ -4045,10 +4154,12 @@ export default {
                 "
                 class="px-3 py-1.5 text-xs text-muted-foreground"
               >
-                и ещё
                 {{
-                  deleteMappingImpact.linkedProductsCount -
-                  deleteMappingImpact.products.length
+                  $t("marketplace.connectionPage.dialogs.andMoreCount", {
+                    count:
+                      deleteMappingImpact.linkedProductsCount -
+                      deleteMappingImpact.products.length,
+                  })
                 }}
               </div>
             </div>
@@ -4057,7 +4168,7 @@ export default {
 
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button
             variant="destructive"
@@ -4073,8 +4184,8 @@ export default {
             />
             {{
               deleteMappingMode === "reassign"
-                ? "Перенести и удалить"
-                : "Удалить без переноса"
+                ? $t("marketplace.connectionPage.dialogs.moveAndDelete")
+                : $t("marketplace.connectionPage.dialogs.deleteWithoutMoving")
             }}
           </Button>
         </DialogFooter>
@@ -4085,23 +4196,23 @@ export default {
     <Dialog v-model:open="showMappingSettingsDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Настройки маппинга</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.mappingSettingsTitle") }}</DialogTitle>
           <DialogDescription
-            >Настройте параметры маппинга категорий</DialogDescription
+            >{{ $t("marketplace.connectionPage.dialogs.mappingSettingsDescription") }}</DialogDescription
           >
         </DialogHeader>
         <div class="space-y-4 py-4">
           <div class="space-y-2">
-            <Label>Название</Label>
+            <Label>{{ $t("common.name") }}</Label>
             <Input
               v-model="mappingSettingsName"
-              placeholder="Название маппинга"
+              :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
             />
           </div>
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">Отмена</Button>
+            <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button
             @click="saveMappingSettingsDialog"
@@ -4111,7 +4222,7 @@ export default {
               v-if="isSavingMappingSettings"
               class="size-4 mr-2 animate-spin"
             />
-            Сохранить
+            {{ $t("common.save") }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -4124,20 +4235,19 @@ export default {
     >
       <DialogContent size="2xl">
         <DialogHeader>
-          <DialogTitle>Выберите маппинг для товаров</DialogTitle>
+          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.selectMappingForProductsTitle") }}</DialogTitle>
           <DialogDescription>
-            Для некоторых товаров доступно несколько маппингов категории.
-            Выберите нужный маппинг для каждого товара.
+            {{ $t("marketplace.connectionPage.dialogs.selectMappingForProductsDescription") }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4 max-h-96 overflow-y-auto">
-          <!-- Быстрый выбор по категории -->
+          <!-- Quick selection by category -->
           <div
             v-if="mappingCategoryGroups.length > 0"
             class="space-y-2 pb-3 border-b"
           >
             <div class="text-sm font-medium text-muted-foreground">
-              Применить ко всем
+              {{ $t("marketplace.connectionPage.dialogs.applyToAll") }}
             </div>
             <div
               v-for="group in mappingCategoryGroups"
@@ -4157,7 +4267,7 @@ export default {
                 @update:model-value="(val) => applyMappingToGroup(group, val)"
               >
                 <SelectTrigger class="h-8 flex-1">
-                  <SelectValue placeholder="Выберите маппинг..." />
+                  <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.chooseMappingPlaceholder')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
@@ -4165,7 +4275,7 @@ export default {
                     :key="m.id"
                     :value="m.id.toString()"
                   >
-                    {{ m.name || `Маппинг #${m.id}` }}
+                    {{ m.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: m.id }) }}
                     <span class="text-muted-foreground ml-1">
                       ({{ m.externalCategoryName || m.externalCategoryId }})
                     </span>
@@ -4195,7 +4305,7 @@ export default {
               "
             >
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Выберите маппинг..." />
+                <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.chooseMappingPlaceholder')" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -4203,7 +4313,7 @@ export default {
                   :key="mapping.id"
                   :value="mapping.id.toString()"
                 >
-                  {{ mapping.name || `Маппинг #${mapping.id}` }}
+                  {{ mapping.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: mapping.id }) }}
                   <span class="text-muted-foreground ml-1">
                     ({{
                       mapping.externalCategoryName ||
@@ -4218,7 +4328,7 @@ export default {
         <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline" @click="cancelMappingSelection"
-              >Отмена</Button
+              >{{ $t("common.cancel") }}</Button
             >
           </DialogClose>
           <Button
@@ -4230,7 +4340,7 @@ export default {
               class="size-4 mr-2 animate-spin"
             />
             <Upload v-else class="size-4 mr-2" />
-            Продолжить экспорт
+            {{ $t("marketplace.connectionPage.dialogs.continueExport") }}
           </Button>
         </DialogFooter>
       </DialogContent>

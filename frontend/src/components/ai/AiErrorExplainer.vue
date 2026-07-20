@@ -3,6 +3,9 @@ import { ref } from "vue";
 import { http } from "@/main";
 import { Loader2, Sparkles, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const props = defineProps({
   errorMessage: { type: String, required: true },
@@ -26,7 +29,7 @@ async function explain() {
     });
     explanation.value = r.data.explanation;
   } catch {
-    explanation.value = "Не удалось получить объяснение от AI.";
+    explanation.value = t("ai.explanationFailed");
   } finally {
     isLoading.value = false;
   }
@@ -43,19 +46,19 @@ async function explain() {
       @click="explain"
     >
       <Sparkles class="size-3" />
-      Объяснить ошибку
+      {{ t("ai.explainError") }}
     </Button>
 
     <div v-if="isLoading" class="flex items-center gap-1.5 text-xs text-muted-foreground italic">
       <Loader2 class="size-3 animate-spin" />
-      AI анализирует...
+      {{ t("ai.analyzing") }}
     </div>
 
     <div v-if="explanation" class="rounded-lg border bg-muted/50 p-2.5 max-w-sm text-xs">
       <div class="flex items-center justify-between mb-1.5">
         <span class="flex items-center gap-1 font-semibold text-primary text-[11px]">
           <Sparkles class="size-3" />
-          AI: объяснение ошибки
+          {{ t("ai.errorExplanationTitle") }}
         </span>
         <Button variant="ghost" size="icon" class="h-5 w-5" @click="explanation = null">
           <X class="size-3" />

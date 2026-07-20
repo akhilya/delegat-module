@@ -1,9 +1,10 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { ChevronDown, ChevronUp } from "lucide-vue-next";
+import { t } from "@/i18n";
 
 // Per-node preview chip. Long values (e.g. a product description) are clamped to a few lines
-// with an "ещё" toggle so a single node can't grow arbitrarily tall.
+// with a "more" toggle so a single node can't grow arbitrarily tall.
 const props = defineProps({
   value: { default: null },
 });
@@ -45,7 +46,7 @@ watch(text, () => {
       @mousedown.stop
     >
       <component :is="expanded ? ChevronUp : ChevronDown" class="size-3" />
-      {{ expanded ? "свернуть" : "ещё" }}
+      {{ expanded ? t("marketplace.graph.previewLess") : t("marketplace.graph.previewMore") }}
     </button>
   </div>
 </template>

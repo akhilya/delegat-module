@@ -15,6 +15,7 @@ import {
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Loader2, Save, Trash2 } from "lucide-vue-next";
+import { t } from "@/i18n";
 
 const isLoading = ref(false);
 const summary = ref(null);
@@ -52,14 +53,14 @@ function inactiveCount(item) {
 
 function statusLabel(status) {
   const value = String(status || "").toLowerCase();
-  if (value === "running") return "выполняется";
-  if (value === "paused") return "пауза";
-  if (value === "pending") return "ожидает";
-  if (value === "inprogress" || value === "in-progress") return "в процессе";
-  if (value === "completed") return "завершено";
-  if (value === "failed") return "ошибка";
-  if (value === "cancelled") return "отменено";
-  if (value === "partial") return "частично";
+  if (value === "running") return t("operations.status.running");
+  if (value === "paused") return t("operations.status.paused");
+  if (value === "pending") return t("pages.settingsOverviewPage.statusPending");
+  if (value === "inprogress" || value === "in-progress") return t("pages.settingsOverviewPage.statusInProgress");
+  if (value === "completed") return t("operations.status.completed");
+  if (value === "failed") return t("operations.status.failed");
+  if (value === "cancelled") return t("operations.status.cancelled");
+  if (value === "partial") return t("operations.status.partial");
   return status || "—";
 }
 
@@ -95,7 +96,7 @@ async function saveAllSettings() {
         value: settingDrafts.value[setting.key],
       });
     }
-    displaySonnerSuccess("Общие параметры сохранены");
+    displaySonnerSuccess(t("pages.settingsOverviewPage.settingsSaved"));
     await fetchSummary();
   } catch (error) {
     displaySonnerError(error);
@@ -106,17 +107,17 @@ async function saveAllSettings() {
 
 async function clearTarget(target, status = "inactive") {
   const confirmed = await showConfirm(
-    "Очистить очередь",
+    t("pages.settingsOverviewPage.clearQueueTitle"),
     status === "all"
-      ? "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?"
-      : "Очистить завершённые, ошибочные и отменённые записи?",
+      ? t("pages.settingsOverviewPage.clearAllDescription")
+      : t("pages.settingsOverviewPage.clearInactiveDescription"),
   );
   if (!confirmed) return;
 
   clearingKey.value = `${target}:${status}`;
   try {
     const response = await http.post("/settings/operations/clear", { target, status }, { cache: false });
-    displaySonnerSuccess(`Удалено записей: ${response.data?.deleted ?? 0}`);
+    displaySonnerSuccess(t("pages.settingsOverviewPage.deletedRecords", { count: response.data?.deleted ?? 0 }));
     await fetchSummary();
   } catch (error) {
     displaySonnerError(error);
@@ -131,14 +132,14 @@ onMounted(fetchSummary);
 <template>
   <div class="flex flex-col">
     <PageHeader
-      title="Общие"
-      description="Платформенные параметры, очереди и диагностика"
+      :title="$t('nav.overview')"
+      :description="$t('pages.settingsOverviewPage.description')"
     />
 
     <PageSection :loading="isLoading" class="!min-h-0">
       <SettingsFormSection
-        title="Общие параметры"
-        description="Лимиты, rate limit и системные ограничения платформы."
+        :title="$t('pages.settingsOverviewPage.generalParamsTitle')"
+        :description="$t('pages.settingsOverviewPage.generalParamsDescription')"
       >
         <SettingsFormField
           v-for="limit in summary?.limits || []"
@@ -151,43 +152,43 @@ onMounted(fetchSummary);
             :type="limit.valueType === 'integer' || limit.valueType === 'decimal' ? 'number' : 'text'"
             :min="limit.valueType === 'decimal' ? '0.1' : '1'"
             :step="limit.valueType === 'decimal' ? '0.1' : '1'"
-            :placeholder="limit.fallbackValue ? `fallback: ${limit.fallbackValue}` : 'не задано'"
+            :placeholder="limit.fallbackValue ? `fallback: ${limit.fallbackValue}` : $t('pages.settingsOverviewPage.notSet')"
             :disabled="!limit.isEditable || isSavingSettings"
           />
           <template #description>
             <span v-if="limit.description">{{ limit.description }}</span>
             <span v-if="limit.description && limit.key"> · </span>
             <span class="font-mono text-xs">{{ limit.key }}</span>
-            <span> · Активно: </span>
+            <span> · {{ $t("pages.settingsOverviewPage.activeLabel") }}: </span>
             <Badge variant="secondary" class="align-middle text-xs">
-              {{ limit.effectiveValue || "не задано" }}
+              {{ limit.effectiveValue || $t("pages.settingsOverviewPage.notSet") }}
             </Badge>
           </template>
         </SettingsFormField>
 
         <p v-if="!summary?.limits?.length" class="py-4 text-sm text-muted-foreground">
-          Общие параметры не найдены.
+          {{ $t("pages.settingsOverviewPage.noParamsFound") }}
         </p>
 
         <template #footer>
           <span v-if="hasSettingChanges" class="mr-auto text-sm text-muted-foreground">
-            Изменено параметров: {{ changedSettings.length }}
+            {{ $t("pages.settingsOverviewPage.changedParamsCount", { count: changedSettings.length }) }}
           </span>
           <Button :disabled="!hasSettingChanges || isSavingSettings" @click="saveAllSettings">
             <Loader2 v-if="isSavingSettings" class="mr-2 size-4 animate-spin" />
             <Save v-else class="mr-2 size-4" />
-            Сохранить параметры
+            {{ $t("pages.settingsOverviewPage.saveParamsButton") }}
           </Button>
         </template>
       </SettingsFormSection>
 
       <SettingsFormSection
-        title="Очереди и процессы"
-        description="Текущие очереди экспорта, импорта, изображений и история фоновых операций."
+        :title="$t('pages.settingsOverviewPage.queuesSectionTitle')"
+        :description="$t('pages.settingsOverviewPage.queuesSectionDescription')"
       >
-        <SettingsFormField label="История фоновых процессов">
+        <SettingsFormField :label="$t('pages.settingsOverviewPage.historyLabel')">
           <div class="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{{ summary?.operations?.total ?? 0 }} записей</Badge>
+            <Badge variant="secondary">{{ $t("pages.settingsOverviewPage.recordsCount", { count: summary?.operations?.total ?? 0 }) }}</Badge>
             <Badge
               v-for="entry in summary?.operations?.statuses || []"
               :key="entry.status"
@@ -195,10 +196,10 @@ onMounted(fetchSummary);
             >
               {{ statusLabel(entry.status) }}: {{ entry.count }}
             </Badge>
-            <Badge v-if="!summary?.operations?.total" variant="secondary">нет записей</Badge>
+            <Badge v-if="!summary?.operations?.total" variant="secondary">{{ $t("pages.settingsOverviewPage.noRecords") }}</Badge>
           </div>
           <template #description>
-            Текущие и завершённые операции магазина.
+            {{ $t("pages.settingsOverviewPage.historyDescription") }}
           </template>
           <div class="mt-3 flex flex-wrap gap-2">
             <Button
@@ -209,7 +210,7 @@ onMounted(fetchSummary);
             >
               <Loader2 v-if="clearingKey === 'operations:inactive'" class="mr-2 size-4 animate-spin" />
               <Trash2 v-else class="mr-2 size-4" />
-              Очистить завершённые
+              {{ $t("pages.settingsOverviewPage.clearCompletedButton") }}
             </Button>
             <Button
               size="sm"
@@ -219,7 +220,7 @@ onMounted(fetchSummary);
             >
               <Loader2 v-if="clearingKey === 'operations:all'" class="mr-2 size-4 animate-spin" />
               <Trash2 v-else class="mr-2 size-4" />
-              Очистить всё
+              {{ $t("pages.settingsOverviewPage.clearAllButton") }}
             </Button>
           </div>
         </SettingsFormField>
@@ -230,11 +231,11 @@ onMounted(fetchSummary);
           :label="queue.label"
         >
           <div class="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{{ queue.total }} записей</Badge>
+            <Badge variant="secondary">{{ $t("pages.settingsOverviewPage.recordsCount", { count: queue.total }) }}</Badge>
             <Badge v-for="entry in queue.statuses" :key="entry.status" variant="secondary">
               {{ statusLabel(entry.status) }}: {{ entry.count }}
             </Badge>
-            <Badge v-if="queue.total === 0" variant="secondary">нет записей</Badge>
+            <Badge v-if="queue.total === 0" variant="secondary">{{ $t("pages.settingsOverviewPage.noRecords") }}</Badge>
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
             <Button
@@ -245,7 +246,7 @@ onMounted(fetchSummary);
             >
               <Loader2 v-if="clearingKey === `${queue.key}:inactive`" class="mr-2 size-4 animate-spin" />
               <Trash2 v-else class="mr-2 size-4" />
-              Очистить неактивные
+              {{ $t("pages.settingsOverviewPage.clearInactiveButton") }}
             </Button>
             <Button
               size="sm"
@@ -255,7 +256,7 @@ onMounted(fetchSummary);
             >
               <Loader2 v-if="clearingKey === `${queue.key}:all`" class="mr-2 size-4 animate-spin" />
               <Trash2 v-else class="mr-2 size-4" />
-              Очистить всё
+              {{ $t("pages.settingsOverviewPage.clearAllButton") }}
             </Button>
           </div>
         </SettingsFormField>
@@ -272,8 +273,8 @@ onMounted(fetchSummary);
           <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Очистить</AlertDialogAction>
+          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">{{ $t("operations.clearCompletedConfirm") }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -182,7 +182,7 @@ export default {
         },
         onSuccess: (response) => {
           this.applyUpdatedUser(response.data.value);
-          displaySonnerSuccess("Пользователь обновлён");
+          displaySonnerSuccess(this.$t("pages.usersPage.userUpdated"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -199,7 +199,7 @@ export default {
       const password = this.editForm.password.trim();
 
       if (!userName) {
-        displaySonnerError("Имя пользователя не может быть пустым");
+        displaySonnerError(this.$t("pages.usersPage.userNameEmptyError"));
         return;
       }
 
@@ -219,7 +219,7 @@ export default {
         onSuccess: async (response) => {
           await this.fetchUsers();
           this.closeEditDialog();
-          displaySonnerSuccess("Пользователь обновлён");
+          displaySonnerSuccess(this.$t("pages.usersPage.userUpdated"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -238,16 +238,16 @@ export default {
 <template>
   <div>
     <PageHeader
-      title="Пользователи"
-      :description="`Активных пользователей: ${activeUsersCount}`"
+      :title="$t('routes.users')"
+      :description="$t('pages.usersPage.activeUsersDescription', { count: activeUsersCount })"
     />
 
     <PageSection
       :loading="isLoading"
       :empty="users.length === 0"
       :empty-icon="Users"
-      empty-title="Нет пользователей"
-      empty-description="Пользователи появятся здесь после регистрации по приглашению"
+      :empty-title="$t('pages.usersPage.emptyTitle')"
+      :empty-description="$t('pages.usersPage.emptyDescription')"
     >
       <div class="rounded-lg border overflow-hidden">
       <div class="overflow-x-auto">
@@ -255,9 +255,9 @@ export default {
           <TableHeader>
             <TableRow>
               <TableHead class="w-24">ID</TableHead>
-              <TableHead>Имя</TableHead>
-              <TableHead class="w-32">Роль</TableHead>
-              <TableHead class="w-32">Статус</TableHead>
+              <TableHead>{{ $t("common.name") }}</TableHead>
+              <TableHead class="w-32">{{ $t("pages.usersPage.columnRole") }}</TableHead>
+              <TableHead class="w-32">{{ $t("common.status") }}</TableHead>
               <TableHead class="w-32"></TableHead>
             </TableRow>
           </TableHeader>
@@ -275,12 +275,12 @@ export default {
               </TableCell>
               <TableCell>
                 <Badge :variant="user.isAdmin ? 'default' : 'secondary'">
-                  {{ user.isAdmin ? "Админ" : "Пользователь" }}
+                  {{ user.isAdmin ? $t("pages.usersPage.roleAdmin") : $t("nav.user") }}
                 </Badge>
               </TableCell>
               <TableCell>
                 <Badge :variant="user.isActive ? 'secondary' : 'outline'">
-                  {{ user.isActive ? "Активен" : "Отключён" }}
+                  {{ user.isActive ? $t("pages.usersPage.statusActive") : $t("pages.usersPage.statusDisabled") }}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -292,7 +292,7 @@ export default {
                     @click="openEditDialog(user)"
                   >
                     <Pencil class="size-4" />
-                    <span class="sr-only">Редактировать пользователя</span>
+                    <span class="sr-only">{{ $t("pages.usersPage.editUser") }}</span>
                   </Button>
                 </div>
               </TableCell>
@@ -306,15 +306,15 @@ export default {
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Редактировать пользователя</DialogTitle>
+          <DialogTitle>{{ $t("pages.usersPage.editUser") }}</DialogTitle>
           <DialogDescription>
-            Измените имя пользователя или задайте новый пароль.
+            {{ $t("pages.usersPage.editUserDescription") }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="grid gap-4">
           <div class="grid gap-2">
-            <Label for="admin-user-name">Имя пользователя</Label>
+            <Label for="admin-user-name">{{ $t("auth.userName") }}</Label>
             <Input
               id="admin-user-name"
               v-model="editForm.userName"
@@ -324,7 +324,7 @@ export default {
           </div>
 
           <div class="grid gap-2">
-            <Label for="admin-user-password">Новый пароль</Label>
+            <Label for="admin-user-password">{{ $t("pages.usersPage.newPasswordLabel") }}</Label>
             <div class="relative">
               <KeyRound class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -334,7 +334,7 @@ export default {
                 class="pl-9"
                 type="password"
                 autocomplete="new-password"
-                placeholder="Оставьте пустым, если менять не нужно"
+                :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
               />
             </div>
           </div>
@@ -342,8 +342,8 @@ export default {
           <div class="grid gap-3 rounded-lg border p-3">
             <div class="flex items-center justify-between gap-4">
               <div>
-                <div class="text-sm font-medium">Глобальный администратор</div>
-                <div class="text-xs text-muted-foreground">Доступ ко всем общим настройкам платформы</div>
+                <div class="text-sm font-medium">{{ $t("pages.usersPage.globalAdminLabel") }}</div>
+                <div class="text-xs text-muted-foreground">{{ $t("pages.usersPage.globalAdminHint") }}</div>
               </div>
               <Switch
                 :model-value="editForm.isAdmin"
@@ -352,12 +352,12 @@ export default {
               />
             </div>
             <div v-if="editingSelf" class="text-xs text-muted-foreground">
-              Нельзя менять собственный статус глобального администратора.
+              {{ $t("pages.usersPage.cannotChangeSelfAdmin") }}
             </div>
             <div class="flex items-center justify-between gap-4">
               <div>
-                <div class="text-sm font-medium">Активен</div>
-                <div class="text-xs text-muted-foreground">Отключённый пользователь не может войти</div>
+                <div class="text-sm font-medium">{{ $t("pages.usersPage.statusActive") }}</div>
+                <div class="text-xs text-muted-foreground">{{ $t("pages.usersPage.disabledUserHint") }}</div>
               </div>
               <Switch
                 :model-value="editForm.isActive"
@@ -374,7 +374,7 @@ export default {
             :disabled="savingUserId === editingUser?.id"
             @click="closeEditDialog"
           >
-            Отмена
+            {{ $t("common.cancel") }}
           </Button>
           <Button
             :disabled="savingUserId === editingUser?.id || !hasEditChanges"
@@ -384,7 +384,7 @@ export default {
               v-if="savingUserId === editingUser?.id"
               class="size-4 animate-spin"
             />
-            <span v-else>Сохранить</span>
+            <span v-else>{{ $t("common.save") }}</span>
           </Button>
         </DialogFooter>
       </DialogContent>

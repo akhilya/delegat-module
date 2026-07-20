@@ -164,7 +164,7 @@ export default {
           size="icon"
           class="size-6 p-0.5 h-6 text-muted-foreground hover:text-foreground"
           @click="moveModifier(index, -1)"
-          title="Переместить влево"
+          :title="$t('marketplacePillChain.moveLeft')"
         >
           <ChevronLeft class="size-3" />
         </Button>
@@ -182,7 +182,7 @@ export default {
                   disabled ? 'opacity-50 pointer-events-none' : '',
                 ]"
                 @click="!disabled && hasParams(mod.type) && openEditor(index)"
-                :title="hasParams(mod.type) ? 'Нажмите для редактирования' : ''"
+                :title="hasParams(mod.type) ? $t('marketplacePillChain.editHint') : ''"
               >
                 <span>{{ getModifierLabel(mod) }}</span>
               </Button>
@@ -194,7 +194,7 @@ export default {
               size="icon"
               class="size-5 p-0 ml-0.5 hover:text-destructive"
               @click.stop="removeModifier(index)"
-              title="Удалить модификатор"
+              :title="$t('marketplacePillChain.removeModifier')"
             >
               <X class="size-3" />
             </Button>
@@ -223,7 +223,7 @@ export default {
           size="icon"
           class="size-6 p-0.5 h-6 text-muted-foreground hover:text-foreground"
           @click="moveModifier(index, 1)"
-          title="Переместить вправо"
+          :title="$t('marketplacePillChain.moveRight')"
         >
           <ChevronRight class="size-3" />
         </Button>
@@ -245,7 +245,7 @@ export default {
           class="inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-full text-xs border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground/60 hover:text-foreground"
         >
           <Plus class="size-3" />
-          <span v-if="modifiers.length === 0">Модификатор</span>
+          <span v-if="modifiers.length === 0">{{ $t("marketplace.graph.modifierFallback") }}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" class="w-56">

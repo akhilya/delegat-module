@@ -122,10 +122,12 @@ export default {
       },
       selectedAdapter: null,
       credentialValues: {},
-      breadcrumbs: [{ label: "Адаптеры" }],
     };
   },
   computed: {
+    breadcrumbs() {
+      return [{ label: this.$t("marketplace.marketplacePage.title") }];
+    },
     selectedAdapterSchema() {
       if (!this.selectedAdapter) return null;
       const adapter = this.adapters.find((a) => a.key === this.selectedAdapter);
@@ -186,11 +188,11 @@ export default {
 
     async handleCreateConnection() {
       if (!this.newConnection.name.trim()) {
-        displaySonnerError("Введите название подключения");
+        displaySonnerError(this.$t("marketplace.marketplacePage.enterConnectionName"));
         return;
       }
       if (!this.newConnection.adapterKey) {
-        displaySonnerError("Выберите адаптер");
+        displaySonnerError(this.$t("marketplace.marketplacePage.selectAdapter"));
         return;
       }
 
@@ -203,7 +205,7 @@ export default {
           isActive: this.newConnection.isActive,
         },
         onSuccess: (response) => {
-          displaySonnerSuccess("Подключение создано");
+          displaySonnerSuccess(this.$t("marketplace.marketplacePage.connectionCreated"));
           this.resetForm();
           this.showCreateDialog = false;
           const data = extractResponseData(response, {});
@@ -221,7 +223,7 @@ export default {
       await this.deleteConnection({
         connectionId,
         onSuccess: () => {
-          displaySonnerSuccess("Подключение удалено");
+          displaySonnerSuccess(this.$t("marketplace.marketplacePage.connectionDeleted"));
           this.fetchConnections();
         },
         onError: (error) => {
@@ -267,52 +269,52 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Адаптеры"
-      description="Управление подключениями к адаптерам для синхронизации товаров"
+      :title="$t('marketplace.marketplacePage.title')"
+      :description="$t('marketplace.marketplacePage.description')"
     >
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
             <Plus class="size-4 mr-2" />
-            Добавить подключение
+            {{ $t("marketplace.marketplacePage.addConnection") }}
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Новое подключение к адаптеру</DialogTitle>
+            <DialogTitle>{{ $t("marketplace.marketplacePage.newConnectionTitle") }}</DialogTitle>
             <DialogDescription>
-              Выберите адаптер и введите данные для подключения
+              {{ $t("marketplace.marketplacePage.newConnectionDescription") }}
             </DialogDescription>
           </DialogHeader>
           <div class="py-4 space-y-4">
             <!-- No plugins available -->
             <EmptyState
               v-if="adapters.length === 0"
-              title="Нет доступных плагинов"
-              description='Для подключения к адаптерам необходимо установить соответствующие плагины. Перейдите в раздел "Плагины" для установки.'
+              :title="$t('marketplace.marketplacePage.noPluginsAvailableTitle')"
+              :description="$t('marketplace.marketplacePage.noPluginsAvailableDescription')"
             >
               <template #icon>
                 <Package />
               </template>
               <Button variant="outline" class="mt-4" @click="openPlugins">
-                Перейти к плагинам
+                {{ $t("marketplace.marketplacePage.goToPlugins") }}
               </Button>
             </EmptyState>
 
             <template v-else>
               <div class="space-y-2">
-                <Label>Название подключения</Label>
+                <Label>{{ $t("marketplace.marketplacePage.connectionNameLabel") }}</Label>
                 <Input
                   v-model="newConnection.name"
-                  placeholder="Например: Основной магазин WB"
+                  :placeholder="$t('marketplace.marketplacePage.connectionNamePlaceholder')"
                 />
               </div>
 
               <div class="space-y-2">
-                <Label>Адаптер</Label>
+                <Label>{{ $t("marketplace.marketplacePage.adapterLabel") }}</Label>
                 <Select v-model="selectedAdapter" @update:modelValue="onAdapterSelect">
                   <SelectTrigger>
-                    <SelectValue placeholder="Выберите адаптер" />
+                    <SelectValue :placeholder="$t('marketplace.marketplacePage.selectAdapterPlaceholder')" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
@@ -359,22 +361,22 @@ export default {
 
               <div class="flex items-center gap-2">
                 <Switch :model-value="newConnection.isActive" @update:model-value="newConnection.isActive = $event" id="active" />
-                <Label for="active">Активное подключение</Label>
+                <Label for="active">{{ $t("marketplace.marketplacePage.activeConnectionLabel") }}</Label>
               </div>
             </template>
           </div>
           <DialogFooter v-if="adapters.length > 0">
             <DialogClose as-child>
-              <Button variant="outline" @click="resetForm">Отмена</Button>
+              <Button variant="outline" @click="resetForm">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateConnection" :disabled="isCreating">
               <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
-              Создать
+              {{ $t("common.create") }}
             </Button>
           </DialogFooter>
           <DialogFooter v-else>
             <DialogClose as-child>
-              <Button variant="outline">Закрыть</Button>
+              <Button variant="outline">{{ $t("common.close") }}</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
@@ -385,8 +387,8 @@ export default {
       :loading="isLoading"
       :empty="connections.length === 0"
       :empty-icon="Store"
-      empty-title="Нет подключений к адаптерам"
-      empty-description="Добавьте первое подключение для синхронизации товаров"
+      :empty-title="$t('marketplace.marketplacePage.emptyTitle')"
+      :empty-description="$t('marketplace.marketplacePage.emptyDescription')"
     >
 
       <div class="rounded-lg border overflow-hidden">
@@ -395,10 +397,10 @@ export default {
             <TableHeader>
               <TableRow class="hover:bg-transparent">
                 <TableHead class="w-10" />
-                <TableHead>Название</TableHead>
-                <TableHead class="hidden sm:table-cell">Адаптер</TableHead>
-                <TableHead class="w-32 text-right">Маппинги</TableHead>
-                <TableHead class="w-28 text-right">Товары</TableHead>
+                <TableHead>{{ $t("common.name") }}</TableHead>
+                <TableHead class="hidden sm:table-cell">{{ $t("marketplace.marketplacePage.adapterLabel") }}</TableHead>
+                <TableHead class="w-32 text-right">{{ $t("marketplace.marketplacePage.mappingsColumn") }}</TableHead>
+                <TableHead class="w-28 text-right">{{ $t("marketplace.marketplacePage.productsColumn") }}</TableHead>
                 <TableHead class="w-24" />
               </TableRow>
             </TableHeader>
@@ -413,7 +415,7 @@ export default {
                   <span
                     class="size-2 rounded-full block"
                     :class="conn.isActive ? 'bg-success' : 'bg-muted-foreground/40'"
-                    :title="conn.isActive ? 'Активен' : 'Неактивен'"
+                    :title="conn.isActive ? $t('marketplace.marketplacePage.active') : $t('marketplace.marketplacePage.inactive')"
                   />
                 </TableCell>
                 <TableCell class="font-medium max-w-0">
@@ -437,7 +439,7 @@ export default {
                       variant="ghost"
                       size="icon"
                       class="size-8"
-                      title="Настройка"
+                      :title="$t('common.settings')"
                       @click.stop="openConnection(conn.id)"
                     >
                       <Settings class="size-4" />
@@ -455,20 +457,19 @@ export default {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Удалить подключение?</AlertDialogTitle>
+                          <AlertDialogTitle>{{ $t("marketplace.marketplacePage.deleteConnectionTitle") }}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Вы уверены что хотите удалить подключение "{{ conn.name }}"? Это
-                            удалит все маппинги категорий и связи товаров.
+                            {{ $t("marketplace.marketplacePage.deleteConnectionDescription", { name: conn.name }) }}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Отмена</AlertDialogCancel>
+                          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                           <AlertDialogAction
                             @click="handleDeleteConnection(conn.id)"
                             :disabled="isDeleting"
                           >
                             <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
-                            Удалить
+                            {{ $t("common.delete") }}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>

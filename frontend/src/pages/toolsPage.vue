@@ -17,7 +17,7 @@ export default {
   },
   data() {
     return {
-      breadcrumbs: [{ label: "Инструменты" }],
+      breadcrumbs: [{ label: this.$t("pages.toolsPage.breadcrumb") }],
     };
   },
 };
@@ -29,15 +29,15 @@ export default {
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Инструменты"
-      description="Дополнительные функции и настройки"
+      :title="$t('pages.toolsPage.title')"
+      :description="$t('pages.toolsPage.description')"
     />
 
     <PageSection
       empty
       :empty-icon="Wrench"
-      empty-title="Пока нет дополнительных инструментов"
-      empty-description="Категории и атрибуты доступны через меню пользователя"
+      :empty-title="$t('pages.toolsPage.emptyTitle')"
+      :empty-description="$t('pages.toolsPage.emptyDescription')"
     />
   </Page>
 </template>

@@ -26,13 +26,14 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { t } from "@/i18n";
 
 const { formatDateTime, loadMemberships } = useStoreDateTime();
 loadMemberships();
 
 const breadcrumbs = [
-  { label: "Настройки", to: "/settings" },
-  { label: "Очереди и процессы" },
+  { label: t("routes.settings"), to: "/settings" },
+  { label: t("pages.settingsOperationsPage.title") },
 ];
 
 const summary = ref(null);
@@ -64,11 +65,11 @@ function formatDate(value) {
 
 function statusLabel(status) {
   const value = String(status || "").toLowerCase();
-  if (value === "running") return "выполняется";
-  if (value === "paused") return "пауза";
-  if (value === "completed") return "завершено";
-  if (value === "failed") return "ошибка";
-  if (value === "cancelled") return "отменено";
+  if (value === "running") return t("operations.status.running");
+  if (value === "paused") return t("operations.status.paused");
+  if (value === "completed") return t("operations.status.completed");
+  if (value === "failed") return t("operations.status.failed");
+  if (value === "cancelled") return t("operations.status.cancelled");
   return status || "-";
 }
 
@@ -91,17 +92,17 @@ async function fetchData() {
 async function clearTarget(target, status = "inactive") {
   const destructiveAll = status === "all";
   const confirmed = await showConfirm(
-    "Очистить очередь",
+    t("pages.settingsOperationsPage.clearQueueTitle"),
     destructiveAll
-      ? "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?"
-      : "Очистить завершённые, ошибочные и отменённые записи?"
+      ? t("pages.settingsOperationsPage.clearAllDescription")
+      : t("pages.settingsOperationsPage.clearInactiveDescription")
   );
   if (!confirmed) return;
 
   clearingKey.value = `${target}:${status}`;
   try {
     const response = await http.post("/settings/operations/clear", { target, status }, { cache: false });
-    displaySonnerSuccess(`Удалено записей: ${response.data?.deleted ?? 0}`);
+    displaySonnerSuccess(t("pages.settingsOperationsPage.deletedRecords", { count: response.data?.deleted ?? 0 }));
     await fetchData();
   } catch (error) {
     displaySonnerError(error);
@@ -119,13 +120,13 @@ onMounted(fetchData);
     <Breadcrumbs :items="breadcrumbs" />
 
     <PageHeader
-      title="Очереди и процессы"
-      description="Управление фоновыми процессами, экспортом, импортом, изображениями и переносами"
+      :title="$t('pages.settingsOperationsPage.title')"
+      :description="$t('pages.settingsOperationsPage.description')"
     >
       <Button variant="outline" :disabled="isLoading" @click="fetchData">
         <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
         <RefreshCw v-else class="mr-2 size-4" />
-        Обновить
+        {{ $t("common.refresh") }}
       </Button>
     </PageHeader>
 
@@ -135,7 +136,7 @@ onMounted(fetchData);
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Activity class="size-4 text-muted-foreground" />
-              История фоновых процессов
+              {{ $t("pages.settingsOperationsPage.historyTitle") }}
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-3">
@@ -147,7 +148,7 @@ onMounted(fetchData);
               >
                 {{ statusLabel(entry.status) }}: {{ entry.count }}
               </Badge>
-              <Badge v-if="!summary?.operations?.total" variant="secondary">нет записей</Badge>
+              <Badge v-if="!summary?.operations?.total" variant="secondary">{{ $t("pages.settingsOperationsPage.noRecords") }}</Badge>
             </div>
             <div class="flex flex-wrap gap-2">
               <Button
@@ -158,7 +159,7 @@ onMounted(fetchData);
               >
                 <Loader2 v-if="clearingKey === 'operations:inactive'" class="mr-2 size-4 animate-spin" />
                 <Trash2 v-else class="mr-2 size-4" />
-                Очистить завершённые
+                {{ $t("pages.settingsOperationsPage.clearCompletedButton") }}
               </Button>
               <Button
                 variant="destructive"
@@ -168,7 +169,7 @@ onMounted(fetchData);
               >
                 <Loader2 v-if="clearingKey === 'operations:all'" class="mr-2 size-4 animate-spin" />
                 <Trash2 v-else class="mr-2 size-4" />
-                Очистить всё
+                {{ $t("pages.settingsOperationsPage.clearAllButton") }}
               </Button>
             </div>
           </CardContent>
@@ -190,7 +191,7 @@ onMounted(fetchData);
               >
                 {{ statusLabel(entry.status) }}: {{ entry.count }}
               </Badge>
-              <Badge v-if="queue.total === 0" variant="secondary">нет записей</Badge>
+              <Badge v-if="queue.total === 0" variant="secondary">{{ $t("pages.settingsOperationsPage.noRecords") }}</Badge>
             </div>
             <div class="flex flex-wrap gap-2">
               <Button
@@ -201,7 +202,7 @@ onMounted(fetchData);
               >
                 <Loader2 v-if="clearingKey === `${queue.key}:inactive`" class="mr-2 size-4 animate-spin" />
                 <Trash2 v-else class="mr-2 size-4" />
-                Очистить неактивные
+                {{ $t("pages.settingsOperationsPage.clearInactiveButton") }}
               </Button>
               <Button
                 variant="destructive"
@@ -211,7 +212,7 @@ onMounted(fetchData);
               >
                 <Loader2 v-if="clearingKey === `${queue.key}:all`" class="mr-2 size-4 animate-spin" />
                 <Trash2 v-else class="mr-2 size-4" />
-                Очистить всё
+                {{ $t("pages.settingsOperationsPage.clearAllButton") }}
               </Button>
             </div>
           </CardContent>
@@ -222,11 +223,11 @@ onMounted(fetchData);
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Процесс</TableHead>
-              <TableHead class="w-32">Статус</TableHead>
-              <TableHead class="w-40">Тип</TableHead>
-              <TableHead class="w-40">Прогресс</TableHead>
-              <TableHead class="w-40">Создан</TableHead>
+              <TableHead>{{ $t("pages.settingsOperationsPage.columnProcess") }}</TableHead>
+              <TableHead class="w-32">{{ $t("common.status") }}</TableHead>
+              <TableHead class="w-40">{{ $t("pages.settingsOperationsPage.columnType") }}</TableHead>
+              <TableHead class="w-40">{{ $t("pages.settingsOperationsPage.columnProgress") }}</TableHead>
+              <TableHead class="w-40">{{ $t("pages.settingsOperationsPage.columnCreated") }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -244,7 +245,7 @@ onMounted(fetchData);
               <TableCell class="text-sm tabular-nums">
                 {{ operation.completedItems || 0 }} / {{ operation.totalItems || 0 }}
                 <span v-if="operation.failedItems" class="text-destructive">
-                  ({{ operation.failedItems }} ошибок)
+                  {{ $t("pages.settingsOperationsPage.failedItemsSuffix", { count: operation.failedItems }) }}
                 </span>
               </TableCell>
               <TableCell class="text-sm text-muted-foreground">
@@ -255,8 +256,8 @@ onMounted(fetchData);
               <TableCell colspan="5">
                 <EmptyState
                   size="sm"
-                  title="История пуста"
-                  description="Здесь появятся завершённые операции: экспорт, импорт и AI-задачи."
+                  :title="$t('pages.settingsOperationsPage.emptyHistoryTitle')"
+                  :description="$t('pages.settingsOperationsPage.emptyHistoryDescription')"
                 >
                   <template #icon>
                     <Activity />
@@ -279,8 +280,8 @@ onMounted(fetchData);
           <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">Отмена</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">Очистить</AlertDialogAction>
+          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">{{ $t("operations.clearCompletedConfirm") }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
