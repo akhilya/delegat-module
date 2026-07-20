@@ -38,7 +38,7 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     /// ISO 4217 code of the store base currency. All product prices are stored in this currency.
     /// </summary>
     [StringLength(BASE_CURRENCY_MAX_LENGTH)]
-    public string baseCurrency { get; set; } = null!;
+    public string baseCurrency { get; set; } = DEFAULT_BASE_CURRENCY;
 
     /// <summary>
     /// Additional currencies with exchange rates to the store base currency.
@@ -82,6 +82,10 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     public bool AddFill(AddForm form)
     {
         name = form.name;
+        if (string.IsNullOrWhiteSpace(timezone))
+            timezone = DEFAULT_TIMEZONE;
+        if (string.IsNullOrWhiteSpace(baseCurrency))
+            baseCurrency = DEFAULT_BASE_CURRENCY;
         return true;
     }
 
@@ -147,6 +151,7 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     public const int TIMEZONE_MAX_LENGTH = 64;
     public const int BASE_CURRENCY_MAX_LENGTH = 3;
     public const string DEFAULT_TIMEZONE = "Europe/Moscow";
+    public const string DEFAULT_BASE_CURRENCY = "RUB";
 
     /// <summary>
     /// Form for creating a new store.

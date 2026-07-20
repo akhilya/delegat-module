@@ -9,7 +9,7 @@ namespace Delegat.Infrastructure.Data;
 public static class DatabaseSeeder
 {
     /// <summary>Default base currency for stores created without an explicit value.</summary>
-    private const string DefaultStoreBaseCurrency = "RUB";
+    private const string DefaultStoreBaseCurrency = Store.DEFAULT_BASE_CURRENCY;
 
     public static async Task SeedAsync(IServiceProvider services, AdminSeedSettings settings)
     {
