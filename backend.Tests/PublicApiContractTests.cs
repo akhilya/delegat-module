@@ -87,6 +87,7 @@ public class PublicApiContractTests
     [InlineData(422, "validation_error")]
     [InlineData(429, "rate_limited")]
     [InlineData(400, "bad_request")]
+    [InlineData(500, "internal_error")]
     public async Task ExceptionMiddleware_PublicApi_UsesErrorEnvelope(int status, string code)
     {
         var middleware = new ExceptionMiddleware(
@@ -97,6 +98,8 @@ public class PublicApiContractTests
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/stores/1/products";
         context.Response.Body = new MemoryStream();
+        // Status >= 500 persists an error log via RequestServices.
+        context.RequestServices = new ServiceCollection().BuildServiceProvider();
 
         await middleware.InvokeAsync(context);
 
@@ -105,6 +108,32 @@ public class PublicApiContractTests
         using var doc = await JsonDocument.ParseAsync(context.Response.Body);
         Assert.Equal(code, doc.RootElement.GetProperty("error").GetProperty("code").GetString());
         Assert.Equal("partner message", doc.RootElement.GetProperty("error").GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task ExceptionMiddleware_PublicApi_PrefersExplicitSemanticCode()
+    {
+        // Stable public codes (e.g. ai_api_key_invalid) must win over status→code mapping.
+        var middleware = new ExceptionMiddleware(
+            _ => throw ApiException.BadRequest(
+                "AI model API key could not be decrypted.",
+                code: "ai_api_key_invalid"),
+            NullLogger<ExceptionMiddleware>.Instance,
+            new FakeHostEnvironment());
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/v1/stores/1/products";
+        context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection().BuildServiceProvider();
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(400, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal(
+            "ai_api_key_invalid",
+            doc.RootElement.GetProperty("error").GetProperty("code").GetString());
     }
 
     [Fact]
@@ -126,6 +155,7 @@ public class PublicApiContractTests
         using var doc = await JsonDocument.ParseAsync(context.Response.Body);
         Assert.Equal("nope", doc.RootElement.GetProperty("title").GetString());
         Assert.Equal(403, doc.RootElement.GetProperty("status").GetInt32());
+        Assert.Equal("forbidden", doc.RootElement.GetProperty("code").GetString());
         Assert.False(doc.RootElement.TryGetProperty("error", out _));
     }
 

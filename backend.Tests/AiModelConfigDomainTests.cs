@@ -1,3 +1,4 @@
+using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
@@ -37,6 +38,49 @@ public class AiModelConfigDomainTests
         await service.DeleteAsync(saved);
 
         Assert.Empty(await db.aiModelConfigs.ToListAsync());
+    }
+
+    [Fact]
+    public void DecryptForUse_AcceptsLegacyPlaintextApiKey()
+    {
+        // Older rows stored the key in plaintext. Decrypt must not throw until migration re-encrypts.
+        var service = CreateService(TestDbFactory.CreateDb());
+        var model = new AiModelConfig
+        {
+            name = "Legacy",
+            apiUrl = "https://api.example.test",
+            apiKeyEncrypted = "sk-legacy-plaintext-key",
+            modelId = "model-1",
+            provider = AiModelProvider.OpenAiCompatible,
+        };
+
+        var decrypted = service.DecryptForUse(model);
+
+        Assert.Equal("sk-legacy-plaintext-key", decrypted.apiKeyEncrypted);
+        Assert.Equal(model.name, decrypted.name);
+        Assert.Equal(model.modelId, decrypted.modelId);
+    }
+
+    [Fact]
+    public void DecryptForUse_CorruptCiphertext_ThrowsAiApiKeyInvalid()
+    {
+        var service = CreateService(TestDbFactory.CreateDb());
+        // Looks like gcm ciphertext (valid Base64, long enough) but wrong auth tag / key material
+        var corrupt = "gcm:" + Convert.ToBase64String(Enumerable.Range(0, 40).Select(i => (byte)i).ToArray());
+        var model = new AiModelConfig
+        {
+            name = "Broken",
+            apiUrl = "https://api.example.test",
+            apiKeyEncrypted = corrupt,
+            modelId = "model-1",
+            provider = AiModelProvider.OpenAiCompatible,
+        };
+
+        var ex = Assert.Throws<ApiException>(() => service.DecryptForUse(model));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("ai_api_key_invalid", ex.Code);
+        Assert.Contains("could not be decrypted", ex.Message);
     }
 
     [Fact]
