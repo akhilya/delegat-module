@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
-import Logo from "@/components/logo.vue";
+import AuthLayout from "@/components/auth/AuthLayout.vue";
 import {
   FormControl,
   FormField,
@@ -21,10 +21,11 @@ import { useRouter, useRoute } from "vue-router";
 import { ref } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import { PAGE_SIGN_UP } from "@/router";
-import { BRAND_NAME } from "@/brand";
+import { useI18n } from "vue-i18n";
 
 export default {
   components: {
+    AuthLayout,
     FormControl,
     FormField,
     FormItem,
@@ -34,10 +35,10 @@ export default {
     Input,
     PasswordInput,
     Checkbox,
-    Logo,
     Loader2,
   },
   setup() {
+    const { t } = useI18n();
     const store = useStore();
     const router = useRouter();
     const route = useRoute();
@@ -62,8 +63,8 @@ export default {
       isSubmitting.value = true;
       await store.dispatch("postSignInUser", {
         input: values,
-        onSuccess: (response) => {
-          displaySonnerSuccess("Успешный вход.");
+        onSuccess: () => {
+          displaySonnerSuccess(t("auth.signInSuccess"));
           router.push(route.query.redirect || "/");
         },
         onError: (error) => {
@@ -80,143 +81,79 @@ export default {
       onSubmit,
       isSubmitting,
       PAGE_SIGN_UP,
-      BRAND_NAME,
+      t,
     };
   },
 };
 </script>
 
 <template>
-  <main class="auth-page">
-    <section class="auth-form-wrap">
-      <header class="auth-header">
-        <Logo class="auth-logo" />
-        <div>
-          <p class="auth-kicker">{{ BRAND_NAME }}</p>
-          <h1 class="auth-title">Вход</h1>
-        </div>
-      </header>
+  <AuthLayout :title="t('auth.signIn')">
+    <form class="auth-form" @submit="onSubmit">
+      <FormField v-slot="{ componentField }" name="userName">
+        <FormItem>
+          <FormLabel>{{ t("auth.userName") }}</FormLabel>
+          <FormControl>
+            <Input
+              type="text"
+              :placeholder="t('auth.userName')"
+              autocomplete="username"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-      <form @submit="onSubmit" class="auth-form">
-        <FormField v-slot="{ componentField }" name="userName">
-          <FormItem>
-            <FormLabel>Имя пользователя</FormLabel>
-            <FormControl>
-              <Input
-                type="text"
-                placeholder="Введите имя"
-                autocomplete="username"
-                v-bind="componentField"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+      <FormField v-slot="{ componentField }" name="password">
+        <FormItem>
+          <FormLabel>{{ t("auth.password") }}</FormLabel>
+          <FormControl>
+            <PasswordInput
+              autocomplete="current-password"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-        <FormField v-slot="{ componentField }" name="password">
-          <FormItem>
-            <FormLabel>Пароль</FormLabel>
-            <FormControl>
-              <PasswordInput
-                autocomplete="current-password"
-                v-bind="componentField"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+      <FormField
+        v-slot="{ value, handleChange }"
+        type="checkbox"
+        name="rememberMe"
+      >
+        <FormItem class="flex flex-row items-center gap-2 space-y-0">
+          <FormControl>
+            <Checkbox
+              :model-value="value"
+              @update:model-value="handleChange"
+            />
+          </FormControl>
+          <FormLabel class="!mt-0 text-sm font-normal">
+            {{ t("auth.rememberMe") }}
+          </FormLabel>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-        <FormField
-          v-slot="{ value, handleChange }"
-          type="checkbox"
-          name="rememberMe"
-        >
-          <FormItem class="flex flex-row items-center gap-2">
-            <FormControl>
-              <Checkbox
-                :model-value="value"
-                @update:model-value="handleChange"
-              />
-            </FormControl>
-            <FormLabel class="!mt-0 text-sm font-normal">Запомнить меня</FormLabel>
-            <FormMessage />
-          </FormItem>
-        </FormField>
+      <Button type="submit" class="w-full" :disabled="isSubmitting">
+        <Loader2 v-if="isSubmitting" class="animate-spin" />
+        <span v-else>{{ t("auth.signIn") }}</span>
+      </Button>
+    </form>
 
-        <Button type="submit" class="w-full" :disabled="isSubmitting">
-          <span v-if="!isSubmitting">Войти</span>
-          <Loader2 v-else class="animate-spin" />
-        </Button>
-      </form>
-
-      <p class="auth-footer">
-        Нет аккаунта?
-        <RouterLink :to="PAGE_SIGN_UP" class="auth-link">
-          Зарегистрироваться
-        </RouterLink>
-      </p>
-    </section>
-  </main>
+    <template #footer>
+      {{ t("auth.noAccount") }}
+      <RouterLink :to="PAGE_SIGN_UP">{{ t("auth.signUp") }}</RouterLink>
+    </template>
+  </AuthLayout>
 </template>
 
 <style scoped>
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--background);
-  padding: 1.5rem;
-}
-
-.auth-form-wrap {
-  width: 100%;
-  max-width: 360px;
-}
-
-.auth-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1.75rem;
-}
-
-.auth-logo {
-  width: 2.25rem !important;
-  opacity: 1 !important;
-}
-
-.auth-kicker {
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  line-height: 1;
-}
-
-.auth-title {
-  font-size: 1.5rem;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
 .auth-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.auth-footer {
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
-  margin-top: 1.5rem;
-}
-
-.auth-link {
-  color: var(--foreground);
-  font-weight: 500;
-  text-decoration: none;
-}
-.auth-link:hover {
-  text-decoration: underline;
 }
 </style>
