@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 
@@ -102,7 +104,7 @@ public class AiModelConfigService
     public async Task ToggleEnabledAsync(int id, CancellationToken ct = default)
     {
         var model = await _context.aiModelConfigs.FindAsync([id], ct)
-            ?? throw new InvalidOperationException("AI-модель не найдена");
+            ?? throw new InvalidOperationException("AI model not found");
         model.isEnabled = !model.isEnabled;
         await _context.SaveChangesAsync(ct);
     }
@@ -126,13 +128,28 @@ public class AiModelConfigService
 
     public AiModelConfig DecryptForUse(AiModelConfig model)
     {
-        // Return a copy with decrypted key for actual API calls
+        // Return a copy with decrypted key for actual API calls.
+        // Some older rows stored the API key in plaintext — accept those until migration re-encrypts.
+        string plainKey;
+        try
+        {
+            plainKey = _encryption.IsCiphertext(model.apiKeyEncrypted)
+                ? _encryption.Decrypt(model.apiKeyEncrypted)
+                : model.apiKeyEncrypted ?? "";
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException or ArgumentException)
+        {
+            throw ApiException.BadRequest(
+                "AI model API key could not be decrypted. Re-enter the key in Settings → AI models.",
+                code: "ai_api_key_invalid");
+        }
+
         return new AiModelConfig
         {
             Id = model.Id,
             name = model.name,
             apiUrl = model.apiUrl,
-            apiKeyEncrypted = _encryption.Decrypt(model.apiKeyEncrypted),
+            apiKeyEncrypted = plainKey,
             modelId = model.modelId,
             provider = model.provider,
             maxTokens = model.maxTokens,

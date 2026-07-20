@@ -48,22 +48,59 @@ public class EncryptionService
             throw new ArgumentException("Ciphertext is empty.", nameof(cipherText));
 
         if (cipherText.StartsWith(GcmPrefix, StringComparison.Ordinal))
-            return DecryptGcm(cipherText[GcmPrefix.Length..]);
+        {
+            var payload = cipherText[GcmPrefix.Length..];
+            if (!TryFromBase64(payload, out _))
+                throw new CryptographicException("Invalid GCM ciphertext encoding.");
+            return DecryptGcm(payload);
+        }
 
         // Legacy AES-CBC (IV || ciphertext), no authentication
+        if (!TryFromBase64(cipherText, out _))
+            throw new CryptographicException(
+                "Ciphertext is not valid Base64 (value may be plaintext or corrupted).");
+
         return DecryptLegacyCbc(cipherText);
     }
 
     /// <summary>
-    /// Plain JSON starts with '{'. Encrypted payloads are Base64 (legacy) or gcm:Base64.
+    /// True when <paramref name="value"/> looks like an AES ciphertext produced by this service
+    /// (gcm:Base64 or legacy Base64 CBC). Plain API keys and JSON are not ciphertext.
     /// </summary>
-    public bool IsEncrypted(string value)
+    public bool IsCiphertext(string value)
     {
         if (string.IsNullOrEmpty(value))
             return false;
+
         if (value.StartsWith(GcmPrefix, StringComparison.Ordinal))
+            return TryFromBase64(value[GcmPrefix.Length..], out var gcmBytes)
+                   && gcmBytes.Length >= NonceSize + TagSize;
+
+        if (!TryFromBase64(value, out var legacyBytes))
+            return false;
+
+        // IV (16) + at least one cipher byte
+        return legacyBytes.Length >= 17;
+    }
+
+    /// <summary>
+    /// True when the value is ciphertext from this service (gcm: or legacy Base64 CBC).
+    /// Plain JSON credentials and plain API keys return false.
+    /// </summary>
+    public bool IsEncrypted(string value) => IsCiphertext(value);
+
+    private static bool TryFromBase64(string s, out byte[] bytes)
+    {
+        try
+        {
+            bytes = Convert.FromBase64String(s);
             return true;
-        return !value.TrimStart().StartsWith('{');
+        }
+        catch (FormatException)
+        {
+            bytes = [];
+            return false;
+        }
     }
 
     private string DecryptGcm(string base64Payload)
