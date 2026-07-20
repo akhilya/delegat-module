@@ -1,0 +1,2897 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "loading": "Loading…",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "actions": "Actions",
+    "name": "Name",
+    "description": "Description",
+    "status": "Status",
+    "all": "All",
+    "none": "None",
+    "copy": "Copy",
+    "download": "Download",
+    "upload": "Upload",
+    "refresh": "Refresh",
+    "reset": "Reset",
+    "apply": "Apply",
+    "add": "Add",
+    "remove": "Remove",
+    "open": "Open",
+    "details": "Details",
+    "settings": "Settings",
+    "more": "More",
+    "or": "or",
+    "emDash": "—",
+    "confirmAction": "Confirm action",
+    "brandDescription": "product and adapter management dashboard",
+    "copied": "Copied",
+    "copyFailed": "Failed to copy"
+  },
+  "attributeGroups": {
+    "core": "Basic",
+    "brand": "Brand",
+    "country": "Country",
+    "material": "Material",
+    "dimensions": "Dimensions and weight",
+    "appearance": "Appearance",
+    "technicalSpecs": "Technical specifications",
+    "electricalSpecs": "Electrical specifications",
+    "package": "Package contents",
+    "certification": "Certification",
+    "media": "Media",
+    "packaging": "Packaging",
+    "labeling": "Labeling",
+    "other": "Other"
+  },
+  "components": {
+    "appSidebar": {
+      "switchStoreTitle": "Switch store",
+      "switchStoreUploadWarning": "Files are uploading. Switching stores will interrupt the upload. Continue?"
+    },
+    "appSidebarStoreSwitcher": {
+      "storePlaceholder": "Store",
+      "storesLabel": "Stores"
+    },
+    "barcodeInput": {
+      "onlyDigitsError": "Digits only",
+      "maxDigitsError": "Maximum 13 digits",
+      "digitsCountError": "8 (EAN-8) or 13 (EAN-13) digits required",
+      "invalidCheckDigitError": "Invalid check digit",
+      "ariaLabel": "Barcode (EAN-8 / EAN-13)",
+      "generateTitle": "Generate",
+      "regenerateTitle": "Regenerate barcode?",
+      "regenerateDescription": "The current barcode {value} will be replaced with a new random one. This action cannot be undone.",
+      "replace": "Replace"
+    },
+    "breadcrumbs": {
+      "homeAriaLabel": "Home"
+    },
+    "fabGroup": {
+      "aiAssistantTitle": "AI Assistant",
+      "backgroundJobsTitle": "Background jobs"
+    },
+    "formCombobox": {
+      "placeholder": "Select...",
+      "nothingFound": "Nothing found"
+    },
+    "goBackButton": {
+      "ariaLabel": "Back"
+    },
+    "homeButton": {
+      "ariaLabel": "Home"
+    },
+    "imageFile": {
+      "altFallback": "Product image"
+    },
+    "multiSelectDropdown": {
+      "placeholder": "Select...",
+      "selectedCount": "Selected: {count}",
+      "searchPlaceholder": "Search...",
+      "searchPlaceholderLarge": "Start typing to search...",
+      "largeListHint": "{count} options. Use search for quick selection.",
+      "noOptions": "No options available",
+      "nothingFound": "Nothing found",
+      "moreResultsHint": "Showing {shown} of {total} results. Refine your query.",
+      "remainingOptionsHint": "{count} more options. Use search."
+    },
+    "navigationBar": {
+      "productGroups": "Product groups",
+      "productTrash": "Product trash",
+      "mySettings": "My settings",
+      "generalSettings": "General settings"
+    },
+    "userAccountMenu": {
+      "account": "Account"
+    },
+    "note": {
+      "updateSuccess": "Note successfully updated.",
+      "deleteSuccess": "Note successfully deleted.",
+      "importanceLow": "Low importance",
+      "importanceMedium": "Medium importance",
+      "importanceHigh": "High importance",
+      "importanceCritical": "Critical importance",
+      "importanceEmergency": "Emergency importance",
+      "deleteConfirmTitle": "Delete note?",
+      "deleteConfirmDescription": "The note will be permanently deleted.",
+      "textPlaceholder": "Note text..."
+    },
+    "productFilesTable": {
+      "nameHeader": "Name",
+      "typeHeader": "Type",
+      "sizeHeader": "Size",
+      "download": "download",
+      "deleteConfirmText": "Are you sure you want to delete the file {name}?"
+    },
+    "productImagesEditor": {
+      "productImagesTitle": "Product images",
+      "dragToReorderHint": "— drag to reorder",
+      "otherImagesTitle": "Other images"
+    },
+    "rightActionStrip": {
+      "backgroundJobsTitle": "Background jobs",
+      "aiAssistantTitle": "AI Assistant"
+    },
+    "searchableSelect": {
+      "placeholder": "Select...",
+      "searchPlaceholder": "Search...",
+      "searchPlaceholderLarge": "Start typing to search...",
+      "largeListHint": "{count} options. Use search for quick selection.",
+      "noOptions": "No options available",
+      "nothingFound": "Nothing found",
+      "moreResultsHint": "Showing {shown} of {total} results. Refine your query.",
+      "remainingOptionsHint": "{count} more options. Use search."
+    },
+    "settingsFormField": {
+      "descriptionAriaLabel": "Description: {label}"
+    },
+    "sidebarTrigger": {
+      "toggleSidebar": "Toggle sidebar"
+    }
+  },
+  "lib": {
+    "productAttributeValidation": {
+      "requiredField": "Required field",
+      "enterNumber": "Enter a number"
+    },
+    "timezones": {
+      "moscow": "Moscow (UTC+3)",
+      "kaliningrad": "Kaliningrad (UTC+2)",
+      "samara": "Samara (UTC+4)",
+      "yekaterinburg": "Yekaterinburg (UTC+5)",
+      "omsk": "Omsk (UTC+6)",
+      "krasnoyarsk": "Krasnoyarsk (UTC+7)",
+      "irkutsk": "Irkutsk (UTC+8)",
+      "yakutsk": "Yakutsk (UTC+9)",
+      "vladivostok": "Vladivostok (UTC+10)",
+      "magadan": "Magadan (UTC+11)",
+      "kamchatka": "Kamchatka (UTC+12)",
+      "almaty": "Almaty (UTC+5)",
+      "tashkent": "Tashkent (UTC+5)",
+      "minsk": "Minsk (UTC+3)",
+      "kyiv": "Kyiv (UTC+2)"
+    }
+  },
+  "store": {
+    "aiChatModule": {
+      "connectionError": "Connection error: {message}",
+      "confirmAndExecute": "Confirmed, proceed",
+      "cancelPlanMessage": "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
+    },
+    "operationsModule": {
+      "defaultTitle": "Operation",
+      "stoppedSummary": "Stopped"
+    }
+  },
+  "language": {
+    "label": "Language",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "nav": {
+    "products": "Products",
+    "newProduct": "New product",
+    "groups": "Groups",
+    "trash": "Trash",
+    "categories": "Categories",
+    "storage": "Storage",
+    "marketplace": "Marketplace",
+    "connections": "Connections",
+    "attributes": "Attributes",
+    "tools": "Tools",
+    "ai": "AI",
+    "operations": "Operations",
+    "settings": "Settings",
+    "store": "Store",
+    "users": "Users",
+    "account": "Account",
+    "billing": "Billing",
+    "apiKeys": "API keys",
+    "webhooks": "Webhooks",
+    "integrations": "Integrations",
+    "utilities": "Utilities",
+    "aiAssistant": "AI assistant",
+    "backgroundJobs": "Background jobs",
+    "globalAttributes": "Global attributes",
+    "adapters": "Adapters",
+    "overview": "Overview",
+    "user": "User",
+    "stores": "Stores",
+    "plugins": "Plugins",
+    "errorLogs": "Error logs",
+    "adapterLogs": "Adapter logs",
+    "tokens": "Tokens"
+  },
+  "theme": {
+    "light": "Light theme",
+    "dark": "Dark theme"
+  },
+  "app": {
+    "mobileWarningTitle": "Better on a computer",
+    "mobileWarningBody": "{brand} is a product management dashboard optimized for desktop use. Some features may not work correctly on mobile devices.",
+    "continue": "Continue",
+    "switchingStore": "Switching store..."
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "userName": "Username",
+    "password": "Password",
+    "rememberMe": "Remember me",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signInSuccess": "Signed in successfully.",
+    "signUpSuccess": "Signed up successfully.",
+    "passwordsMismatch": "Passwords do not match",
+    "userNamePlaceholder": "Enter name",
+    "confirmPassword": "Confirm password",
+    "invitationToken": "Invitation token",
+    "invitationTokenHint": "Paste the token you received from the administrator",
+    "createAccount": "Create account",
+    "haveAccount": "Already have an account?"
+  },
+  "errors": {
+    "generic": "Error",
+    "detailsUnreadable": "Error details were received but could not be displayed",
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "resourceLimit": "Resource limit reached",
+    "store_not_selected": "Store is not selected",
+    "product_not_found": "Product not found",
+    "file_not_found": "File not found",
+    "group_not_found": "Group not found",
+    "category_not_found": "Category not found",
+    "connection_not_found": "Connection not found",
+    "user_not_found": "User not found",
+    "invalid_credentials": "Invalid credentials",
+    "user_deactivated": "User is deactivated",
+    "invalid_token": "Invalid token",
+    "unauthorized": "Unauthorized",
+    "forbidden": "Forbidden",
+    "not_found": "Resource not found",
+    "conflict": "Conflict",
+    "bad_request": "Bad request",
+    "validation_error": "Validation error",
+    "rate_limited": "Rate limit exceeded",
+    "product_limit_reached": "Product limit reached ({limit})",
+    "required_fields_missing": "Required fields are missing: {fields}",
+    "sku_already_used": "SKU '{sku}' is already in use",
+    "folder_not_empty": "Folder is not empty",
+    "export_failed": "Export failed",
+    "import_failed": "Import failed",
+    "access_denied_store": "No access to this store",
+    "internal_error": "Internal server error",
+    "ai_api_key_invalid": "Could not decrypt the AI model API key. Open Settings → AI and re-enter the key."
+  },
+  "routes": {
+    "products": "Products",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "settings": "Settings",
+    "marketplace": "Marketplace",
+    "operations": "Operations",
+    "storage": "Storage",
+    "categories": "Categories",
+    "groups": "Product groups",
+    "tools": "Tools",
+    "attributes": "Global attributes",
+    "productCreation": "New product",
+    "productEdit": "Edit product",
+    "categoryEdit": "Edit category",
+    "connection": "Connection",
+    "ai": "AI",
+    "trash": "Trash",
+    "groupCreate": "New group",
+    "groupEdit": "Product group",
+    "settingsOverview": "General settings",
+    "settingsUser": "User settings",
+    "stores": "Stores",
+    "store": "Store",
+    "users": "Users",
+    "tokens": "Tokens",
+    "errorLogs": "Error logs",
+    "plugins": "Plugins",
+    "aiModels": "AI Models",
+    "adapterLogs": "Adapter logs",
+    "notFound": "Not found",
+    "adapters": "Adapters",
+    "categoryImport": "Import category",
+    "fieldMapping": "Field mapping"
+  },
+  "ai": {
+    "historyTooltip": "Conversation history",
+    "newChatTooltip": "New conversation",
+    "toolsTooltip": "Assistant tools",
+    "closeTooltip": "Close",
+    "conversationTitlePlaceholder": "Conversation title",
+    "renameTooltip": "Rename",
+    "newConversation": "New conversation",
+    "conversationHistory": "Conversation history",
+    "backToChat": "Back to chat",
+    "toolsTitle": "Tools",
+    "noConversations": "No saved conversations",
+    "startNew": "Start new",
+    "untitled": "Untitled",
+    "messagesCountSuffix": "msg.",
+    "deleteConversationTooltip": "Delete conversation",
+    "toolsCountLabel": "{count} tools · {categories} categories",
+    "copied": "Copied",
+    "goodResponse": "Good response",
+    "badResponse": "Bad response",
+    "greeting": "Hi!",
+    "unavailable": "AI unavailable",
+    "capabilitiesDescription": "I manage products, categories, mappings, and exports.",
+    "noModelsEnabled": "No connected or enabled AI models. An administrator can enable models in Settings → AI.",
+    "exampleStats": "Show store statistics",
+    "exampleFillMapping": "Fill in unmapped mapping fields",
+    "exampleFindNoPrice": "Find products without a price",
+    "inputPlaceholder": "Type a message...",
+    "noModelsPlaceholder": "No enabled AI models",
+    "modelPlaceholder": "model",
+    "noEnabledModels": "no enabled models",
+    "stopGeneration": "Stop generation",
+    "send": "Send",
+    "deleteConversationTitle": "Delete conversation?",
+    "deleteConversationDescription": "This action cannot be undone — the message history will be deleted.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "earlier": "Earlier",
+    "daysAgo": "{n} days ago",
+    "generateWithAi": "Generate with AI",
+    "improveWithAi": "Improve with AI",
+    "generatingWithAi": "Generating…",
+    "improvingWithAi": "Improving…",
+    "provideProductNameFirst": "Please enter a product name first",
+    "emptyAiResponse": "Empty response from AI",
+    "descriptionGeneratingHint": "AI is writing the description…",
+    "descriptionImprovingHint": "AI is improving the current description…",
+    "explainError": "Explain error",
+    "analyzing": "AI is analyzing...",
+    "explanationFailed": "Failed to get an explanation from AI.",
+    "errorExplanationTitle": "AI: error explanation",
+    "planExecute": "Execute",
+    "planExecuting": "Executing…",
+    "planCancelled": "Cancelled",
+    "planAffected": "Affected:",
+    "closeAssistant": "Close AI Assistant",
+    "openAssistant": "AI Assistant",
+    "toolCategories": {
+      "products": "Products",
+      "categories": "Categories",
+      "mappings": "Mappings",
+      "connections": "Connections",
+      "export": "Export",
+      "import": "Import",
+      "groups": "Groups",
+      "files": "Files",
+      "analytics": "Analytics",
+      "store": "Store",
+      "system": "System"
+    },
+    "toolCatalog": {
+      "products": {
+        "list_products": "List and search products",
+        "get_products_count": "Count by filter",
+        "get_product": "Full product data",
+        "create_product": "Create a product",
+        "create_products": "Create products in bulk",
+        "update_product": "Update fields",
+        "update_product_sku": "Change SKU",
+        "update_product_prices": "Bulk price change",
+        "update_product_attribute": "Attribute for several products",
+        "update_product_attributes": "Multiple attributes in bulk",
+        "delete_products": "Soft delete",
+        "restore_products": "Restore from trash",
+        "list_trash": "Product trash",
+        "generate_barcodes": "Generate EAN-13 barcodes"
+      },
+      "categories": {
+        "list_categories": "List categories",
+        "get_category": "Category with attributes",
+        "create_category": "Create a category",
+        "update_category": "Rename",
+        "delete_category": "Delete",
+        "list_category_fields": "Category attributes",
+        "add_category_field": "Add attribute",
+        "update_category_field": "Change attribute",
+        "delete_category_field": "Delete attribute",
+        "find_categories_with_field": "Find categories with an attribute"
+      },
+      "mappings": {
+        "list_mappings": "List mappings",
+        "get_mapping": "Details + coverage",
+        "create_mapping": "Create a mapping",
+        "update_mapping_name": "Rename",
+        "delete_mapping": "Delete",
+        "duplicate_mapping": "Duplicate",
+        "list_external_categories": "Marketplace categories",
+        "get_external_fields": "Adapter card fields",
+        "get_price_fields": "Adapter price fields",
+        "get_option_alignment_hints": "optionMap hints",
+        "search_field_options": "Search field options",
+        "get_available_sources": "Available sources",
+        "get_mapping_coverage": "Coverage analysis",
+        "connect_field": "Connect a field",
+        "connect_fields": "Connect multiple fields",
+        "set_field_static_value": "Set a static value",
+        "set_fields_static_value": "Static values in bulk",
+        "add_field_modifier": "Add a transform",
+        "remove_field_connection": "Disconnect a field",
+        "merge_adapter_fields": "Merge duplicate fields",
+        "unmerge_adapter_fields": "Unmerge fields",
+        "preview_mapping_for_product": "Mapping preview",
+        "find_products_without_mapping": "Products without an assigned mapping",
+        "get_product_mapping_summary": "Summary: products by mapping",
+        "assign_product_mappings": "Assign mapping to products"
+      },
+      "connections": {
+        "list_connections": "List connections",
+        "get_connection": "Connection details",
+        "test_connection": "Test connectivity",
+        "get_connection_limits": "API limits",
+        "get_adapter_info": "Adapter metadata"
+      },
+      "export": {
+        "export_products_batch": "Export products (batch)",
+        "export_prices": "Export prices",
+        "export_stocks": "Export stock",
+        "get_batch_status": "Task status",
+        "list_product_links": "Product sync links"
+      },
+      "import": {
+        "preview_marketplace_products": "Products on the marketplace",
+        "import_products": "Import products",
+        "import_prices": "Import prices",
+        "import_stocks": "Import stock",
+        "archive_product_on_marketplace": "Archive on the marketplace"
+      },
+      "groups": {
+        "list_groups": "Product groups",
+        "get_group": "Group details",
+        "create_group": "Create a group",
+        "update_group": "Rename",
+        "delete_group": "Delete a group",
+        "add_products_to_group": "Add products",
+        "remove_products_from_group": "Remove products"
+      },
+      "files": {
+        "list_files": "List files",
+        "create_folder": "Create a folder",
+        "rename_file": "Rename a file",
+        "rename_folder": "Rename a folder",
+        "move_files": "Move files",
+        "delete_files": "Delete files",
+        "delete_folder": "Delete a folder",
+        "share_file": "Create a public link"
+      },
+      "analytics": {
+        "get_store_stats": "Store statistics",
+        "find_products_without_images": "Without images",
+        "find_products_without_barcode": "Without a barcode",
+        "find_products_missing_field": "With an empty attribute",
+        "find_products_with_sync_errors": "With sync errors",
+        "analyze_mapping_quality": "Mapping quality",
+        "get_image_download_status": "Image download status"
+      },
+      "store": {
+        "list_store_attributes": "Global store attributes"
+      },
+      "system": {
+        "propose_plan": "Show a plan before running",
+        "rollback_last_operation": "Undo the last action",
+        "navigate_to": "Navigate to a page button"
+      }
+    }
+  },
+  "marketplace": {
+    "connectionPage": {
+      "capabilities": {
+        "getCategories": "Get categories",
+        "getCategoryFields": "Category fields",
+        "createCategory": "Create categories",
+        "importProduct": "Import product",
+        "importAllProducts": "Import all products",
+        "importProductBatch": "Batch import",
+        "exportProduct": "Export product",
+        "exportProductBulk": "Bulk export",
+        "updateSku": "Update SKU",
+        "importPrices": "Import prices",
+        "exportPrices": "Export prices",
+        "importStocks": "Import stock",
+        "exportStocks": "Export stock",
+        "getOrders": "Get orders",
+        "updateOrderStatus": "Update order status",
+        "fieldBasedGrouping": "Field-based grouping",
+        "endpointBasedGrouping": "API-based grouping",
+        "importGroups": "Import groups",
+        "deleteGroups": "Delete groups",
+        "modifyGroupMembership": "Modify group membership",
+        "archiveProduct": "Archive product"
+      },
+      "tabs": {
+        "settings": "Settings",
+        "mappings": "Mappings",
+        "products": "Products"
+      },
+      "breadcrumbs": {
+        "adapters": "Adapters",
+        "connectionFallback": "Connection"
+      },
+      "categories": {
+        "uncategorized": "No category"
+      },
+      "mappingSelection": {
+        "linkFallback": "Link #{id}"
+      },
+      "limits": {
+        "unlimited": "Unlimited",
+        "loadNormal": "Normal",
+        "loadHigh": "High",
+        "loadCritical": "Critical",
+        "title": "API limits",
+        "subtitle": "Current load and request quotas for the adapter API",
+        "unavailableTitle": "Limits unavailable",
+        "unavailableDescription": "This adapter doesn't support API limit tracking.",
+        "requestsPerSecond": "Requests per second",
+        "currentWindow": "Current window",
+        "totalRequestsSinceStart": "Total requests since start:",
+        "usage": "Usage",
+        "reset": "Reset"
+      },
+      "notifications": {
+        "connectionSaved": "Connection saved",
+        "testSuccess": "Connection successful",
+        "testError": "Connection error",
+        "selectBothCategories": "Select both categories",
+        "mappingCreated": "Mapping created",
+        "selectLocalCategory": "Select a local category",
+        "createCategoryUnsupported": "The adapter doesn't support creating categories",
+        "categoryCreatedAndLinked": "Category created and linked",
+        "mappingDeletedReassigned": "Mapping deleted, products reassigned: {count}",
+        "mappingDeletedDetached": "Mapping deleted, products without mapping: {count}",
+        "mappingDeleted": "Mapping deleted",
+        "selectReplacementMapping": "Select a mapping to move products to",
+        "mappingDuplicated": "Mapping duplicated",
+        "duplicateError": "Duplication error",
+        "mappingRenamed": "Mapping renamed",
+        "renameError": "Rename error",
+        "settingsSaved": "Settings saved",
+        "saveError": "Save error",
+        "noChangesDetected": "No changes detected",
+        "fieldsUpdated": "Updated: {fields}",
+        "productExported": "Product exported to the adapter",
+        "productUnlinked": "Product unlinked from the adapter",
+        "selectUnlinkedProducts": "Select unlinked products",
+        "categoryCreateError": "Category creation error: {error}",
+        "queuedForImport": "Queued: {count} products",
+        "importSummary": "Created: {created}, skipped: {skipped}, failed: {failed}",
+        "selectLinkedProducts": "Select linked products",
+        "bulkImportSummary": "Imported: {success}, failed: {failed}",
+        "mappingCheckError": "Mapping check error",
+        "exportBatchError": "Export batch creation error",
+        "pricesExportSummary": "Prices exported: {updated}, skipped: {skipped}",
+        "stocksExportSummary": "Stock exported: {updated}, skipped: {skipped}",
+        "selectProductsToExport": "Select products to export",
+        "selectMappingForAll": "Select a mapping for all products (remaining: {count})",
+        "saveMappingSelectionsError": "Error saving mapping selections"
+      },
+      "confirm": {
+        "unlinkTitle": "Unlink product?",
+        "unlinkDescription": "The product will be unlinked from the adapter. The marketplace link will disappear.",
+        "unlinkConfirm": "Unlink"
+      },
+      "operations": {
+        "importTitle": "Import {count} products"
+      },
+      "fields": {
+        "price": "Price",
+        "storageQuantity": "Stock"
+      },
+      "status": {
+        "unlinked": "Unlinked",
+        "noMapping": "No mapping",
+        "synced": "Synced",
+        "notSynced": "Not synced",
+        "syncError": "Error",
+        "modified": "Modified",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "header": {
+        "subtitle": "Adapter connection: settings, category mappings, and product syncing.",
+        "test": "Test"
+      },
+      "settings": {
+        "connectionTitle": "Connection",
+        "activeConnection": "Active connection",
+        "credentialsTitle": "Connection credentials",
+        "credentialsHint": "Credentials are already saved. Leave fields empty to keep them unchanged, or enter new values to replace them.",
+        "capabilitiesTitle": "Adapter capabilities"
+      },
+      "mappings": {
+        "title": "Category mappings",
+        "createMapping": "Create mapping",
+        "createMappingDescription": "Link a local category to a {adapter} category for exporting and importing products.",
+        "mappingNameLabel": "Mapping name",
+        "mappingNamePlaceholder": "Mapping name",
+        "mappingNameHint": "Optional. Helps distinguish between multiple mappings of the same category.",
+        "localCategory": "Local category",
+        "noCategories": "No categories",
+        "attributesCountAbbr": "{count} attrs.",
+        "selected": "Selected:",
+        "categoryOf": "{adapter} category",
+        "searchByNamePlaceholder": "Search by name...",
+        "findCategoriesAria": "Find categories",
+        "categoriesNotFoundTitle": "No categories found",
+        "categoriesNotFoundHintWithCreate": "Try a different search or create a category in {adapter}.",
+        "categoriesNotFoundHint": "Try a different search query.",
+        "creating": "Creating...",
+        "createInAdapter": "Create in {adapter}",
+        "linking": "Linking...",
+        "link": "Link",
+        "importCategory": "Import category",
+        "noMappingsYetTitle": "No mappings yet",
+        "noMappingsYetDescription": "A mapping links a local category to a {adapter} category and manages fields during export and import.",
+        "mappingActionsAria": "Mapping actions",
+        "rename": "Rename",
+        "duplicate": "Duplicate"
+      },
+      "products": {
+        "adapterProducts": "Adapter products",
+        "localForExport": "Local for export",
+        "searchBySkuPlaceholder": "Search by SKU (exact match)",
+        "searchByNameOrSkuPlaceholder": "Search by name or SKU...",
+        "foundCount": "Found: {count}",
+        "externalIdHeader": "External ID",
+        "localSkuHeader": "Local SKU",
+        "adapterValuePrefix": "Adapter:",
+        "importFromAdapter": "Import from adapter",
+        "exportToAdapter": "Export to adapter",
+        "unlinkProduct": "Unlink product",
+        "noProductsTitle": "No products",
+        "noProductsDescription": "Products will appear here after export or linking to the adapter.",
+        "loadMore": "Load more",
+        "selectedLabel": "Selected:",
+        "linkedCount": "{count} linked",
+        "unlinkedCount": "{count} unlinked",
+        "createLocal": "Create local ({count})",
+        "importCount": "Import ({count})",
+        "exportCount": "Export ({count})",
+        "exportPrices": "Export prices",
+        "exportStocks": "Export stock",
+        "categoryHeader": "Category",
+        "noProductsToExportTitle": "No products to export",
+        "noProductsToExportDescription": "All products are already exported, or there are no mappings for their categories.",
+        "pageSizeLabel": "per",
+        "totalLabel": "Total:",
+        "exportToAdapterCount": "Export to adapter ({count})"
+      },
+      "dialogs": {
+        "confirmBulkImportTitle": "Confirm bulk import",
+        "bulkImportWillUpdate": "{count} of {total} products will be updated",
+        "importProductsTitle": "Import products",
+        "importProductsDescription": "Select a local category for each adapter category",
+        "selectedProductsCount": "Selected products: {count}",
+        "productsCount": "{count} products",
+        "localCategoryColon": "Local category:",
+        "selectExistingColon": "Select existing:",
+        "choosePlaceholder": "Select a category",
+        "mappingParenthetical": "(mapping)",
+        "duplicateMappingTitle": "Duplicate mapping?",
+        "duplicateMappingDescription": "A full copy of this mapping with all graph settings will be created.",
+        "duplicateAction": "Duplicate",
+        "renameMappingTitle": "Rename mapping",
+        "renameMappingDescription": "Enter a new name for the mapping",
+        "mappingNamePlaceholder": "Mapping name",
+        "deleteMappingTitle": "Delete mapping \"{name}\"?",
+        "deleteMappingLinkedProducts": "It has {count} linked products. Choose what to do with them.",
+        "whatToDoWithProductsAria": "What to do with the products",
+        "moveProductsToAnotherMapping": "Move products to another mapping",
+        "moveProductsHint": "Links will switch to the selected mapping, exports will keep working.",
+        "mappingToTransferPlaceholder": "Mapping to move to",
+        "mappingFallback": "Mapping #{id}",
+        "deleteWithoutMoving": "Delete without moving",
+        "deleteWithoutMovingHint": "Products will remain linked to the marketplace but will lose their mapping — export will be unavailable until you assign a new one.",
+        "noReplacementMappingHint": "Nowhere to move to: there's no other mapping for this category. To move, first create or duplicate a mapping.",
+        "linkedProducts": "Linked products",
+        "productFallback": "Product #{id}",
+        "andMoreCount": "and {count} more",
+        "moveAndDelete": "Move and delete",
+        "mappingSettingsTitle": "Mapping settings",
+        "mappingSettingsDescription": "Configure category mapping parameters",
+        "selectMappingForProductsTitle": "Select mapping for products",
+        "selectMappingForProductsDescription": "Some products have multiple category mappings available. Choose the right mapping for each product.",
+        "applyToAll": "Apply to all",
+        "chooseMappingPlaceholder": "Select a mapping...",
+        "continueExport": "Continue export"
+      },
+      "import": {
+        "createNewFromAdapter": "Create new from adapter: \"{name}\"",
+        "createNewCategory": "Create new category:",
+        "categoryNamePlaceholder": "Category name",
+        "noCategory": "No category",
+        "importCount": "Import ({count})"
+      }
+    },
+    "adapterLogsPage": {
+      "noErrors": "No errors",
+      "errorCount": "{count} with an error",
+      "dateTime": "Time",
+      "duration": "Duration",
+      "durationMs": "{ms} ms",
+      "adapter": "Adapter",
+      "connection": "Connection",
+      "title": "Adapter logs",
+      "description": "Outgoing HTTP requests to marketplace APIs",
+      "allConnections": "All connections",
+      "allAdapters": "All adapters",
+      "method": "Method",
+      "anyMethod": "Any",
+      "code": "Code",
+      "anyCode": "Any code",
+      "errors": "Errors",
+      "searchByPath": "Search by path…",
+      "emptyTitle": "No requests yet",
+      "emptyDescription": "Entries will appear here automatically after adapter API calls",
+      "resource": "Resource",
+      "response": "Response",
+      "itemsOfTotal": "{count} of {total}",
+      "loadMore": "More",
+      "request": "Request",
+      "overview": "Overview",
+      "error": "Error",
+      "headers": "Headers",
+      "body": "Body"
+    },
+    "categoryImportPage": {
+      "adapters": "Adapters",
+      "connection": "Connection",
+      "importCategory": "Import category",
+      "adapterGenitive": "adapter",
+      "attrsAbbrCount": "{count} attrs.",
+      "importShort": "Import",
+      "selectAdapterCategory": "Select an adapter category",
+      "selectExistingCategory": "Select an existing category",
+      "categoryImported": "Category imported",
+      "pageDescription": "Select a {adapterLabel} category, configure the fields, and import it into the local catalog.",
+      "import": "Import",
+      "source": "Source:",
+      "localCatalog": "Local catalog",
+      "adapterCategory": "Adapter category",
+      "adapterCategoryDescription": "Find the category in the tree or enter its ID manually.",
+      "searchByNamePlaceholder": "Search by name...",
+      "findCategories": "Find categories",
+      "categoriesNotFoundTitle": "No categories found",
+      "categoriesNotFoundDescription": "Try changing the search query or go up one level.",
+      "categoryIdLabel": "Category ID",
+      "categoryIdPlaceholder": "Choose a category above or enter an ID",
+      "categoryIdDescription": "You can specify an ID manually if the category isn't in the list.",
+      "selectCategoryTitle": "Select a category",
+      "selectCategoryDescription": "First choose an adapter category on the left — import settings will appear here.",
+      "loadingCategoryFields": "Loading category fields...",
+      "whereToImportTitle": "Where to import",
+      "whereToImportDescription": "Create a new local category or add to an existing one.",
+      "createNewCategory": "Create new category",
+      "categoryNameLabel": "Category name",
+      "categoryNamePlaceholder": "Leave empty to use the adapter's name",
+      "intoExistingCategory": "Into an existing category",
+      "localCategoryLabel": "Local category",
+      "selectCategoryPlaceholder": "Select a category...",
+      "searchCategoryPlaceholder": "Search category...",
+      "baseFieldsCount": "{count} base fields",
+      "baseFieldsHint": "— SKU, name, description, price, stock and images — will be automatically linked to product fields.",
+      "attributesForImportTitle": "Attributes to import ({selected} / {total})",
+      "attributesForImportDescription": "Select additional category fields to transfer.",
+      "deselectAll": "Deselect all",
+      "selectAll": "Select all",
+      "noAdditionalAttributes": "No additional attributes to import",
+      "requiredAbbr": "req.",
+      "optionsAbbrCount": "{count} opts."
+    },
+    "fieldMappingPage": {
+      "adapters": "Adapters",
+      "connection": "Connection",
+      "mappings": "Mappings",
+      "category": "Category",
+      "sourceType": {
+        "productField": "Product field",
+        "categoryAttribute": "Category attribute",
+        "storeAttribute": "Store attribute",
+        "staticValue": "Static value",
+        "groupName": "Group name"
+      },
+      "notSelected": "Not selected",
+      "notSet": "Not set",
+      "productGroupName": "Product group name",
+      "notConfigured": "Not configured",
+      "mappingsSaved": "Mappings saved",
+      "untitled": "Untitled",
+      "mappingHash": "Mapping #{id}",
+      "settingsSaved": "Settings saved",
+      "saveError": "Save error",
+      "enterFieldKey": "Enter a field key",
+      "fieldKeyExists": "A field with this key already exists",
+      "cannotDeleteAdapterField": "Cannot delete an adapter field. It can only be disabled.",
+      "invalidFileFormat": "Invalid file format",
+      "importedFieldsCount": "Imported: {count} fields",
+      "fileReadError": "File read error",
+      "moreActions": "More actions",
+      "autoArrange": "Auto-arrange",
+      "checkFieldsUpToDate": "Check fields are up to date",
+      "export": "Export",
+      "import": "Import",
+      "rearrangeBlocksTitle": "Rearrange blocks?",
+      "rearrangeBlocksDescription": "All blocks will be automatically rearranged — the current layout will be lost.",
+      "rearrange": "Rearrange",
+      "previewTitle": "Preview",
+      "previewSheetDescription": "Summary of all fields. Changed values are highlighted.",
+      "visualTab": "Preview",
+      "rawDataTab": "Data",
+      "imagesCountHint": "{count} images. If they don't display — the URL may be inaccessible from the browser.",
+      "sourceAbbr": "Src:",
+      "resultAbbr": "Res:",
+      "noActiveFieldsTitle": "No active fields",
+      "noActiveFieldsDescription": "Connect adapter fields to sources to see a value preview.",
+      "mappingSettingsTitle": "Mapping settings",
+      "mappingSettingsDescription": "Configure mapping parameters",
+      "mappingNamePlaceholder": "Mapping name",
+      "addFieldTitle": "Add field",
+      "addFieldDescription": "Add a field with an arbitrary key for the adapter",
+      "fieldKeyLabel": "Field key *",
+      "fieldKeyPlaceholder": "e.g.: custom_field",
+      "nameOptionalLabel": "Name (optional)",
+      "displayNamePlaceholder": "Display name",
+      "sourceTypeLabel": "Source type",
+      "fieldValuePlaceholder": "Field value"
+    },
+    "marketplacePage": {
+      "title": "Adapters",
+      "enterConnectionName": "Enter a connection name",
+      "selectAdapter": "Select an adapter",
+      "connectionCreated": "Connection created",
+      "connectionDeleted": "Connection deleted",
+      "description": "Manage adapter connections for product syncing",
+      "addConnection": "Add connection",
+      "newConnectionTitle": "New adapter connection",
+      "newConnectionDescription": "Select an adapter and enter connection details",
+      "noPluginsAvailableTitle": "No plugins available",
+      "noPluginsAvailableDescription": "You need to install the relevant plugins to connect to adapters. Go to the",
+      "goToPlugins": "Go to plugins",
+      "connectionNameLabel": "Connection name",
+      "connectionNamePlaceholder": "E.g.: Main WB store",
+      "adapterLabel": "Adapter",
+      "selectAdapterPlaceholder": "Select an adapter",
+      "activeConnectionLabel": "Active connection",
+      "emptyTitle": "No adapter connections",
+      "emptyDescription": "Add your first connection to sync products",
+      "mappingsColumn": "Mappings",
+      "productsColumn": "Products",
+      "active": "Active",
+      "inactive": "Inactive",
+      "deleteConnectionTitle": "Delete connection?",
+      "deleteConnectionDescription": "Are you sure you want to delete the connection \"{name}\"? This will delete all category mappings and product links."
+    },
+    "pluginsPage": {
+      "selectDllFile": "Select a file with a .dll extension",
+      "selectPluginFile": "Select a plugin file",
+      "pluginUploaded": "Plugin uploaded",
+      "pluginDeleted": "Plugin deleted",
+      "pluginReloaded": "Plugin reloaded",
+      "title": "Plugins",
+      "description": "Manage DLL plugins for adapter integration",
+      "uploadPlugin": "Upload plugin",
+      "selectDllFileToUpload": "Select a DLL plugin file to upload",
+      "pluginFileLabel": "Plugin file (.dll)",
+      "dragFileHere": "Drag a file here or",
+      "chooseFile": "Choose file",
+      "chooseAnother": "Choose another",
+      "sdkInterfaceHint": "The plugin must implement the IMarketplacePlugin interface from the SDK",
+      "emptyTitle": "No plugins installed",
+      "emptyDescription": "Upload a DLL plugin to integrate with an adapter",
+      "plugin": "Plugin",
+      "key": "Key",
+      "version": "Version",
+      "file": "File",
+      "loaded": "Loaded",
+      "type": "Type",
+      "systemType": "System",
+      "userType": "User",
+      "reload": "Reload",
+      "deletePluginTitle": "Delete plugin?",
+      "deletePluginDescription": "Are you sure you want to delete the plugin \"{name}\"? Connections using this plugin will stop working."
+    },
+    "graph": {
+      "pinTypes": {
+        "text": "Text",
+        "select": "Select",
+        "number": "Number",
+        "integer": "Integer",
+        "boolean": "Boolean",
+        "list": "List",
+        "any": "Any"
+      },
+      "groupNameLabel": "Group name",
+      "staticValueLabel": "Static value",
+      "storeFileLabel": "Store file",
+      "productFileByNameLabel": "Product file by name",
+      "productFilesByExtensionPrefix": "Files *.",
+      "productFilesByExtensionLabel": "Product files by extension",
+      "attributeFallback": "Attribute #{id}",
+      "adapterHeader": "Adapter fields",
+      "priceHeader": "Price fields",
+      "aliasMergedTitle": "Merged with «{primary}»: takes its value on export, ignored on import",
+      "aliasMergedShortTitle": "Merged with «{primary}»",
+      "fanOutSourceUsed": "This source is already used by another field — a data conflict is possible. If the fields are duplicates, merge them in the field settings.",
+      "fanOutImportDisabled": "Import disabled: this source is already used by several adapter fields. If the fields are duplicates, merge them in the field settings.",
+      "fanOutPriceUsed": "This source is already used by another price field.",
+      "sourceClickTitle": "{label} — click to configure",
+      "unitLabel": "Unit: {unit}",
+      "rangeFrom": "from {value}",
+      "rangeTo": "to {value}",
+      "keyLabel": "Key: {key}",
+      "modifierFallback": "Modifier",
+      "irreversibleWarning": "Not reversible on import: the original value can't be restored — the field will be written as-is.",
+      "valueRowLabel": "value",
+      "previewMore": "more",
+      "previewLess": "collapse",
+      "inputsCount": "inputs: {count}",
+      "removeInput": "Remove input",
+      "addInput": "Add input",
+      "exportOnlyTitle": "Export only",
+      "nodeKinds": {
+        "attribute": "Category attribute",
+        "storeAttribute": "Store attribute",
+        "productField": "Product field",
+        "static": "Value",
+        "groupName": "Product group",
+        "storeFileUrl": "Store file · link",
+        "storeFileContent": "Store file · text",
+        "productFileByName": "Product file · link",
+        "productFileContentByName": "Product file · text",
+        "productFilesByExtension": "Product files · extension",
+        "adapterValue": "Standard value"
+      },
+      "literalKinds": {
+        "number": "Number",
+        "boolean": "Boolean",
+        "array": "List",
+        "string": "Text"
+      },
+      "opSpecs": {
+        "formatString": {
+          "label": "Format string",
+          "params": {
+            "template": "Template"
+          }
+        },
+        "join": {
+          "label": "Join",
+          "params": {
+            "delimiter": "Delimiter"
+          }
+        },
+        "makeArray": {
+          "label": "Create array",
+          "params": {}
+        },
+        "arrayAppend": {
+          "label": "Append to array",
+          "inputLabels": [
+            "array",
+            "element"
+          ],
+          "params": {}
+        },
+        "splitToArray": {
+          "label": "Split into array",
+          "params": {
+            "delimiter": "Delimiter"
+          }
+        },
+        "arrayIndex": {
+          "label": "Element by index",
+          "params": {
+            "index": "Index"
+          }
+        },
+        "arrayLength": {
+          "label": "Array length",
+          "params": {}
+        },
+        "ifElse": {
+          "label": "If",
+          "inputLabels": [
+            "condition",
+            "if true",
+            "if false"
+          ],
+          "params": {}
+        },
+        "not": {
+          "label": "Not",
+          "params": {}
+        },
+        "and": {
+          "label": "And",
+          "params": {}
+        },
+        "or": {
+          "label": "Or",
+          "params": {}
+        },
+        "equals": {
+          "label": "Equals",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "notEquals": {
+          "label": "Not equal",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "greaterThan": {
+          "label": "Greater than",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "lessThan": {
+          "label": "Less than",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "contains": {
+          "label": "Contains",
+          "inputLabels": [
+            "in",
+            "value"
+          ],
+          "params": {}
+        },
+        "isEmpty": {
+          "label": "Is empty",
+          "params": {}
+        },
+        "isValid": {
+          "label": "Is filled",
+          "params": {}
+        }
+      },
+      "validation": {
+        "fieldNotConnectedAdapter": "Adapter field «{label}» is not connected",
+        "fieldNotConnectedPrice": "Price field «{label}» is not connected",
+        "nodeWithoutInput": "Node has no input",
+        "unknownModifier": "Unknown modifier: {type}",
+        "graphHasCycle": "The graph contains a cycle — it will not run"
+      },
+      "contextMenu": {
+        "searchPlaceholder": "Search blocks…",
+        "empty": "Nothing found",
+        "groupNameItem": "Group name",
+        "numberLiteral": "Number",
+        "textLiteral": "Text",
+        "booleanLiteral": "Boolean",
+        "arrayLiteral": "List",
+        "adapterValueItem": "Standard value",
+        "productFileByNameLink": "Product file by name · link",
+        "productFileContentByNameText": "Product file by name · text",
+        "productFilesByExtensionItem": "Product files by extension",
+        "storeFileUrlItem": "Store file · link",
+        "storeFileContentItem": "Store file · text",
+        "groups": {
+          "sources": "Sources",
+          "literals": "Values",
+          "storage": "Storage",
+          "productFiles": "Product files",
+          "ops": "Operations",
+          "logic": "Logic"
+        }
+      },
+      "inspector": {
+        "titleByType": {
+          "attribute": "Category attribute",
+          "storeAttribute": "Store attribute",
+          "productField": "Product field",
+          "static": "Static value",
+          "groupName": "Group name",
+          "storeFileUrl": "Store file · link",
+          "storeFileContent": "Store file · text",
+          "productFileByName": "Product file by name · link",
+          "productFileContentByName": "Product file by name · text",
+          "productFilesByExtension": "Product files by extension",
+          "adapterFields": "Adapter fields",
+          "adapterPriceFields": "Price fields"
+        },
+        "staticTypeTitles": {
+          "number": "Number",
+          "boolean": "Boolean",
+          "array": "List",
+          "string": "Text",
+          "default": "Value"
+        },
+        "storeFileFieldLabel": "File from store storage",
+        "chooseFilePlaceholder": "Choose a file",
+        "notSelected": "Not selected",
+        "storeFileUrlHint": "Outputs a link to the file (e.g. for images).",
+        "storeFileContentHint": "Outputs the file's text content (e.g. rich JSON).",
+        "noStoreFiles": "No files in the store's storage yet.",
+        "productFileNameLabel": "Product file name",
+        "productFileNamePlaceholder": "e.g. spec.pdf",
+        "productFileByNameHint": "Finds a product file by name and outputs a link to it.",
+        "productFileContentByNameHint": "Finds a product file by name and outputs its text content.",
+        "extensionLabel": "Extension",
+        "extensionPlaceholder": "e.g. pdf",
+        "productFilesByExtensionHint": "Outputs an array of links to all product files with this extension.",
+        "sourceLabel": "Source",
+        "sourceChangeHint": "To change the source, add another node from the menu (right-click/Tab) and reconnect it.",
+        "importableLabel": "Importable",
+        "importableHint": "Unchecking this makes it export-only: importing from the marketplace won't write the value back to this source.",
+        "valueLabel": "Value",
+        "choosePlaceholder": "Choose a value...",
+        "enterValuePlaceholder": "Enter a value...",
+        "adapterValueAutoloadHint": "To auto-load options, connect this block to an adapter field that has predefined values.",
+        "loadOptionsFromFieldPlaceholder": "Load options from a field...",
+        "yes": "Yes",
+        "no": "No",
+        "commaSeparated": "comma-separated",
+        "fieldsCount": "Fields:",
+        "requiredCount": "required:",
+        "adapterFieldsHint": "For each field, choose a standard source directly (the pin on the block disappears) or leave it \"by wire\" and connect a node.",
+        "byWire": "by wire",
+        "byWireOption": "By wire",
+        "productGroup": "Product",
+        "stockGroup": "Stock",
+        "priceGroup": "Price",
+        "categoryAttributeGroup": "Category attribute",
+        "storeAttributeGroup": "Store attribute",
+        "groupNameOption": "Group name",
+        "mergeWithFieldGroup": "Merge with field (duplicate)",
+        "noParams": "This node has no parameters.",
+        "noModifierParams": "This modifier has no parameters.",
+        "additionalInputs": "Additional inputs",
+        "llmPinsHint": "Connect blocks to the pins on the left of the card. Use in the prompt:",
+        "pinNamePlaceholder": "Pin name",
+        "pinDefaultLabel": "Pin",
+        "addPin": "Add pin",
+        "pinOverrideHint": "The value below is the default; it can be overridden by wiring the pin on the left.",
+        "pinOverrideBadge": "pin override",
+        "chooseModelPlaceholder": "Choose a model",
+        "noAiModelsHint": "No connected or enabled models. An administrator can add and enable them in Settings → AI.",
+        "outputValueLabel": "Output value",
+        "deleteNode": "Delete node",
+        "productField": "Product field",
+        "attributeFallback": "attribute #{id}"
+      }
+    },
+    "canvas": {
+      "save": "Save",
+      "previewPlaceholder": "Product for preview…",
+      "previewing": "previewing…",
+      "resetPreview": "Reset",
+      "resetPreviewTitle": "Reset the preview product",
+      "disableWireAnimation": "Disable wire animation",
+      "enableWireAnimation": "Enable wire animation",
+      "collapse": "Collapse (F)",
+      "fullscreen": "Fullscreen (F)",
+      "fieldsAnalysis": "Field analysis",
+      "noFields": "no fields",
+      "edges": "Edges",
+      "hideDebug": "Shift+Tab — hide",
+      "fieldsAddedCount": "Fields added: {count}",
+      "schemaUpToDate": "Schema is up to date — no new fields",
+      "graphSaved": "Graph saved",
+      "invalidFileFormat": "Invalid format: expected an object with nodes and edges",
+      "mappingExported": "Mapping exported",
+      "mappingImported": "Mapping imported — click \"Save\"",
+      "sourceValueLabel": "Source value",
+      "aiModelFallback": "Model #{id}"
+    },
+    "optionMapEditor": {
+      "title": "Mappings: variant → adapter option",
+      "sourceOptionsHint": "Left — source options. Connect a block to a category attribute with options.",
+      "loadFromFieldPlaceholder": "Load options from adapter field...",
+      "loadFromFieldHint": "Or connect a block to the adapter field — options will be loaded automatically.",
+      "sourceOptionPlaceholder": "Source option",
+      "adapterOptionPlaceholder": "Adapter option",
+      "addMapping": "Add mapping",
+      "unmappedWarning": "No mapping for {mapped} of {total} category values",
+      "defaultOptionLabel": "Default option (if no mapping)",
+      "defaultValueLabel": "Default (if no mapping)",
+      "defaultValuePlaceholder": "Leave as is"
+    },
+    "valueMapEditor": {
+      "title": "Mappings: variant → valueId",
+      "sourceOptionsHint": "Left — source options (category attribute). Connect a block to an attribute with options.",
+      "valueIdHint": "Right — adapter field valueId (entered manually). The label is shown if the valueId matches a known option.",
+      "sourceOptionPlaceholder": "Source option",
+      "addMapping": "Add mapping",
+      "unmappedWarning": "No mapping for {mapped} of {total} source values",
+      "defaultValueLabel": "Default valueId (if no mapping)",
+      "defaultValuePlaceholder": "Leave as is"
+    },
+    "templateEditor": {
+      "heightExampleLabel": "height",
+      "insertField": "Insert field",
+      "fieldValueHint": "field value",
+      "productFields": "Product fields",
+      "stockFields": "Stock",
+      "priceFields": "Price",
+      "categoryAttributes": "Category attributes",
+      "storeAttributes": "Global attributes",
+      "inputPins": "Input pins"
+    },
+    "modifierCategories": {
+      "text": "Text",
+      "number": "Number",
+      "select": "Select",
+      "array": "Array",
+      "any": "Universal",
+      "random": "Random"
+    },
+    "modifiers": {
+      "common": {
+        "empty": "empty"
+      },
+      "truncate": {
+        "name": "Truncate",
+        "maxLength": "Max length",
+        "summary": "up to {n} characters"
+      },
+      "split": {
+        "name": "Split",
+        "delimiter": "Delimiter",
+        "indexPart": "Part index",
+        "summary": "by \"{d}\" [{i}]"
+      },
+      "replace": {
+        "name": "Replace",
+        "search": "Search",
+        "replacement": "Replace with"
+      },
+      "append": {
+        "name": "Append",
+        "suffix": "Suffix"
+      },
+      "prepend": {
+        "name": "Prepend",
+        "prefix": "Prefix"
+      },
+      "uppercase": {
+        "name": "Uppercase"
+      },
+      "lowercase": {
+        "name": "Lowercase"
+      },
+      "trim": {
+        "name": "Trim whitespace"
+      },
+      "multiply": {
+        "name": "Multiply",
+        "factor": "Factor"
+      },
+      "divide": {
+        "name": "Divide",
+        "divisor": "Divisor"
+      },
+      "add": {
+        "name": "Add",
+        "addend": "Addend"
+      },
+      "round": {
+        "name": "Round",
+        "decimals": "Decimal places",
+        "summary": "to {n} decimals"
+      },
+      "floor": {
+        "name": "Round down"
+      },
+      "ceiling": {
+        "name": "Round up"
+      },
+      "clamp": {
+        "name": "Clamp range",
+        "min": "Minimum",
+        "max": "Maximum"
+      },
+      "valueMap": {
+        "name": "Value mapping (→ valueId)",
+        "mappings": "Mappings",
+        "default": "Default"
+      },
+      "optionMap": {
+        "name": "Option mapping",
+        "summaryCount": "{count} options"
+      },
+      "llmGenerate": {
+        "name": "AI generation",
+        "prompt": "Prompt",
+        "systemPrompt": "System prompt",
+        "model": "Model",
+        "cacheEnabled": "Cache",
+        "perProduct": "Unique per product",
+        "summaryPlaceholder": "prompt"
+      },
+      "randomInt": {
+        "name": "Random integer"
+      },
+      "randomFloat": {
+        "name": "Random float",
+        "decimals": "Decimals"
+      },
+      "randomPick": {
+        "name": "Random pick",
+        "choices": "Choices",
+        "summaryOf": "of {n}",
+        "summaryOfInput": "of input"
+      },
+      "randomUuid": {
+        "name": "Random UUID"
+      },
+      "toText": {
+        "name": "Convert to text",
+        "useLabel": "Use label instead of code",
+        "summaryWithLabels": "with labels"
+      },
+      "forceType": {
+        "name": "Force type",
+        "sendAs": "Send as",
+        "optionString": "Text",
+        "optionNumber": "Number",
+        "optionInteger": "Integer",
+        "optionBoolean": "Boolean",
+        "summaryText": "text",
+        "summaryNumber": "number",
+        "summaryInteger": "integer",
+        "summaryBoolean": "bool"
+      },
+      "template": {
+        "name": "Insert product fields",
+        "template": "Template"
+      },
+      "defaultValue": {
+        "name": "Default value",
+        "value": "Value"
+      },
+      "takeFirst": {
+        "name": "Take first"
+      },
+      "limit": {
+        "name": "Limit count",
+        "count": "Count",
+        "summary": "up to {n}"
+      },
+      "skip": {
+        "name": "Skip first",
+        "count": "Skip",
+        "summary": "{n} items"
+      },
+      "reverse": {
+        "name": "Reverse order"
+      },
+      "join": {
+        "name": "Join into string"
+      },
+      "sort": {
+        "name": "Sort"
+      },
+      "addItems": {
+        "name": "Add items",
+        "items": "Items"
+      },
+      "removeItems": {
+        "name": "Remove items"
+      }
+    }
+  },
+  "operations": {
+    "durationMs": "{ms}ms",
+    "durationSec": "{sec}s",
+    "durationMinSec": "{min}m {sec}s",
+    "status": {
+      "running": "running",
+      "paused": "paused",
+      "completed": "completed",
+      "failed": "failed",
+      "partial": "partial",
+      "cancelled": "cancelled"
+    },
+    "total": "Total",
+    "pending": "Pending",
+    "completed": "Done",
+    "errors": "Errors",
+    "loadingLogs": "Loading logs...",
+    "startedBy": "Started by: {name}",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "retry": "Retry ({count})",
+    "deleteTitle": "Delete operation?",
+    "deleteConfirm": "Delete",
+    "panelTitle": "Operations",
+    "clearCompletedTitle": "Clear completed",
+    "clearCompletedConfirmTitle": "Clear completed operations?",
+    "clearCompletedConfirmDescription": "All completed, cancelled, and failed operations will be removed from the list.",
+    "clearCompletedConfirm": "Clear",
+    "active": "Active",
+    "history": "History",
+    "loadMore": "Load more",
+    "loading": "Loading...",
+    "emptyTitle": "No operations",
+    "emptyDescription": "Export, import, and AI task progress will appear here.",
+    "retryStarted": "Retry started",
+    "retryError": "Error while retrying",
+    "waitingForLogs": "Waiting for logs...",
+    "maxLogEntries": "Showing a maximum of 500 entries",
+    "showButtons": "Show buttons",
+    "hideButtons": "Hide buttons"
+  },
+  "barcodeCell": {
+    "clickToEnlarge": "Click to enlarge",
+    "downloadPng": "Download PNG"
+  },
+  "productMarketplaceIntegrations": {
+    "header": "Adapter connections",
+    "noCategoryTitle": "Product is not assigned to a category",
+    "noCategoryDescription": "Set a product category to export to adapters",
+    "noConnectionsTitle": "No adapter connections",
+    "noConnectionsDescription": "Create an adapter connection to export and sync products",
+    "goToConnections": "Go to adapters",
+    "exportToAllTitle": "Export to all adapters",
+    "readyCountFew": "{count} connections ready to export",
+    "readyCountMany": "{count} connections ready to export",
+    "export": "Export",
+    "skuPrefix": "· sku {sku}",
+    "mappingDeleted": "mapping deleted",
+    "sizesTooltip": "Sizes",
+    "openOnAdapter": "Open on adapter",
+    "menuExport": "Export",
+    "menuImport": "Import",
+    "menuMapping": "Mapping",
+    "menuRelink": "Relink",
+    "menuUnlink": "Unlink",
+    "menuRecreate": "Recreate",
+    "loadingSizes": "Loading sizes...",
+    "noSizesForConnection": "No sizes for this connection",
+    "sizeHeader": "Size",
+    "barcodeHeader": "Barcode",
+    "priceHeader": "Price",
+    "stockHeader": "Stock",
+    "notExported": "Not exported",
+    "ready": "Ready",
+    "linkManually": "Link manually",
+    "mappingNotConfigured": "Mapping for \"{category}\" is not configured",
+    "configure": "· configure",
+    "noAvailableAdaptersTitle": "No available adapters",
+    "noAvailableAdaptersDescription": "Connect an adapter and create a mapping for the product category to export it.",
+    "importDialogTitle": "Confirm import",
+    "importDialogDescription": "The following fields will be updated from the adapter",
+    "cancelAction": "Cancel",
+    "confirmAction": "Confirm",
+    "bulkMappingDialogTitle": "Choose mapping",
+    "bulkMappingDialogDescription": "Several mappings are available for some connections. Choose the right one for each.",
+    "choosePlaceholder": "Choose mapping",
+    "recreateDialogTitle": "Recreate product",
+    "recreateDialogDescription": "The product will be recreated on {adapter} with a new SKU. The old product will be archived.",
+    "newSkuLabel": "New SKU",
+    "newSkuPlaceholder": "Enter new SKU",
+    "relinkProductTitle": "Relink product",
+    "linkProductTitle": "Link product",
+    "relinkDescription": "Enter the new product ID on {adapter} for relinking.",
+    "linkDescription": "Enter the existing product ID on {adapter} for manual linking.",
+    "externalIdLabel": "Product ID on adapter",
+    "externalIdPlaceholder": "E.g.: 12345678",
+    "relinkAction": "Relink",
+    "linkAction": "Link",
+    "mappingFallback": "Mapping #{id}",
+    "errorSavingMapping": "Error saving mapping",
+    "errorSavingMappingFor": "Error saving mapping for {adapter}",
+    "noExportableConnections": "No connections with mapping to export",
+    "exportedToAdapters": "Exported to {count} adapter(s)",
+    "exportErrors": "Export errors: {count}",
+    "noChangesFound": "No changes detected",
+    "irreversibleFieldsWarning": "Some fields contain irreversible modifiers and were excluded from the import. You can include them manually.",
+    "mappingDeletedError": "The mapping for this connection was deleted. Unlink the product or choose a new mapping.",
+    "chooseMappingBeforeExport": "Choose a mapping before exporting",
+    "productUpdatedOnAdapter": "Product updated on {adapter}",
+    "productExportedToAdapter": "Product exported to {adapter}",
+    "productRecreated": "Product recreated on the adapter",
+    "archiveErrorSuffix": " (archiving the old one: {error})",
+    "productRelinked": "Product relinked on {adapter}",
+    "productLinked": "Product linked to {adapter}",
+    "unlinkConfirmTitle": "Unlink product?",
+    "unlinkConfirmDescription": "The product will be unlinked from {adapter}. Export to this marketplace will stop.",
+    "unlinkConfirmLabel": "Unlink",
+    "productUnlinked": "Product unlinked from {adapter}",
+    "noMapping": "No mapping",
+    "statusSynced": "Synced",
+    "statusNotSynced": "Not synced",
+    "statusError": "Error",
+    "statusModified": "Modified",
+    "justNow": "just now",
+    "minutesAgo": "{count} min ago",
+    "hoursAgo": "{count} h ago",
+    "exportTitleLinked": "Export: product #{id}",
+    "exportTitleUnlinked": "Export product #{id}",
+    "importTitle": "Import: product #{id}",
+    "fieldLabels": {
+      "name": "Name",
+      "description": "Description",
+      "price": "Price",
+      "storageQuantity": "Stock"
+    },
+    "updatedFieldsMessage": "Updated: {fields}"
+  },
+  "composables": {
+    "useStoreDateTime": {
+      "today": "Today",
+      "yesterday": "Yesterday"
+    }
+  },
+  "products": {
+    "productsTable": {
+      "sortHeaderHint": "Click to sort",
+      "noResults": "No results found"
+    },
+    "storeAttributeForm": {
+      "selectPlaceholder": "Select...",
+      "unknownTypePlaceholder": "Unknown type: {type}",
+      "emptyTitle": "No global attributes",
+      "emptyDescription": "Add global attributes in store settings — they will appear here."
+    },
+    "productAttributeForm": {
+      "selectPlaceholder": "Select...",
+      "unknownTypePlaceholder": "Unknown type: {type}",
+      "emptyTitle": "No attributes to fill in",
+      "emptyDescription": "Add attributes to the product category — they will appear here."
+    },
+    "bulkAdapterDialog": {
+      "title": "Adapter action ({count} products)",
+      "description": "Choose an adapter and an action for the selected products.",
+      "adapterLabel": "Adapter",
+      "adapterPlaceholder": "Choose adapter",
+      "loadingCapabilities": "Loading adapter capabilities...",
+      "actionLabel": "Action",
+      "checkingLinks": "Checking links...",
+      "linkedLabel": "Linked",
+      "unlinkedLabel": "Unlinked",
+      "noneLinkedWarning": "None of the selected products are linked to this adapter",
+      "runButton": "Run",
+      "operationStarted": "Operation started",
+      "actions": {
+        "export": {
+          "label": "Export products",
+          "description": "Create or update products on the adapter"
+        },
+        "import": {
+          "label": "Import products",
+          "description": "Update local products with data from the adapter"
+        },
+        "exportPrices": {
+          "label": "Export prices",
+          "description": "Send current prices to the adapter"
+        },
+        "exportStocks": {
+          "label": "Export stock",
+          "description": "Send current stock to the adapter"
+        },
+        "importPrices": {
+          "label": "Import prices",
+          "description": "Update local prices with data from the adapter"
+        }
+      }
+    },
+    "bulkEditDialog": {
+      "title": "Bulk edit",
+      "selectedCount": "Selected products: {count}",
+      "differentCategoriesWarning": "The selected products have different categories",
+      "productFieldsTab": "Product fields",
+      "categoryFieldsTab": "Category attributes",
+      "globalFieldsTab": "Global attributes",
+      "namePlaceholder": "New name",
+      "descriptionPlaceholder": "New description",
+      "storageQuantityLabel": "Stock",
+      "priceLabel": "Price",
+      "barcodeLabel": "Barcode",
+      "generateBarcodesLabel": "Generate barcodes for products without one",
+      "noCategoryAttributes": "No category attributes to edit",
+      "noGlobalAttributes": "No global attributes to edit",
+      "selectFieldToEdit": "Select at least one field to edit",
+      "updatedCount": "Products updated: {count}",
+      "updateFailed": "Failed to update products"
+    },
+    "columns": {
+      "imageLabel": "Photo",
+      "skuLabel": "SKU",
+      "barcodeLabel": "Barcode",
+      "categoryLabel": "Category",
+      "storageQuantityLabel": "Stock",
+      "priceLabel": "Price",
+      "createdAtLabel": "Created",
+      "updatedAtLabel": "Updated",
+      "copySkuTooltip": "Copy SKU",
+      "presets": {
+        "none": {
+          "label": "No merging",
+          "description": "Show all columns separately"
+        },
+        "product": {
+          "label": "Product",
+          "description": "Merge photo, name, and category into one column"
+        },
+        "productSku": {
+          "label": "Product and SKU",
+          "description": "Merge photo, name, SKU, and category into one column"
+        },
+        "nameSku": {
+          "label": "Name and SKU",
+          "description": "Merge name and SKU into one column"
+        },
+        "nameCategorySku": {
+          "label": "Name, category, and SKU",
+          "description": "Merge name, category, and SKU into one column"
+        }
+      }
+    },
+    "productTransferDialog": {
+      "previewLoadFailed": "Failed to load preview",
+      "targetStoreFallback": "target store",
+      "queuedMoveHeadline": "Move to \"{store}\" queued",
+      "queuedCloneHeadline": "Clone to \"{store}\" queued",
+      "progressWithFiles": "Progress for {count} files can be tracked in the operations panel",
+      "progressGeneric": "Progress can be tracked in the operations panel",
+      "dialogTitle": "Transfer product to another store",
+      "modeLabel": "Mode",
+      "cloneAction": "Clone",
+      "moveAction": "Move",
+      "cloneModeHint": "The product will be copied to the target store, the original stays unchanged.",
+      "moveModeHint": "The product will be moved to the target store, the original will go to the current store's trash.",
+      "targetStoreLabel": "Target store",
+      "loadingStoresPlaceholder": "Loading stores...",
+      "chooseStorePlaceholder": "Choose a store",
+      "currentStoreSuffix": "current",
+      "checkingPreview": "Checking data...",
+      "skuResolvedLabel": "New SKU: {sku}",
+      "skuConflictLabel": "SKU \"{sku}\" is already used in the target store",
+      "newSkuPlaceholder": "New SKU",
+      "categoryLabel": "Category",
+      "sourceCategoryLabel": "Source category:",
+      "foundSameNameInTarget": "Found a category with the same name in the target store.",
+      "notFoundInTarget": "No category with this name found in the target store.",
+      "useFoundCategory": "Use found category \"{name}\"",
+      "createSameCategory": "Create the same category",
+      "noCategory": "No category",
+      "willBeAddedPrefix": "Will be added:",
+      "wontFitPrefix": "Won't fit:",
+      "addMissingAttrsPrefix": "Add",
+      "addMissingAttrsSuffix": "to category \"{name}\"",
+      "storeAttributesSummary": "Store attributes: {mapped} of {total} mapped",
+      "storeAttributesMissingInTarget": "Not found in target store:",
+      "groupLabel": "Product group",
+      "noGroup": "No group",
+      "addToExistingGroup": "Add to existing group",
+      "createNewGroup": "Create new group",
+      "chooseGroupPlaceholder": "Choose a group",
+      "newGroupNamePlaceholder": "New group name",
+      "linksWillBreakAfterMovePrefix": "After the move,",
+      "withAdaptersSuffix": "with adapters will be broken",
+      "originalHasLinksPrefix": "The original has",
+      "moveLinksExplanation": "Marketplace links are not transferred — they will need to be set up again in the target store.",
+      "cloneLinksExplanation": "The new product will be created without marketplace links — the original keeps its links.",
+      "confirmBreakLinksLabel": "I understand that marketplace links will be broken",
+      "alsoMovesLabel": "Will also be moved:",
+      "alsoCopiesLabel": "Will also be copied:",
+      "inFoldersPrefix": "in",
+      "attrMappableOne": "attribute will be mapped",
+      "attrMappableFew": "attributes will be mapped",
+      "attrMappableMany": "attributes will be mapped",
+      "attrWillBeAddedOne": "attribute will be added",
+      "attrWillBeAddedFew": "attributes will be added",
+      "attrWillBeAddedMany": "attributes will be added",
+      "attrWontFitOne": "attribute doesn't fit",
+      "attrWontFitFew": "attributes don't fit",
+      "attrWontFitMany": "attributes don't fit",
+      "missingAttrOne": "attribute",
+      "missingAttrFew": "attributes",
+      "missingAttrMany": "attributes",
+      "linkOne": "link",
+      "linkFew": "links",
+      "linkMany": "links",
+      "fileOne": "file",
+      "fileFew": "files",
+      "fileMany": "files",
+      "folderOne": "folder",
+      "folderFew": "folders",
+      "folderMany": "folders",
+      "imageOne": "image",
+      "imageFew": "images",
+      "imageMany": "images",
+      "noteOne": "note",
+      "noteFew": "notes",
+      "noteMany": "notes",
+      "variantOne": "variant",
+      "variantFew": "variants",
+      "variantMany": "variants"
+    },
+    "productGallerySidebar": {
+      "title": "Photos",
+      "firstIsMainHint": "The first photo will be the main one",
+      "productPhotoAlt": "Product photo",
+      "mainBadge": "Main"
+    },
+    "productGroupSidebar": {
+      "title": "Product group",
+      "duplicate": "Duplicate"
+    },
+    "productFileManager": {
+      "storageRootLabel": "Storage",
+      "filesRootLabel": "Files",
+      "storeSharedStorageLabel": "Shared store storage",
+      "productFallback": "Product",
+      "productWithIdFallback": "Product #{id}",
+      "tagColorRed": "Red",
+      "tagColorBlue": "Blue",
+      "tagColorGreen": "Green",
+      "tagColorYellow": "Yellow",
+      "tagColorOrange": "Orange",
+      "tagColorPurple": "Purple",
+      "tagColorBlack": "Black",
+      "tagColorGray": "Gray",
+      "tagRemovedFromFiles": "Tag removed from {count} files",
+      "tagAssignedToFiles": "Tag assigned to {count} files",
+      "newFolderDefaultName": "New folder",
+      "folderNotFound": "Folder \"{name}\" not found",
+      "dragItemsCount": "{count} items",
+      "uploadingFileTitle": "Uploading file: {subject}",
+      "uploadingFilesTitle": "Uploading files ({count}): {subject}",
+      "logCancelledEntry": "Cancelled: {name}",
+      "errorFallback": "Unknown error",
+      "uploadedSummary": "Files uploaded: {count}",
+      "uploadedSummaryErrorsSuffix": ", errors: {count}",
+      "uploadCancelledSummary": "Cancelled. Uploaded: {completed}, cancelled: {cancelled}",
+      "folderDeleted": "Folder deleted",
+      "linkCopied": "Link copied",
+      "copyFailed": "Failed to copy",
+      "archiveBuilding": "Building archive...",
+      "deleteFileTitle": "Delete file?",
+      "deleteSelectedFilesTitle": "Delete selected files?",
+      "deleteFileIrreversible": "The file will be permanently deleted.",
+      "deleteFilesCountIrreversible": "{count} files will be deleted. This action cannot be undone.",
+      "dropFilesToUpload": "Drop files to upload",
+      "emptyFolderTitle": "No files yet",
+      "emptyFolderDescription": "Upload files or create a folder",
+      "folderTypeLabel": "Folder",
+      "fileCountOne": "file",
+      "fileCountMany": "files",
+      "changeColorTitle": "Change color",
+      "newTagPlaceholder": "Tag name",
+      "copyPublicLinkTitle": "Copy public link",
+      "openAction": "Open",
+      "downloadArchiveAction": "Download as archive",
+      "shareAction": "Share",
+      "renameAction": "Rename",
+      "createFolderAction": "Create folder",
+      "uploadFilesAction": "Upload files",
+      "deleteFolderTitle": "Delete folder \"{name}\"?",
+      "deleteFolderContentsLabel": "Also delete contents: {fileCount} files, {subfolderCount} subfolders",
+      "shareFolderTitle": "Share folder",
+      "shareFileTitle": "Share file",
+      "allFilesFallback": "All files",
+      "expirationPlaceholder": "Link expiration",
+      "ttl1Hour": "1 hour",
+      "ttl1Day": "1 day",
+      "ttl7Days": "7 days",
+      "ttl30Days": "30 days",
+      "ttlPermanent": "No expiration",
+      "createLinkAction": "Create link",
+      "cancelUploadsAction": "Cancel upload",
+      "selectedCount": "Selected: {count}",
+      "deselectAction": "Deselect",
+      "tagLabel": "Tag",
+      "noTagsLabel": "No tags",
+      "deletingFileTitle": "Deleting file: {subject}",
+      "deletingFilesTitle": "Deleting files ({count}): {subject}",
+      "deletedSummary": "Files deleted: {count}",
+      "deleteErrorFallback": "Failed to delete files"
+    },
+    "importExcelDialog": {
+      "title": "Import from Excel",
+      "stepUploadDescription": "Upload an .xlsx file with product changes",
+      "stepPreviewDescription": "Review the changes before applying them",
+      "stepApplyingDescription": "Applying changes...",
+      "stepResultDescription": "Import result",
+      "dropzoneTitle": "Drag a file here or click to choose",
+      "dropzoneHint": "Only .xlsx format is supported",
+      "totalRows": "Total rows:",
+      "changedCount": "Changed:",
+      "unchangedCount": "Unchanged:",
+      "errorCount": "Errors:",
+      "errorsTitle": "Errors",
+      "rowLabel": "Row {row}",
+      "productIdSuffix": "(product #{id})",
+      "applyChanges": "Apply changes",
+      "unsupportedFormat": "Only .xlsx files are supported",
+      "processError": "Failed to process the file",
+      "applyError": "Failed to apply changes",
+      "updatedCount": "Products updated: {count}"
+    },
+    "productVariantsEditor": {
+      "title": "Sizes",
+      "emptyTitle": "No sizes",
+      "emptyDescription": "Add product sizes to track each one separately.",
+      "sizeHeader": "Size",
+      "skuHeader": "SKU",
+      "barcodeHeader": "Barcode",
+      "priceHeader": "Price",
+      "quantityHeader": "Stock",
+      "deleteConfirmTitle": "Delete size?",
+      "deleteConfirmDescription": "The size \"{name}\" will be deleted permanently.",
+      "unnamedFallback": "unnamed",
+      "saving": "Saving…",
+      "variantAdded": "Size added",
+      "variantDeleted": "Size deleted"
+    }
+  },
+  "fieldChangesTable": {
+    "fieldHeader": "Field",
+    "currentHeader": "Current",
+    "newHeader": "New",
+    "irreversibleModifiers": "Irreversible modifiers",
+    "emptyValue": "(empty)",
+    "noChangesTitle": "No changes detected",
+    "noChangesDescription": "Adapter data matches the local data."
+  },
+  "pages": {
+    "productEditPage": {
+      "breadcrumbEditing": "Editing",
+      "validation": {
+        "nameRequired": "Name is required",
+        "quantityNonNegative": "Quantity cannot be negative"
+      },
+      "attributesCount": {
+        "formOne": "attribute",
+        "formFew": "attributes",
+        "formMany": "attributes"
+      },
+      "discardChangesConfirm": {
+        "title": "Unsaved changes",
+        "description": "There are unsaved changes. Leave without saving?",
+        "confirmLabel": "Leave",
+        "cancelLabel": "Stay"
+      },
+      "toast": {
+        "updated": "Product successfully updated.",
+        "fileDeleted": "File successfully deleted.",
+        "deleted": "Product successfully deleted.",
+        "noteAdded": "New note added.",
+        "skuChangedWithErrors": "SKU changed locally. Errors on adapters ({count}):\n{details}",
+        "skuChangedOnAdapters": "SKU changed locally and on {count} adapter(s)",
+        "skuChanged": "SKU changed",
+        "groupChanged": "Group changed",
+        "removedFromGroup": "Product removed from group"
+      },
+      "fields": {
+        "group": {
+          "noGroupOption": "No group",
+          "label": "Product group",
+          "placeholder": "Select a group...",
+          "editLink": "Edit group"
+        },
+        "category": {
+          "label": "Category",
+          "placeholder": "Select a category...",
+          "editLink": "Edit category"
+        },
+        "sku": {
+          "label": "SKU",
+          "changeAction": "Change SKU"
+        },
+        "barcode": {
+          "label": "Barcode (EAN)"
+        },
+        "name": {
+          "label": "Name"
+        },
+        "description": {
+          "label": "Description"
+        },
+        "quantity": {
+          "label": "Stock quantity"
+        },
+        "price": {
+          "label": "Price ({currency})",
+          "defaultCurrencyFallback": "store's base currency"
+        },
+        "oldPrice": {
+          "label": "Old price ({currency})",
+          "description": "Strikethrough price before discount. Discount % is calculated from it and the \"Price\" field above."
+        },
+        "discount": {
+          "label": "Discount (%)",
+          "description": "Calculated from the old price and the current price"
+        },
+        "minPrice": {
+          "label": "Minimum price ({currency})"
+        },
+        "netPrice": {
+          "label": "Cost price ({currency})"
+        },
+        "currency": {
+          "label": "Currency (export)",
+          "description": "Amounts are stored in {currency}",
+          "defaultCurrencyFallback": "store's base currency"
+        }
+      },
+      "removeGalleryImageConfirm": {
+        "title": "Remove photo from gallery?",
+        "description": "The image will be unlinked from the product. The file will remain in storage."
+      },
+      "tabs": {
+        "properties": "Properties",
+        "notes": "Notes",
+        "files": "Files",
+        "imagesShort": "Photos",
+        "images": "Images",
+        "sizes": "Sizes",
+        "marketplacesShort": "MP"
+      },
+      "sections": {
+        "mainData": {
+          "title": "Main data",
+          "description": "SKU, barcode, name and price. Quantity and price by size are on the \"Sizes\" tab."
+        },
+        "stock": {
+          "title": "Stock",
+          "description": "Product availability and storage parameters"
+        },
+        "price": {
+          "title": "Price",
+          "description": "All prices are stored in {currency}."
+        },
+        "extendedPrice": {
+          "title": "Extended price settings",
+          "description": "For marketplaces with discounts, minimum price and export in another currency"
+        },
+        "categoryAttributes": {
+          "title": "Category attributes",
+          "description": "{count} {unit}. Values from the category settings \"{category}\"."
+        },
+        "storeAttributes": {
+          "description": "{count} {unit}. Shared across all store products."
+        }
+      },
+      "skuDialog": {
+        "title": "Change SKU",
+        "description": "The SKU will be changed locally and on all linked adapters.",
+        "currentSkuLabel": "Current SKU",
+        "newSkuLabel": "New SKU",
+        "newSkuPlaceholder": "Enter new SKU",
+        "changeAction": "Change"
+      },
+      "notesEmpty": {
+        "title": "No notes",
+        "description": "Add a note to keep important information about the product"
+      },
+      "actions": {
+        "duplicate": "Duplicate"
+      },
+      "deleteConfirm": {
+        "title": "Delete product {sku}?",
+        "description": "The product will be moved to trash. It can be restored later.",
+        "confirmAction": "Move to trash"
+      },
+      "unsavedChanges": "Unsaved changes",
+      "lightbox": {
+        "prevPhoto": "Previous photo",
+        "productPhotoAlt": "Product photo",
+        "nextPhoto": "Next photo"
+      }
+    },
+    "productGroupEditPage": {
+      "breadcrumbNewGroup": "New group",
+      "breadcrumbEditing": "Editing",
+      "productsCount": {
+        "formOne": "product",
+        "formFew": "products",
+        "formMany": "products"
+      },
+      "grouping": {
+        "viaCardField": "Via card field",
+        "viaMergeApi": "Via merge API",
+        "supported": "Supported",
+        "updateLink": "Update link",
+        "linkGroup": "Link group",
+        "mergeCards": "Merge cards",
+        "exportAction": "Export"
+      },
+      "toast": {
+        "nameRequired": "Enter a group name",
+        "created": "Group created",
+        "saved": "Group saved",
+        "productsAdded": "{count} products added",
+        "productRemoved": "Product removed from group",
+        "orderSaved": "Order saved",
+        "exportDone": "Done",
+        "linkCreated": "Link created. {message}",
+        "cardsMerged": "Cards merged on the marketplace. {message}"
+      },
+      "syncStatus": {
+        "synced": "Synced",
+        "pending": "Pending",
+        "error": "Error"
+      },
+      "newGroupTitle": "New group",
+      "newGroupHint": "Set a name and description — then add products to merge on the marketplace",
+      "editGroupHint": "Group name and description in the catalog. The description is only visible inside the system.",
+      "actions": {
+        "createGroup": "Create group",
+        "addProducts": "Add products"
+      },
+      "fields": {
+        "name": {
+          "placeholder": "Enter a name"
+        },
+        "description": {
+          "placeholder": "Optional"
+        }
+      },
+      "sections": {
+        "groupProducts": {
+          "title": "Products in group",
+          "description": "{count} {unit}. Row order determines the order of variants in the merged card — drag rows to change the order."
+        },
+        "marketplaceMerge": {
+          "title": "Marketplace merge",
+          "description": "Ozon merges via a card field — re-export products after linking. Wildberries — via merge API, if the products are already exported.",
+          "refreshStatuses": "Refresh statuses",
+          "noConnections": "No connected adapters. Connect a marketplace in the \"Adapters\" section.",
+          "checkingCapabilities": "Checking adapter capabilities…",
+          "supportedTitle": "Support merging",
+          "unsupportedTitle": "No merge support",
+          "notSupported": "Not supported"
+        }
+      },
+      "membersEmpty": {
+        "title": "No products",
+        "description": "Add products that should be merged into one card on the marketplace"
+      },
+      "table": {
+        "sku": "SKU",
+        "category": "Category"
+      },
+      "removeProductConfirm": {
+        "title": "Remove product from group?",
+        "description": "The product will remain in the catalog but will be excluded from the group."
+      },
+      "addProductsDialog": {
+        "title": "Add products to group",
+        "description": "Find products in the catalog and mark those that should be included in the group \"{name}\". Products already added are not shown here.",
+        "searchPlaceholder": "Search by name or SKU...",
+        "searchAction": "Search",
+        "selectedToAdd": "{unit} to add",
+        "clearSelection": "Clear selection",
+        "selectAllOnPage": "Select all on page",
+        "searching": "Searching for products…",
+        "noAvailableProductsTitle": "No available products",
+        "noAvailableProductsDescription": "All products are already in the group, or the search returned no results. Try a different query.",
+        "totalInCatalog": "{count} in catalog",
+        "availableOnPage": "{count} available on page",
+        "firstPage": "First page",
+        "prevPage": "Previous page",
+        "nextPage": "Next page",
+        "lastPage": "Last page",
+        "reorderHint": "The order within the group can be changed by dragging rows after adding.",
+        "addCount": "Add {count} {unit}",
+        "addToGroup": "Add to group"
+      }
+    },
+    "categoriesPage": {
+      "breadcrumb": "Categories",
+      "nameRequired": "Enter a category name",
+      "created": "Category created",
+      "deleted": "Category deleted",
+      "title": "Categories",
+      "description": "Manage product categories",
+      "addCategory": "Add category",
+      "newCategoryTitle": "New category",
+      "newCategoryDescription": "Enter a name and description for the new category",
+      "namePlaceholder": "Category name",
+      "descriptionPlaceholder": "Description (optional)",
+      "emptyTitle": "No categories",
+      "emptyDescription": "Create your first category for products",
+      "productsHeader": "Products",
+      "attributesHeader": "Attributes",
+      "deleteTitle": "Delete category?",
+      "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This action cannot be undone."
+    },
+    "notFoundPage": {
+      "errorCode": "Error 404",
+      "title": "Page not found",
+      "description": "The requested address doesn't exist or has been moved.",
+      "goBack": "Go back",
+      "home": "Home"
+    },
+    "productCreationPage": {
+      "breadcrumbTitle": "Create product",
+      "validation": {
+        "skuRequired": "SKU is required",
+        "nameRequired": "Name is required",
+        "quantityNonNegative": "Quantity cannot be negative",
+        "categoryRequired": "Select a category",
+        "categoryRequiredToast": "Select a product category"
+      },
+      "removePhotoConfirm": {
+        "title": "Remove photo from the list?",
+        "description": "The image won't be added to the product.",
+        "confirmLabel": "Remove"
+      },
+      "attributesCount": {
+        "formOne": "attribute",
+        "formFew": "attributes",
+        "formMany": "attributes"
+      },
+      "fields": {
+        "group": {
+          "noGroupOption": "No group",
+          "label": "Product group",
+          "placeholder": "Select a group...",
+          "editLink": "Edit group"
+        },
+        "category": {
+          "label": "Category",
+          "placeholder": "Select a category...",
+          "emptyHint": "Create a product category first"
+        },
+        "sku": {
+          "label": "SKU"
+        },
+        "barcode": {
+          "label": "Barcode (EAN)"
+        },
+        "name": {
+          "label": "Name"
+        },
+        "description": {
+          "label": "Description"
+        },
+        "quantity": {
+          "label": "Stock quantity"
+        },
+        "price": {
+          "label": "Price ({currency})",
+          "defaultCurrencyFallback": "the store's base currency"
+        },
+        "oldPrice": {
+          "label": "Old price ({currency})",
+          "description": "The struck-through price before the discount. The discount % is calculated from it and the \"Price\" field above."
+        },
+        "discount": {
+          "label": "Discount (%)",
+          "description": "Calculated from the old price and the current price"
+        },
+        "minPrice": {
+          "label": "Minimum price ({currency})"
+        },
+        "netPrice": {
+          "label": "Cost price ({currency})"
+        },
+        "currency": {
+          "label": "Currency (export)",
+          "description": "Amounts are stored in {currency}",
+          "defaultCurrencyFallback": "the store's base currency"
+        }
+      },
+      "toast": {
+        "createdSuccess": "Product created successfully.",
+        "createdImagesFailed": "Product created, but failed to upload photos.",
+        "createdAndAddedToGroup": "Product created and added to the group.",
+        "addedToGroupSuffix": "{message} Product added to the group.",
+        "addToGroupFailedSuffix": "{message} Failed to add to the group."
+      },
+      "sections": {
+        "mainData": {
+          "title": "Basic data",
+          "description": "Category, SKU, barcode, name, and price. Quantity and per-size pricing — if sizes are enabled for the category."
+        },
+        "stock": {
+          "title": "Stock",
+          "description": "Product availability and warehouse parameters"
+        },
+        "price": {
+          "title": "Price",
+          "description": "All prices are stored in {currency}."
+        },
+        "extendedPrice": {
+          "title": "Extended price parameters",
+          "description": "For marketplaces with discounts, minimum price, and export in a different currency"
+        },
+        "categoryAttributes": {
+          "title": "Category attributes",
+          "description": "{count} {unit}. Values from the settings of the category \"{category}\"."
+        },
+        "storeAttributes": {
+          "description": "{count} {unit}. Shared across all products in the store."
+        }
+      },
+      "actions": {
+        "createProduct": "Create product"
+      }
+    },
+    "productGroupsPage": {
+      "breadcrumb": "Product groups",
+      "nameRequired": "Enter a group name",
+      "created": "Group created",
+      "deleted": "Group deleted",
+      "syncStatus": {
+        "synced": "Synced",
+        "pending": "Pending",
+        "error": "Error"
+      },
+      "title": "Product groups",
+      "description": "Combine products into groups for management and syncing",
+      "createGroup": "Create group",
+      "newGroupTitle": "New group",
+      "newGroupDescription": "Enter a name and description for the new product group",
+      "namePlaceholder": "Group name",
+      "descriptionPlaceholder": "Description (optional)",
+      "emptyTitle": "No product groups",
+      "emptyDescription": "Create your first group to combine products",
+      "productsHeader": "Products",
+      "marketplacesHeader": "Marketplaces",
+      "deleteTitle": "Delete group?",
+      "deleteDescription": "Are you sure you want to delete the group \"{name}\"? This action cannot be undone. Adapter links will also be deleted."
+    },
+    "categoryEditPage": {
+      "breadcrumbEditing": "Editing",
+      "attributeTypes": {
+        "text": "Text",
+        "number": "Number",
+        "boolean": "Yes/No",
+        "select": "Select",
+        "multiSelect": "Multi-select",
+        "unknown": "Unknown type"
+      },
+      "noGroupOption": "No group (Other)",
+      "attributesCount": {
+        "one": "attribute",
+        "few": "attributes",
+        "many": "attributes"
+      },
+      "nameRequired": "Enter a category name",
+      "saved": "Category saved",
+      "attrNameRequired": "Enter an attribute name",
+      "attrKeyRequired": "Enter an attribute key",
+      "attrUpdated": "Attribute updated",
+      "attrAdded": "Attribute added",
+      "attrDeleted": "Attribute deleted",
+      "orderSaved": "Attribute order saved",
+      "fileNoOptions": "The file has no options",
+      "importedCount": "Options imported: {count}",
+      "noOptionsToExport": "No options to export",
+      "exportedCount": "Options exported: {count}",
+      "fileReadFailed": "Failed to read the file",
+      "fileReadError": "Error reading the file",
+      "editingCategoryFallback": "Editing category",
+      "subtitle": "Name, description and size grid settings for products in this category.",
+      "namePlaceholder": "Enter a name",
+      "optionalPlaceholder": "Optional",
+      "sizeGridLabel": "Size grid",
+      "hasSizesLabel": "Products have sizes",
+      "attributesCardTitle": "Category attributes",
+      "attributesOrderHint": "Row order determines the order of fields on the product page — drag rows to change the order.",
+      "noAttributesTitle": "No attributes",
+      "noAttributesDescription": "Attributes define product properties — size, color, material and other characteristics",
+      "addAttribute": "Add attribute",
+      "keyLabel": "Key",
+      "groupLabel": "Group",
+      "typeHeader": "Type",
+      "optionsHeader": "Options",
+      "requiredFieldTitle": "Required field",
+      "deleteAttributeTitle": "Delete attribute?",
+      "deleteAttributeDescription": "Are you sure you want to delete the attribute \"{name}\"? All values of this attribute on products will be deleted.",
+      "editAttributeTitle": "Edit attribute",
+      "newAttributeTitle": "New attribute",
+      "attributeDialogSubtitle": "Field settings on the product page in this category",
+      "basicSection": "Basic",
+      "namePlaceholderExamples": "Color, Size, Brand",
+      "keyDescription": "Used in the API and export",
+      "typeLabel": "Value type",
+      "optionsSection": "Options",
+      "export": "Export",
+      "import": "Import",
+      "optionsWord": "options",
+      "largeOptionsHint": "The list is stored as JSON — edit it via import and export",
+      "clearOptions": "Clear",
+      "optionsPlaceholderExample": "Red, Blue, Green — or value:label",
+      "optionsFormatHint": "JSON, CSV, or plain text — one option per line or comma-separated",
+      "additionalSection": "Additional",
+      "defaultValueLabel": "Default value",
+      "notSelectedPlaceholder": "Not selected",
+      "lazyLoadHint": "The list will load when the selector is opened",
+      "multiValuePlaceholder": "value1, value2",
+      "multiValueHint": "Multiple values separated by commas",
+      "descriptionPlaceholder": "Hint for the user on the product page",
+      "descriptionInTooltipLabel": "Description in tooltip",
+      "descriptionInTooltipHint": "Hide a long description behind an icon on the product page",
+      "groupNamePlaceholder": "Group name",
+      "noGroupPlaceholder": "No group",
+      "chooseFromListLabel": "Choose from list",
+      "customGroupLabel": "Custom group",
+      "multilineLabel": "Multiline text",
+      "multilineHint": "Field with line breaks on the product page",
+      "showOnProductPageLabel": "On the product page",
+      "showOnProductPageHint": "Show when editing a product",
+      "requiredFieldHint": "Require filling in when creating a product"
+    },
+    "storeAttributesPage": {
+      "types": {
+        "text": "Text",
+        "number": "Number",
+        "boolean": "Yes/No",
+        "select": "Select",
+        "multiSelect": "Multi-select",
+        "barcode": "Barcode",
+        "unknown": "Unknown type"
+      },
+      "validation": {
+        "nameRequired": "Enter an attribute name",
+        "keyRequired": "Enter an attribute key"
+      },
+      "toast": {
+        "updated": "Attribute updated",
+        "added": "Attribute added",
+        "deletedWithValues": "Attribute deleted ({count} values removed)",
+        "deleted": "Attribute deleted",
+        "orderSaved": "Attribute order saved"
+      },
+      "options": {
+        "fileHasNoOptions": "The file has no options",
+        "imported": "Options imported: {count}",
+        "noOptionsToExport": "No options to export",
+        "exported": "Options exported: {count}",
+        "readFailed": "Failed to read the file",
+        "readError": "Error reading the file"
+      },
+      "header": {
+        "title": "Global attributes",
+        "description": "Attributes applied to all store products regardless of category",
+        "addButton": "Add attribute"
+      },
+      "empty": {
+        "title": "No global attributes",
+        "description": "Global attributes are available in all categories — convenient for common properties like brand or country"
+      },
+      "table": {
+        "name": "Name",
+        "key": "Key",
+        "type": "Type",
+        "options": "Options",
+        "requiredShort": "Req.",
+        "description": "Description"
+      },
+      "deleteDialog": {
+        "title": "Delete attribute?",
+        "description": "Are you sure you want to delete the attribute \"{name}\"? All values of this attribute on products will be deleted."
+      },
+      "dialog": {
+        "newTitle": "New attribute",
+        "editTitle": "Edit attribute",
+        "description": "Field settings for all store products",
+        "sectionBasic": "Basic",
+        "nameLabel": "Name",
+        "namePlaceholder": "Brand, Country, SKU",
+        "keyLabel": "Key",
+        "keyDescription": "Used in the API and export",
+        "typeLabel": "Value type",
+        "sectionOptions": "Options",
+        "exportButton": "Export",
+        "importButton": "Import",
+        "optionsCountSuffix": "options",
+        "optionsStoredHint": "The list is stored as JSON — edit it via import and export",
+        "clearButton": "Clear",
+        "optionsPlaceholder": "Red, Blue, Green — or value:label",
+        "optionsTextareaHint": "JSON, CSV, or plain text — one option per line or comma-separated",
+        "sectionAdditional": "Additional",
+        "defaultValueLabel": "Default value",
+        "notSelectedPlaceholder": "Not selected",
+        "optionalPlaceholder": "Optional",
+        "optionsWillLoadHint": "The list will load when the selector is opened",
+        "multiValuePlaceholder": "value1, value2",
+        "multiValueHint": "Multiple values separated by commas",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Hint for the user on the product page",
+        "descriptionInTooltipLabel": "Description in tooltip",
+        "descriptionInTooltipHint": "Hide a long description behind an icon on the product page",
+        "multilineLabel": "Multiline text",
+        "multilineHint": "Field with line breaks on the product page",
+        "showOnProductPageLabel": "On the product page",
+        "showOnProductPageHint": "Show when editing a product",
+        "requiredFieldLabel": "Required field",
+        "requiredFieldHint": "Require filling in when creating a product"
+      }
+    },
+    "storeStoragePage": {
+      "breadcrumb": "Storage",
+      "title": "Storage",
+      "description": "Shared store files not linked to a specific product",
+      "loading": "Loading storage...",
+      "storageLabel": "Shared store storage"
+    },
+    "toolsPage": {
+      "breadcrumb": "Tools",
+      "title": "Tools",
+      "description": "Additional features and settings",
+      "emptyTitle": "No additional tools yet",
+      "emptyDescription": "Categories and attributes are available via the user menu"
+    },
+    "productsPage": {
+      "toast": {
+        "bulkDeleted": "Products deleted: {count}",
+        "bulkDeleteFailed": "Failed to delete products",
+        "restored": "Product restored",
+        "permanentlyDeleted": "Product permanently deleted",
+        "movedToTrash": "Product moved to trash",
+        "moveToTrashFailed": "Failed to move product to trash",
+        "bulkRestored": "Products restored: {count}",
+        "bulkPermanentlyDeleted": "Permanently deleted: {count}",
+        "fileExported": "File exported",
+        "exportFailed": "Export failed"
+      },
+      "breadcrumbTrashWithCount": "Product trash ({count})",
+      "breadcrumbTrash": "Product trash",
+      "filters": {
+        "allCategories": "All categories",
+        "noCategory": "No category"
+      },
+      "perPageLabel": "per",
+      "selectedCount": "Selected: {count}",
+      "bulkEditFromTable": "Edit from table",
+      "moveToTrash": "Move to trash",
+      "restoring": "Restoring...",
+      "excelDialog": {
+        "title": "Edit from table",
+        "description": "Action for {count} selected products",
+        "exporting": "Exporting...",
+        "downloadTemplate": "Download edit template",
+        "uploadChanges": "Upload changes from file"
+      },
+      "bulkTrashConfirm": {
+        "description": "The selected products will be moved to trash. They can be restored.",
+        "moving": "Moving..."
+      },
+      "bulkPermanentDeleteConfirm": {
+        "description": "You are about to permanently delete {count} products. All files, photos, notes, and adapter data will be deleted. This action cannot be undone.",
+        "deleting": "Deleting..."
+      }
+    },
+    "aiModelsPage": {
+      "apiUrlRequiredError": "Enter the API URL first",
+      "modelsNotFoundError": "No models found — check the URL and key",
+      "settingsSaved": "Settings saved",
+      "fillRequiredFieldsError": "Fill in the name, API URL, and Model ID",
+      "apiKeyRequiredError": "API key is required when creating",
+      "modelUpdated": "Model updated",
+      "deleteModelTitle": "Delete model?",
+      "deleteModelDescription": "Delete \"{name}\"? This action cannot be undone.",
+      "modelDeleted": "Model deleted",
+      "defaultModelChanged": "Default model changed",
+      "toggleEnabledError": "Failed to change the model's status",
+      "connectionError": "Connection error",
+      "description": "Language models and personal AI assistant settings",
+      "addModel": "Add model",
+      "modelsSectionTitle": "Language models",
+      "modelsSectionDescription": "You can disable any model, including the default one. If all models are disabled, the assistant will report that no models are enabled.",
+      "emptyModelsTitle": "No AI models",
+      "emptyModelsDescription": "Add a language model to enable the AI assistant",
+      "providerLabel": "Provider",
+      "proxyTitle": "Proxy: {url}",
+      "testButton": "Test",
+      "personalSectionTitle": "Personal settings",
+      "personalSectionDescription": "Affect the AI assistant's communication style in your store.",
+      "defaultModelLabel": "Default model",
+      "chooseModelPlaceholder": "Select a model",
+      "defaultModelHint": "Used for all AI operations by default.",
+      "storeDescriptionLabel": "Store description",
+      "storeDescriptionPlaceholder": "Briefly describe your store, product range, target audience...",
+      "storeDescriptionHint": "Passed to the AI as context on every request.",
+      "communicationStyleLabel": "Communication style",
+      "communicationStyleProfessional": "Professional",
+      "communicationStyleFriendly": "Friendly",
+      "communicationStyleExpert": "Expert",
+      "responseBrevityLabel": "Brevity",
+      "responseBrevityBrief": "Brief",
+      "responseBrevityBalanced": "Balanced",
+      "responseBrevityDetailed": "Detailed",
+      "emojiUsageLabel": "Emoji",
+      "emojiUsageNone": "Don't use",
+      "emojiUsageMinimal": "Minimal",
+      "emojiUsageStandard": "Standard",
+      "saving": "Saving...",
+      "editModelTitle": "Edit model",
+      "editModelDescription": "Update AI API connection parameters",
+      "chooseProviderPlaceholder": "Select a provider",
+      "apiUrlPlaceholderOpenAi": "http://localhost:1234  (or a full path /v1/chat/completions)",
+      "addModelDialogTitle": "Add model",
+      "addModelDescription": "Specify the AI API connection parameters",
+      "modelAdded": "Model added",
+      "optionalSuffix": "(optional)",
+      "baseUrlOnlyPrefix": "You can specify just the base URL — the path",
+      "baseUrlOnlySuffix": "will be added automatically",
+      "proxyLabel": "Proxy",
+      "proxyPlaceholder": "http://user:pass@host:8080 or socks5://host:1080",
+      "proxyHint": "If the model's API isn't directly accessible — specify an HTTP or SOCKS5 proxy. The URI format supports login/password.",
+      "apiKeyLabel": "API key",
+      "fetchListButton": "Fetch list",
+      "enterManuallyButton": "Enter manually"
+    },
+    "settingsOperationsPage": {
+      "title": "Queues and processes",
+      "clearQueueTitle": "Clear queue",
+      "clearAllDescription": "Clear all entries in the selected queue, including pending and running ones?",
+      "clearInactiveDescription": "Clear completed, failed, and cancelled entries?",
+      "deletedRecords": "Deleted records: {count}",
+      "description": "Manage background processes, export, import, images, and transfers",
+      "historyTitle": "Background process history",
+      "noRecords": "no records",
+      "clearCompletedButton": "Clear completed",
+      "clearAllButton": "Clear all",
+      "clearInactiveButton": "Clear inactive",
+      "columnProcess": "Process",
+      "columnType": "Type",
+      "columnProgress": "Progress",
+      "columnCreated": "Created",
+      "failedItemsSuffix": "({count} errors)",
+      "emptyHistoryTitle": "History is empty",
+      "emptyHistoryDescription": "Completed operations will appear here: export, import, and AI tasks."
+    },
+    "settingsOverviewPage": {
+      "statusPending": "pending",
+      "statusInProgress": "in progress",
+      "settingsSaved": "General settings saved",
+      "clearQueueTitle": "Clear queue",
+      "clearAllDescription": "Clear all entries in the selected queue, including pending and running ones?",
+      "clearInactiveDescription": "Clear completed, failed, and cancelled entries?",
+      "deletedRecords": "Deleted records: {count}",
+      "description": "Platform settings, queues, and diagnostics",
+      "generalParamsTitle": "General settings",
+      "generalParamsDescription": "Platform limits, rate limits, and system constraints.",
+      "notSet": "not set",
+      "activeLabel": "· Active:",
+      "noParamsFound": "No general settings found.",
+      "changedParamsCount": "Changed settings: {count}",
+      "saveParamsButton": "Save settings",
+      "queuesSectionTitle": "Queues and processes",
+      "queuesSectionDescription": "Current export, import, and image queues, and background operation history.",
+      "historyLabel": "Background process history",
+      "recordsCount": "{count} records",
+      "noRecords": "no records",
+      "historyDescription": "Current and completed store operations.",
+      "clearCompletedButton": "Clear completed",
+      "clearAllButton": "Clear all",
+      "clearInactiveButton": "Clear inactive"
+    },
+    "settingsUserPage": {
+      "userNameEmptyError": "User name cannot be empty",
+      "profileUpdated": "Profile updated",
+      "passwordUpdated": "Password updated",
+      "keyNameRequiredError": "Enter a key name",
+      "apiKeyCreated": "API key created — copy it now",
+      "revokeKeyConfirm": "Revoke this API key? Integrations will stop working.",
+      "keyRevoked": "Key revoked",
+      "keyCopied": "Key copied",
+      "description": "Personal settings for the current account",
+      "saveProfileButton": "Save profile",
+      "currentPasswordLabel": "Current password",
+      "newPasswordLabel": "New password",
+      "changePasswordButton": "Change password",
+      "apiKeysIntroPrefix": "Keys for external integrations (ERP, 1C, n8n). Authorization:",
+      "apiKeysIntroSuffix": "The full key is only shown once, at creation.",
+      "openSwaggerLink": "Open Swagger (Public API v1)",
+      "copyKeyWarning": "Copy the key — it won't be shown again",
+      "keyNameLabel": "Key name",
+      "keyNamePlaceholder": "E.g.: 1C",
+      "createKeyButton": "Create key",
+      "loadingKeys": "Loading keys…",
+      "noKeysYet": "No keys yet",
+      "revokedSuffix": "revoked",
+      "usedSuffix": "used {date}"
+    },
+    "tokensPage": {
+      "tokenCreated": "Token created",
+      "tokenCopied": "Token copied",
+      "title": "Invitation tokens",
+      "description": "Manage tokens for user registration",
+      "createToken": "Create token",
+      "newTokenCreated": "New token created:",
+      "emptyTitle": "No tokens",
+      "emptyDescription": "Tokens let other users register and join the store",
+      "columnToken": "Token",
+      "columnStatus": "Status",
+      "columnCreated": "Created",
+      "columnUsed": "Used",
+      "columnUsedBy": "Used by",
+      "statusUsed": "Used",
+      "statusActive": "Active"
+    },
+    "usersPage": {
+      "userUpdated": "User updated",
+      "userNameEmptyError": "User name cannot be empty",
+      "activeUsersDescription": "Active users: {count}",
+      "emptyTitle": "No users",
+      "emptyDescription": "Users will appear here after registering via invitation",
+      "columnRole": "Role",
+      "roleAdmin": "Admin",
+      "statusActive": "Active",
+      "statusDisabled": "Disabled",
+      "editUser": "Edit user",
+      "editUserDescription": "Change the user's name or set a new password.",
+      "newPasswordLabel": "New password",
+      "newPasswordPlaceholder": "Leave empty to keep unchanged",
+      "globalAdminLabel": "Global administrator",
+      "globalAdminHint": "Access to all platform-wide settings",
+      "cannotChangeSelfAdmin": "You cannot change your own global administrator status.",
+      "disabledUserHint": "A disabled user cannot sign in"
+    },
+    "storeDetailPage": {
+      "selectUserError": "Select a user",
+      "memberAdded": "Member added",
+      "removeMemberTitle": "Remove member?",
+      "removeMemberDescriptionNamed": "\"{name}\" will lose access to the store.",
+      "removeMemberDescription": "The member will lose access to the store.",
+      "memberRemoved": "Member removed",
+      "membersCountDescription": "Members: {count}",
+      "membersSettingsDescription": "Store member settings",
+      "addMember": "Add member",
+      "addMemberDialogDescription": "Choose a user to add to the store",
+      "selectUserPlaceholder": "Select a user...",
+      "usersLabel": "Users",
+      "emptyTitle": "No members",
+      "emptyDescription": "Invite members via tokens so they can work with store products",
+      "columnUserName": "User name"
+    },
+    "storesPage": {
+      "nameRequiredError": "Enter a store name",
+      "storeCreated": "Store created",
+      "nameEmptyError": "Store name cannot be empty",
+      "storeUpdated": "Store updated",
+      "currencySelectError": "Select a currency and specify a rate",
+      "rateInvalidError": "The rate must be greater than zero",
+      "currencyAdded": "Currency added",
+      "currencyRemoved": "Currency removed",
+      "description": "Manage stores in the system",
+      "createStore": "Create store",
+      "newStoreDialogTitle": "New store",
+      "newStoreDialogDescription": "Enter a name for the new store",
+      "storeNamePlaceholder": "Store name",
+      "addAllUsersLabel": "Add all current users",
+      "addAllUsersHint": "If disabled, only the current admin will be a member of the new store.",
+      "emptyTitle": "No stores",
+      "emptyDescription": "A store is a workspace for managing products and syncing with adapters",
+      "columnStore": "Store",
+      "columnMembers": "Members",
+      "columnStoreAdmins": "Store admins",
+      "editStoreSr": "Edit store",
+      "editDialogTitle": "Store settings",
+      "editDialogDescription": "Change the store's name, members, and administrators.",
+      "regionalSettingsTitle": "Regional settings",
+      "timezoneLabel": "Timezone",
+      "pricesTitle": "Prices",
+      "extendedPriceParamsLabel": "Extended price parameters",
+      "extendedPriceParamsHint": "The base price and mapping links won't change when toggled.",
+      "currenciesTitle": "Currencies",
+      "currenciesHint": "All prices are stored in {base}. Rates are used for entry, preview, and export.",
+      "baseCurrencyFallback": "the store's base currency",
+      "columnCurrency": "Currency",
+      "columnRate": "Rate ({base} per 1 unit)",
+      "columnUpdated": "Updated",
+      "baseTag": "base",
+      "baseFallback": "base",
+      "addCurrencyPlaceholder": "Add currency",
+      "rateToPlaceholder": "Rate to {base}",
+      "columnMemberSingular": "Member",
+      "columnStoreAdminSingular": "Store admin"
+    },
+    "errorLogsPage": {
+      "summaryNone": "No errors",
+      "summaryCount": {
+        "one": "{count} entry",
+        "few": "{count} entries",
+        "many": "{count} entries"
+      },
+      "metaTime": "Time",
+      "metaMethod": "Method",
+      "metaUser": "User",
+      "metaType": "Type",
+      "clipboardStatus": "Status",
+      "clipboardPath": "Path",
+      "clipboardErrorType": "Error type",
+      "messageLabel": "Message",
+      "copySuccess": "Error details copied",
+      "copyError": "Failed to copy error details",
+      "deleteConfirmTitle": "Delete error log?",
+      "deleteConfirmDescription": "The entry will be permanently deleted.",
+      "deleteSuccess": "Log deleted",
+      "description": "Latest recorded server errors",
+      "searchPlaceholder": "Search by message, path, user…",
+      "emptyNotFoundTitle": "Nothing found",
+      "emptyNoErrorsTitle": "No errors",
+      "emptyNotFoundDescription": "Try changing the search query",
+      "emptyNoErrorsDescription": "New unexpected backend errors will appear here automatically",
+      "columnDate": "Date and time",
+      "columnMethod": "Method",
+      "columnError": "Error",
+      "columnUser": "User",
+      "columnCode": "Code",
+      "ofTotal": "of {total}",
+      "detailFallbackTitle": "Error",
+      "copyAll": "Copy all",
+      "codeLabel": "Code",
+      "requestLabel": "Request"
+    },
+    "categoryEditPage": {
+      "breadcrumbEditing": "Editing",
+      "attributeTypes": {
+        "text": "Text",
+        "number": "Number",
+        "boolean": "Yes/No",
+        "select": "Select",
+        "multiSelect": "Multiple select",
+        "unknown": "Unknown type"
+      },
+      "noGroupOption": "No group (Other)",
+      "attributesCount": {
+        "one": "attribute",
+        "few": "attributes",
+        "many": "attributes"
+      },
+      "nameRequired": "Enter a category name",
+      "saved": "Category saved",
+      "attrNameRequired": "Enter an attribute name",
+      "attrKeyRequired": "Enter an attribute key",
+      "attrUpdated": "Attribute updated",
+      "attrAdded": "Attribute added",
+      "attrDeleted": "Attribute deleted",
+      "orderSaved": "Attribute order saved",
+      "fileNoOptions": "The file contains no options",
+      "importedCount": "Imported options: {count}",
+      "noOptionsToExport": "No options to export",
+      "exportedCount": "Exported options: {count}",
+      "fileReadFailed": "Failed to read the file",
+      "fileReadError": "Error reading the file",
+      "editingCategoryFallback": "Editing category",
+      "subtitle": "Name, description, and size grid settings for products in this category.",
+      "namePlaceholder": "Enter a name",
+      "optionalPlaceholder": "Optional",
+      "sizeGridLabel": "Size grid",
+      "hasSizesLabel": "Products have sizes",
+      "attributesCardTitle": "Category attributes",
+      "attributesOrderHint": "Row order determines the field order on the product page — drag rows to change the order.",
+      "noAttributesTitle": "No attributes",
+      "noAttributesDescription": "Attributes define product properties — size, color, material, and other characteristics",
+      "addAttribute": "Add attribute",
+      "keyLabel": "Key",
+      "groupLabel": "Group",
+      "typeHeader": "Type",
+      "optionsHeader": "Options",
+      "requiredFieldTitle": "Required field",
+      "deleteAttributeTitle": "Delete attribute?",
+      "deleteAttributeDescription": "Are you sure you want to delete the attribute \"{name}\"? All values of this attribute on products will be deleted.",
+      "editAttributeTitle": "Edit attribute",
+      "newAttributeTitle": "New attribute",
+      "attributeDialogSubtitle": "Field settings on the product page in this category",
+      "basicSection": "Basic",
+      "namePlaceholderExamples": "Color, Size, Brand",
+      "keyDescription": "Used in the API and exports",
+      "typeLabel": "Value type",
+      "optionsSection": "Variants",
+      "export": "Export",
+      "import": "Import",
+      "optionsWord": "variants",
+      "largeOptionsHint": "The list is stored as JSON — edit via import and export",
+      "clearOptions": "Clear",
+      "optionsPlaceholderExample": "Red, Blue, Green — or value:label",
+      "optionsFormatHint": "JSON, CSV, or text — one variant per line or comma-separated",
+      "additionalSection": "Additional",
+      "defaultValueLabel": "Default value",
+      "notSelectedPlaceholder": "Not selected",
+      "lazyLoadHint": "The list will load when the picker opens",
+      "multiValuePlaceholder": "value1, value2",
+      "multiValueHint": "Multiple values separated by commas",
+      "descriptionPlaceholder": "Hint for the user on the product page",
+      "descriptionInTooltipLabel": "Description in tooltip",
+      "descriptionInTooltipHint": "Hide the long description behind an icon on the product page",
+      "groupNamePlaceholder": "Group name",
+      "noGroupPlaceholder": "No group",
+      "chooseFromListLabel": "Choose from list",
+      "customGroupLabel": "Custom group",
+      "multilineLabel": "Multiline text",
+      "multilineHint": "Field with line breaks on the product page",
+      "showOnProductPageLabel": "On product page",
+      "showOnProductPageHint": "Show when editing a product",
+      "requiredFieldHint": "Require this field when creating a product"
+    }
+  },
+  "columnSelector": {
+    "columnsTitle": "Columns",
+    "combinedColumns": "Combined columns",
+    "productFields": "Product fields",
+    "storeAttributes": "Global attributes"
+  },
+  "productRowActions": {
+    "goTo": "Open",
+    "moveToStore": "Move to store",
+    "moveToTrash": "Move to trash",
+    "confirmTrashTitle": "Move to trash?",
+    "confirmTrashDescription": "The product will be moved to trash. It can be restored later.",
+    "toTrash": "Move to trash"
+  },
+  "trashRowActions": {
+    "restore": "Restore",
+    "deleteForever": "Delete forever",
+    "confirmRestoreTitle": "Restore product?",
+    "confirmRestoreDescription": "The product will be restored from trash and will appear in the product list again.",
+    "confirmDeleteTitle": "Delete forever?",
+    "confirmDeleteDescription": "All files, photos, notes, and adapter data will be deleted. This action cannot be undone."
+  },
+  "marketplacePillChain": {
+    "moveLeft": "Move left",
+    "moveRight": "Move right",
+    "editHint": "Click to edit",
+    "removeModifier": "Remove modifier",
+    "addModifier": "Add modifier"
+  },
+  "marketplaceStack": {
+    "toggleModifier": "Enable/disable modifier",
+    "irreversibleHint": "The value can't be restored on import",
+    "irreversibleBadge": "irreversible",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeModifier": "Remove modifier",
+    "enterValuePlaceholder": "Enter a value…",
+    "chooseModelPlaceholder": "Choose a model",
+    "addModifier": "Add modifier"
+  }
+}

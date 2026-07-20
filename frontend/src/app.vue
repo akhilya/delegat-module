@@ -13,6 +13,8 @@ import { Monitor } from "lucide-vue-next";
 import AiChatPanel from "@/components/ai/AiChatPanel.vue";
 import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
+import { useI18n } from "vue-i18n";
+import { BRAND_NAME } from "@/brand";
 
 export default {
   components: {
@@ -31,6 +33,7 @@ export default {
     ConfirmDialogHost,
   },
   setup() {
+    const { t } = useI18n();
     const route = useRoute();
     const isPublicPage = computed(() => !!route.meta?.public);
 
@@ -45,7 +48,7 @@ export default {
       localStorage.setItem("mobile-warning-dismissed", "1");
     }
 
-    return { isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning };
+    return { t, BRAND_NAME, isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning };
   },
   computed: {
     appKey() {
@@ -120,14 +123,13 @@ export default {
       <div class="max-w-sm w-full flex flex-col items-center text-center gap-5">
         <Monitor class="size-12 text-muted-foreground" />
         <div>
-          <h2 class="text-lg font-semibold mb-2">Лучше с компьютера</h2>
+          <h2 class="text-lg font-semibold mb-2">{{ t("app.mobileWarningTitle") }}</h2>
           <p class="text-sm text-muted-foreground leading-relaxed">
-            Delegat — панель управления товарами, оптимизированная для работы на компьютере.
-            На мобильных устройствах часть функций может работать некорректно.
+            {{ t("app.mobileWarningBody", { brand: BRAND_NAME }) }}
           </p>
         </div>
         <Button class="w-full" @click="dismissMobileWarning">
-          Продолжить
+          {{ t("app.continue") }}
         </Button>
       </div>
     </div>
@@ -141,7 +143,7 @@ export default {
     >
       <div class="flex flex-col items-center gap-3">
         <Loader2 class="size-6 animate-spin text-muted-foreground" />
-        <span class="text-sm text-muted-foreground">Переключение магазина...</span>
+        <span class="text-sm text-muted-foreground">{{ t("app.switchingStore") }}</span>
       </div>
     </div>
   </Transition>

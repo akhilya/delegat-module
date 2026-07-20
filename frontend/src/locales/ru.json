@@ -1,0 +1,2897 @@
+{
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "close": "Закрыть",
+    "back": "Назад",
+    "next": "Далее",
+    "search": "Поиск",
+    "loading": "Загрузка…",
+    "error": "Ошибка",
+    "success": "Успех",
+    "confirm": "Подтвердить",
+    "yes": "Да",
+    "no": "Нет",
+    "actions": "Действия",
+    "name": "Название",
+    "description": "Описание",
+    "status": "Статус",
+    "all": "Все",
+    "none": "Нет",
+    "copy": "Копировать",
+    "download": "Скачать",
+    "upload": "Загрузить",
+    "refresh": "Обновить",
+    "reset": "Сбросить",
+    "apply": "Применить",
+    "add": "Добавить",
+    "remove": "Удалить",
+    "open": "Открыть",
+    "details": "Подробности",
+    "settings": "Настройки",
+    "more": "Ещё",
+    "or": "или",
+    "emDash": "—",
+    "confirmAction": "Подтвердите действие",
+    "brandDescription": "панель управления товарами и адаптерами",
+    "copied": "Скопировано",
+    "copyFailed": "Не удалось скопировать"
+  },
+  "attributeGroups": {
+    "core": "Основные",
+    "brand": "Бренд",
+    "country": "Страна",
+    "material": "Материал",
+    "dimensions": "Размеры и вес",
+    "appearance": "Внешний вид",
+    "technicalSpecs": "Технические характеристики",
+    "electricalSpecs": "Электрические характеристики",
+    "package": "Комплектация",
+    "certification": "Сертификация",
+    "media": "Медиа",
+    "packaging": "Упаковка",
+    "labeling": "Маркировка",
+    "other": "Прочее"
+  },
+  "components": {
+    "appSidebar": {
+      "switchStoreTitle": "Переключить магазин",
+      "switchStoreUploadWarning": "Идёт загрузка файлов. При переключении магазина загрузка будет прервана. Продолжить?"
+    },
+    "appSidebarStoreSwitcher": {
+      "storePlaceholder": "Магазин",
+      "storesLabel": "Магазины"
+    },
+    "barcodeInput": {
+      "onlyDigitsError": "Только цифры",
+      "maxDigitsError": "Максимум 13 цифр",
+      "digitsCountError": "Нужно 8 (EAN-8) или 13 (EAN-13) цифр",
+      "invalidCheckDigitError": "Неверная контрольная цифра",
+      "ariaLabel": "Штрихкод (EAN-8 / EAN-13)",
+      "generateTitle": "Сгенерировать",
+      "regenerateTitle": "Перегенерировать штрихкод?",
+      "regenerateDescription": "Текущий штрихкод {value} будет заменён на новый случайный. Это действие нельзя отменить.",
+      "replace": "Заменить"
+    },
+    "breadcrumbs": {
+      "homeAriaLabel": "Главная"
+    },
+    "fabGroup": {
+      "aiAssistantTitle": "AI Ассистент",
+      "backgroundJobsTitle": "Фоновые процессы"
+    },
+    "formCombobox": {
+      "placeholder": "Выберите...",
+      "nothingFound": "Ничего не найдено"
+    },
+    "goBackButton": {
+      "ariaLabel": "Назад"
+    },
+    "homeButton": {
+      "ariaLabel": "Главная"
+    },
+    "imageFile": {
+      "altFallback": "Изображение товара"
+    },
+    "multiSelectDropdown": {
+      "placeholder": "Выберите...",
+      "selectedCount": "Выбрано: {count}",
+      "searchPlaceholder": "Поиск...",
+      "searchPlaceholderLarge": "Начните вводить для поиска...",
+      "largeListHint": "{count} вариантов. Используйте поиск для быстрого выбора.",
+      "noOptions": "Нет доступных вариантов",
+      "nothingFound": "Ничего не найдено",
+      "moreResultsHint": "Показано {shown} из {total} результатов. Уточните запрос.",
+      "remainingOptionsHint": "Ещё {count} вариантов. Используйте поиск."
+    },
+    "navigationBar": {
+      "productGroups": "Группы товаров",
+      "productTrash": "Корзина товаров",
+      "mySettings": "Мои настройки",
+      "generalSettings": "Общие настройки"
+    },
+    "userAccountMenu": {
+      "account": "Аккаунт"
+    },
+    "note": {
+      "updateSuccess": "Заметка успешно обновлена.",
+      "deleteSuccess": "Заметка успешно удалена.",
+      "importanceLow": "Низкая важность",
+      "importanceMedium": "Средняя важность",
+      "importanceHigh": "Высокая важность",
+      "importanceCritical": "Критическая важность",
+      "importanceEmergency": "Чрезвычайная важность",
+      "deleteConfirmTitle": "Удалить заметку?",
+      "deleteConfirmDescription": "Заметка будет удалена безвозвратно.",
+      "textPlaceholder": "Текст заметки..."
+    },
+    "productFilesTable": {
+      "nameHeader": "Название",
+      "typeHeader": "Тип",
+      "sizeHeader": "Размер",
+      "download": "скачать",
+      "deleteConfirmText": "Вы уверены что хотите удалить файл {name}?"
+    },
+    "productImagesEditor": {
+      "productImagesTitle": "Изображения товара",
+      "dragToReorderHint": "— перетащите для сортировки",
+      "otherImagesTitle": "Остальные изображения"
+    },
+    "rightActionStrip": {
+      "backgroundJobsTitle": "Фоновые процессы",
+      "aiAssistantTitle": "AI Ассистент"
+    },
+    "searchableSelect": {
+      "placeholder": "Выберите...",
+      "searchPlaceholder": "Поиск...",
+      "searchPlaceholderLarge": "Начните вводить для поиска...",
+      "largeListHint": "{count} вариантов. Используйте поиск для быстрого выбора.",
+      "noOptions": "Нет доступных вариантов",
+      "nothingFound": "Ничего не найдено",
+      "moreResultsHint": "Показано {shown} из {total} результатов. Уточните запрос.",
+      "remainingOptionsHint": "Ещё {count} вариантов. Используйте поиск."
+    },
+    "settingsFormField": {
+      "descriptionAriaLabel": "Описание: {label}"
+    },
+    "sidebarTrigger": {
+      "toggleSidebar": "Переключить сайдбар"
+    }
+  },
+  "lib": {
+    "productAttributeValidation": {
+      "requiredField": "Обязательное поле",
+      "enterNumber": "Введите число"
+    },
+    "timezones": {
+      "moscow": "Москва (UTC+3)",
+      "kaliningrad": "Калининград (UTC+2)",
+      "samara": "Самара (UTC+4)",
+      "yekaterinburg": "Екатеринбург (UTC+5)",
+      "omsk": "Омск (UTC+6)",
+      "krasnoyarsk": "Красноярск (UTC+7)",
+      "irkutsk": "Иркутск (UTC+8)",
+      "yakutsk": "Якутск (UTC+9)",
+      "vladivostok": "Владивосток (UTC+10)",
+      "magadan": "Магадан (UTC+11)",
+      "kamchatka": "Камчатка (UTC+12)",
+      "almaty": "Алматы (UTC+5)",
+      "tashkent": "Ташкент (UTC+5)",
+      "minsk": "Минск (UTC+3)",
+      "kyiv": "Киев (UTC+2)"
+    }
+  },
+  "store": {
+    "aiChatModule": {
+      "connectionError": "Ошибка соединения: {message}",
+      "confirmAndExecute": "Confirmed, proceed",
+      "cancelPlanMessage": "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
+    },
+    "operationsModule": {
+      "defaultTitle": "Операция",
+      "stoppedSummary": "Остановлено"
+    }
+  },
+  "language": {
+    "label": "Язык",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "nav": {
+    "products": "Товары",
+    "newProduct": "Новый товар",
+    "groups": "Группы",
+    "trash": "Корзина",
+    "categories": "Категории",
+    "storage": "Хранилище",
+    "marketplace": "Маркетплейс",
+    "connections": "Подключения",
+    "attributes": "Атрибуты",
+    "tools": "Инструменты",
+    "ai": "ИИ",
+    "operations": "Операции",
+    "settings": "Настройки",
+    "store": "Магазин",
+    "users": "Пользователи",
+    "account": "Аккаунт",
+    "billing": "Биллинг",
+    "apiKeys": "API-ключи",
+    "webhooks": "Вебхуки",
+    "integrations": "Интеграции",
+    "utilities": "Утилиты",
+    "aiAssistant": "ИИ ассистент",
+    "backgroundJobs": "Фоновые процессы",
+    "globalAttributes": "Глобальные атрибуты",
+    "adapters": "Адаптеры",
+    "overview": "Общие",
+    "user": "Пользователь",
+    "stores": "Магазины",
+    "plugins": "Плагины",
+    "errorLogs": "Логи ошибок",
+    "adapterLogs": "Логи адаптеров",
+    "tokens": "Токены"
+  },
+  "theme": {
+    "light": "Светлая тема",
+    "dark": "Тёмная тема"
+  },
+  "app": {
+    "mobileWarningTitle": "Лучше с компьютера",
+    "mobileWarningBody": "{brand} — панель управления товарами, оптимизированная для работы на компьютере. На мобильных устройствах часть функций может работать некорректно.",
+    "continue": "Продолжить",
+    "switchingStore": "Переключение магазина..."
+  },
+  "auth": {
+    "signIn": "Вход",
+    "signUp": "Регистрация",
+    "signOut": "Выйти",
+    "userName": "Имя пользователя",
+    "password": "Пароль",
+    "rememberMe": "Запомнить меня",
+    "noAccount": "Нет аккаунта?",
+    "hasAccount": "Уже есть аккаунт?",
+    "signInSuccess": "Успешный вход.",
+    "signUpSuccess": "Успешная регистрация.",
+    "passwordsMismatch": "Пароли не совпадают",
+    "userNamePlaceholder": "Введите имя",
+    "confirmPassword": "Подтвердите пароль",
+    "invitationToken": "Токен приглашения",
+    "invitationTokenHint": "Вставьте токен, полученный от администратора",
+    "createAccount": "Создать аккаунт",
+    "haveAccount": "Есть аккаунт?"
+  },
+  "errors": {
+    "generic": "Ошибка",
+    "detailsUnreadable": "Подробности ошибки получены, но их не удалось отобразить",
+    "rateLimited": "Слишком много запросов. Подождите немного и попробуйте снова.",
+    "resourceLimit": "Достигнут лимит ресурсов",
+    "store_not_selected": "Магазин не выбран",
+    "product_not_found": "Товар не найден",
+    "file_not_found": "Файл не найден",
+    "group_not_found": "Группа не найдена",
+    "category_not_found": "Категория не найдена",
+    "connection_not_found": "Подключение не найдено",
+    "user_not_found": "Пользователь не найден",
+    "invalid_credentials": "Неверные учётные данные",
+    "user_deactivated": "Пользователь деактивирован",
+    "invalid_token": "Недействительный токен",
+    "unauthorized": "Не авторизован",
+    "forbidden": "Доступ запрещён",
+    "not_found": "Ресурс не найден",
+    "conflict": "Конфликт",
+    "bad_request": "Неверный запрос",
+    "validation_error": "Ошибка валидации",
+    "rate_limited": "Превышен лимит запросов",
+    "product_limit_reached": "Достигнут лимит товаров ({limit})",
+    "required_fields_missing": "Не заполнены обязательные поля: {fields}",
+    "sku_already_used": "Артикул '{sku}' уже используется",
+    "folder_not_empty": "Папка не пуста",
+    "export_failed": "Ошибка экспорта",
+    "import_failed": "Ошибка импорта",
+    "access_denied_store": "Нет доступа к этому магазину",
+    "internal_error": "Внутренняя ошибка сервера",
+    "ai_api_key_invalid": "Не удалось расшифровать API-ключ модели. Откройте Настройки → ИИ и введите ключ заново."
+  },
+  "routes": {
+    "products": "Товары",
+    "signIn": "Вход",
+    "signUp": "Регистрация",
+    "settings": "Настройки",
+    "marketplace": "Маркетплейс",
+    "operations": "Операции",
+    "storage": "Хранилище",
+    "categories": "Категории",
+    "groups": "Группы товаров",
+    "tools": "Инструменты",
+    "attributes": "Глобальные атрибуты",
+    "productCreation": "Новый товар",
+    "productEdit": "Редактирование товара",
+    "categoryEdit": "Редактирование категории",
+    "connection": "Подключение",
+    "ai": "AI",
+    "trash": "Корзина",
+    "groupCreate": "Новая группа",
+    "groupEdit": "Группа товаров",
+    "settingsOverview": "Общие настройки",
+    "settingsUser": "Настройки пользователя",
+    "stores": "Магазины",
+    "store": "Магазин",
+    "users": "Пользователи",
+    "tokens": "Токены",
+    "errorLogs": "Логи ошибок",
+    "plugins": "Плагины",
+    "aiModels": "AI Модели",
+    "adapterLogs": "Логи адаптеров",
+    "notFound": "Не найдено",
+    "adapters": "Адаптеры",
+    "categoryImport": "Импорт категории",
+    "fieldMapping": "Маппинг полей"
+  },
+  "ai": {
+    "historyTooltip": "История диалогов",
+    "newChatTooltip": "Новый диалог",
+    "toolsTooltip": "Инструменты ассистента",
+    "closeTooltip": "Закрыть",
+    "conversationTitlePlaceholder": "Название диалога",
+    "renameTooltip": "Переименовать",
+    "newConversation": "Новый диалог",
+    "conversationHistory": "История диалогов",
+    "backToChat": "Назад к чату",
+    "toolsTitle": "Инструменты",
+    "noConversations": "Нет сохранённых диалогов",
+    "startNew": "Начать новый",
+    "untitled": "Без названия",
+    "messagesCountSuffix": "сообщ.",
+    "deleteConversationTooltip": "Удалить диалог",
+    "toolsCountLabel": "{count} инструментов · {categories} категорий",
+    "copied": "Скопировано",
+    "goodResponse": "Хороший ответ",
+    "badResponse": "Плохой ответ",
+    "greeting": "Привет!",
+    "unavailable": "AI недоступен",
+    "capabilitiesDescription": "Управляю товарами, категориями, маппингами и экспортом.",
+    "noModelsEnabled": "Нет подключённых или включённых AI-моделей. Администратор может включить модели в Настройки → ИИ.",
+    "exampleStats": "Покажи статистику магазина",
+    "exampleFillMapping": "Заполни незаполненные поля маппинга",
+    "exampleFindNoPrice": "Найди товары без цены",
+    "inputPlaceholder": "Введите запрос...",
+    "noModelsPlaceholder": "Нет включённых AI-моделей",
+    "modelPlaceholder": "модель",
+    "noEnabledModels": "нет включённых моделей",
+    "stopGeneration": "Остановить генерацию",
+    "send": "Отправить",
+    "deleteConversationTitle": "Удалить диалог?",
+    "deleteConversationDescription": "Это действие необратимо — история сообщений будет удалена.",
+    "today": "Сегодня",
+    "yesterday": "Вчера",
+    "thisWeek": "Эта неделя",
+    "earlier": "Ранее",
+    "daysAgo": "{n} дн. назад",
+    "generateWithAi": "Сгенерировать с ИИ",
+    "improveWithAi": "Улучшить с ИИ",
+    "generatingWithAi": "Генерация…",
+    "improvingWithAi": "Улучшение…",
+    "provideProductNameFirst": "Сначала укажите название товара",
+    "emptyAiResponse": "Пустой ответ от AI",
+    "descriptionGeneratingHint": "ИИ пишет описание…",
+    "descriptionImprovingHint": "ИИ улучшает текущее описание…",
+    "explainError": "Объяснить ошибку",
+    "analyzing": "AI анализирует...",
+    "explanationFailed": "Не удалось получить объяснение от AI.",
+    "errorExplanationTitle": "AI: объяснение ошибки",
+    "planExecute": "Выполнить",
+    "planExecuting": "Выполняю…",
+    "planCancelled": "Отменено",
+    "planAffected": "Затронуто:",
+    "closeAssistant": "Закрыть AI Ассистент",
+    "openAssistant": "AI Ассистент",
+    "toolCategories": {
+      "products": "Товары",
+      "categories": "Категории",
+      "mappings": "Маппинги",
+      "connections": "Подключения",
+      "export": "Экспорт",
+      "import": "Импорт",
+      "groups": "Группы",
+      "files": "Файлы",
+      "analytics": "Аналитика",
+      "store": "Магазин",
+      "system": "Служебные"
+    },
+    "toolCatalog": {
+      "products": {
+        "list_products": "Список и поиск товаров",
+        "get_products_count": "Количество по фильтру",
+        "get_product": "Полные данные товара",
+        "create_product": "Создать товар",
+        "create_products": "Создать товары пачкой",
+        "update_product": "Обновить поля",
+        "update_product_sku": "Изменить SKU",
+        "update_product_prices": "Массовое изменение цен",
+        "update_product_attribute": "Атрибут для нескольких товаров",
+        "update_product_attributes": "Несколько атрибутов пачкой",
+        "delete_products": "Мягкое удаление",
+        "restore_products": "Восстановить из корзины",
+        "list_trash": "Корзина товаров",
+        "generate_barcodes": "Сгенерировать EAN-13 штрихкоды"
+      },
+      "categories": {
+        "list_categories": "Список категорий",
+        "get_category": "Категория с атрибутами",
+        "create_category": "Создать категорию",
+        "update_category": "Переименовать",
+        "delete_category": "Удалить",
+        "list_category_fields": "Атрибуты категории",
+        "add_category_field": "Добавить атрибут",
+        "update_category_field": "Изменить атрибут",
+        "delete_category_field": "Удалить атрибут",
+        "find_categories_with_field": "Найти категории с атрибутом"
+      },
+      "mappings": {
+        "list_mappings": "Список маппингов",
+        "get_mapping": "Детали + покрытие",
+        "create_mapping": "Создать маппинг",
+        "update_mapping_name": "Переименовать",
+        "delete_mapping": "Удалить",
+        "duplicate_mapping": "Скопировать",
+        "list_external_categories": "Категории маркетплейса",
+        "get_external_fields": "Поля карточки адаптера",
+        "get_price_fields": "Поля цен адаптера",
+        "get_option_alignment_hints": "Подсказки optionMap",
+        "search_field_options": "Поиск в опциях поля",
+        "get_available_sources": "Доступные источники",
+        "get_mapping_coverage": "Анализ покрытия",
+        "connect_field": "Подключить поле",
+        "connect_fields": "Подключить несколько полей",
+        "set_field_static_value": "Задать статическое значение",
+        "set_fields_static_value": "Статические значения пачкой",
+        "add_field_modifier": "Добавить трансформацию",
+        "remove_field_connection": "Отключить поле",
+        "merge_adapter_fields": "Объединить дубли полей",
+        "unmerge_adapter_fields": "Разъединить поля",
+        "preview_mapping_for_product": "Превью маппинга",
+        "find_products_without_mapping": "Товары без назначенного маппинга",
+        "get_product_mapping_summary": "Сводка: товары по маппингам",
+        "assign_product_mappings": "Назначить маппинг товарам"
+      },
+      "connections": {
+        "list_connections": "Список подключений",
+        "get_connection": "Детали подключения",
+        "test_connection": "Проверить связь",
+        "get_connection_limits": "Лимиты API",
+        "get_adapter_info": "Мета-данные адаптера"
+      },
+      "export": {
+        "export_products_batch": "Экспорт товаров (batch)",
+        "export_prices": "Экспорт цен",
+        "export_stocks": "Экспорт остатков",
+        "get_batch_status": "Статус задачи",
+        "list_product_links": "Sync-ссылки товаров"
+      },
+      "import": {
+        "preview_marketplace_products": "Товары на маркетплейсе",
+        "import_products": "Импортировать товары",
+        "import_prices": "Импортировать цены",
+        "import_stocks": "Импортировать остатки",
+        "archive_product_on_marketplace": "Архивировать на площадке"
+      },
+      "groups": {
+        "list_groups": "Группы товаров",
+        "get_group": "Детали группы",
+        "create_group": "Создать группу",
+        "update_group": "Переименовать",
+        "delete_group": "Удалить группу",
+        "add_products_to_group": "Добавить товары",
+        "remove_products_from_group": "Убрать товары"
+      },
+      "files": {
+        "list_files": "Список файлов",
+        "create_folder": "Создать папку",
+        "rename_file": "Переименовать файл",
+        "rename_folder": "Переименовать папку",
+        "move_files": "Переместить файлы",
+        "delete_files": "Удалить файлы",
+        "delete_folder": "Удалить папку",
+        "share_file": "Создать публичную ссылку"
+      },
+      "analytics": {
+        "get_store_stats": "Статистика магазина",
+        "find_products_without_images": "Без изображений",
+        "find_products_without_barcode": "Без штрихкода",
+        "find_products_missing_field": "С пустым атрибутом",
+        "find_products_with_sync_errors": "С ошибками синхронизации",
+        "analyze_mapping_quality": "Качество маппингов",
+        "get_image_download_status": "Статус загрузки изображений"
+      },
+      "store": {
+        "list_store_attributes": "Глобальные атрибуты магазина"
+      },
+      "system": {
+        "propose_plan": "Показать план перед выполнением",
+        "rollback_last_operation": "Отменить последнее действие",
+        "navigate_to": "Кнопка перехода на страницу"
+      }
+    }
+  },
+  "marketplace": {
+    "connectionPage": {
+      "capabilities": {
+        "getCategories": "Получение категорий",
+        "getCategoryFields": "Поля категорий",
+        "createCategory": "Создание категорий",
+        "importProduct": "Импорт товара",
+        "importAllProducts": "Импорт всех товаров",
+        "importProductBatch": "Пакетный импорт",
+        "exportProduct": "Экспорт товара",
+        "exportProductBulk": "Массовый экспорт",
+        "updateSku": "Обновление артикула",
+        "importPrices": "Импорт цен",
+        "exportPrices": "Экспорт цен",
+        "importStocks": "Импорт остатков",
+        "exportStocks": "Экспорт остатков",
+        "getOrders": "Получение заказов",
+        "updateOrderStatus": "Обновление статуса заказа",
+        "fieldBasedGrouping": "Группировка через поле",
+        "endpointBasedGrouping": "Группировка через API",
+        "importGroups": "Импорт групп",
+        "deleteGroups": "Удаление групп",
+        "modifyGroupMembership": "Изменение состава групп",
+        "archiveProduct": "Архивирование товара"
+      },
+      "tabs": {
+        "settings": "Настройки",
+        "mappings": "Маппинги",
+        "products": "Товары"
+      },
+      "breadcrumbs": {
+        "adapters": "Адаптеры",
+        "connectionFallback": "Подключение"
+      },
+      "categories": {
+        "uncategorized": "Без категории"
+      },
+      "mappingSelection": {
+        "linkFallback": "Связь #{id}"
+      },
+      "limits": {
+        "unlimited": "Безлимит",
+        "loadNormal": "Норма",
+        "loadHigh": "Высокая",
+        "loadCritical": "Критическая",
+        "title": "API лимиты",
+        "subtitle": "Текущая нагрузка и квоты запросов к API адаптера",
+        "unavailableTitle": "Лимиты недоступны",
+        "unavailableDescription": "Этот адаптер не поддерживает отслеживание API-лимитов.",
+        "requestsPerSecond": "Запросов в секунду",
+        "currentWindow": "Текущее окно",
+        "totalRequestsSinceStart": "Всего запросов с момента запуска:",
+        "usage": "Использование",
+        "reset": "Сброс"
+      },
+      "notifications": {
+        "connectionSaved": "Подключение сохранено",
+        "testSuccess": "Подключение успешно",
+        "testError": "Ошибка подключения",
+        "selectBothCategories": "Выберите обе категории",
+        "mappingCreated": "Маппинг создан",
+        "selectLocalCategory": "Выберите локальную категорию",
+        "createCategoryUnsupported": "Адаптер не поддерживает создание категорий",
+        "categoryCreatedAndLinked": "Категория создана и связана",
+        "mappingDeletedReassigned": "Маппинг удалён, товары перенесены: {count}",
+        "mappingDeletedDetached": "Маппинг удалён, товаров без маппинга: {count}",
+        "mappingDeleted": "Маппинг удалён",
+        "selectReplacementMapping": "Выберите маппинг, на который перенести товары",
+        "mappingDuplicated": "Маппинг продублирован",
+        "duplicateError": "Ошибка дублирования",
+        "mappingRenamed": "Маппинг переименован",
+        "renameError": "Ошибка переименования",
+        "settingsSaved": "Настройки сохранены",
+        "saveError": "Ошибка сохранения",
+        "noChangesDetected": "Изменений не обнаружено",
+        "fieldsUpdated": "Обновлено: {fields}",
+        "productExported": "Товар экспортирован на адаптер",
+        "productUnlinked": "Товар отвязан от адаптера",
+        "selectUnlinkedProducts": "Выберите несвязанные товары",
+        "categoryCreateError": "Ошибка создания категории: {error}",
+        "queuedForImport": "Добавлено в очередь: {count} товаров",
+        "importSummary": "Создано: {created}, пропущено: {skipped}, ошибок: {failed}",
+        "selectLinkedProducts": "Выберите связанные товары",
+        "bulkImportSummary": "Импортировано: {success}, ошибок: {failed}",
+        "mappingCheckError": "Ошибка проверки маппингов",
+        "exportBatchError": "Ошибка создания пакета экспорта",
+        "pricesExportSummary": "Экспортировано цен: {updated}, пропущено: {skipped}",
+        "stocksExportSummary": "Экспортировано остатков: {updated}, пропущено: {skipped}",
+        "selectProductsToExport": "Выберите товары для экспорта",
+        "selectMappingForAll": "Выберите маппинг для всех товаров (осталось: {count})",
+        "saveMappingSelectionsError": "Ошибка сохранения выбора маппингов"
+      },
+      "confirm": {
+        "unlinkTitle": "Отвязать товар?",
+        "unlinkDescription": "Товар будет отвязан от адаптера. Связь с маркетплейсом исчезнет.",
+        "unlinkConfirm": "Отвязать"
+      },
+      "operations": {
+        "importTitle": "Импорт {count} товаров"
+      },
+      "fields": {
+        "price": "Цена",
+        "storageQuantity": "Остаток"
+      },
+      "status": {
+        "unlinked": "Не связан",
+        "noMapping": "Нет маппинга",
+        "synced": "Синхронизирован",
+        "notSynced": "Не синхронизирован",
+        "syncError": "Ошибка",
+        "modified": "Изменён",
+        "active": "Активно",
+        "inactive": "Неактивно"
+      },
+      "header": {
+        "subtitle": "Подключение к адаптеру: настройки, маппинги категорий и синхронизация товаров.",
+        "test": "Тест"
+      },
+      "settings": {
+        "connectionTitle": "Подключение",
+        "activeConnection": "Активное подключение",
+        "credentialsTitle": "Данные для подключения",
+        "credentialsHint": "Учётные данные уже сохранены. Оставьте поля пустыми, чтобы не менять их, или введите новые значения для замены.",
+        "capabilitiesTitle": "Возможности адаптера"
+      },
+      "mappings": {
+        "title": "Маппинги категорий",
+        "createMapping": "Создать маппинг",
+        "createMappingDescription": "Свяжите локальную категорию с категорией {adapter} для экспорта и импорта товаров.",
+        "mappingNameLabel": "Название маппинга",
+        "mappingNamePlaceholder": "Название маппинга",
+        "mappingNameHint": "Необязательно. Помогает различать несколько маппингов одной категории.",
+        "localCategory": "Локальная категория",
+        "noCategories": "Нет категорий",
+        "attributesCountAbbr": "{count} атр.",
+        "selected": "Выбрано:",
+        "categoryOf": "Категория {adapter}",
+        "searchByNamePlaceholder": "Поиск по названию...",
+        "findCategoriesAria": "Найти категории",
+        "categoriesNotFoundTitle": "Категории не найдены",
+        "categoriesNotFoundHintWithCreate": "Измените запрос или создайте категорию в {adapter}.",
+        "categoriesNotFoundHint": "Измените поисковый запрос.",
+        "creating": "Создание...",
+        "createInAdapter": "Создать в {adapter}",
+        "linking": "Связывание...",
+        "link": "Связать",
+        "importCategory": "Импортировать категорию",
+        "noMappingsYetTitle": "Пока нет маппингов",
+        "noMappingsYetDescription": "Маппинг связывает локальную категорию с категорией {adapter} и управляет полями при экспорте и импорте.",
+        "mappingActionsAria": "Действия с маппингом",
+        "rename": "Переименовать",
+        "duplicate": "Дублировать"
+      },
+      "products": {
+        "adapterProducts": "Товары адаптера",
+        "localForExport": "Локальные для экспорта",
+        "searchBySkuPlaceholder": "Поиск по SKU (точное совпадение)",
+        "searchByNameOrSkuPlaceholder": "Поиск по названию или SKU...",
+        "foundCount": "Найдено: {count}",
+        "externalIdHeader": "Внешний ID",
+        "localSkuHeader": "Локальный SKU",
+        "adapterValuePrefix": "Адаптер:",
+        "importFromAdapter": "Импорт с адаптера",
+        "exportToAdapter": "Экспорт на адаптер",
+        "unlinkProduct": "Отвязать товар",
+        "noProductsTitle": "Нет товаров",
+        "noProductsDescription": "Товары появятся здесь после экспорта или привязки к адаптеру.",
+        "loadMore": "Загрузить ещё",
+        "selectedLabel": "Выбрано:",
+        "linkedCount": "{count} связанных",
+        "unlinkedCount": "{count} несвязанных",
+        "createLocal": "Создать локальные ({count})",
+        "importCount": "Импорт ({count})",
+        "exportCount": "Экспорт ({count})",
+        "exportPrices": "Экспорт цен",
+        "exportStocks": "Экспорт остатков",
+        "categoryHeader": "Категория",
+        "noProductsToExportTitle": "Нет товаров для экспорта",
+        "noProductsToExportDescription": "Все товары уже экспортированы, или для их категорий нет маппингов.",
+        "pageSizeLabel": "по",
+        "totalLabel": "Всего:",
+        "exportToAdapterCount": "Экспортировать на адаптер ({count})"
+      },
+      "dialogs": {
+        "confirmBulkImportTitle": "Подтверждение массового импорта",
+        "bulkImportWillUpdate": "Будет обновлено {count} из {total} товаров",
+        "importProductsTitle": "Импорт товаров",
+        "importProductsDescription": "Выберите локальную категорию для каждой категории адаптера",
+        "selectedProductsCount": "Выбрано товаров: {count}",
+        "productsCount": "{count} товаров",
+        "localCategoryColon": "Локальная категория:",
+        "selectExistingColon": "Выбрать существующую:",
+        "choosePlaceholder": "Выберите категорию",
+        "mappingParenthetical": "(маппинг)",
+        "duplicateMappingTitle": "Дублировать маппинг?",
+        "duplicateMappingDescription": "Будет создана полная копия этого маппинга со всеми настройками графа.",
+        "duplicateAction": "Дублировать",
+        "renameMappingTitle": "Переименовать маппинг",
+        "renameMappingDescription": "Укажите новое название для маппинга",
+        "mappingNamePlaceholder": "Название маппинга",
+        "deleteMappingTitle": "Удалить маппинг «{name}»?",
+        "deleteMappingLinkedProducts": "С ним связано товаров: {count}. Выберите, что с ними сделать.",
+        "whatToDoWithProductsAria": "Что сделать с товарами",
+        "moveProductsToAnotherMapping": "Перенести товары на другой маппинг",
+        "moveProductsHint": "Связи переключатся на выбранный маппинг, экспорт продолжит работать.",
+        "mappingToTransferPlaceholder": "Маппинг для переноса",
+        "mappingFallback": "Маппинг #{id}",
+        "deleteWithoutMoving": "Удалить без переноса",
+        "deleteWithoutMovingHint": "Товары останутся связанными с маркетплейсом, но потеряют маппинг — экспорт будет недоступен, пока не назначите новый.",
+        "noReplacementMappingHint": "Перенести некуда: другого маппинга для этой категории нет. Чтобы перенести, сначала создайте или продублируйте маппинг.",
+        "linkedProducts": "Связанные товары",
+        "productFallback": "Товар #{id}",
+        "andMoreCount": "и ещё {count}",
+        "moveAndDelete": "Перенести и удалить",
+        "mappingSettingsTitle": "Настройки маппинга",
+        "mappingSettingsDescription": "Настройте параметры маппинга категорий",
+        "selectMappingForProductsTitle": "Выберите маппинг для товаров",
+        "selectMappingForProductsDescription": "Для некоторых товаров доступно несколько маппингов категории. Выберите нужный маппинг для каждого товара.",
+        "applyToAll": "Применить ко всем",
+        "chooseMappingPlaceholder": "Выберите маппинг...",
+        "continueExport": "Продолжить экспорт"
+      },
+      "import": {
+        "createNewFromAdapter": "Создать новую из адаптера: «{name}»",
+        "createNewCategory": "Создать новую категорию:",
+        "categoryNamePlaceholder": "Название категории",
+        "noCategory": "Без категории",
+        "importCount": "Импортировать ({count})"
+      }
+    },
+    "adapterLogsPage": {
+      "noErrors": "Ошибок нет",
+      "errorCount": "{count} с ошибкой",
+      "dateTime": "Время",
+      "duration": "Длительность",
+      "durationMs": "{ms} мс",
+      "adapter": "Адаптер",
+      "connection": "Подключение",
+      "title": "Логи адаптеров",
+      "description": "Исходящие HTTP-запросы к API маркетплейсов",
+      "allConnections": "Все подключения",
+      "allAdapters": "Все адаптеры",
+      "method": "Метод",
+      "anyMethod": "Любой",
+      "code": "Код",
+      "anyCode": "Любой код",
+      "errors": "Ошибки",
+      "searchByPath": "Поиск по path…",
+      "emptyTitle": "Запросов пока нет",
+      "emptyDescription": "После вызовов API адаптеров записи появятся здесь автоматически",
+      "resource": "Ресурс",
+      "response": "Ответ",
+      "itemsOfTotal": "{count} из {total}",
+      "loadMore": "Ещё",
+      "request": "Запрос",
+      "overview": "Обзор",
+      "error": "Ошибка",
+      "headers": "Заголовки",
+      "body": "Тело"
+    },
+    "categoryImportPage": {
+      "adapters": "Адаптеры",
+      "connection": "Подключение",
+      "importCategory": "Импорт категории",
+      "adapterGenitive": "адаптера",
+      "attrsAbbrCount": "{count} атр.",
+      "importShort": "Импорт",
+      "selectAdapterCategory": "Выберите категорию адаптера",
+      "selectExistingCategory": "Выберите существующую категорию",
+      "categoryImported": "Категория импортирована",
+      "pageDescription": "Выберите категорию {adapterLabel}, настройте поля и импортируйте её в локальный каталог.",
+      "import": "Импортировать",
+      "source": "Источник:",
+      "localCatalog": "Локальный каталог",
+      "adapterCategory": "Категория адаптера",
+      "adapterCategoryDescription": "Найдите категорию в дереве или укажите её ID вручную.",
+      "searchByNamePlaceholder": "Поиск по названию...",
+      "findCategories": "Найти категории",
+      "categoriesNotFoundTitle": "Категории не найдены",
+      "categoriesNotFoundDescription": "Измените поисковый запрос или поднимитесь на уровень выше.",
+      "categoryIdLabel": "ID категории",
+      "categoryIdPlaceholder": "Выберите категорию выше или введите ID",
+      "categoryIdDescription": "Можно указать ID вручную, если категории нет в списке.",
+      "selectCategoryTitle": "Выберите категорию",
+      "selectCategoryDescription": "Сначала укажите категорию адаптера слева — здесь появятся настройки импорта.",
+      "loadingCategoryFields": "Загрузка полей категории...",
+      "whereToImportTitle": "Куда импортировать",
+      "whereToImportDescription": "Создайте новую локальную категорию или дополните существующую.",
+      "createNewCategory": "Создать новую категорию",
+      "categoryNameLabel": "Название категории",
+      "categoryNamePlaceholder": "Оставьте пустым — возьмём название из адаптера",
+      "intoExistingCategory": "В существующую категорию",
+      "localCategoryLabel": "Локальная категория",
+      "selectCategoryPlaceholder": "Выберите категорию...",
+      "searchCategoryPlaceholder": "Поиск категории...",
+      "baseFieldsCount": "{count} базовых полей",
+      "baseFieldsHint": "— SKU, название, описание, цена, остатки и изображения — будут автоматически связаны с полями товара.",
+      "attributesForImportTitle": "Атрибуты для импорта ({selected} / {total})",
+      "attributesForImportDescription": "Выберите дополнительные поля категории, которые нужно перенести.",
+      "deselectAll": "Снять все",
+      "selectAll": "Выбрать все",
+      "noAdditionalAttributes": "Нет дополнительных атрибутов для импорта",
+      "requiredAbbr": "обяз.",
+      "optionsAbbrCount": "{count} опц."
+    },
+    "fieldMappingPage": {
+      "adapters": "Адаптеры",
+      "connection": "Подключение",
+      "mappings": "Маппинги",
+      "category": "Категория",
+      "sourceType": {
+        "productField": "Поле товара",
+        "categoryAttribute": "Атрибут категории",
+        "storeAttribute": "Атрибут магазина",
+        "staticValue": "Статическое значение",
+        "groupName": "Название группы"
+      },
+      "notSelected": "Не выбрано",
+      "notSet": "Не задано",
+      "productGroupName": "Название группы товаров",
+      "notConfigured": "Не настроено",
+      "mappingsSaved": "Маппинги сохранены",
+      "untitled": "Без названия",
+      "mappingHash": "Маппинг #{id}",
+      "settingsSaved": "Настройки сохранены",
+      "saveError": "Ошибка сохранения",
+      "enterFieldKey": "Введите ключ поля",
+      "fieldKeyExists": "Поле с таким ключом уже существует",
+      "cannotDeleteAdapterField": "Нельзя удалить поле адаптера. Можно только отключить.",
+      "invalidFileFormat": "Неверный формат файла",
+      "importedFieldsCount": "Импортировано: {count} полей",
+      "fileReadError": "Ошибка чтения файла",
+      "moreActions": "Дополнительные действия",
+      "autoArrange": "Авторасстановка",
+      "checkFieldsUpToDate": "Проверить актуальность полей",
+      "export": "Экспорт",
+      "import": "Импорт",
+      "rearrangeBlocksTitle": "Переставить блоки?",
+      "rearrangeBlocksDescription": "Все блоки будут автоматически перестроены — текущее расположение будет потеряно.",
+      "rearrange": "Переставить",
+      "previewTitle": "Предпросмотр",
+      "previewSheetDescription": "Сводка всех полей. Изменённые значения выделены цветом.",
+      "visualTab": "Просмотр",
+      "rawDataTab": "Данные",
+      "imagesCountHint": "{count} изображений. Если не отображаются — URL может быть недоступен из браузера.",
+      "sourceAbbr": "Исх:",
+      "resultAbbr": "Рез:",
+      "noActiveFieldsTitle": "Нет активных полей",
+      "noActiveFieldsDescription": "Подключите поля адаптера к источникам, чтобы увидеть предпросмотр значений.",
+      "mappingSettingsTitle": "Настройки маппинга",
+      "mappingSettingsDescription": "Настройте параметры маппинга",
+      "mappingNamePlaceholder": "Название маппинга",
+      "addFieldTitle": "Добавить поле",
+      "addFieldDescription": "Добавьте поле с произвольным ключом для адаптера",
+      "fieldKeyLabel": "Ключ поля *",
+      "fieldKeyPlaceholder": "например: custom_field",
+      "nameOptionalLabel": "Название (опционально)",
+      "displayNamePlaceholder": "Отображаемое название",
+      "sourceTypeLabel": "Тип источника",
+      "fieldValuePlaceholder": "Значение поля"
+    },
+    "marketplacePage": {
+      "title": "Адаптеры",
+      "enterConnectionName": "Введите название подключения",
+      "selectAdapter": "Выберите адаптер",
+      "connectionCreated": "Подключение создано",
+      "connectionDeleted": "Подключение удалено",
+      "description": "Управление подключениями к адаптерам для синхронизации товаров",
+      "addConnection": "Добавить подключение",
+      "newConnectionTitle": "Новое подключение к адаптеру",
+      "newConnectionDescription": "Выберите адаптер и введите данные для подключения",
+      "noPluginsAvailableTitle": "Нет доступных плагинов",
+      "noPluginsAvailableDescription": "Для подключения к адаптерам необходимо установить соответствующие плагины. Перейдите в раздел",
+      "goToPlugins": "Перейти к плагинам",
+      "connectionNameLabel": "Название подключения",
+      "connectionNamePlaceholder": "Например: Основной магазин WB",
+      "adapterLabel": "Адаптер",
+      "selectAdapterPlaceholder": "Выберите адаптер",
+      "activeConnectionLabel": "Активное подключение",
+      "emptyTitle": "Нет подключений к адаптерам",
+      "emptyDescription": "Добавьте первое подключение для синхронизации товаров",
+      "mappingsColumn": "Маппинги",
+      "productsColumn": "Товары",
+      "active": "Активен",
+      "inactive": "Неактивен",
+      "deleteConnectionTitle": "Удалить подключение?",
+      "deleteConnectionDescription": "Вы уверены что хотите удалить подключение «{name}»? Это удалит все маппинги категорий и связи товаров."
+    },
+    "pluginsPage": {
+      "selectDllFile": "Выберите файл с расширением .dll",
+      "selectPluginFile": "Выберите файл плагина",
+      "pluginUploaded": "Плагин загружен",
+      "pluginDeleted": "Плагин удалён",
+      "pluginReloaded": "Плагин перезагружен",
+      "title": "Плагины",
+      "description": "Управление DLL-плагинами для интеграции с адаптерами",
+      "uploadPlugin": "Загрузить плагин",
+      "selectDllFileToUpload": "Выберите DLL файл плагина для загрузки",
+      "pluginFileLabel": "Файл плагина (.dll)",
+      "dragFileHere": "Перетащите файл сюда или",
+      "chooseFile": "Выберите файл",
+      "chooseAnother": "Выбрать другой",
+      "sdkInterfaceHint": "Плагин должен реализовывать интерфейс IMarketplacePlugin из SDK",
+      "emptyTitle": "Нет установленных плагинов",
+      "emptyDescription": "Загрузите DLL-плагин для интеграции с адаптером",
+      "plugin": "Плагин",
+      "key": "Ключ",
+      "version": "Версия",
+      "file": "Файл",
+      "loaded": "Загружен",
+      "type": "Тип",
+      "systemType": "Системный",
+      "userType": "Пользовательский",
+      "reload": "Перезагрузить",
+      "deletePluginTitle": "Удалить плагин?",
+      "deletePluginDescription": "Вы уверены что хотите удалить плагин «{name}»? Подключения, использующие этот плагин, перестанут работать."
+    },
+    "graph": {
+      "pinTypes": {
+        "text": "Текст",
+        "select": "Выбор",
+        "number": "Число",
+        "integer": "Целое",
+        "boolean": "Логическое",
+        "list": "Список",
+        "any": "Любой"
+      },
+      "groupNameLabel": "Название группы",
+      "staticValueLabel": "Статическое значение",
+      "storeFileLabel": "Файл магазина",
+      "productFileByNameLabel": "Файл товара по имени",
+      "productFilesByExtensionPrefix": "Файлы *.",
+      "productFilesByExtensionLabel": "Файлы товара по расширению",
+      "attributeFallback": "Атрибут #{id}",
+      "adapterHeader": "Поля адаптера",
+      "priceHeader": "Поля цен",
+      "aliasMergedTitle": "Объединено с «{primary}»: при экспорте получает его значение, при импорте игнорируется",
+      "aliasMergedShortTitle": "Объединено с «{primary}»",
+      "fanOutSourceUsed": "Этот источник уже используется другим полем — возможен конфликт данных. Если поля дублируют друг друга — объедините их в настройках поля.",
+      "fanOutImportDisabled": "Импорт отключён: этот источник уже используется несколькими полями адаптера. Если поля дублируют друг друга — объедините их в настройках поля.",
+      "fanOutPriceUsed": "Источник уже используется другим полем цен.",
+      "sourceClickTitle": "{label} — нажмите для настройки",
+      "unitLabel": "Ед. изм.: {unit}",
+      "rangeFrom": "от {value}",
+      "rangeTo": "до {value}",
+      "keyLabel": "Ключ: {key}",
+      "modifierFallback": "Модификатор",
+      "irreversibleWarning": "Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть.",
+      "valueRowLabel": "значение",
+      "previewMore": "ещё",
+      "previewLess": "свернуть",
+      "inputsCount": "входов: {count}",
+      "removeInput": "Убрать вход",
+      "addInput": "Добавить вход",
+      "exportOnlyTitle": "Только экспорт",
+      "nodeKinds": {
+        "attribute": "Атрибут категории",
+        "storeAttribute": "Атрибут магазина",
+        "productField": "Поле товара",
+        "static": "Значение",
+        "groupName": "Группа товара",
+        "storeFileUrl": "Файл магазина · ссылка",
+        "storeFileContent": "Файл магазина · текст",
+        "productFileByName": "Файл товара · ссылка",
+        "productFileContentByName": "Файл товара · текст",
+        "productFilesByExtension": "Файлы товара · расширение",
+        "adapterValue": "Стандартное значение"
+      },
+      "literalKinds": {
+        "number": "Число",
+        "boolean": "Логическое",
+        "array": "Список",
+        "string": "Текст"
+      },
+      "opSpecs": {
+        "formatString": {
+          "label": "Формат строки",
+          "params": {
+            "template": "Шаблон"
+          }
+        },
+        "join": {
+          "label": "Объединить",
+          "params": {
+            "delimiter": "Разделитель"
+          }
+        },
+        "makeArray": {
+          "label": "Создать массив",
+          "params": {}
+        },
+        "arrayAppend": {
+          "label": "Добавить в массив",
+          "inputLabels": [
+            "массив",
+            "элемент"
+          ],
+          "params": {}
+        },
+        "splitToArray": {
+          "label": "Разбить в массив",
+          "params": {
+            "delimiter": "Разделитель"
+          }
+        },
+        "arrayIndex": {
+          "label": "Элемент по индексу",
+          "params": {
+            "index": "Индекс"
+          }
+        },
+        "arrayLength": {
+          "label": "Длина массива",
+          "params": {}
+        },
+        "ifElse": {
+          "label": "Если",
+          "inputLabels": [
+            "условие",
+            "если да",
+            "если нет"
+          ],
+          "params": {}
+        },
+        "not": {
+          "label": "Не",
+          "params": {}
+        },
+        "and": {
+          "label": "И",
+          "params": {}
+        },
+        "or": {
+          "label": "Или",
+          "params": {}
+        },
+        "equals": {
+          "label": "Равно",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "notEquals": {
+          "label": "Не равно",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "greaterThan": {
+          "label": "Больше",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "lessThan": {
+          "label": "Меньше",
+          "inputLabels": [
+            "A",
+            "B"
+          ],
+          "params": {}
+        },
+        "contains": {
+          "label": "Содержит",
+          "inputLabels": [
+            "где",
+            "что"
+          ],
+          "params": {}
+        },
+        "isEmpty": {
+          "label": "Пусто",
+          "params": {}
+        },
+        "isValid": {
+          "label": "Заполнено",
+          "params": {}
+        }
+      },
+      "validation": {
+        "fieldNotConnectedAdapter": "Поле адаптера «{label}» не подключено",
+        "fieldNotConnectedPrice": "Поле цен «{label}» не подключено",
+        "nodeWithoutInput": "Узел без входа",
+        "unknownModifier": "Неизвестный модификатор: {type}",
+        "graphHasCycle": "Граф содержит цикл — он не будет выполнен"
+      },
+      "contextMenu": {
+        "searchPlaceholder": "Поиск узлов…",
+        "empty": "Ничего не найдено",
+        "groupNameItem": "Название группы",
+        "numberLiteral": "Число",
+        "textLiteral": "Текст",
+        "booleanLiteral": "Логическое",
+        "arrayLiteral": "Список",
+        "adapterValueItem": "Стандартное значение",
+        "productFileByNameLink": "Файл товара по имени · ссылка",
+        "productFileContentByNameText": "Файл товара по имени · текст",
+        "productFilesByExtensionItem": "Файлы товара по расширению",
+        "storeFileUrlItem": "Файл магазина · ссылка",
+        "storeFileContentItem": "Файл магазина · текст",
+        "groups": {
+          "sources": "Источники",
+          "literals": "Значения",
+          "storage": "Хранилище",
+          "productFiles": "Файлы товара",
+          "ops": "Операции",
+          "logic": "Логика"
+        }
+      },
+      "inspector": {
+        "titleByType": {
+          "attribute": "Атрибут категории",
+          "storeAttribute": "Атрибут магазина",
+          "productField": "Поле товара",
+          "static": "Статическое значение",
+          "groupName": "Название группы",
+          "storeFileUrl": "Файл магазина · ссылка",
+          "storeFileContent": "Файл магазина · текст",
+          "productFileByName": "Файл товара по имени · ссылка",
+          "productFileContentByName": "Файл товара по имени · текст",
+          "productFilesByExtension": "Файлы товара по расширению",
+          "adapterFields": "Поля адаптера",
+          "adapterPriceFields": "Поля цен"
+        },
+        "staticTypeTitles": {
+          "number": "Число",
+          "boolean": "Логическое",
+          "array": "Список",
+          "string": "Текст",
+          "default": "Значение"
+        },
+        "storeFileFieldLabel": "Файл из хранилища магазина",
+        "chooseFilePlaceholder": "Выберите файл",
+        "notSelected": "Не выбран",
+        "storeFileUrlHint": "На выход подаётся ссылка на файл (например, для изображений).",
+        "storeFileContentHint": "На выход подаётся текстовое содержимое файла (например, rich-JSON).",
+        "noStoreFiles": "В хранилище магазина пока нет файлов.",
+        "productFileNameLabel": "Имя файла товара",
+        "productFileNamePlaceholder": "например, spec.pdf",
+        "productFileByNameHint": "Ищет файл товара по имени и подаёт ссылку на него.",
+        "productFileContentByNameHint": "Ищет файл товара по имени и подаёт его текстовое содержимое.",
+        "extensionLabel": "Расширение",
+        "extensionPlaceholder": "например, pdf",
+        "productFilesByExtensionHint": "Подаёт массив ссылок на все файлы товара с этим расширением.",
+        "sourceLabel": "Источник",
+        "sourceChangeHint": "Чтобы изменить источник, добавьте другой узел из меню (ПКМ/Tab) и переподключите.",
+        "importableLabel": "Импортируемый",
+        "importableHint": "Снятие флажка — только экспорт: при импорте с маркетплейса значение не записывается в этот источник.",
+        "valueLabel": "Значение",
+        "choosePlaceholder": "Выберите значение...",
+        "enterValuePlaceholder": "Введите значение...",
+        "adapterValueAutoloadHint": "Для автоматической загрузки вариантов подключите блок к полю адаптера, у которого есть предустановленные значения.",
+        "loadOptionsFromFieldPlaceholder": "Загрузить варианты из поля...",
+        "yes": "Да",
+        "no": "Нет",
+        "commaSeparated": "через запятую",
+        "fieldsCount": "Полей:",
+        "requiredCount": "обязательных:",
+        "adapterFieldsHint": "Для каждого поля выберите стандартный источник напрямую (тогда пин на блоке исчезает) или оставьте «по проводу» и подключите узел.",
+        "byWire": "по проводу",
+        "byWireOption": "По проводу",
+        "productGroup": "Товар",
+        "stockGroup": "Остатки",
+        "priceGroup": "Цена",
+        "categoryAttributeGroup": "Атрибут категории",
+        "storeAttributeGroup": "Атрибут магазина",
+        "groupNameOption": "Название группы",
+        "mergeWithFieldGroup": "Объединить с полем (дубликат)",
+        "noParams": "У узла нет параметров.",
+        "noModifierParams": "У модификатора нет параметров.",
+        "additionalInputs": "Дополнительные входы",
+        "llmPinsHint": "Подключите блоки к пинам слева на карточке. В промпте используйте",
+        "pinNamePlaceholder": "Название пина",
+        "pinDefaultLabel": "Пин",
+        "addPin": "Добавить пин",
+        "pinOverrideHint": "Значение ниже — по умолчанию; его можно переопределить, подав провод в пин слева.",
+        "pinOverrideBadge": "пин-переопределение",
+        "chooseModelPlaceholder": "Выберите модель",
+        "noAiModelsHint": "Нет подключённых или включённых моделей. Администратор может добавить и включить их в Настройки → ИИ.",
+        "outputValueLabel": "Значение на выходе",
+        "deleteNode": "Удалить узел",
+        "productField": "Поле товара",
+        "attributeFallback": "атрибут #{id}"
+      }
+    },
+    "canvas": {
+      "save": "Сохранить",
+      "previewPlaceholder": "Товар для предпросмотра…",
+      "previewing": "предпросмотр…",
+      "resetPreview": "Сбросить",
+      "resetPreviewTitle": "Сбросить товар предпросмотра",
+      "disableWireAnimation": "Выключить анимацию проводов",
+      "enableWireAnimation": "Включить анимацию проводов",
+      "collapse": "Свернуть (F)",
+      "fullscreen": "На весь экран (F)",
+      "fieldsAnalysis": "Анализ полей",
+      "noFields": "нет полей",
+      "edges": "Рёбра",
+      "hideDebug": "Shift+Tab — скрыть",
+      "fieldsAddedCount": "Добавлено полей: {count}",
+      "schemaUpToDate": "Схема актуальна — новых полей нет",
+      "graphSaved": "Граф сохранён",
+      "invalidFileFormat": "Неверный формат: ожидается объект с nodes и edges",
+      "mappingExported": "Маппинг экспортирован",
+      "mappingImported": "Маппинг импортирован — нажмите «Сохранить»",
+      "sourceValueLabel": "Исходное значение",
+      "aiModelFallback": "Модель #{id}"
+    },
+    "optionMapEditor": {
+      "title": "Соответствия: вариант → вариант адаптера",
+      "sourceOptionsHint": "Слева — варианты источника. Подключите блок к атрибуту категории с вариантами.",
+      "loadFromFieldPlaceholder": "Загрузить варианты из поля адаптера...",
+      "loadFromFieldHint": "Или подключите блок к полю адаптера — варианты подтянутся автоматически.",
+      "sourceOptionPlaceholder": "Вариант источника",
+      "adapterOptionPlaceholder": "Вариант адаптера",
+      "addMapping": "Добавить соответствие",
+      "unmappedWarning": "Не указаны соответствия для {mapped} из {total} значений категории",
+      "defaultOptionLabel": "Вариант по умолчанию (если нет соответствия)",
+      "defaultValueLabel": "По умолчанию (если нет соответствия)",
+      "defaultValuePlaceholder": "Оставить как есть"
+    },
+    "valueMapEditor": {
+      "title": "Соответствия: вариант → valueId",
+      "sourceOptionsHint": "Слева — варианты источника (атрибут категории). Подключите блок к атрибуту с вариантами.",
+      "valueIdHint": "Справа — valueId поля адаптера (вводится вручную). Подпись показывается, если valueId совпадает с известной опцией.",
+      "sourceOptionPlaceholder": "Вариант источника",
+      "addMapping": "Добавить соответствие",
+      "unmappedWarning": "Не указаны соответствия для {mapped} из {total} значений источника",
+      "defaultValueLabel": "valueId по умолчанию (если нет соответствия)",
+      "defaultValuePlaceholder": "Оставить как есть"
+    },
+    "templateEditor": {
+      "heightExampleLabel": "высота",
+      "insertField": "Вставить поле",
+      "fieldValueHint": "значение поля",
+      "productFields": "Поля товара",
+      "stockFields": "Остатки",
+      "priceFields": "Цена",
+      "categoryAttributes": "Атрибуты категории",
+      "storeAttributes": "Глобальные атрибуты",
+      "inputPins": "Входные пины"
+    },
+    "modifierCategories": {
+      "text": "Текст",
+      "number": "Число",
+      "select": "Выбор",
+      "array": "Массив",
+      "any": "Универсальные",
+      "random": "Случайные"
+    },
+    "modifiers": {
+      "common": {
+        "empty": "пусто"
+      },
+      "truncate": {
+        "name": "Обрезать",
+        "maxLength": "Макс. длина",
+        "summary": "до {n} символов"
+      },
+      "split": {
+        "name": "Разделить",
+        "delimiter": "Разделитель",
+        "indexPart": "Индекс части",
+        "summary": "по \"{d}\" [{i}]"
+      },
+      "replace": {
+        "name": "Заменить",
+        "search": "Искать",
+        "replacement": "Заменить на"
+      },
+      "append": {
+        "name": "Добавить в конец",
+        "suffix": "Суффикс"
+      },
+      "prepend": {
+        "name": "Добавить в начало",
+        "prefix": "Префикс"
+      },
+      "uppercase": {
+        "name": "В верхний регистр"
+      },
+      "lowercase": {
+        "name": "В нижний регистр"
+      },
+      "trim": {
+        "name": "Убрать пробелы"
+      },
+      "multiply": {
+        "name": "Умножить",
+        "factor": "Множитель"
+      },
+      "divide": {
+        "name": "Разделить",
+        "divisor": "Делитель"
+      },
+      "add": {
+        "name": "Прибавить",
+        "addend": "Слагаемое"
+      },
+      "round": {
+        "name": "Округлить",
+        "decimals": "Знаков после запятой",
+        "summary": "до {n} знаков"
+      },
+      "floor": {
+        "name": "Округлить вниз"
+      },
+      "ceiling": {
+        "name": "Округлить вверх"
+      },
+      "clamp": {
+        "name": "Ограничить диапазон",
+        "min": "Минимум",
+        "max": "Максимум"
+      },
+      "valueMap": {
+        "name": "Маппинг значений (→ valueId)",
+        "mappings": "Соответствия",
+        "default": "По умолчанию"
+      },
+      "optionMap": {
+        "name": "Маппинг значений по вариантам",
+        "summaryCount": "{count} вариантов"
+      },
+      "llmGenerate": {
+        "name": "AI-генерация",
+        "prompt": "Промпт",
+        "systemPrompt": "Системный промпт",
+        "model": "Модель",
+        "cacheEnabled": "Кэшировать",
+        "perProduct": "Уникально для каждого товара",
+        "summaryPlaceholder": "промпт"
+      },
+      "randomInt": {
+        "name": "Случайное целое"
+      },
+      "randomFloat": {
+        "name": "Случайное дробное",
+        "decimals": "Знаков"
+      },
+      "randomPick": {
+        "name": "Случайный выбор",
+        "choices": "Варианты",
+        "summaryOf": "из {n}",
+        "summaryOfInput": "из входа"
+      },
+      "randomUuid": {
+        "name": "Случайный UUID"
+      },
+      "toText": {
+        "name": "Преобразовать в текст",
+        "useLabel": "Словесное преобразование (лейбл вместо кода)",
+        "summaryWithLabels": "с лейблами"
+      },
+      "forceType": {
+        "name": "Принудительный тип",
+        "sendAs": "Отправить как",
+        "optionString": "Текст",
+        "optionNumber": "Число",
+        "optionInteger": "Целое число",
+        "optionBoolean": "Логическое",
+        "summaryText": "текст",
+        "summaryNumber": "число",
+        "summaryInteger": "целое",
+        "summaryBoolean": "логич."
+      },
+      "template": {
+        "name": "Подставить поля товара",
+        "template": "Шаблон"
+      },
+      "defaultValue": {
+        "name": "Значение по умолчанию",
+        "value": "Значение"
+      },
+      "takeFirst": {
+        "name": "Взять первый"
+      },
+      "limit": {
+        "name": "Ограничить количество",
+        "count": "Количество",
+        "summary": "до {n}"
+      },
+      "skip": {
+        "name": "Пропустить первые",
+        "count": "Пропустить",
+        "summary": "{n} шт."
+      },
+      "reverse": {
+        "name": "Перевернуть порядок"
+      },
+      "join": {
+        "name": "Объединить в строку"
+      },
+      "sort": {
+        "name": "Сортировать"
+      },
+      "addItems": {
+        "name": "Добавить элементы",
+        "items": "Элементы"
+      },
+      "removeItems": {
+        "name": "Удалить элементы"
+      }
+    }
+  },
+  "operations": {
+    "durationMs": "{ms}мс",
+    "durationSec": "{sec}с",
+    "durationMinSec": "{min}м {sec}с",
+    "status": {
+      "running": "выполняется",
+      "paused": "пауза",
+      "completed": "завершено",
+      "failed": "ошибка",
+      "partial": "частично",
+      "cancelled": "остановлено"
+    },
+    "total": "Всего",
+    "pending": "В очереди",
+    "completed": "Готово",
+    "errors": "Ошибки",
+    "loadingLogs": "Загрузка логов...",
+    "startedBy": "Запустил: {name}",
+    "pause": "Пауза",
+    "resume": "Продолжить",
+    "stop": "Остановить",
+    "retry": "Повторить ({count})",
+    "deleteTitle": "Удалить операцию?",
+    "deleteConfirm": "Удалить",
+    "panelTitle": "Операции",
+    "clearCompletedTitle": "Очистить завершённые",
+    "clearCompletedConfirmTitle": "Очистить завершённые операции?",
+    "clearCompletedConfirmDescription": "Все завершённые, отменённые и ошибочные операции будут удалены из списка.",
+    "clearCompletedConfirm": "Очистить",
+    "active": "Активные",
+    "history": "История",
+    "loadMore": "Загрузить ещё",
+    "loading": "Загрузка...",
+    "emptyTitle": "Нет операций",
+    "emptyDescription": "Здесь появится прогресс экспорта, импорта и AI-задач.",
+    "retryStarted": "Повторная обработка запущена",
+    "retryError": "Ошибка при повторе",
+    "waitingForLogs": "Ожидание логов...",
+    "maxLogEntries": "Показано максимум 500 записей",
+    "showButtons": "Показать кнопки",
+    "hideButtons": "Скрыть кнопки"
+  },
+  "barcodeCell": {
+    "clickToEnlarge": "Нажмите для увеличения",
+    "downloadPng": "Скачать PNG"
+  },
+  "productMarketplaceIntegrations": {
+    "header": "Связи с адаптерами",
+    "noCategoryTitle": "Товар не привязан к категории",
+    "noCategoryDescription": "Укажите категорию товара для экспорта на адаптеры",
+    "noConnectionsTitle": "Нет подключений к адаптерам",
+    "noConnectionsDescription": "Создайте подключение к адаптеру, чтобы экспортировать и синхронизировать товары",
+    "goToConnections": "Перейти к адаптерам",
+    "exportToAllTitle": "Экспорт на все адаптеры",
+    "readyCountFew": "{count} подключения готовы к экспорту",
+    "readyCountMany": "{count} подключений готово к экспорту",
+    "export": "Экспортировать",
+    "skuPrefix": "· арт. {sku}",
+    "mappingDeleted": "маппинг удалён",
+    "sizesTooltip": "Размеры",
+    "openOnAdapter": "Открыть на адаптере",
+    "menuExport": "Экспорт",
+    "menuImport": "Импорт",
+    "menuMapping": "Маппинг",
+    "menuRelink": "Перепривязать",
+    "menuUnlink": "Отвязать",
+    "menuRecreate": "Пересоздать",
+    "loadingSizes": "Загрузка размеров...",
+    "noSizesForConnection": "Нет размеров для этого подключения",
+    "sizeHeader": "Размер",
+    "barcodeHeader": "Баркод",
+    "priceHeader": "Цена",
+    "stockHeader": "Остаток",
+    "notExported": "Не экспортирован",
+    "ready": "Готов",
+    "linkManually": "Привязать вручную",
+    "mappingNotConfigured": "Маппинг для «{category}» не настроен",
+    "configure": "· настроить",
+    "noAvailableAdaptersTitle": "Нет доступных адаптеров",
+    "noAvailableAdaptersDescription": "Подключите адаптер и создайте маппинг для категории товара, чтобы экспортировать его.",
+    "importDialogTitle": "Подтверждение импорта",
+    "importDialogDescription": "Следующие поля будут обновлены из адаптера",
+    "cancelAction": "Отменить",
+    "confirmAction": "Подтвердить",
+    "bulkMappingDialogTitle": "Выберите маппинг",
+    "bulkMappingDialogDescription": "Для некоторых подключений доступно несколько маппингов. Выберите нужный для каждого.",
+    "choosePlaceholder": "Выберите маппинг",
+    "recreateDialogTitle": "Пересоздать товар",
+    "recreateDialogDescription": "Товар будет создан заново на {adapter} с новым артикулом. Старый товар будет архивирован.",
+    "newSkuLabel": "Новый артикул",
+    "newSkuPlaceholder": "Введите новый артикул",
+    "relinkProductTitle": "Перепривязать товар",
+    "linkProductTitle": "Привязать товар",
+    "relinkDescription": "Введите новый ID товара на {adapter} для перепривязки.",
+    "linkDescription": "Введите ID существующего товара на {adapter} для ручной привязки.",
+    "externalIdLabel": "ID товара на адаптере",
+    "externalIdPlaceholder": "Например: 12345678",
+    "relinkAction": "Перепривязать",
+    "linkAction": "Привязать",
+    "mappingFallback": "Маппинг #{id}",
+    "errorSavingMapping": "Ошибка сохранения маппинга",
+    "errorSavingMappingFor": "Ошибка сохранения маппинга для {adapter}",
+    "noExportableConnections": "Нет подключений с маппингом для экспорта",
+    "exportedToAdapters": "Экспортировано на {count} адаптер(ов)",
+    "exportErrors": "Ошибок при экспорте: {count}",
+    "noChangesFound": "Изменений не обнаружено",
+    "irreversibleFieldsWarning": "Некоторые поля содержат необратимые модификаторы и были исключены из импорта. Вы можете включить их вручную.",
+    "mappingDeletedError": "Маппинг этой связи удалён. Отвяжите товар или выберите новый маппинг.",
+    "chooseMappingBeforeExport": "Выберите маппинг перед экспортом",
+    "productUpdatedOnAdapter": "Товар обновлён на {adapter}",
+    "productExportedToAdapter": "Товар экспортирован на {adapter}",
+    "productRecreated": "Товар пересоздан на адаптере",
+    "archiveErrorSuffix": " (архивация старого: {error})",
+    "productRelinked": "Товар перепривязан на {adapter}",
+    "productLinked": "Товар привязан к {adapter}",
+    "unlinkConfirmTitle": "Отвязать товар?",
+    "unlinkConfirmDescription": "Товар будет отвязан от {adapter}. Экспорт в этот маркетплейс прекратится.",
+    "unlinkConfirmLabel": "Отвязать",
+    "productUnlinked": "Товар отвязан от {adapter}",
+    "noMapping": "Нет маппинга",
+    "statusSynced": "Синхронизирован",
+    "statusNotSynced": "Не синхронизирован",
+    "statusError": "Ошибка",
+    "statusModified": "Изменён",
+    "justNow": "только что",
+    "minutesAgo": "{count} мин назад",
+    "hoursAgo": "{count} ч назад",
+    "exportTitleLinked": "Экспорт: товар #{id}",
+    "exportTitleUnlinked": "Экспорт товара #{id}",
+    "importTitle": "Импорт: товар #{id}",
+    "fieldLabels": {
+      "name": "Название",
+      "description": "Описание",
+      "price": "Цена",
+      "storageQuantity": "Остаток"
+    },
+    "updatedFieldsMessage": "Обновлено: {fields}"
+  },
+  "composables": {
+    "useStoreDateTime": {
+      "today": "Сегодня",
+      "yesterday": "Вчера"
+    }
+  },
+  "products": {
+    "productsTable": {
+      "sortHeaderHint": "Нажмите для сортировки",
+      "noResults": "Ничего не найдено"
+    },
+    "storeAttributeForm": {
+      "selectPlaceholder": "Выберите...",
+      "unknownTypePlaceholder": "Неизвестный тип: {type}",
+      "emptyTitle": "Нет глобальных атрибутов",
+      "emptyDescription": "Добавьте глобальные атрибуты в настройках магазина — они появятся здесь."
+    },
+    "productAttributeForm": {
+      "selectPlaceholder": "Выберите...",
+      "unknownTypePlaceholder": "Неизвестный тип: {type}",
+      "emptyTitle": "Нет атрибутов для заполнения",
+      "emptyDescription": "Добавьте атрибуты в категорию товара — они появятся здесь."
+    },
+    "bulkAdapterDialog": {
+      "title": "Действие на адаптере ({count} товаров)",
+      "description": "Выберите адаптер и действие для выбранных товаров.",
+      "adapterLabel": "Адаптер",
+      "adapterPlaceholder": "Выберите адаптер",
+      "loadingCapabilities": "Загрузка возможностей адаптера...",
+      "actionLabel": "Действие",
+      "checkingLinks": "Проверка связей...",
+      "linkedLabel": "Связано",
+      "unlinkedLabel": "Не связано",
+      "noneLinkedWarning": "Ни один из выбранных товаров не связан с этим адаптером",
+      "runButton": "Выполнить",
+      "operationStarted": "Операция запущена",
+      "actions": {
+        "export": {
+          "label": "Экспортировать товары",
+          "description": "Создать или обновить товары на адаптере"
+        },
+        "import": {
+          "label": "Импортировать товары",
+          "description": "Обновить локальные товары данными с адаптера"
+        },
+        "exportPrices": {
+          "label": "Экспортировать цены",
+          "description": "Отправить текущие цены на адаптер"
+        },
+        "exportStocks": {
+          "label": "Экспортировать остатки",
+          "description": "Отправить текущие остатки на адаптер"
+        },
+        "importPrices": {
+          "label": "Импортировать цены",
+          "description": "Обновить локальные цены данными с адаптера"
+        }
+      }
+    },
+    "bulkEditDialog": {
+      "title": "Массовое редактирование",
+      "selectedCount": "Выбрано товаров: {count}",
+      "differentCategoriesWarning": "У выбранных товаров разные категории",
+      "productFieldsTab": "Поля товара",
+      "categoryFieldsTab": "Атрибуты категории",
+      "globalFieldsTab": "Глобальные атрибуты",
+      "namePlaceholder": "Новое название",
+      "descriptionPlaceholder": "Новое описание",
+      "storageQuantityLabel": "Остаток",
+      "priceLabel": "Цена",
+      "barcodeLabel": "Штрихкод",
+      "generateBarcodesLabel": "Сгенерировать штрихкоды для товаров без них",
+      "noCategoryAttributes": "Нет атрибутов категории для редактирования",
+      "noGlobalAttributes": "Нет глобальных атрибутов для редактирования",
+      "selectFieldToEdit": "Выберите хотя бы одно поле для редактирования",
+      "updatedCount": "Обновлено товаров: {count}",
+      "updateFailed": "Не удалось обновить товары"
+    },
+    "columns": {
+      "imageLabel": "Фото",
+      "skuLabel": "SKU",
+      "barcodeLabel": "Штрихкод",
+      "categoryLabel": "Категория",
+      "storageQuantityLabel": "Остаток",
+      "priceLabel": "Цена",
+      "createdAtLabel": "Создан",
+      "updatedAtLabel": "Обновлён",
+      "copySkuTooltip": "Скопировать SKU",
+      "presets": {
+        "none": {
+          "label": "Без объединения",
+          "description": "Показывать все колонки раздельно"
+        },
+        "product": {
+          "label": "Товар",
+          "description": "Объединить фото, название и категорию в одну колонку"
+        },
+        "productSku": {
+          "label": "Товар и SKU",
+          "description": "Объединить фото, название, SKU и категорию в одну колонку"
+        },
+        "nameSku": {
+          "label": "Название и SKU",
+          "description": "Объединить название и SKU в одну колонку"
+        },
+        "nameCategorySku": {
+          "label": "Название, категория и SKU",
+          "description": "Объединить название, категорию и SKU в одну колонку"
+        }
+      }
+    },
+    "productTransferDialog": {
+      "previewLoadFailed": "Не удалось загрузить предпросмотр",
+      "targetStoreFallback": "целевой магазин",
+      "queuedMoveHeadline": "Перемещение в «{store}» запланировано",
+      "queuedCloneHeadline": "Копирование в «{store}» запланировано",
+      "progressWithFiles": "Прогресс переноса {count} файлов можно отслеживать в панели операций",
+      "progressGeneric": "Прогресс можно отслеживать в панели операций",
+      "dialogTitle": "Перенести товар в другой магазин",
+      "modeLabel": "Режим",
+      "cloneAction": "Копировать",
+      "moveAction": "Переместить",
+      "cloneModeHint": "Товар будет скопирован в целевой магазин, оригинал останется без изменений.",
+      "moveModeHint": "Товар будет перемещён в целевой магазин, оригинал попадёт в корзину текущего магазина.",
+      "targetStoreLabel": "Целевой магазин",
+      "loadingStoresPlaceholder": "Загрузка магазинов...",
+      "chooseStorePlaceholder": "Выберите магазин",
+      "currentStoreSuffix": "текущий",
+      "checkingPreview": "Проверка данных...",
+      "skuResolvedLabel": "Новый SKU: {sku}",
+      "skuConflictLabel": "SKU «{sku}» уже используется в целевом магазине",
+      "newSkuPlaceholder": "Новый SKU",
+      "categoryLabel": "Категория",
+      "sourceCategoryLabel": "Исходная категория:",
+      "foundSameNameInTarget": "Найдена категория с таким же названием в целевом магазине.",
+      "notFoundInTarget": "В целевом магазине не найдена категория с таким названием.",
+      "useFoundCategory": "Использовать найденную категорию «{name}»",
+      "createSameCategory": "Создать такую же категорию",
+      "noCategory": "Без категории",
+      "willBeAddedPrefix": "Будут добавлены:",
+      "wontFitPrefix": "Не поместятся:",
+      "addMissingAttrsPrefix": "Добавить",
+      "addMissingAttrsSuffix": "в категорию «{name}»",
+      "storeAttributesSummary": "Глобальные атрибуты: сопоставлено {mapped} из {total}",
+      "storeAttributesMissingInTarget": "Не найдены в целевом магазине:",
+      "groupLabel": "Группа товаров",
+      "noGroup": "Без группы",
+      "addToExistingGroup": "Добавить в существующую группу",
+      "createNewGroup": "Создать новую группу",
+      "chooseGroupPlaceholder": "Выберите группу",
+      "newGroupNamePlaceholder": "Название новой группы",
+      "linksWillBreakAfterMovePrefix": "После переноса будут разорваны",
+      "withAdaptersSuffix": "с адаптерами",
+      "originalHasLinksPrefix": "У оригинала есть",
+      "moveLinksExplanation": "Связи с адаптерами не переносятся — их нужно будет настроить заново в целевом магазине.",
+      "cloneLinksExplanation": "Новый товар будет создан без связей с адаптерами — оригинал сохранит свои связи.",
+      "confirmBreakLinksLabel": "Я понимаю, что связи с адаптерами будут разорваны",
+      "alsoMovesLabel": "Также будет перемещено:",
+      "alsoCopiesLabel": "Также будет скопировано:",
+      "inFoldersPrefix": "в",
+      "attrMappableOne": "атрибут будет сопоставлен",
+      "attrMappableFew": "атрибута будет сопоставлено",
+      "attrMappableMany": "атрибутов будет сопоставлено",
+      "attrWillBeAddedOne": "атрибут будет добавлен",
+      "attrWillBeAddedFew": "атрибута будет добавлено",
+      "attrWillBeAddedMany": "атрибутов будет добавлено",
+      "attrWontFitOne": "атрибут не подходит",
+      "attrWontFitFew": "атрибута не подходят",
+      "attrWontFitMany": "атрибутов не подходят",
+      "missingAttrOne": "атрибут",
+      "missingAttrFew": "атрибута",
+      "missingAttrMany": "атрибутов",
+      "linkOne": "связь",
+      "linkFew": "связи",
+      "linkMany": "связей",
+      "fileOne": "файл",
+      "fileFew": "файла",
+      "fileMany": "файлов",
+      "folderOne": "папка",
+      "folderFew": "папки",
+      "folderMany": "папок",
+      "imageOne": "изображение",
+      "imageFew": "изображения",
+      "imageMany": "изображений",
+      "noteOne": "заметка",
+      "noteFew": "заметки",
+      "noteMany": "заметок",
+      "variantOne": "вариант",
+      "variantFew": "варианта",
+      "variantMany": "вариантов"
+    },
+    "productGallerySidebar": {
+      "title": "Фотографии",
+      "firstIsMainHint": "Первое фото будет главным",
+      "productPhotoAlt": "Фото товара",
+      "mainBadge": "Главное"
+    },
+    "productGroupSidebar": {
+      "title": "Группа товаров",
+      "duplicate": "Дублировать"
+    },
+    "productFileManager": {
+      "storageRootLabel": "Хранилище",
+      "filesRootLabel": "Файлы",
+      "storeSharedStorageLabel": "Общее хранилище магазина",
+      "productFallback": "Товар",
+      "productWithIdFallback": "Товар #{id}",
+      "tagColorRed": "Красный",
+      "tagColorBlue": "Синий",
+      "tagColorGreen": "Зелёный",
+      "tagColorYellow": "Жёлтый",
+      "tagColorOrange": "Оранжевый",
+      "tagColorPurple": "Фиолетовый",
+      "tagColorBlack": "Чёрный",
+      "tagColorGray": "Серый",
+      "tagRemovedFromFiles": "Метка снята с {count} файлов",
+      "tagAssignedToFiles": "Метка назначена {count} файлам",
+      "newFolderDefaultName": "Новая папка",
+      "folderNotFound": "Папка «{name}» не найдена",
+      "dragItemsCount": "{count} объектов",
+      "uploadingFileTitle": "Загрузка файла: {subject}",
+      "uploadingFilesTitle": "Загрузка файлов ({count}): {subject}",
+      "logCancelledEntry": "Отменено: {name}",
+      "errorFallback": "Неизвестная ошибка",
+      "uploadedSummary": "Загружено файлов: {count}",
+      "uploadedSummaryErrorsSuffix": ", ошибок: {count}",
+      "uploadCancelledSummary": "Отменено. Загружено: {completed}, отменено: {cancelled}",
+      "folderDeleted": "Папка удалена",
+      "linkCopied": "Ссылка скопирована",
+      "copyFailed": "Не удалось скопировать",
+      "archiveBuilding": "Формирование архива...",
+      "deleteFileTitle": "Удалить файл?",
+      "deleteSelectedFilesTitle": "Удалить выбранные файлы?",
+      "deleteFileIrreversible": "Файл будет удалён без возможности восстановления.",
+      "deleteFilesCountIrreversible": "Будет удалено файлов: {count}. Это действие нельзя отменить.",
+      "dropFilesToUpload": "Отпустите файлы, чтобы загрузить",
+      "emptyFolderTitle": "Здесь пока нет файлов",
+      "emptyFolderDescription": "Загрузите файлы или создайте папку",
+      "folderTypeLabel": "Папка",
+      "fileCountOne": "файл",
+      "fileCountMany": "файлов",
+      "changeColorTitle": "Изменить цвет",
+      "newTagPlaceholder": "Название метки",
+      "copyPublicLinkTitle": "Скопировать публичную ссылку",
+      "openAction": "Открыть",
+      "downloadArchiveAction": "Скачать архивом",
+      "shareAction": "Поделиться",
+      "renameAction": "Переименовать",
+      "createFolderAction": "Создать папку",
+      "uploadFilesAction": "Загрузить файлы",
+      "deleteFolderTitle": "Удалить папку «{name}»?",
+      "deleteFolderContentsLabel": "Также удалить содержимое: {fileCount} файлов, {subfolderCount} подпапок",
+      "shareFolderTitle": "Поделиться папкой",
+      "shareFileTitle": "Поделиться файлом",
+      "allFilesFallback": "Все файлы",
+      "expirationPlaceholder": "Срок действия ссылки",
+      "ttl1Hour": "1 час",
+      "ttl1Day": "1 день",
+      "ttl7Days": "7 дней",
+      "ttl30Days": "30 дней",
+      "ttlPermanent": "Без ограничения",
+      "createLinkAction": "Создать ссылку",
+      "cancelUploadsAction": "Отменить загрузку",
+      "selectedCount": "Выбрано: {count}",
+      "deselectAction": "Снять выделение",
+      "tagLabel": "Метка",
+      "noTagsLabel": "Нет меток",
+      "deletingFileTitle": "Удаление файла: {subject}",
+      "deletingFilesTitle": "Удаление файлов ({count}): {subject}",
+      "deletedSummary": "Удалено файлов: {count}",
+      "deleteErrorFallback": "Не удалось удалить файлы"
+    },
+    "importExcelDialog": {
+      "title": "Импорт из Excel",
+      "stepUploadDescription": "Загрузите файл .xlsx с изменениями товаров",
+      "stepPreviewDescription": "Проверьте изменения перед применением",
+      "stepApplyingDescription": "Применение изменений...",
+      "stepResultDescription": "Результат импорта",
+      "dropzoneTitle": "Перетащите файл сюда или нажмите для выбора",
+      "dropzoneHint": "Поддерживается формат .xlsx",
+      "totalRows": "Всего строк:",
+      "changedCount": "Изменено:",
+      "unchangedCount": "Без изменений:",
+      "errorCount": "Ошибок:",
+      "errorsTitle": "Ошибки",
+      "rowLabel": "Строка {row}",
+      "productIdSuffix": "(товар #{id})",
+      "applyChanges": "Применить изменения",
+      "unsupportedFormat": "Поддерживаются только файлы .xlsx",
+      "processError": "Не удалось обработать файл",
+      "applyError": "Не удалось применить изменения",
+      "updatedCount": "Обновлено товаров: {count}"
+    },
+    "productVariantsEditor": {
+      "title": "Размеры",
+      "emptyTitle": "Нет размеров",
+      "emptyDescription": "Добавьте размеры товара, чтобы вести отдельный учёт по каждому.",
+      "sizeHeader": "Размер",
+      "skuHeader": "SKU",
+      "barcodeHeader": "Баркод",
+      "priceHeader": "Цена",
+      "quantityHeader": "Остаток",
+      "deleteConfirmTitle": "Удалить размер?",
+      "deleteConfirmDescription": "Размер «{name}» будет удалён без возможности восстановления.",
+      "unnamedFallback": "без названия",
+      "saving": "Сохранение…",
+      "variantAdded": "Размер добавлен",
+      "variantDeleted": "Размер удалён"
+    }
+  },
+  "fieldChangesTable": {
+    "fieldHeader": "Поле",
+    "currentHeader": "Текущее",
+    "newHeader": "Новое",
+    "irreversibleModifiers": "Необратимые модификаторы",
+    "emptyValue": "(пусто)",
+    "noChangesTitle": "Изменений не обнаружено",
+    "noChangesDescription": "Данные на адаптере совпадают с локальными."
+  },
+  "pages": {
+    "productEditPage": {
+      "breadcrumbEditing": "Редактирование",
+      "validation": {
+        "nameRequired": "Название обязательно",
+        "quantityNonNegative": "Количество не может быть отрицательным"
+      },
+      "attributesCount": {
+        "formOne": "атрибут",
+        "formFew": "атрибута",
+        "formMany": "атрибутов"
+      },
+      "discardChangesConfirm": {
+        "title": "Несохранённые изменения",
+        "description": "Есть несохранённые изменения. Уйти без сохранения?",
+        "confirmLabel": "Уйти",
+        "cancelLabel": "Остаться"
+      },
+      "toast": {
+        "updated": "Товар успешно обновлён.",
+        "fileDeleted": "Файл успешно удалён.",
+        "deleted": "Товар успешно удалён.",
+        "noteAdded": "Новая заметка добавлена.",
+        "skuChangedWithErrors": "Артикул изменён локально. Ошибки на адаптерах ({count}):\n{details}",
+        "skuChangedOnAdapters": "Артикул изменён локально и на {count} адаптер(ах)",
+        "skuChanged": "Артикул изменён",
+        "groupChanged": "Группа изменена",
+        "removedFromGroup": "Товар удалён из группы"
+      },
+      "fields": {
+        "group": {
+          "noGroupOption": "Без группы",
+          "label": "Группа товаров",
+          "placeholder": "Выберите группу...",
+          "editLink": "Редактировать группу"
+        },
+        "category": {
+          "label": "Категория",
+          "placeholder": "Выберите категорию...",
+          "editLink": "Редактировать категорию"
+        },
+        "sku": {
+          "label": "Артикул",
+          "changeAction": "Изменить артикул"
+        },
+        "barcode": {
+          "label": "Штрихкод (EAN)"
+        },
+        "name": {
+          "label": "Название"
+        },
+        "description": {
+          "label": "Описание"
+        },
+        "quantity": {
+          "label": "Количество на складе"
+        },
+        "price": {
+          "label": "Цена ({currency})",
+          "defaultCurrencyFallback": "базовой валюте магазина"
+        },
+        "oldPrice": {
+          "label": "Старая цена ({currency})",
+          "description": "Зачёркнутая цена до скидки. Скидка % считается от неё и поля «Цена» выше."
+        },
+        "discount": {
+          "label": "Скидка (%)",
+          "description": "Вычисляется из старой цены и текущей цены"
+        },
+        "minPrice": {
+          "label": "Минимальная цена ({currency})"
+        },
+        "netPrice": {
+          "label": "Себестоимость ({currency})"
+        },
+        "currency": {
+          "label": "Валюта (экспорт)",
+          "description": "Суммы хранятся в {currency}",
+          "defaultCurrencyFallback": "базовой валюте магазина"
+        }
+      },
+      "removeGalleryImageConfirm": {
+        "title": "Удалить фото из галереи?",
+        "description": "Изображение будет откреплено от товара. Файл останется в хранилище."
+      },
+      "tabs": {
+        "properties": "Свойства",
+        "notes": "Заметки",
+        "files": "Файлы",
+        "imagesShort": "Фото",
+        "images": "Изображения",
+        "sizes": "Размеры",
+        "marketplacesShort": "АД"
+      },
+      "sections": {
+        "mainData": {
+          "title": "Основные данные",
+          "description": "Артикул, штрихкод, название и цена. Количество и цена по размерам — на вкладке «Размеры»."
+        },
+        "stock": {
+          "title": "Остатки",
+          "description": "Наличие и складские параметры товара"
+        },
+        "price": {
+          "title": "Цена",
+          "description": "Все цены хранятся в {currency}."
+        },
+        "extendedPrice": {
+          "title": "Расширенные параметры цены",
+          "description": "Для маркетплейсов со скидками, минимальной ценой и экспортом в другой валюте"
+        },
+        "categoryAttributes": {
+          "title": "Атрибуты категории",
+          "description": "{count} {unit}. Значения из настроек категории «{category}»."
+        },
+        "storeAttributes": {
+          "description": "{count} {unit}. Общие для всех товаров магазина."
+        }
+      },
+      "skuDialog": {
+        "title": "Изменить артикул",
+        "description": "Артикул будет изменён локально и на всех привязанных адаптерах.",
+        "currentSkuLabel": "Текущий артикул",
+        "newSkuLabel": "Новый артикул",
+        "newSkuPlaceholder": "Введите новый артикул",
+        "changeAction": "Изменить"
+      },
+      "notesEmpty": {
+        "title": "Нет заметок",
+        "description": "Добавьте заметку, чтобы сохранить важную информацию о товаре"
+      },
+      "actions": {
+        "duplicate": "Дублировать"
+      },
+      "deleteConfirm": {
+        "title": "Удалить товар {sku}?",
+        "description": "Товар будет перемещён в корзину. Его можно будет восстановить.",
+        "confirmAction": "В корзину"
+      },
+      "unsavedChanges": "Несохранённые изменения",
+      "lightbox": {
+        "prevPhoto": "Предыдущее фото",
+        "productPhotoAlt": "Фото товара",
+        "nextPhoto": "Следующее фото"
+      }
+    },
+    "productGroupEditPage": {
+      "breadcrumbNewGroup": "Новая группа",
+      "breadcrumbEditing": "Редактирование",
+      "productsCount": {
+        "formOne": "товар",
+        "formFew": "товара",
+        "formMany": "товаров"
+      },
+      "grouping": {
+        "viaCardField": "Через поле карточки",
+        "viaMergeApi": "Через API слияния",
+        "supported": "Поддерживается",
+        "updateLink": "Обновить привязку",
+        "linkGroup": "Привязать группу",
+        "mergeCards": "Объединить карточки",
+        "exportAction": "Экспортировать"
+      },
+      "toast": {
+        "nameRequired": "Введите название группы",
+        "created": "Группа создана",
+        "saved": "Группа сохранена",
+        "productsAdded": "Добавлено {count} товаров",
+        "productRemoved": "Товар удалён из группы",
+        "orderSaved": "Порядок сохранён",
+        "exportDone": "Готово",
+        "linkCreated": "Привязка создана. {message}",
+        "cardsMerged": "Карточки объединены на маркетплейсе. {message}"
+      },
+      "syncStatus": {
+        "synced": "Синхронизировано",
+        "pending": "Ожидает",
+        "error": "Ошибка"
+      },
+      "newGroupTitle": "Новая группа",
+      "newGroupHint": "Задайте название и описание — затем добавьте товары для объединения на маркетплейсе",
+      "editGroupHint": "Название и описание группы в каталоге. Описание видно только внутри системы.",
+      "actions": {
+        "createGroup": "Создать группу",
+        "addProducts": "Добавить товары"
+      },
+      "fields": {
+        "name": {
+          "placeholder": "Введите название"
+        },
+        "description": {
+          "placeholder": "Необязательно"
+        }
+      },
+      "sections": {
+        "groupProducts": {
+          "title": "Товары в группе",
+          "description": "{count} {unit}. Порядок строк определяет порядок вариантов в объединённой карточке — перетащите строки, чтобы изменить порядок."
+        },
+        "marketplaceMerge": {
+          "title": "Объединение на маркетплейсах",
+          "description": "Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары. Wildberries — через API слияния, если товары уже экспортированы.",
+          "refreshStatuses": "Обновить статусы",
+          "noConnections": "Нет подключённых адаптеров. Подключите маркетплейс в разделе «Адаптеры».",
+          "checkingCapabilities": "Проверка возможностей адаптеров…",
+          "supportedTitle": "Поддерживают объединение",
+          "unsupportedTitle": "Без поддержки объединения",
+          "notSupported": "Не поддерживается"
+        }
+      },
+      "membersEmpty": {
+        "title": "Нет товаров",
+        "description": "Добавьте товары, которые должны объединяться на маркетплейсе в одну карточку"
+      },
+      "table": {
+        "sku": "Артикул",
+        "category": "Категория"
+      },
+      "removeProductConfirm": {
+        "title": "Удалить товар из группы?",
+        "description": "Товар останется в каталоге, но будет исключён из группы."
+      },
+      "addProductsDialog": {
+        "title": "Добавить товары в группу",
+        "description": "Найдите товары в каталоге и отметьте те, что войдут в группу «{name}». Уже добавленные здесь не показываются.",
+        "searchPlaceholder": "Поиск по названию или артикулу...",
+        "searchAction": "Найти",
+        "selectedToAdd": "{unit} к добавлению",
+        "clearSelection": "Сбросить выбор",
+        "selectAllOnPage": "Выбрать все на странице",
+        "searching": "Ищем товары…",
+        "noAvailableProductsTitle": "Нет доступных товаров",
+        "noAvailableProductsDescription": "Все товары уже в группе или поиск не дал результатов. Попробуйте другой запрос.",
+        "totalInCatalog": "{count} в каталоге",
+        "availableOnPage": "{count} доступно на странице",
+        "firstPage": "Первая страница",
+        "prevPage": "Предыдущая страница",
+        "nextPage": "Следующая страница",
+        "lastPage": "Последняя страница",
+        "reorderHint": "Порядок в группе можно изменить перетаскиванием строк после добавления.",
+        "addCount": "Добавить {count} {unit}",
+        "addToGroup": "Добавить в группу"
+      }
+    },
+    "categoriesPage": {
+      "breadcrumb": "Категории",
+      "nameRequired": "Введите название категории",
+      "created": "Категория создана",
+      "deleted": "Категория удалена",
+      "title": "Категории",
+      "description": "Управление категориями товаров",
+      "addCategory": "Добавить категорию",
+      "newCategoryTitle": "Новая категория",
+      "newCategoryDescription": "Введите название и описание для новой категории",
+      "namePlaceholder": "Название категории",
+      "descriptionPlaceholder": "Описание (необязательно)",
+      "emptyTitle": "Нет категорий",
+      "emptyDescription": "Создайте первую категорию для товаров",
+      "productsHeader": "Товары",
+      "attributesHeader": "Атрибуты",
+      "deleteTitle": "Удалить категорию?",
+      "deleteDescription": "Вы уверены что хотите удалить категорию «{name}»? Это действие нельзя отменить."
+    },
+    "notFoundPage": {
+      "errorCode": "Ошибка 404",
+      "title": "Страница не найдена",
+      "description": "Запрошенный адрес не существует или был перемещён.",
+      "goBack": "Вернуться",
+      "home": "Главная"
+    },
+    "productCreationPage": {
+      "breadcrumbTitle": "Создание товара",
+      "validation": {
+        "skuRequired": "Артикул обязателен",
+        "nameRequired": "Название обязательно",
+        "quantityNonNegative": "Количество не может быть отрицательным",
+        "categoryRequired": "Выберите категорию",
+        "categoryRequiredToast": "Выберите категорию товара"
+      },
+      "removePhotoConfirm": {
+        "title": "Убрать фото из списка?",
+        "description": "Изображение не будет добавлено к товару.",
+        "confirmLabel": "Убрать"
+      },
+      "attributesCount": {
+        "formOne": "атрибут",
+        "formFew": "атрибута",
+        "formMany": "атрибутов"
+      },
+      "fields": {
+        "group": {
+          "noGroupOption": "Без группы",
+          "label": "Группа товаров",
+          "placeholder": "Выберите группу...",
+          "editLink": "Редактировать группу"
+        },
+        "category": {
+          "label": "Категория",
+          "placeholder": "Выберите категорию...",
+          "emptyHint": "Сначала создайте категорию товаров"
+        },
+        "sku": {
+          "label": "Артикул"
+        },
+        "barcode": {
+          "label": "Штрихкод (EAN)"
+        },
+        "name": {
+          "label": "Название"
+        },
+        "description": {
+          "label": "Описание"
+        },
+        "quantity": {
+          "label": "Количество на складе"
+        },
+        "price": {
+          "label": "Цена ({currency})",
+          "defaultCurrencyFallback": "базовой валюте магазина"
+        },
+        "oldPrice": {
+          "label": "Старая цена ({currency})",
+          "description": "Зачёркнутая цена до скидки. Скидка % считается от неё и поля «Цена» выше."
+        },
+        "discount": {
+          "label": "Скидка (%)",
+          "description": "Вычисляется из старой цены и текущей цены"
+        },
+        "minPrice": {
+          "label": "Минимальная цена ({currency})"
+        },
+        "netPrice": {
+          "label": "Себестоимость ({currency})"
+        },
+        "currency": {
+          "label": "Валюта (экспорт)",
+          "description": "Суммы хранятся в {currency}",
+          "defaultCurrencyFallback": "базовой валюте магазина"
+        }
+      },
+      "toast": {
+        "createdSuccess": "Товар успешно создан.",
+        "createdImagesFailed": "Товар создан, но не удалось загрузить фотографии.",
+        "createdAndAddedToGroup": "Товар создан и добавлен в группу.",
+        "addedToGroupSuffix": "{message} Товар добавлен в группу.",
+        "addToGroupFailedSuffix": "{message} Не удалось добавить в группу."
+      },
+      "sections": {
+        "mainData": {
+          "title": "Основные данные",
+          "description": "Категория, артикул, штрихкод, название и цена. Количество и цена по размерам — если у категории включены размеры."
+        },
+        "stock": {
+          "title": "Остатки",
+          "description": "Наличие и складские параметры товара"
+        },
+        "price": {
+          "title": "Цена",
+          "description": "Все цены хранятся в {currency}."
+        },
+        "extendedPrice": {
+          "title": "Расширенные параметры цены",
+          "description": "Для маркетплейсов со скидками, минимальной ценой и экспортом в другой валюте"
+        },
+        "categoryAttributes": {
+          "title": "Атрибуты категории",
+          "description": "{count} {unit}. Значения из настроек категории «{category}»."
+        },
+        "storeAttributes": {
+          "description": "{count} {unit}. Общие для всех товаров магазина."
+        }
+      },
+      "actions": {
+        "createProduct": "Создать товар"
+      }
+    },
+    "productGroupsPage": {
+      "breadcrumb": "Группы товаров",
+      "nameRequired": "Введите название группы",
+      "created": "Группа создана",
+      "deleted": "Группа удалена",
+      "syncStatus": {
+        "synced": "Синхронизировано",
+        "pending": "Ожидает",
+        "error": "Ошибка"
+      },
+      "title": "Группы товаров",
+      "description": "Объединение товаров в группы для управления и синхронизации",
+      "createGroup": "Создать группу",
+      "newGroupTitle": "Новая группа",
+      "newGroupDescription": "Введите название и описание для новой группы товаров",
+      "namePlaceholder": "Название группы",
+      "descriptionPlaceholder": "Описание (необязательно)",
+      "emptyTitle": "Нет групп товаров",
+      "emptyDescription": "Создайте первую группу для объединения товаров",
+      "productsHeader": "Товары",
+      "marketplacesHeader": "Маркетплейсы",
+      "deleteTitle": "Удалить группу?",
+      "deleteDescription": "Вы уверены что хотите удалить группу «{name}»? Это действие нельзя отменить. Связи с адаптерами также будут удалены."
+    },
+    "categoryEditPage": {
+      "breadcrumbEditing": "Редактирование",
+      "attributeTypes": {
+        "text": "Текст",
+        "number": "Число",
+        "boolean": "Да/Нет",
+        "select": "Выбор",
+        "multiSelect": "Множественный выбор",
+        "unknown": "Неизвестный тип"
+      },
+      "noGroupOption": "Без группы (Прочее)",
+      "attributesCount": {
+        "one": "атрибут",
+        "few": "атрибута",
+        "many": "атрибутов"
+      },
+      "nameRequired": "Введите название категории",
+      "saved": "Категория сохранена",
+      "attrNameRequired": "Введите название атрибута",
+      "attrKeyRequired": "Введите ключ атрибута",
+      "attrUpdated": "Атрибут обновлён",
+      "attrAdded": "Атрибут добавлен",
+      "attrDeleted": "Атрибут удалён",
+      "orderSaved": "Порядок атрибутов сохранён",
+      "fileNoOptions": "Файл не содержит вариантов",
+      "importedCount": "Импортировано вариантов: {count}",
+      "noOptionsToExport": "Нет вариантов для экспорта",
+      "exportedCount": "Экспортировано вариантов: {count}",
+      "fileReadFailed": "Не удалось прочитать файл",
+      "fileReadError": "Ошибка чтения файла",
+      "editingCategoryFallback": "Редактирование категории",
+      "subtitle": "Название, описание и настройки размерной сетки для товаров категории.",
+      "namePlaceholder": "Введите название",
+      "optionalPlaceholder": "Необязательно",
+      "sizeGridLabel": "Размерная сетка",
+      "hasSizesLabel": "Товары имеют размеры",
+      "attributesCardTitle": "Атрибуты категории",
+      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара — перетащите строки, чтобы изменить порядок.",
+      "noAttributesTitle": "Нет атрибутов",
+      "noAttributesDescription": "Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики",
+      "addAttribute": "Добавить атрибут",
+      "keyLabel": "Ключ",
+      "groupLabel": "Группа",
+      "typeHeader": "Тип",
+      "optionsHeader": "Опции",
+      "requiredFieldTitle": "Обязательное поле",
+      "deleteAttributeTitle": "Удалить атрибут?",
+      "deleteAttributeDescription": "Вы уверены что хотите удалить атрибут «{name}»? Все значения этого атрибута у товаров будут удалены.",
+      "editAttributeTitle": "Редактировать атрибут",
+      "newAttributeTitle": "Новый атрибут",
+      "attributeDialogSubtitle": "Параметры поля на странице товара в этой категории",
+      "basicSection": "Основное",
+      "namePlaceholderExamples": "Цвет, Размер, Бренд",
+      "keyDescription": "Используется в API и экспорте",
+      "typeLabel": "Тип значения",
+      "optionsSection": "Варианты",
+      "export": "Экспорт",
+      "import": "Импорт",
+      "optionsWord": "вариантов",
+      "largeOptionsHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+      "clearOptions": "Очистить",
+      "optionsPlaceholderExample": "Красный, Синий, Зелёный — или value:подпись",
+      "optionsFormatHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+      "additionalSection": "Дополнительно",
+      "defaultValueLabel": "Значение по умолчанию",
+      "notSelectedPlaceholder": "Не выбрано",
+      "lazyLoadHint": "Список загрузится при открытии выбора",
+      "multiValuePlaceholder": "значение1, значение2",
+      "multiValueHint": "Несколько значений через запятую",
+      "descriptionPlaceholder": "Подсказка для пользователя на странице товара",
+      "descriptionInTooltipLabel": "Описание в подсказке",
+      "descriptionInTooltipHint": "Скрывать длинное описание за иконкой на странице товара",
+      "groupNamePlaceholder": "Название группы",
+      "noGroupPlaceholder": "Без группы",
+      "chooseFromListLabel": "Выбрать из списка",
+      "customGroupLabel": "Другая группа",
+      "multilineLabel": "Многострочный текст",
+      "multilineHint": "Поле с переносами строк на странице товара",
+      "showOnProductPageLabel": "На странице товара",
+      "showOnProductPageHint": "Показывать при редактировании товара",
+      "requiredFieldHint": "Требовать заполнение при создании товара"
+    },
+    "storeAttributesPage": {
+      "types": {
+        "text": "Текст",
+        "number": "Число",
+        "boolean": "Да/Нет",
+        "select": "Выбор",
+        "multiSelect": "Множественный выбор",
+        "barcode": "Штрихкод (Barcode)",
+        "unknown": "Неизвестный тип"
+      },
+      "validation": {
+        "nameRequired": "Введите название атрибута",
+        "keyRequired": "Введите ключ атрибута"
+      },
+      "toast": {
+        "updated": "Атрибут обновлён",
+        "added": "Атрибут добавлен",
+        "deletedWithValues": "Атрибут удалён ({count} значений удалено)",
+        "deleted": "Атрибут удалён",
+        "orderSaved": "Порядок атрибутов сохранён"
+      },
+      "options": {
+        "fileHasNoOptions": "Файл не содержит вариантов",
+        "imported": "Импортировано вариантов: {count}",
+        "noOptionsToExport": "Нет вариантов для экспорта",
+        "exported": "Экспортировано вариантов: {count}",
+        "readFailed": "Не удалось прочитать файл",
+        "readError": "Ошибка чтения файла"
+      },
+      "header": {
+        "title": "Глобальные атрибуты",
+        "description": "Атрибуты, применяемые ко всем товарам магазина независимо от категории",
+        "addButton": "Добавить атрибут"
+      },
+      "empty": {
+        "title": "Нет глобальных атрибутов",
+        "description": "Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
+      },
+      "table": {
+        "name": "Название",
+        "key": "Ключ",
+        "type": "Тип",
+        "options": "Опции",
+        "requiredShort": "Обяз.",
+        "description": "Описание"
+      },
+      "deleteDialog": {
+        "title": "Удалить атрибут?",
+        "description": "Вы уверены что хотите удалить атрибут «{name}»? Все значения этого атрибута у товаров будут удалены."
+      },
+      "dialog": {
+        "newTitle": "Новый атрибут",
+        "editTitle": "Редактировать атрибут",
+        "description": "Параметры поля для всех товаров магазина",
+        "sectionBasic": "Основное",
+        "nameLabel": "Название",
+        "namePlaceholder": "Бренд, Страна, Артикул",
+        "keyLabel": "Ключ",
+        "keyDescription": "Используется в API и экспорте",
+        "typeLabel": "Тип значения",
+        "sectionOptions": "Варианты",
+        "exportButton": "Экспорт",
+        "importButton": "Импорт",
+        "optionsCountSuffix": "вариантов",
+        "optionsStoredHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+        "clearButton": "Очистить",
+        "optionsPlaceholder": "Красный, Синий, Зелёный — или value:подпись",
+        "optionsTextareaHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+        "sectionAdditional": "Дополнительно",
+        "defaultValueLabel": "Значение по умолчанию",
+        "notSelectedPlaceholder": "Не выбрано",
+        "optionalPlaceholder": "Необязательно",
+        "optionsWillLoadHint": "Список загрузится при открытии выбора",
+        "multiValuePlaceholder": "значение1, значение2",
+        "multiValueHint": "Несколько значений через запятую",
+        "descriptionLabel": "Описание",
+        "descriptionPlaceholder": "Подсказка для пользователя на странице товара",
+        "descriptionInTooltipLabel": "Описание в подсказке",
+        "descriptionInTooltipHint": "Скрывать длинное описание за иконкой на странице товара",
+        "multilineLabel": "Многострочный текст",
+        "multilineHint": "Поле с переносами строк на странице товара",
+        "showOnProductPageLabel": "На странице товара",
+        "showOnProductPageHint": "Показывать при редактировании товара",
+        "requiredFieldLabel": "Обязательное поле",
+        "requiredFieldHint": "Требовать заполнение при создании товара"
+      }
+    },
+    "storeStoragePage": {
+      "breadcrumb": "Хранилище",
+      "title": "Хранилище",
+      "description": "Общие файлы магазина, не привязанные к конкретному товару",
+      "loading": "Загрузка хранилища...",
+      "storageLabel": "Общее хранилище магазина"
+    },
+    "toolsPage": {
+      "breadcrumb": "Инструменты",
+      "title": "Инструменты",
+      "description": "Дополнительные функции и настройки",
+      "emptyTitle": "Пока нет дополнительных инструментов",
+      "emptyDescription": "Категории и атрибуты доступны через меню пользователя"
+    },
+    "productsPage": {
+      "toast": {
+        "bulkDeleted": "Удалено товаров: {count}",
+        "bulkDeleteFailed": "Не удалось удалить товары",
+        "restored": "Товар восстановлен",
+        "permanentlyDeleted": "Товар удалён навсегда",
+        "movedToTrash": "Товар перемещён в корзину",
+        "moveToTrashFailed": "Не удалось переместить товар в корзину",
+        "bulkRestored": "Восстановлено товаров: {count}",
+        "bulkPermanentlyDeleted": "Удалено навсегда: {count}",
+        "fileExported": "Файл экспортирован",
+        "exportFailed": "Не удалось экспортировать"
+      },
+      "breadcrumbTrashWithCount": "Корзина товаров ({count})",
+      "breadcrumbTrash": "Корзина товаров",
+      "filters": {
+        "allCategories": "Все категории",
+        "noCategory": "Без категории"
+      },
+      "perPageLabel": "по",
+      "selectedCount": "Выбрано: {count}",
+      "bulkEditFromTable": "Редактирование из таблицы",
+      "moveToTrash": "В корзину",
+      "restoring": "Восстановление...",
+      "excelDialog": {
+        "title": "Редактирование из таблицы",
+        "description": "Действие для выбранных {count} товаров",
+        "exporting": "Экспорт...",
+        "downloadTemplate": "Скачать шаблон редактирования",
+        "uploadChanges": "Загрузить изменения из файла"
+      },
+      "bulkTrashConfirm": {
+        "description": "Выбранные товары будут перемещены в корзину. Их можно будет восстановить.",
+        "moving": "Перемещение..."
+      },
+      "bulkPermanentDeleteConfirm": {
+        "description": "Вы собираетесь безвозвратно удалить {count} товаров. Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.",
+        "deleting": "Удаление..."
+      }
+    },
+    "aiModelsPage": {
+      "apiUrlRequiredError": "Сначала укажите API URL",
+      "modelsNotFoundError": "Модели не найдены — проверьте URL и ключ",
+      "settingsSaved": "Настройки сохранены",
+      "fillRequiredFieldsError": "Заполните название, API URL и Model ID",
+      "apiKeyRequiredError": "API ключ обязателен при создании",
+      "modelUpdated": "Модель обновлена",
+      "deleteModelTitle": "Удалить модель?",
+      "deleteModelDescription": "Удалить «{name}»? Это действие необратимо.",
+      "modelDeleted": "Модель удалена",
+      "defaultModelChanged": "Основная модель изменена",
+      "toggleEnabledError": "Не удалось изменить статус модели",
+      "connectionError": "Ошибка подключения",
+      "description": "Языковые модели и персональные настройки AI-ассистента",
+      "addModel": "Добавить модель",
+      "modelsSectionTitle": "Языковые модели",
+      "modelsSectionDescription": "Можно отключить любую модель, включая основную. Если все модели выключены, ассистент сообщит об отсутствии включённых моделей.",
+      "emptyModelsTitle": "Нет AI-моделей",
+      "emptyModelsDescription": "Добавьте языковую модель, чтобы включить AI-ассистента",
+      "providerLabel": "Провайдер",
+      "proxyTitle": "Прокси: {url}",
+      "testButton": "Тест",
+      "personalSectionTitle": "Персональные настройки",
+      "personalSectionDescription": "Влияют на стиль общения ИИ-ассистента в вашем магазине.",
+      "defaultModelLabel": "Основная модель",
+      "chooseModelPlaceholder": "Выберите модель",
+      "defaultModelHint": "Используется для всех AI-операций по умолчанию.",
+      "storeDescriptionLabel": "Описание магазина",
+      "storeDescriptionPlaceholder": "Кратко опишите ваш магазин, ассортимент, целевую аудиторию...",
+      "storeDescriptionHint": "Передаётся ИИ как контекст при каждом запросе.",
+      "communicationStyleLabel": "Стиль общения",
+      "communicationStyleProfessional": "Деловой",
+      "communicationStyleFriendly": "Дружелюбный",
+      "communicationStyleExpert": "Экспертный",
+      "responseBrevityLabel": "Краткость",
+      "responseBrevityBrief": "Кратко",
+      "responseBrevityBalanced": "Сбалансированно",
+      "responseBrevityDetailed": "Подробно",
+      "emojiUsageLabel": "Эмодзи",
+      "emojiUsageNone": "Не использовать",
+      "emojiUsageMinimal": "Минимально",
+      "emojiUsageStandard": "Стандартно",
+      "saving": "Сохранение...",
+      "editModelTitle": "Изменить модель",
+      "editModelDescription": "Обновите параметры подключения к AI API",
+      "chooseProviderPlaceholder": "Выберите провайдер",
+      "apiUrlPlaceholderOpenAi": "http://localhost:1234  (или полный путь /v1/chat/completions)",
+      "addModelDialogTitle": "Добавить модель",
+      "addModelDescription": "Укажите параметры подключения к AI API",
+      "modelAdded": "Модель добавлена",
+      "optionalSuffix": "(опционально)",
+      "baseUrlOnlyPrefix": "Можно указать только базовый URL — путь",
+      "baseUrlOnlySuffix": "добавится автоматически",
+      "proxyLabel": "Прокси",
+      "proxyPlaceholder": "http://user:pass@host:8080 или socks5://host:1080",
+      "proxyHint": "Если API модели недоступен напрямую — укажите HTTP или SOCKS5-прокси. Формат URI поддерживает логин/пароль.",
+      "apiKeyLabel": "API ключ",
+      "fetchListButton": "Получить список",
+      "enterManuallyButton": "Ввести вручную"
+    },
+    "settingsOperationsPage": {
+      "title": "Очереди и процессы",
+      "clearQueueTitle": "Очистить очередь",
+      "clearAllDescription": "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?",
+      "clearInactiveDescription": "Очистить завершённые, ошибочные и отменённые записи?",
+      "deletedRecords": "Удалено записей: {count}",
+      "description": "Управление фоновыми процессами, экспортом, импортом, изображениями и переносами",
+      "historyTitle": "История фоновых процессов",
+      "noRecords": "нет записей",
+      "clearCompletedButton": "Очистить завершённые",
+      "clearAllButton": "Очистить всё",
+      "clearInactiveButton": "Очистить неактивные",
+      "columnProcess": "Процесс",
+      "columnType": "Тип",
+      "columnProgress": "Прогресс",
+      "columnCreated": "Создан",
+      "failedItemsSuffix": "({count} ошибок)",
+      "emptyHistoryTitle": "История пуста",
+      "emptyHistoryDescription": "Здесь появятся завершённые операции: экспорт, импорт и AI-задачи."
+    },
+    "settingsOverviewPage": {
+      "statusPending": "ожидает",
+      "statusInProgress": "в процессе",
+      "settingsSaved": "Общие параметры сохранены",
+      "clearQueueTitle": "Очистить очередь",
+      "clearAllDescription": "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?",
+      "clearInactiveDescription": "Очистить завершённые, ошибочные и отменённые записи?",
+      "deletedRecords": "Удалено записей: {count}",
+      "description": "Платформенные параметры, очереди и диагностика",
+      "generalParamsTitle": "Общие параметры",
+      "generalParamsDescription": "Лимиты, rate limit и системные ограничения платформы.",
+      "notSet": "не задано",
+      "activeLabel": "· Активно:",
+      "noParamsFound": "Общие параметры не найдены.",
+      "changedParamsCount": "Изменено параметров: {count}",
+      "saveParamsButton": "Сохранить параметры",
+      "queuesSectionTitle": "Очереди и процессы",
+      "queuesSectionDescription": "Текущие очереди экспорта, импорта, изображений и история фоновых операций.",
+      "historyLabel": "История фоновых процессов",
+      "recordsCount": "{count} записей",
+      "noRecords": "нет записей",
+      "historyDescription": "Текущие и завершённые операции магазина.",
+      "clearCompletedButton": "Очистить завершённые",
+      "clearAllButton": "Очистить всё",
+      "clearInactiveButton": "Очистить неактивные"
+    },
+    "settingsUserPage": {
+      "userNameEmptyError": "Имя пользователя не может быть пустым",
+      "profileUpdated": "Профиль обновлён",
+      "passwordUpdated": "Пароль обновлён",
+      "keyNameRequiredError": "Укажите название ключа",
+      "apiKeyCreated": "API-ключ создан — скопируйте его сейчас",
+      "revokeKeyConfirm": "Отозвать этот API-ключ? Интеграции перестанут работать.",
+      "keyRevoked": "Ключ отозван",
+      "keyCopied": "Ключ скопирован",
+      "description": "Персональные параметры текущей учётной записи",
+      "saveProfileButton": "Сохранить профиль",
+      "currentPasswordLabel": "Текущий пароль",
+      "newPasswordLabel": "Новый пароль",
+      "changePasswordButton": "Сменить пароль",
+      "apiKeysIntroPrefix": "Ключи для внешних интеграций (ERP, 1С, n8n). Авторизация:",
+      "apiKeysIntroSuffix": "Полный ключ показывается только при создании.",
+      "openSwaggerLink": "Открыть Swagger (Public API v1)",
+      "copyKeyWarning": "Скопируйте ключ — повторно он не отобразится",
+      "keyNameLabel": "Название ключа",
+      "keyNamePlaceholder": "Например: 1С",
+      "createKeyButton": "Создать ключ",
+      "loadingKeys": "Загрузка ключей…",
+      "noKeysYet": "Ключей пока нет",
+      "revokedSuffix": "отозван",
+      "usedSuffix": "использован {date}"
+    },
+    "tokensPage": {
+      "tokenCreated": "Токен создан",
+      "tokenCopied": "Токен скопирован",
+      "title": "Токены приглашения",
+      "description": "Управление токенами для регистрации пользователей",
+      "createToken": "Создать токен",
+      "newTokenCreated": "Новый токен создан:",
+      "emptyTitle": "Нет токенов",
+      "emptyDescription": "Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину",
+      "columnToken": "Токен",
+      "columnStatus": "Статус",
+      "columnCreated": "Создан",
+      "columnUsed": "Использован",
+      "columnUsedBy": "Кем",
+      "statusUsed": "Использован",
+      "statusActive": "Активный"
+    },
+    "usersPage": {
+      "userUpdated": "Пользователь обновлён",
+      "userNameEmptyError": "Имя пользователя не может быть пустым",
+      "activeUsersDescription": "Активных пользователей: {count}",
+      "emptyTitle": "Нет пользователей",
+      "emptyDescription": "Пользователи появятся здесь после регистрации по приглашению",
+      "columnRole": "Роль",
+      "roleAdmin": "Админ",
+      "statusActive": "Активен",
+      "statusDisabled": "Отключён",
+      "editUser": "Редактировать пользователя",
+      "editUserDescription": "Измените имя пользователя или задайте новый пароль.",
+      "newPasswordLabel": "Новый пароль",
+      "newPasswordPlaceholder": "Оставьте пустым, если менять не нужно",
+      "globalAdminLabel": "Глобальный администратор",
+      "globalAdminHint": "Доступ ко всем общим настройкам платформы",
+      "cannotChangeSelfAdmin": "Нельзя менять собственный статус глобального администратора.",
+      "disabledUserHint": "Отключённый пользователь не может войти"
+    },
+    "storeDetailPage": {
+      "selectUserError": "Выберите пользователя",
+      "memberAdded": "Участник добавлен",
+      "removeMemberTitle": "Удалить участника?",
+      "removeMemberDescriptionNamed": "Пользователь «{name}» потеряет доступ к магазину.",
+      "removeMemberDescription": "Участник потеряет доступ к магазину.",
+      "memberRemoved": "Участник удалён",
+      "membersCountDescription": "Участников: {count}",
+      "membersSettingsDescription": "Настройки участников магазина",
+      "addMember": "Добавить участника",
+      "addMemberDialogDescription": "Выберите пользователя для добавления в магазин",
+      "selectUserPlaceholder": "Выберите пользователя...",
+      "usersLabel": "Пользователи",
+      "emptyTitle": "Нет участников",
+      "emptyDescription": "Пригласите участников через токены, чтобы они могли работать с товарами магазина",
+      "columnUserName": "Имя пользователя"
+    },
+    "storesPage": {
+      "nameRequiredError": "Введите название магазина",
+      "storeCreated": "Магазин создан",
+      "nameEmptyError": "Название магазина не может быть пустым",
+      "storeUpdated": "Магазин обновлён",
+      "currencySelectError": "Выберите валюту и укажите курс",
+      "rateInvalidError": "Курс должен быть больше нуля",
+      "currencyAdded": "Валюта добавлена",
+      "currencyRemoved": "Валюта удалена",
+      "description": "Управление магазинами системы",
+      "createStore": "Создать магазин",
+      "newStoreDialogTitle": "Новый магазин",
+      "newStoreDialogDescription": "Введите название для нового магазина",
+      "storeNamePlaceholder": "Название магазина",
+      "addAllUsersLabel": "Добавить всех текущих пользователей",
+      "addAllUsersHint": "Если выключить, участником нового магазина станет только текущий администратор.",
+      "emptyTitle": "Нет магазинов",
+      "emptyDescription": "Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами",
+      "columnStore": "Магазин",
+      "columnMembers": "Участники",
+      "columnStoreAdmins": "Админы магазина",
+      "editStoreSr": "Редактировать магазин",
+      "editDialogTitle": "Настройки магазина",
+      "editDialogDescription": "Измените название, участников и администраторов магазина.",
+      "regionalSettingsTitle": "Региональные настройки",
+      "timezoneLabel": "Часовой пояс",
+      "pricesTitle": "Цены",
+      "extendedPriceParamsLabel": "Расширенные параметры цены",
+      "extendedPriceParamsHint": "Основная цена товаров и привязки маппинга не изменятся при переключении.",
+      "currenciesTitle": "Валюты",
+      "currenciesHint": "Все цены хранятся в {base}. Курсы используются для ввода, превью и экспорта.",
+      "baseCurrencyFallback": "базовой валюте магазина",
+      "columnCurrency": "Валюта",
+      "columnRate": "Курс ({base} за 1 ед.)",
+      "columnUpdated": "Обновлён",
+      "baseTag": "базовая",
+      "baseFallback": "базе",
+      "addCurrencyPlaceholder": "Добавить валюту",
+      "rateToPlaceholder": "Курс к {base}",
+      "columnMemberSingular": "Участник",
+      "columnStoreAdminSingular": "Админ магазина"
+    },
+    "errorLogsPage": {
+      "summaryNone": "Ошибок нет",
+      "summaryCount": {
+        "one": "{count} запись",
+        "few": "{count} записи",
+        "many": "{count} записей"
+      },
+      "metaTime": "Время",
+      "metaMethod": "Метод",
+      "metaUser": "Пользователь",
+      "metaType": "Тип",
+      "clipboardStatus": "Статус",
+      "clipboardPath": "Путь",
+      "clipboardErrorType": "Тип ошибки",
+      "messageLabel": "Сообщение",
+      "copySuccess": "Детали ошибки скопированы",
+      "copyError": "Не удалось скопировать детали ошибки",
+      "deleteConfirmTitle": "Удалить лог ошибки?",
+      "deleteConfirmDescription": "Запись будет удалена безвозвратно.",
+      "deleteSuccess": "Лог удалён",
+      "description": "Последние сохранённые серверные ошибки",
+      "searchPlaceholder": "Поиск по сообщению, пути, пользователю…",
+      "emptyNotFoundTitle": "Ничего не найдено",
+      "emptyNoErrorsTitle": "Ошибок нет",
+      "emptyNotFoundDescription": "Попробуйте изменить поисковый запрос",
+      "emptyNoErrorsDescription": "Новые неожиданные ошибки backend появятся здесь автоматически",
+      "columnDate": "Дата и время",
+      "columnMethod": "Метод",
+      "columnError": "Ошибка",
+      "columnUser": "Пользователь",
+      "columnCode": "Код",
+      "ofTotal": "из {total}",
+      "detailFallbackTitle": "Ошибка",
+      "copyAll": "Копировать всё",
+      "codeLabel": "Код",
+      "requestLabel": "Запрос"
+    },
+    "categoryEditPage": {
+      "breadcrumbEditing": "Редактирование",
+      "attributeTypes": {
+        "text": "Текст",
+        "number": "Число",
+        "boolean": "Да/Нет",
+        "select": "Выбор",
+        "multiSelect": "Множественный выбор",
+        "unknown": "Неизвестный тип"
+      },
+      "noGroupOption": "Без группы (Прочее)",
+      "attributesCount": {
+        "one": "атрибут",
+        "few": "атрибута",
+        "many": "атрибутов"
+      },
+      "nameRequired": "Введите название категории",
+      "saved": "Категория сохранена",
+      "attrNameRequired": "Введите название атрибута",
+      "attrKeyRequired": "Введите ключ атрибута",
+      "attrUpdated": "Атрибут обновлён",
+      "attrAdded": "Атрибут добавлен",
+      "attrDeleted": "Атрибут удалён",
+      "orderSaved": "Порядок атрибутов сохранён",
+      "fileNoOptions": "Файл не содержит вариантов",
+      "importedCount": "Импортировано вариантов: {count}",
+      "noOptionsToExport": "Нет вариантов для экспорта",
+      "exportedCount": "Экспортировано вариантов: {count}",
+      "fileReadFailed": "Не удалось прочитать файл",
+      "fileReadError": "Ошибка чтения файла",
+      "editingCategoryFallback": "Редактирование категории",
+      "subtitle": "Название, описание и настройки размерной сетки для товаров категории.",
+      "namePlaceholder": "Введите название",
+      "optionalPlaceholder": "Необязательно",
+      "sizeGridLabel": "Размерная сетка",
+      "hasSizesLabel": "Товары имеют размеры",
+      "attributesCardTitle": "Атрибуты категории",
+      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара — перетащите строки, чтобы изменить порядок.",
+      "noAttributesTitle": "Нет атрибутов",
+      "noAttributesDescription": "Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики",
+      "addAttribute": "Добавить атрибут",
+      "keyLabel": "Ключ",
+      "groupLabel": "Группа",
+      "typeHeader": "Тип",
+      "optionsHeader": "Опции",
+      "requiredFieldTitle": "Обязательное поле",
+      "deleteAttributeTitle": "Удалить атрибут?",
+      "deleteAttributeDescription": "Вы уверены что хотите удалить атрибут \"{name}\"? Все значения этого атрибута у товаров будут удалены.",
+      "editAttributeTitle": "Редактировать атрибут",
+      "newAttributeTitle": "Новый атрибут",
+      "attributeDialogSubtitle": "Параметры поля на странице товара в этой категории",
+      "basicSection": "Основное",
+      "namePlaceholderExamples": "Цвет, Размер, Бренд",
+      "keyDescription": "Используется в API и экспорте",
+      "typeLabel": "Тип значения",
+      "optionsSection": "Варианты",
+      "export": "Экспорт",
+      "import": "Импорт",
+      "optionsWord": "вариантов",
+      "largeOptionsHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+      "clearOptions": "Очистить",
+      "optionsPlaceholderExample": "Красный, Синий, Зелёный — или value:подпись",
+      "optionsFormatHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+      "additionalSection": "Дополнительно",
+      "defaultValueLabel": "Значение по умолчанию",
+      "notSelectedPlaceholder": "Не выбрано",
+      "lazyLoadHint": "Список загрузится при открытии выбора",
+      "multiValuePlaceholder": "значение1, значение2",
+      "multiValueHint": "Несколько значений через запятую",
+      "descriptionPlaceholder": "Подсказка для пользователя на странице товара",
+      "descriptionInTooltipLabel": "Описание в подсказке",
+      "descriptionInTooltipHint": "Скрывать длинное описание за иконкой на странице товара",
+      "groupNamePlaceholder": "Название группы",
+      "noGroupPlaceholder": "Без группы",
+      "chooseFromListLabel": "Выбрать из списка",
+      "customGroupLabel": "Своя группа",
+      "multilineLabel": "Многострочный текст",
+      "multilineHint": "Поле с переносами строк на странице товара",
+      "showOnProductPageLabel": "На странице товара",
+      "showOnProductPageHint": "Показывать при редактировании товара",
+      "requiredFieldHint": "Требовать заполнение при создании товара"
+    }
+  },
+  "columnSelector": {
+    "columnsTitle": "Колонки",
+    "combinedColumns": "Комбинированные колонки",
+    "productFields": "Поля товара",
+    "storeAttributes": "Глобальные атрибуты"
+  },
+  "productRowActions": {
+    "goTo": "Перейти",
+    "moveToStore": "Переместить в магазин",
+    "moveToTrash": "Переместить в корзину",
+    "confirmTrashTitle": "Отправить в корзину?",
+    "confirmTrashDescription": "Товар будет перемещён в корзину. Его можно будет восстановить.",
+    "toTrash": "В корзину"
+  },
+  "trashRowActions": {
+    "restore": "Восстановить",
+    "deleteForever": "Удалить навсегда",
+    "confirmRestoreTitle": "Восстановить товар?",
+    "confirmRestoreDescription": "Товар будет восстановлен из корзины и снова появится в списке товаров.",
+    "confirmDeleteTitle": "Удалить навсегда?",
+    "confirmDeleteDescription": "Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить."
+  },
+  "marketplacePillChain": {
+    "moveLeft": "Переместить влево",
+    "moveRight": "Переместить вправо",
+    "editHint": "Нажмите для редактирования",
+    "removeModifier": "Удалить модификатор",
+    "addModifier": "Добавить модификатор"
+  },
+  "marketplaceStack": {
+    "toggleModifier": "Включить/выключить модификатор",
+    "irreversibleHint": "При импорте значение не будет восстановлено",
+    "irreversibleBadge": "необратимый",
+    "moveUp": "Переместить вверх",
+    "moveDown": "Переместить вниз",
+    "removeModifier": "Удалить модификатор",
+    "enterValuePlaceholder": "Введите значение…",
+    "chooseModelPlaceholder": "Выберите модель",
+    "addModifier": "Добавить модификатор"
+  }
+}

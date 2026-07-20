@@ -7,6 +7,7 @@ import axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import { startLoading, finishLoading } from "./composables/useLoadingBar";
 import { toast } from "vue-sonner";
+import i18n, { getLocale, t } from "./i18n";
 
 export const http = setupCache(
   axios.create({
@@ -22,6 +23,12 @@ export const http = setupCache(
     },
   }),
 );
+
+http.interceptors.request.use((config) => {
+  config.headers = config.headers || {};
+  config.headers["X-UI-Locale"] = getLocale();
+  return config;
+});
 
 // Shared refresh with promise deduplication — prevents race conditions
 // when both the router guard and interceptor trigger refresh simultaneously.
@@ -80,15 +87,16 @@ http.interceptors.response.use(undefined, async (error) => {
   }
 
   if (error.response?.status === 409) {
+    const code = error.response.data?.code;
     toast.error(
-      error.response.data?.title || "Достигнут лимит ресурсов",
+      (code && t(`errors.${code}`)) ||
+        error.response.data?.title ||
+        t("errors.resourceLimit"),
     );
   }
 
   if (error.response?.status === 429) {
-    toast.warning(
-      "Слишком много запросов. Подождите немного и попробуйте снова.",
-    );
+    toast.warning(t("errors.rateLimited"));
   }
 
   return Promise.reject(error);
@@ -150,6 +158,7 @@ setInterval(() => {
 
 const app = createApp(App);
 
+app.use(i18n);
 app.use(router);
 app.use(store);
 
