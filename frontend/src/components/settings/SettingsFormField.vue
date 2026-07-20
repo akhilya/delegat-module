@@ -1,6 +1,7 @@
 <script setup>
 import { computed, useSlots } from "vue";
 import { CircleHelp } from "lucide-vue-next";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   Field,
@@ -64,7 +65,7 @@ const showDescriptionTooltip = computed(
                 <button
                   type="button"
                   class="inline-flex shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                  :aria-label="`Описание: ${label}`"
+                  :aria-label="t('components.settingsFormField.descriptionAriaLabel', { label })"
                 >
                   <CircleHelp class="size-3.5" />
                 </button>
@@ -103,7 +104,7 @@ const showDescriptionTooltip = computed(
               <button
                 type="button"
                 class="mt-0.5 inline-flex shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                :aria-label="`Описание: ${label}`"
+                :aria-label="t('components.settingsFormField.descriptionAriaLabel', { label })"
               >
                 <CircleHelp class="size-3.5" />
               </button>

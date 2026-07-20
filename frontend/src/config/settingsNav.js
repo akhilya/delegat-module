@@ -20,21 +20,33 @@ import {
   Sparkles,
   ScrollText,
 } from "lucide-vue-next";
+import { t } from "@/i18n";
 
-/** @typedef {{ id: string, label: string, to: string, icon: import('vue').Component, visible?: (ctx: NavContext) => boolean }} SettingsNavItem */
+/** @typedef {{ id: string, label?: string, labelKey?: string, to: string, icon: import('vue').Component, visible?: (ctx: NavContext) => boolean }} SettingsNavItem */
 /** @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean }} NavContext */
 
-export const SETTINGS_ROUTE_LABELS = {
-  [PAGE_SETTINGS]: "Общие",
-  [PAGE_SETTINGS_USER]: "Пользователь",
-  [PAGE_ADMIN_STORES]: "Магазины",
-  [PAGE_ADMIN_USERS]: "Пользователи",
-  [PAGE_ADMIN_TOKENS]: "Токены",
-  [PAGE_ADMIN_PLUGINS]: "Плагины",
-  [PAGE_ADMIN_ERROR_LOGS]: "Логи ошибок",
-  [PAGE_ADMIN_AI]: "ИИ",
-  [PAGE_ADAPTER_LOGS]: "Логи адаптеров",
+export const SETTINGS_ROUTE_LABEL_KEYS = {
+  [PAGE_SETTINGS]: "nav.overview",
+  [PAGE_SETTINGS_USER]: "nav.user",
+  [PAGE_ADMIN_STORES]: "nav.stores",
+  [PAGE_ADMIN_USERS]: "nav.users",
+  [PAGE_ADMIN_TOKENS]: "nav.tokens",
+  [PAGE_ADMIN_PLUGINS]: "nav.plugins",
+  [PAGE_ADMIN_ERROR_LOGS]: "nav.errorLogs",
+  [PAGE_ADMIN_AI]: "nav.ai",
+  [PAGE_ADAPTER_LOGS]: "nav.adapterLogs",
 };
+
+/** @deprecated use SETTINGS_ROUTE_LABEL_KEYS + t() */
+export const SETTINGS_ROUTE_LABELS = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const key = SETTINGS_ROUTE_LABEL_KEYS[prop];
+      return key ? t(key) : undefined;
+    },
+  },
+);
 
 const ADMIN_PREFIX = "/settings/admin";
 
@@ -44,11 +56,11 @@ const ADMIN_PREFIX = "/settings/admin";
  */
 export function getPersonalSettingsItems(ctx) {
   const items = [
-    { id: "user", label: "Пользователь", to: PAGE_SETTINGS_USER, icon: User },
-    { id: "adapter-logs", label: "Логи адаптеров", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
+    { id: "user", labelKey: "nav.user", to: PAGE_SETTINGS_USER, icon: User },
+    { id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
   ];
   if (ctx.canManageStore && !ctx.isAdmin) {
-    items.push({ id: "stores", label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store });
+    items.push({ id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store });
   }
   return items;
 }
@@ -60,13 +72,13 @@ export function getPersonalSettingsItems(ctx) {
 export function getAdminSettingsItems(ctx) {
   if (!ctx.isAdmin) return [];
   return [
-    { id: "overview", label: "Общие", to: PAGE_SETTINGS, icon: Settings2 },
-    { id: "stores", label: "Магазины", to: PAGE_ADMIN_STORES, icon: Store },
-    { id: "users", label: "Пользователи", to: PAGE_ADMIN_USERS, icon: Users },
-    { id: "tokens", label: "Токены", to: PAGE_ADMIN_TOKENS, icon: Key },
-    { id: "plugins", label: "Плагины", to: PAGE_ADMIN_PLUGINS, icon: Plug },
-    { id: "logs", label: "Логи ошибок", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-    { id: "ai", label: "ИИ", to: PAGE_ADMIN_AI, icon: Sparkles },
+    { id: "overview", labelKey: "nav.overview", to: PAGE_SETTINGS, icon: Settings2 },
+    { id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store },
+    { id: "users", labelKey: "nav.users", to: PAGE_ADMIN_USERS, icon: Users },
+    { id: "tokens", labelKey: "nav.tokens", to: PAGE_ADMIN_TOKENS, icon: Key },
+    { id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug },
+    { id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
+    { id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles },
   ];
 }
 
@@ -83,7 +95,16 @@ export function isSettingsAdminPath(path) {
 }
 
 export function resolveSettingsBreadcrumb(path) {
-  if (SETTINGS_ROUTE_LABELS[path]) return SETTINGS_ROUTE_LABELS[path];
-  if (path.startsWith(`${PAGE_ADMIN_STORES}/`)) return "Магазин";
+  if (SETTINGS_ROUTE_LABEL_KEYS[path]) return t(SETTINGS_ROUTE_LABEL_KEYS[path]);
+  if (path.startsWith(`${PAGE_ADMIN_STORES}/`)) return t("routes.store");
   return null;
+}
+
+export function resolveSettingsLabel(itemOrPath) {
+  if (typeof itemOrPath === "string") {
+    const key = SETTINGS_ROUTE_LABEL_KEYS[itemOrPath];
+    return key ? t(key) : itemOrPath;
+  }
+  if (itemOrPath?.labelKey) return t(itemOrPath.labelKey);
+  return itemOrPath?.label ?? "";
 }

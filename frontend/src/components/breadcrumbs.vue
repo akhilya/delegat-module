@@ -3,6 +3,7 @@ import { useRouter } from "vue-router";
 import { ChevronRight, Home } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -37,7 +38,7 @@ function navigate(to) {
             variant="ghost"
             size="icon"
             class="size-7"
-            aria-label="Главная"
+            :aria-label="t('components.breadcrumbs.homeAriaLabel')"
             @click="navigate('/')"
           >
             <Home class="size-4" />

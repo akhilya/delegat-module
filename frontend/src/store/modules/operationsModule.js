@@ -1,5 +1,6 @@
 import { HubConnectionBuilder, LogLevel, HttpTransportType } from "@microsoft/signalr";
 import { http } from "@/main";
+import { t } from "@/i18n";
 
 let connection = null;
 
@@ -164,7 +165,7 @@ const actions = {
       const op = {
         id: data.operationId,
         type: data.type || "unknown",
-        title: data.title || "Операция",
+        title: data.title || t("store.operationsModule.defaultTitle"),
         status: "running",
         connectionName: data.connectionName || null,
         connectionId: data.connectionId || null,
@@ -294,7 +295,7 @@ const actions = {
     const op = {
       id: operation.id || crypto.randomUUID().replace(/-/g, ""),
       type: operation.type || "unknown",
-      title: operation.title || "Операция",
+      title: operation.title || t("store.operationsModule.defaultTitle"),
       status: "running",
       connectionName: operation.connectionName || null,
       connectionId: operation.connectionId || null,
@@ -434,7 +435,7 @@ const actions = {
     if (localCancel) {
       localCancel();
       cancelCallbacks.delete(id);
-      commit("FINISH_OPERATION", { id, status: "cancelled", summary: "Остановлено" });
+      commit("FINISH_OPERATION", { id, status: "cancelled", summary: t("store.operationsModule.stoppedSummary") });
       return;
     }
     try {

@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { t } from "@/i18n";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import {
   addCalendarDays,
@@ -45,16 +46,17 @@ export function useStoreDateTime() {
     if (!key) return "—";
     const today = todayKey();
     const yesterday = addCalendarDays(today, -1);
-    if (key === today) return "Сегодня";
-    if (key === yesterday) return "Вчера";
+    if (key === today) return t("composables.useStoreDateTime.today");
+    if (key === yesterday) return t("composables.useStoreDateTime.yesterday");
     const [y, m, d] = key.split("-").map(Number);
     // Format short date in store TZ using a noon UTC stand-in for that calendar day
     const standIn = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    // Strip the trailing "g." (Russian year abbreviation, \u0433) Intl may append in ru-RU formatting
     return formatDateOnly(standIn.toISOString(), timezone.value, {
       day: "numeric",
       month: "short",
       year: undefined,
-    }).replace(/\s*г\.?\s*$/i, "").trim();
+    }).replace(/\s*\u0433\.?\s*$/i, "").trim();
   }
 
   return {

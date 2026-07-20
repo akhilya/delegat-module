@@ -1,4 +1,5 @@
 <script setup>
+import { t } from "@/i18n";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -29,11 +30,11 @@ const emit = defineEmits(["select-store"]);
         @update:model-value="emit('select-store', Number($event))"
       >
         <SelectTrigger class="h-9 w-full bg-background">
-          <SelectValue placeholder="Магазин" />
+          <SelectValue :placeholder="t('components.appSidebarStoreSwitcher.storePlaceholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectLabel>Магазины</SelectLabel>
+            <SelectLabel>{{ t('components.appSidebarStoreSwitcher.storesLabel') }}</SelectLabel>
             <SelectItem
               v-for="store in memberships"
               :key="store.id"

@@ -565,7 +565,7 @@ export default {
     },
 
     /**
-     * Lists the selected store's shared-storage files (for the graph's «Файл магазина» blocks).
+     * Lists the selected store's shared-storage files (for the graph's "Store file" blocks).
      */
     async getStoreFiles() {
       const response = await http.get(`/store-storage/files`);

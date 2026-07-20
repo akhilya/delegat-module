@@ -17,6 +17,7 @@ import { Check, ChevronsUpDown } from "lucide-vue-next";
 import FormControl from "./ui/form/FormControl.vue";
 
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 export default {
   components: {
@@ -37,7 +38,7 @@ export default {
   props: {
     placeholder: {
       type: String,
-      default: "Выберите...",
+      default: () => t("components.formCombobox.placeholder"),
     },
     items: {
       type: Array,
@@ -67,7 +68,7 @@ export default {
     </FormControl>
 
     <ComboboxList>
-      <ComboboxEmpty> Ничего не найдено </ComboboxEmpty>
+      <ComboboxEmpty> {{ $t("components.formCombobox.nothingFound") }} </ComboboxEmpty>
 
       <ComboboxGroup>
         <ComboboxItem

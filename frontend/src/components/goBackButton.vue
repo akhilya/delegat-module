@@ -12,7 +12,7 @@ export default {
 </script>
 
 <template>
-  <Button variant="ghost" aria-label="Назад" @click="$router.go(-1)">
+  <Button variant="ghost" :aria-label="$t('components.goBackButton.ariaLabel')" @click="$router.go(-1)">
     <ArrowLeft class="size-4" />
   </Button>
 </template>

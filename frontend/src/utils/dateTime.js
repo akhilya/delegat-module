@@ -1,4 +1,9 @@
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { getLocale, toBcp47 } from "@/i18n";
+
+function intlLocale() {
+  return toBcp47(getLocale());
+}
 
 export function getStoreTimezone(store) {
   return store?.timezone || DEFAULT_TIMEZONE;
@@ -27,14 +32,15 @@ export function formatDateTime(iso, timezone = DEFAULT_TIMEZONE, options = {}) {
   const d = parseServerUtc(iso);
   if (!d) return { date: "—", time: "—", combined: "—" };
   const tz = timezone || DEFAULT_TIMEZONE;
-  const date = d.toLocaleDateString("ru-RU", {
+  const loc = intlLocale();
+  const date = d.toLocaleDateString(loc, {
     timeZone: tz,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     ...options.date,
   });
-  const time = d.toLocaleTimeString("ru-RU", {
+  const time = d.toLocaleTimeString(loc, {
     timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
@@ -78,7 +84,7 @@ export function formatDateOnly(iso, timezone = DEFAULT_TIMEZONE, dateOptions = {
   for (const key of Object.keys(opts)) {
     if (opts[key] === undefined) delete opts[key];
   }
-  return d.toLocaleDateString("ru-RU", opts);
+  return d.toLocaleDateString(intlLocale(), opts);
 }
 
 /**

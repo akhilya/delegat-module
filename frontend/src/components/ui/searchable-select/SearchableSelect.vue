@@ -7,6 +7,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 const props = defineProps({
   options: {
@@ -19,7 +20,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: "Выберите...",
+    default: () => t("components.searchableSelect.placeholder"),
   },
   disabled: {
     type: Boolean,
@@ -173,7 +174,9 @@ const clearSelection = () => {
               v-model="searchQuery"
               type="text"
               :placeholder="
-                isLargeList ? 'Начните вводить для поиска...' : 'Поиск...'
+                isLargeList
+                  ? t('components.searchableSelect.searchPlaceholderLarge')
+                  : t('components.searchableSelect.searchPlaceholder')
               "
               class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               @click.stop
@@ -184,8 +187,7 @@ const clearSelection = () => {
             v-if="isLargeList && !searchQuery"
             class="mt-1.5 text-xs text-muted-foreground"
           >
-            {{ options.length.toLocaleString() }} вариантов. Используйте поиск
-            для быстрого выбора.
+            {{ t('components.searchableSelect.largeListHint', { count: options.length.toLocaleString() }) }}
           </div>
         </div>
 
@@ -195,13 +197,13 @@ const clearSelection = () => {
             v-if="options.length === 0"
             class="p-3 text-sm text-muted-foreground text-center"
           >
-            Нет доступных вариантов
+            {{ t('components.searchableSelect.noOptions') }}
           </div>
           <div
             v-else-if="filteredOptions.length === 0"
             class="p-3 text-sm text-muted-foreground text-center"
           >
-            Ничего не найдено
+            {{ t('components.searchableSelect.nothingFound') }}
           </div>
           <div v-else class="p-1">
             <div
@@ -229,12 +231,10 @@ const clearSelection = () => {
               class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1"
             >
               <template v-if="searchQuery">
-                Показано {{ displayedOptions.length }} из
-                {{ filteredOptions.length }} результатов. Уточните запрос.
+                {{ t('components.searchableSelect.moreResultsHint', { shown: displayedOptions.length, total: filteredOptions.length }) }}
               </template>
               <template v-else>
-                Ещё {{ remainingCount.toLocaleString() }} вариантов. Используйте
-                поиск.
+                {{ t('components.searchableSelect.remainingOptionsHint', { count: remainingCount.toLocaleString() }) }}
               </template>
             </div>
           </div>

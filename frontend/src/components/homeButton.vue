@@ -18,7 +18,7 @@ export default {
 
 <template>
   <RouterLink :to="PAGE_PRODUCTS">
-    <Button variant="ghost" aria-label="Главная">
+    <Button variant="ghost" :aria-label="$t('components.homeButton.ariaLabel')">
       <House class="size-4" />
     </Button>
   </RouterLink>

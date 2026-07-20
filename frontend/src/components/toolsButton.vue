@@ -20,7 +20,7 @@ export default {
   <RouterLink :to="PAGE_TOOLS">
     <Button variant="ghost">
       <Paintbrush class="size-4" />
-      Инструменты
+      {{ $t('nav.tools') }}
     </Button>
   </RouterLink>
 </template>

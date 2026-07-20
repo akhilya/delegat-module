@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useStore } from "vuex";
 import { Sparkles, Loader2, Activity } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { t } from "@/i18n";
 
 const store = useStore();
 const isAiOpen    = computed(() => store.state.aiChat.isOpen);
@@ -21,7 +22,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
     <Button
       size="icon"
       class="relative size-10 rounded-full shadow-md shrink-0"
-      title="Фоновые процессы"
+      :title="t('components.rightActionStrip.backgroundJobsTitle')"
       @click="toggleOps"
     >
       <Activity class="size-4" />
@@ -35,7 +36,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
     <Button
       size="icon"
       class="relative size-10 rounded-full shadow-md shrink-0"
-      title="AI Ассистент"
+      :title="t('components.rightActionStrip.aiAssistantTitle')"
       @click="toggleAi"
     >
       <Loader2 v-if="isAiLoading" class="size-4 animate-spin" />

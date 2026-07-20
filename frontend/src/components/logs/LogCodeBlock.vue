@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Check, Copy } from "lucide-vue-next";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { highlightJsonHtml, prettyJson } from "./logFormat.js";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const props = defineProps({
   label: { type: String, default: "" },
@@ -42,13 +45,13 @@ async function copy() {
   try {
     await navigator.clipboard.writeText(displayText.value || "");
     copied.value = true;
-    displaySonnerSuccess("Скопировано");
+    displaySonnerSuccess(t("common.copied"));
     clearTimeout(copyTimer);
     copyTimer = window.setTimeout(() => {
       copied.value = false;
     }, 1500);
   } catch {
-    displaySonnerError("Не удалось скопировать");
+    displaySonnerError(t("common.copyFailed"));
   }
 }
 </script>
@@ -75,7 +78,7 @@ async function copy() {
       >
         <Check v-if="copied" class="mr-1 size-3.5" />
         <Copy v-else class="mr-1 size-3.5" />
-        Копировать
+        {{ t("common.copy") }}
       </Button>
     </div>
     <pre

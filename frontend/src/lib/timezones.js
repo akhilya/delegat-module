@@ -1,20 +1,22 @@
+import { t } from "@/i18n";
+
 /** Common IANA timezones for store settings. */
 export const STORE_TIMEZONES = [
-  { value: "Europe/Moscow", label: "Москва (UTC+3)" },
-  { value: "Europe/Kaliningrad", label: "Калининград (UTC+2)" },
-  { value: "Europe/Samara", label: "Самара (UTC+4)" },
-  { value: "Asia/Yekaterinburg", label: "Екатеринбург (UTC+5)" },
-  { value: "Asia/Omsk", label: "Омск (UTC+6)" },
-  { value: "Asia/Krasnoyarsk", label: "Красноярск (UTC+7)" },
-  { value: "Asia/Irkutsk", label: "Иркутск (UTC+8)" },
-  { value: "Asia/Yakutsk", label: "Якутск (UTC+9)" },
-  { value: "Asia/Vladivostok", label: "Владивосток (UTC+10)" },
-  { value: "Asia/Magadan", label: "Магадан (UTC+11)" },
-  { value: "Asia/Kamchatka", label: "Камчатка (UTC+12)" },
-  { value: "Asia/Almaty", label: "Алматы (UTC+5)" },
-  { value: "Asia/Tashkent", label: "Ташкент (UTC+5)" },
-  { value: "Europe/Minsk", label: "Минск (UTC+3)" },
-  { value: "Europe/Kyiv", label: "Киев (UTC+2)" },
+  { value: "Europe/Moscow", label: t("lib.timezones.moscow") },
+  { value: "Europe/Kaliningrad", label: t("lib.timezones.kaliningrad") },
+  { value: "Europe/Samara", label: t("lib.timezones.samara") },
+  { value: "Asia/Yekaterinburg", label: t("lib.timezones.yekaterinburg") },
+  { value: "Asia/Omsk", label: t("lib.timezones.omsk") },
+  { value: "Asia/Krasnoyarsk", label: t("lib.timezones.krasnoyarsk") },
+  { value: "Asia/Irkutsk", label: t("lib.timezones.irkutsk") },
+  { value: "Asia/Yakutsk", label: t("lib.timezones.yakutsk") },
+  { value: "Asia/Vladivostok", label: t("lib.timezones.vladivostok") },
+  { value: "Asia/Magadan", label: t("lib.timezones.magadan") },
+  { value: "Asia/Kamchatka", label: t("lib.timezones.kamchatka") },
+  { value: "Asia/Almaty", label: t("lib.timezones.almaty") },
+  { value: "Asia/Tashkent", label: t("lib.timezones.tashkent") },
+  { value: "Europe/Minsk", label: t("lib.timezones.minsk") },
+  { value: "Europe/Kyiv", label: t("lib.timezones.kyiv") },
   { value: "UTC", label: "UTC" },
 ];
 

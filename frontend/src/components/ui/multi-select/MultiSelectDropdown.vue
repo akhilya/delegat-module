@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/popover";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 const props = defineProps({
   options: {
@@ -20,7 +21,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: "Выберите...",
+    default: () => t("components.multiSelectDropdown.placeholder"),
   },
   disabled: {
     type: Boolean,
@@ -115,7 +116,7 @@ const displayText = computed(() => {
   if (selectedCount.value === 1) {
     return props.modelValue[0];
   }
-  return `Выбрано: ${selectedCount.value}`;
+  return t("components.multiSelectDropdown.selectedCount", { count: selectedCount.value });
 });
 
 const isSelected = (option) => {
@@ -185,24 +186,24 @@ const clearAll = () => {
             ref="searchInputRef"
             v-model="searchQuery"
             type="text"
-            :placeholder="isLargeList ? 'Начните вводить для поиска...' : 'Поиск...'"
+            :placeholder="isLargeList ? t('components.multiSelectDropdown.searchPlaceholderLarge') : t('components.multiSelectDropdown.searchPlaceholder')"
             class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             @click.stop
           />
         </div>
         <!-- Info for large lists without search -->
         <div v-if="isLargeList && !searchQuery" class="mt-1.5 text-xs text-muted-foreground">
-          {{ options.length.toLocaleString() }} вариантов. Используйте поиск для быстрого выбора.
+          {{ t('components.multiSelectDropdown.largeListHint', { count: options.length.toLocaleString() }) }}
         </div>
       </div>
 
       <!-- Options list -->
       <div class="overflow-auto flex-1">
         <div v-if="options.length === 0" class="p-3 text-sm text-muted-foreground text-center">
-          Нет доступных вариантов
+          {{ t('components.multiSelectDropdown.noOptions') }}
         </div>
         <div v-else-if="filteredOptions.length === 0" class="p-3 text-sm text-muted-foreground text-center">
-          Ничего не найдено
+          {{ t('components.multiSelectDropdown.nothingFound') }}
         </div>
         <div v-else class="p-1">
           <label
@@ -225,10 +226,10 @@ const clearAll = () => {
           <!-- Hint when there are more options -->
           <div v-if="hasMoreOptions" class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1">
             <template v-if="searchQuery">
-              Показано {{ displayedOptions.length }} из {{ filteredOptions.length }} результатов. Уточните запрос.
+              {{ t('components.multiSelectDropdown.moreResultsHint', { shown: displayedOptions.length, total: filteredOptions.length }) }}
             </template>
             <template v-else>
-              Ещё {{ remainingCount.toLocaleString() }} вариантов. Используйте поиск.
+              {{ t('components.multiSelectDropdown.remainingOptionsHint', { count: remainingCount.toLocaleString() }) }}
             </template>
           </div>
         </div>

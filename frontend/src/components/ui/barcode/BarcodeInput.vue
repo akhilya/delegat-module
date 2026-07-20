@@ -20,6 +20,7 @@ import { Dices, Download } from "lucide-vue-next";
 import JsBarcode from "jsbarcode";
 import { ref, computed, watch, nextTick } from "vue";
 import { downloadBarcodePng } from "@/lib/barcodeDownload.js";
+import { t } from "@/i18n";
 
 export default {
   components: {
@@ -71,11 +72,11 @@ export default {
 
     const errorMessage = computed(() => {
       if (!props.modelValue) return null;
-      if (!/^\d*$/.test(props.modelValue)) return "Только цифры";
-      if (props.modelValue.length > 13) return "Максимум 13 цифр";
+      if (!/^\d*$/.test(props.modelValue)) return t("components.barcodeInput.onlyDigitsError");
+      if (props.modelValue.length > 13) return t("components.barcodeInput.maxDigitsError");
       if (props.modelValue.length !== 8 && props.modelValue.length !== 13)
-        return "Нужно 8 (EAN-8) или 13 (EAN-13) цифр";
-      if (!isValidEan(props.modelValue)) return "Неверная контрольная цифра";
+        return t("components.barcodeInput.digitsCountError");
+      if (!isValidEan(props.modelValue)) return t("components.barcodeInput.invalidCheckDigitError");
       return null;
     });
 
@@ -191,6 +192,7 @@ export default {
       generate,
       confirmGenerate,
       downloadBarcode,
+      t,
     };
   },
 };
@@ -208,10 +210,10 @@ export default {
         :model-value="modelValue"
         @update:model-value="onInput"
         placeholder="EAN-8 / EAN-13"
-        aria-label="Штрихкод (EAN-8 / EAN-13)"
+        :aria-label="t('components.barcodeInput.ariaLabel')"
         :class="{ 'border-destructive focus-visible:ring-destructive': modelValue && !isValid }"
       />
-      <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" title="Сгенерировать" @click="generate">
+      <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" :title="t('components.barcodeInput.generateTitle')" @click="generate">
         <Dices class="size-4" />
       </Button>
 
@@ -221,7 +223,7 @@ export default {
           <button
             type="button"
             class="shrink-0 h-9 bg-background border rounded px-1.5 flex items-center cursor-pointer hover:border-foreground/30 transition-colors"
-            title="Нажмите для увеличения"
+            :title="t('barcodeCell.clickToEnlarge')"
           >
             <svg ref="svgRef" class="h-6 block"></svg>
           </button>
@@ -237,7 +239,7 @@ export default {
               @click="downloadBarcode"
             >
               <Download class="size-3.5 mr-1.5" />
-              Скачать PNG
+              {{ t('barcodeCell.downloadPng') }}
             </Button>
           </div>
         </PopoverContent>
@@ -252,14 +254,14 @@ export default {
     <AlertDialog :open="showConfirm" @update:open="showConfirm = $event">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Перегенерировать штрихкод?</AlertDialogTitle>
+          <AlertDialogTitle>{{ t('components.barcodeInput.regenerateTitle') }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Текущий штрихкод <span class="font-mono font-medium">{{ modelValue }}</span> будет заменён на новый случайный. Это действие нельзя отменить.
+            {{ t('components.barcodeInput.regenerateDescription', { value: modelValue }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
-          <AlertDialogAction @click="confirmGenerate">Заменить</AlertDialogAction>
+          <AlertDialogCancel>{{ t('common.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction @click="confirmGenerate">{{ t('components.barcodeInput.replace') }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

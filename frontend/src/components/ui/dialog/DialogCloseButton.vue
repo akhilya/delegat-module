@@ -5,6 +5,7 @@
 import { X } from "lucide-vue-next";
 import { DialogClose } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 const props = defineProps({
   class: { type: null, required: false },
@@ -22,6 +23,6 @@ const props = defineProps({
     "
   >
     <X class="size-4" />
-    <span class="sr-only">Закрыть</span>
+    <span class="sr-only">{{ t('common.close') }}</span>
   </DialogClose>
 </template>

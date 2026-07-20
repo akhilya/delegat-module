@@ -1,11 +1,12 @@
 import { reactive } from "vue";
+import { t } from "@/i18n";
 
 export const confirmState = reactive({
   open: false,
   title: "",
   description: "",
-  confirmLabel: "Удалить",
-  cancelLabel: "Отмена",
+  confirmLabel: "",
+  cancelLabel: "",
   destructive: true,
   _resolve: null,
 });
@@ -21,10 +22,10 @@ export function confirm(options) {
   return new Promise((resolve) => {
     Object.assign(confirmState, {
       open: true,
-      title: opts.title ?? "Подтвердите действие",
+      title: opts.title ?? t("common.confirmAction"),
       description: opts.description ?? "",
-      confirmLabel: opts.confirmLabel ?? "Удалить",
-      cancelLabel: opts.cancelLabel ?? "Отмена",
+      confirmLabel: opts.confirmLabel ?? t("common.delete"),
+      cancelLabel: opts.cancelLabel ?? t("common.cancel"),
       destructive: opts.destructive !== false,
       _resolve: resolve,
     });

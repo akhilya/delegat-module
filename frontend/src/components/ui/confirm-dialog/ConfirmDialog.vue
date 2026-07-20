@@ -1,5 +1,6 @@
 <script setup>
 import { Loader2 } from "lucide-vue-next";
+import { t } from "@/i18n";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,8 +16,8 @@ import {
 const props = defineProps({
   title: { type: String, required: true },
   description: { type: String, default: '' },
-  confirmLabel: { type: String, default: 'Удалить' },
-  cancelLabel: { type: String, default: 'Отмена' },
+  confirmLabel: { type: String, default: () => t('common.delete') },
+  cancelLabel: { type: String, default: () => t('common.cancel') },
   loading: { type: Boolean, default: false },
   destructive: { type: Boolean, default: true },
 })

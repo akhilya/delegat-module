@@ -1,5 +1,6 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
 import { BRAND_NAME } from "@/brand";
+import { t } from "@/i18n";
 
 const signUpPage = () => import("./pages/signUpPage.vue");
 const signInPage = () => import("./pages/signInPage.vue");
@@ -65,46 +66,46 @@ export const PAGE_MARKETPLACE_FIELD_MAPPING = "/adapter/:connId/categories/:mapp
 let _customTitle = null;
 
 export const routes = [
-  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, title: "Регистрация" } },
-  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true, title: "Вход" } },
-  { path: "/", component: productsPage, meta: { title: "Товары" } },
-  { path: PAGE_PRODUCTS, component: productsPage, meta: { title: "Товары" } },
-  { path: PAGE_PRODUCT_CREATION, component: productCreationPage, meta: { title: "Новый товар" } },
-  { path: PAGE_PRODUCT_EDIT, component: productEditPage, meta: { title: "Товар", stableKey: "product-edit" } },
-  { path: PAGE_CATEGORIES, component: categoriesPage, meta: { title: "Категории" } },
-  { path: PAGE_CATEGORY_EDIT, component: categoryEditPage, meta: { title: "Категория" } },
-  { path: PAGE_PRODUCT_GROUPS, component: productGroupsPage, meta: { title: "Группы товаров" } },
-  { path: PAGE_PRODUCT_GROUP_CREATE, component: productGroupEditPage, meta: { title: "Новая группа" } },
-  { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage, meta: { title: "Группа товаров" } },
-  { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { title: "Глобальные атрибуты" } },
-  { path: PAGE_STORE_STORAGE, component: storeStoragePage, meta: { title: "Хранилище" } },
+  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, titleKey: "routes.signUp" } },
+  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true, titleKey: "routes.signIn" } },
+  { path: "/", component: productsPage, meta: { titleKey: "routes.products" } },
+  { path: PAGE_PRODUCTS, component: productsPage, meta: { titleKey: "routes.products" } },
+  { path: PAGE_PRODUCT_CREATION, component: productCreationPage, meta: { titleKey: "routes.productCreation" } },
+  { path: PAGE_PRODUCT_EDIT, component: productEditPage, meta: { titleKey: "routes.productEdit", stableKey: "product-edit" } },
+  { path: PAGE_CATEGORIES, component: categoriesPage, meta: { titleKey: "routes.categories" } },
+  { path: PAGE_CATEGORY_EDIT, component: categoryEditPage, meta: { titleKey: "routes.categoryEdit" } },
+  { path: PAGE_PRODUCT_GROUPS, component: productGroupsPage, meta: { titleKey: "routes.groups" } },
+  { path: PAGE_PRODUCT_GROUP_CREATE, component: productGroupEditPage, meta: { titleKey: "routes.groupCreate" } },
+  { path: PAGE_PRODUCT_GROUP_EDIT, component: productGroupEditPage, meta: { titleKey: "routes.groupEdit" } },
+  { path: PAGE_STORE_ATTRIBUTES, component: storeAttributesPage, meta: { titleKey: "routes.attributes" } },
+  { path: PAGE_STORE_STORAGE, component: storeStoragePage, meta: { titleKey: "routes.storage" } },
   {
     path: PAGE_SETTINGS,
     component: SettingsShell,
     children: [
-      { path: "", component: SettingsOverviewPage, meta: { title: "Общие настройки" } },
+      { path: "", component: SettingsOverviewPage, meta: { titleKey: "routes.settingsOverview" } },
       { path: "operations", redirect: "" },
-      { path: "user", component: SettingsUserPage, meta: { title: "Настройки пользователя" } },
+      { path: "user", component: SettingsUserPage, meta: { titleKey: "routes.settingsUser" } },
       { path: "store", redirect: "/settings/admin/stores" },
-      { path: "admin/stores", component: AdminStoresPage, meta: { title: "Магазины" } },
-      { path: "admin/stores/:id", component: AdminStoreDetailPage, meta: { title: "Магазин" } },
-      { path: "admin/users", component: AdminUsersPage, meta: { title: "Пользователи" } },
-      { path: "admin/tokens", component: AdminTokensPage, meta: { title: "Токены" } },
-      { path: "admin/error-logs", component: AdminErrorLogsPage, meta: { title: "Логи ошибок" } },
-      { path: "admin/plugins", component: PluginsPage, meta: { title: "Плагины" } },
-      { path: "admin/ai", component: AiModelsPage, meta: { title: "AI Модели" } },
-      { path: "adapter-logs", component: AdapterLogsPage, meta: { title: "Логи адаптеров" } },
+      { path: "admin/stores", component: AdminStoresPage, meta: { titleKey: "routes.stores" } },
+      { path: "admin/stores/:id", component: AdminStoreDetailPage, meta: { titleKey: "routes.store" } },
+      { path: "admin/users", component: AdminUsersPage, meta: { titleKey: "routes.users" } },
+      { path: "admin/tokens", component: AdminTokensPage, meta: { titleKey: "routes.tokens" } },
+      { path: "admin/error-logs", component: AdminErrorLogsPage, meta: { titleKey: "routes.errorLogs" } },
+      { path: "admin/plugins", component: PluginsPage, meta: { titleKey: "routes.plugins" } },
+      { path: "admin/ai", component: AiModelsPage, meta: { titleKey: "routes.aiModels" } },
+      { path: "adapter-logs", component: AdapterLogsPage, meta: { titleKey: "routes.adapterLogs" } },
     ],
   },
   { path: PAGE_SETTINGS_OPERATIONS, redirect: PAGE_SETTINGS },
   { path: "/adapter-logs", redirect: PAGE_ADAPTER_LOGS },
-  { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { title: "Не найдено" } },
-  { path: PAGE_TOOLS, component: ToolsPage, meta: { title: "Инструменты" } },
-  { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { title: "Адаптеры" } },
+  { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { titleKey: "routes.notFound" } },
+  { path: PAGE_TOOLS, component: ToolsPage, meta: { titleKey: "routes.tools" } },
+  { path: PAGE_MARKETPLACE, component: MarketplacePage, meta: { titleKey: "routes.adapters" } },
   { path: PAGE_MARKETPLACE_PLUGINS, redirect: PAGE_ADMIN_PLUGINS },
-  { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { title: "Подключение" } },
-  { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { title: "Импорт категории" } },
-  { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage, meta: { title: "Маппинг полей" } },
+  { path: PAGE_MARKETPLACE_CONNECTION, component: MarketplaceConnectionPage, meta: { titleKey: "routes.connection" } },
+  { path: PAGE_MARKETPLACE_CATEGORY_IMPORT, component: MarketplaceCategoryImportPage, meta: { titleKey: "routes.categoryImport" } },
+  { path: PAGE_MARKETPLACE_FIELD_MAPPING, component: MarketplaceFieldMappingPage, meta: { titleKey: "routes.fieldMapping" } },
   { path: "/marketplace/:connId/categories/import", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/import`, query: to.query }) },
   { path: "/marketplace/:connId/categories/:mappingId", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/${to.params.mappingId}`, query: to.query }) },
   { path: "/marketplace/plugins", redirect: PAGE_ADMIN_PLUGINS },
@@ -129,6 +130,12 @@ export function setPageTitle(detail) {
   document.title = detail ? `${detail} — ${BRAND_NAME}` : BRAND_NAME;
 }
 
+function resolveRouteTitle(to) {
+  const key = to.meta?.titleKey;
+  if (key) return t(key);
+  return to.meta?.title || null;
+}
+
 export function createRouter() {
   const router = _createRouter({
     history: createWebHistory(),
@@ -142,7 +149,7 @@ export function createRouter() {
 
     // New route — reset custom title and apply route meta
     _customTitle = null;
-    const title = to.meta?.title;
+    const title = resolveRouteTitle(to);
     document.title = title ? `${title} — ${BRAND_NAME}` : BRAND_NAME;
   });
 

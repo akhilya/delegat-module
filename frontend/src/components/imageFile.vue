@@ -74,7 +74,7 @@ export default {
       @load="onImageLoad"
       @error="onImageError"
       :src="resolvedSrc"
-      :alt="file?.displayName || file?.fileName || 'Изображение товара'"
+      :alt="file?.displayName || file?.fileName || $t('components.imageFile.altFallback')"
       class="absolute w-full h-full object-contain"
       v-show="!isLoading"
     />

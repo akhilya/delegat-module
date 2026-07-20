@@ -2,6 +2,7 @@
 import { PanelLeft } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { useSidebar } from "./utils";
 
 const props = defineProps({
@@ -21,6 +22,6 @@ const { toggleSidebar } = useSidebar();
     @click="toggleSidebar"
   >
     <PanelLeft />
-    <span class="sr-only">Переключить сайдбар</span>
+    <span class="sr-only">{{ t('components.sidebarTrigger.toggleSidebar') }}</span>
   </Button>
 </template>

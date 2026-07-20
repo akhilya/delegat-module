@@ -5,6 +5,7 @@ import { http } from "@/main";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { resolveSettingsBreadcrumb } from "@/config/settingsNav";
 import { PAGE_SETTINGS, PAGE_SETTINGS_USER } from "@/router";
+import { t } from "@/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -15,9 +16,9 @@ const isAdmin = computed(() => me.value?.isAdmin ?? false);
 const breadcrumbs = computed(() => {
   const path = route.path;
   const label = resolveSettingsBreadcrumb(path);
-  if (!label || path === PAGE_SETTINGS) return [{ label: "Настройки" }];
+  if (!label || path === PAGE_SETTINGS) return [{ label: t("nav.settings") }];
   const settingsRoot = isAdmin.value ? PAGE_SETTINGS : PAGE_SETTINGS_USER;
-  return [{ label: "Настройки", to: settingsRoot }, { label }];
+  return [{ label: t("nav.settings"), to: settingsRoot }, { label }];
 });
 
 watch(

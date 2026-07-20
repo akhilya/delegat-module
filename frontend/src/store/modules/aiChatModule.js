@@ -1,4 +1,10 @@
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { t } from "@/i18n";
+
+/** Model-facing control messages — always English (system prompts are English). */
+const AI_CONFIRM_PLAN = "Confirmed, proceed";
+const AI_CANCEL_PLAN =
+  "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation.";
 
 function newSessionId() { return crypto.randomUUID(); }
 
@@ -365,7 +371,10 @@ export default {
           commit("updateLastAssistantMessage", { done: true });
           dispatch("syncHistory");
         } else if (err.message !== "Session expired") {
-          commit("updateLastAssistantMessage", { delta: `\n\nОшибка соединения: ${err.message}`, done: true });
+          commit("updateLastAssistantMessage", {
+            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
+            done: true,
+          });
         }
       } finally {
         abortController = null;
@@ -392,11 +401,11 @@ export default {
       commit("setLastPlanConfirmed");
 
       if (!executable) {
-        dispatch("sendMessage", "Подтверждаю, выполняй");
+        dispatch("sendMessage", AI_CONFIRM_PLAN);
         return;
       }
 
-      commit("addMessage", { id: Date.now(), role: "user", content: "Подтверждаю, выполняй" });
+      commit("addMessage", { id: Date.now(), role: "user", content: AI_CONFIRM_PLAN });
       commit("setLoading", true);
       commit("addMessage", { id: Date.now() + 1, role: "assistant", content: "", toolCalls: [], plan: null, apiBlocks: [] });
       abortController = new AbortController();
@@ -414,7 +423,10 @@ export default {
         if (err.name === "AbortError") {
           commit("updateLastAssistantMessage", { done: true });
         } else if (err.message !== "Session expired") {
-          commit("updateLastAssistantMessage", { delta: `\n\nОшибка соединения: ${err.message}`, done: true });
+          commit("updateLastAssistantMessage", {
+            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
+            done: true,
+          });
         }
       } finally {
         abortController = null;
@@ -528,10 +540,7 @@ export default {
 
     cancelPlan({ commit, dispatch }) {
       commit("setLastPlanCancelled");
-      dispatch(
-        "sendMessage",
-        "Отменяю предложенный план — НЕ выполняй его. Ничего не откатывай и не вызывай rollback_last_operation: план не был выполнен. Просто подтверди отмену.",
-      );
+      dispatch("sendMessage", AI_CANCEL_PLAN);
     },
   },
 };

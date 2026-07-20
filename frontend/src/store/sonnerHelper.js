@@ -1,4 +1,31 @@
 import { toast } from "vue-sonner";
+import { t } from "@/i18n";
+
+/**
+ * Resolve a localized API error title from response payload.
+ * Prefers stable `code` → errors.* i18n key; falls back to English title/message.
+ */
+export function resolveApiErrorMessage(payload, fallbackKey = "errors.generic") {
+  if (!payload) return t(fallbackKey);
+
+  const code = payload.code || payload.error?.code;
+  const data = payload.data || payload.error?.details || payload.details;
+  const params =
+    data && typeof data === "object" && !Array.isArray(data) ? data : {};
+
+  if (code) {
+    const key = `errors.${code}`;
+    const translated = t(key, params);
+    if (translated !== key) return translated;
+  }
+
+  return (
+    payload.title ||
+    payload.message ||
+    payload.error?.message ||
+    t(fallbackKey)
+  );
+}
 
 /**
  * Displays an error toast notification from an API error response.
@@ -12,11 +39,11 @@ export function displaySonnerError(error) {
 
   const payload = error?.response?.data;
   if (!payload) {
-    toast.error(error?.message || "Ошибка");
+    toast.error(error?.message || t("errors.generic"));
     return;
   }
 
-  const title = payload.title || payload.message || "Ошибка";
+  const title = resolveApiErrorMessage(payload);
   const description = formatErrorDetails(payload);
   toast.error(title, description ? { description } : undefined);
 }
@@ -26,7 +53,8 @@ function formatErrorDetails(payload) {
     payload.detail ||
     payload.details ||
     payload.data ||
-    payload.errors;
+    payload.errors ||
+    payload.error?.details;
 
   if (!details) return null;
 
@@ -37,10 +65,18 @@ function formatErrorDetails(payload) {
   }
 
   if (typeof details === "object") {
+    // Prefer not to dump code params as description when they are i18n params
+    if (payload.code && !payload.detail && !payload.errors) {
+      const keys = Object.keys(details);
+      const looksLikeParams = keys.every(
+        (k) => typeof details[k] === "string" || typeof details[k] === "number",
+      );
+      if (looksLikeParams && keys.length <= 4) return null;
+    }
     try {
       return truncateDetails(JSON.stringify(details, null, 2));
     } catch {
-      return "Подробности ошибки получены, но их не удалось отобразить";
+      return t("errors.detailsUnreadable");
     }
   }
 

@@ -90,7 +90,7 @@ export default {
           importance: this.noteValue.importance,
         },
         onSuccess: (response) => {
-          //displaySonnerSuccess(`Заметка успешно обновлёна.`);
+          //displaySonnerSuccess(this.$t("components.note.updateSuccess"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -103,7 +103,7 @@ export default {
         productId: this.productId,
         id: this.noteValue.id,
         onSuccess: (response) => {
-          displaySonnerSuccess(`Заметка успешно удалена.`);
+          displaySonnerSuccess(this.$t("components.note.deleteSuccess"));
           this.$emit("onDelete");
         },
         onError: (error) => {
@@ -127,11 +127,11 @@ export default {
   },
   data() {
     const importances = [
-      { value: "Low", label: "Низкая важность" },
-      { value: "Medium", label: "Средняя важность" },
-      { value: "High", label: "Высокая важность" },
-      { value: "Critical", label: "Критическая важность" },
-      { value: "Emergency", label: "Чрезвычайная важность" },
+      { value: "Low", label: this.$t("components.note.importanceLow") },
+      { value: "Medium", label: this.$t("components.note.importanceMedium") },
+      { value: "High", label: this.$t("components.note.importanceHigh") },
+      { value: "Critical", label: this.$t("components.note.importanceCritical") },
+      { value: "Emergency", label: this.$t("components.note.importanceEmergency") },
     ];
 
     return {
@@ -185,24 +185,24 @@ export default {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Удалить заметку?</AlertDialogTitle>
+              <AlertDialogTitle>{{ $t('components.note.deleteConfirmTitle') }}</AlertDialogTitle>
               <AlertDialogDescription>
-                Заметка будет удалена безвозвратно.
+                {{ $t('components.note.deleteConfirmDescription') }}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Отмена</AlertDialogCancel>
+              <AlertDialogCancel>{{ $t('common.cancel') }}</AlertDialogCancel>
               <AlertDialogAction
                 class="bg-destructive text-white hover:bg-destructive/90"
                 @click="deleteThisNote"
               >
-                Удалить
+                {{ $t('common.delete') }}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
     </div>
-    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" placeholder="Текст заметки..." />
+    <Textarea :maxlength="10000" v-model="noteValue.text" class="h-64" :placeholder="$t('components.note.textPlaceholder')" />
   </span>
 </template>

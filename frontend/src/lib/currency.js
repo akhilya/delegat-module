@@ -1,11 +1,13 @@
+import { getLocale, toBcp47 } from "@/i18n";
+
 export const ADDABLE_CURRENCIES = [
-  { code: "USD", label: "USD — доллар США" },
-  { code: "EUR", label: "EUR — евро" },
-  { code: "KZT", label: "KZT — тенге" },
-  { code: "BYN", label: "BYN — бел. рубль" },
-  { code: "CNY", label: "CNY — юань" },
-  { code: "GBP", label: "GBP — фунт" },
-  { code: "TRY", label: "TRY — лира" },
+  { code: "USD", label: "USD — US Dollar" },
+  { code: "EUR", label: "EUR — Euro" },
+  { code: "KZT", label: "KZT — Tenge" },
+  { code: "BYN", label: "BYN — Belarusian ruble" },
+  { code: "CNY", label: "CNY — Yuan" },
+  { code: "GBP", label: "GBP — Pound" },
+  { code: "TRY", label: "TRY — Lira" },
 ];
 
 export function getBaseCurrency(store) {
@@ -43,7 +45,7 @@ export function convertFromBase(baseAmount, currencyCode, currencies = [], baseC
 export function formatMoney(amount, currency) {
   if (amount == null || Number.isNaN(amount)) return "—";
   const code = currency?.toUpperCase() || "";
-  return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${code}`.trim();
+  return `${Number(amount).toLocaleString(toBcp47(getLocale()), { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${code}`.trim();
 }
 
 export function formatEquivalents(baseAmount, currencies = [], baseCurrency) {
