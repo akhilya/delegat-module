@@ -37,38 +37,38 @@ public class RollbackToolHandlers : ToolHandlerBase
         else
             op = await _operationService.GetLastAsync(userId, storeId, ct);
 
-        if (op == null) return (new { error = "Нет операций для отмены" }, "Нет операций для отмены");
+        if (op == null) return (new { error = "No operations to undo" }, "No operations to undo");
         if (!op.canRollback || op.status == AiOperationStatus.RolledBack)
-            return (new { error = "Эту операцию нельзя отменить" }, "Нельзя отменить");
+            return (new { error = "This operation cannot be undone" }, "Cannot undo");
 
         // Stale guard: without an explicit operationId, don't silently undo something old —
         // it may belong to a long-finished task the user no longer has in mind
         if (!p.Id.HasValue && op.createdAt < DateTime.UtcNow.AddMinutes(-30))
         {
             var age = DateTime.UtcNow - op.createdAt;
-            var ageText = age.TotalHours >= 1 ? $"{(int)age.TotalHours} ч назад" : $"{(int)age.TotalMinutes} мин назад";
+            var ageText = age.TotalHours >= 1 ? $"{(int)age.TotalHours} h ago" : $"{(int)age.TotalMinutes} min ago";
             return (new
             {
                 requiresConfirmation = true,
                 operationId = op.Id,
                 description = op.description,
                 createdAt = op.createdAt,
-            }, $"Последняя операция выполнена {ageText}: «{op.description}». " +
-               $"Это давняя операция — уточни у пользователя, что откатить нужно именно её, " +
-               $"и повтори вызов с operationId={op.Id}");
+            }, $"The last operation was performed {ageText}: \"{op.description}\". " +
+               $"This is an old operation — confirm with the user that this is the one to roll back, " +
+               $"then retry the call with operationId={op.Id}");
         }
 
         var applied = await ApplyRollbackAsync(op, ct);
         if (!applied)
         {
             _logger.LogWarning("Rollback of operation {OpId} ({Type}) did not change any data", op.Id, op.operationType);
-            return (new { error = "Откат не удался — данные не были изменены" },
-                $"Откат операции «{op.description}» не удался: данные не изменены");
+            return (new { error = "Rollback failed — no data was changed" },
+                $"Rollback of operation \"{op.description}\" failed: no data changed");
         }
 
         await _operationService.MarkRolledBackAsync(op.Id, ct);
         return (new { success = true, operationId = op.Id, description = op.description },
-            $"Отменено: {op.description}");
+            $"Undone: {op.description}");
     }
 
     // Returns true only when the rollback actually changed data.

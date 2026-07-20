@@ -63,19 +63,19 @@ public class ProductToolHandlers : ToolHandlerBase
             .ToListAsync(ct);
 
         // Zero hits on a text search: nudge the model to retry with spelling variants —
-        // catalogs often mix Cyrillic and Latin (Вархаммер vs Warhammer)
+        // catalogs often mix Cyrillic and Latin transliterations of the same brand name
         if (products.Count == 0 && !string.IsNullOrEmpty(p.Search))
         {
             return (new
             {
                 items = products,
                 count = 0,
-                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
-                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
-            }, $"0 товаров по '{p.Search}' — попробуй другое написание (латиница/кириллица)");
+                hint = $"0 products for query '{p.Search}'. Try other spelling variants: " +
+                       "Latin instead of Cyrillic (or vice versa), the English brand name, or a word stem without endings.",
+            }, $"0 products for '{p.Search}' — try a different spelling (Latin/Cyrillic)");
         }
 
-        return (new { items = products, count = products.Count }, $"Найдено {products.Count} товаров");
+        return (new { items = products, count = products.Count }, $"Found {products.Count} products");
     }
 
     internal async Task<(object, string)> GetProductsCountAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -92,11 +92,11 @@ public class ProductToolHandlers : ToolHandlerBase
             return (new
             {
                 count = 0,
-                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
-                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
-            }, $"0 товаров по '{p.Search}' — попробуй другое написание");
+                hint = $"0 products for query '{p.Search}'. Try other spelling variants: " +
+                       "Latin instead of Cyrillic (or vice versa), the English brand name, or a word stem without endings.",
+            }, $"0 products for '{p.Search}' — try a different spelling");
         }
-        return (new { count }, $"{count} товаров");
+        return (new { count }, $"{count} products");
     }
 
     internal async Task<(object, string)> GetProductAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -106,7 +106,7 @@ public class ProductToolHandlers : ToolHandlerBase
             .Include(x => x.category)
             .Include(x => x.attributeValues).ThenInclude(v => v.attribute)
             .FirstOrDefaultAsync(x => x.Id == p.Id && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
         var result = new
         {
             product.Id,
@@ -146,15 +146,15 @@ public class ProductToolHandlers : ToolHandlerBase
         _context.products.Add(product);
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "create_product",
-            $"Создан товар \"{p.Name}\"", new { productId = product.Id }, canRollback: false, ct: ct);
-        return (new { id = product.Id }, $"Товар \"{p.Name}\" создан (id={product.Id})");
+            $"Created product \"{p.Name}\"", new { productId = product.Id }, canRollback: false, ct: ct);
+        return (new { id = product.Id }, $"Product \"{p.Name}\" created (id={product.Id})");
     }
 
     internal async Task<(object, string)> CreateProductsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<CreateProductsBulkInput>(json);
         if (p.Products is not { Count: > 0 })
-            return (new { error = "Список товаров пуст" }, "Список пуст");
+            return (new { error = "Product list is empty" }, "List is empty");
 
         var created = new List<object>();
         foreach (var spec in p.Products)
@@ -174,36 +174,36 @@ public class ProductToolHandlers : ToolHandlerBase
             await _context.SaveChangesAsync(ct);
             created.Add(new { id = product.Id, name = product.name });
         }
-        return (new { created }, $"Создано {created.Count} товаров");
+        return (new { created }, $"Created {created.Count} products");
     }
 
     internal async Task<(object, string)> UpdateProductAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateProductInput>(json);
         var product = await _context.products.FirstOrDefaultAsync(x => x.Id == p.Id && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
 
         var changes = new List<string>();
-        if (p.Name != null) { changes.Add($"name: {product.name}→{p.Name}"); product.name = p.Name; }
-        if (p.Price.HasValue) { changes.Add($"price: {product.price}→{p.Price}"); product.price = p.Price.Value; }
+        if (p.Name != null) { changes.Add($"name: {product.name}->{p.Name}"); product.name = p.Name; }
+        if (p.Price.HasValue) { changes.Add($"price: {product.price}->{p.Price}"); product.price = p.Price.Value; }
         if (p.Description != null) product.description = p.Description;
         if (p.Barcode != null) product.barcode = p.Barcode;
         if (p.Quantity.HasValue) product.storageQuantity = p.Quantity.Value;
         if (p.CategoryId.HasValue) product.categoryId = p.CategoryId.Value;
 
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Товар обновлён: {string.Join(", ", changes)}");
+        return (new { success = true }, $"Product updated: {string.Join(", ", changes)}");
     }
 
     internal async Task<(object, string)> UpdateProductSkuAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateSkuInput>(json);
         var product = await _context.products.FirstOrDefaultAsync(x => x.Id == p.ProductId && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
         var oldSku = product.sku;
         product.sku = p.NewSku;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true, oldSku, newSku = p.NewSku }, $"SKU изменён: {oldSku} → {p.NewSku}");
+        return (new { success = true, oldSku, newSku = p.NewSku }, $"SKU changed: {oldSku} -> {p.NewSku}");
     }
 
     internal async Task<(object, string)> UpdateProductPricesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -229,10 +229,10 @@ public class ProductToolHandlers : ToolHandlerBase
 
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "update_prices",
-            $"Изменена цена у {products.Count} товаров ({p.Mode} {p.Amount})",
+            $"Changed price for {products.Count} products ({p.Mode} {p.Amount})",
             AiOperationService.BuildPriceRollback(rollback), ct: ct);
 
-        return (new { affected = products.Count }, $"Изменена цена у {products.Count} товаров");
+        return (new { affected = products.Count }, $"Changed price for {products.Count} products");
     }
 
     internal async Task<(object, string)> UpdateProductAttributeAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -240,7 +240,7 @@ public class ProductToolHandlers : ToolHandlerBase
         var p = ParseInput<UpdateAttributeInput>(json);
         var attr = await _context.categoryAttributes.AsNoTracking()
             .FirstOrDefaultAsync(a => a.key == p.AttributeKey && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Атрибут не найден" }, "Атрибут не найден");
+        if (attr == null) return (new { error = "Attribute not found" }, "Attribute not found");
 
         var productIds = p.ProductIds ?? await _context.products.AsNoTracking()
             .Where(x => x.storeId == storeId && x.categoryId == attr.categoryId)
@@ -264,17 +264,17 @@ public class ProductToolHandlers : ToolHandlerBase
 
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "update_attribute",
-            $"Атрибут '{p.AttributeKey}' = '{p.Value}' у {productIds.Count} товаров",
+            $"Attribute '{p.AttributeKey}' = '{p.Value}' for {productIds.Count} products",
             new ProductAttributeRollbackData { Products = oldValues }, ct: ct);
 
-        return (new { affected = productIds.Count }, $"Атрибут обновлён у {productIds.Count} товаров");
+        return (new { affected = productIds.Count }, $"Attribute updated for {productIds.Count} products");
     }
 
     internal async Task<(object, string)> UpdateProductAttributesBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateAttributesBulkInput>(json);
         if (p.Attributes is not { Count: > 0 })
-            return (new { error = "Список атрибутов пуст" }, "Список пуст");
+            return (new { error = "Attribute list is empty" }, "List is empty");
 
         var applied = 0;
         var errors = new List<string>();
@@ -284,7 +284,7 @@ public class ProductToolHandlers : ToolHandlerBase
         {
             var attrDef = await _context.categoryAttributes.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.key == attr.AttributeKey && a.category.storeId == storeId, ct);
-            if (attrDef == null) { errors.Add($"Атрибут '{attr.AttributeKey}' не найден"); continue; }
+            if (attrDef == null) { errors.Add($"Attribute '{attr.AttributeKey}' not found"); continue; }
 
             var productIds = p.ProductIds ?? await _context.products.AsNoTracking()
                 .Where(x => x.storeId == storeId && x.categoryId == attrDef.categoryId)
@@ -309,11 +309,11 @@ public class ProductToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
         if (allOldValues.Count > 0)
             await _operationService.RecordAsync(storeId, userId, "update_attribute",
-                $"Обновлено {applied} атрибутов у товаров",
+                $"Updated {applied} attributes on products",
                 new ProductAttributeRollbackData { Products = allOldValues }, ct: ct);
 
-        var summary = $"Обновлено атрибутов: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        var summary = $"Attributes updated: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count} ({string.Join("; ", errors)})";
         return (new { applied, errors }, summary);
     }
 
@@ -325,7 +325,7 @@ public class ProductToolHandlers : ToolHandlerBase
             .ToListAsync(ct);
         foreach (var pr in products) pr.deletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
-        return (new { deleted = products.Count }, $"Удалено {products.Count} товаров");
+        return (new { deleted = products.Count }, $"Deleted {products.Count} products");
     }
 
     internal async Task<(object, string)> RestoreProductsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -334,7 +334,7 @@ public class ProductToolHandlers : ToolHandlerBase
         await _context.products.IgnoreQueryFilters()
             .Where(x => p.Ids.Contains(x.Id) && x.storeId == storeId && x.deletedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.deletedAt, (DateTime?)null), ct);
-        return (new { success = true }, $"Восстановлено {p.Ids.Count} товаров");
+        return (new { success = true }, $"Restored {p.Ids.Count} products");
     }
 
     internal async Task<(object, string)> ListTrashAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -345,7 +345,7 @@ public class ProductToolHandlers : ToolHandlerBase
         if (!string.IsNullOrEmpty(p.Search)) q = q.Where(x => x.name.Contains(p.Search));
         var items = await q.OrderByDescending(x => x.deletedAt).Take(50)
             .Select(x => new { x.Id, x.name, x.deletedAt }).ToListAsync(ct);
-        return (new { items, count = items.Count }, $"{items.Count} товаров в корзине");
+        return (new { items, count = items.Count }, $"{items.Count} products in trash");
     }
 
     internal async Task<(object, string)> GenerateBarcodesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -354,7 +354,7 @@ public class ProductToolHandlers : ToolHandlerBase
         var q = _context.products.Where(x => x.storeId == storeId && (x.barcode == null || x.barcode == ""));
         if (p.ProductIds?.Count > 0) q = q.Where(x => p.ProductIds.Contains(x.Id));
         var products = await q.ToListAsync(ct);
-        if (products.Count == 0) return (new { generated = 0 }, "Нет товаров без баркода");
+        if (products.Count == 0) return (new { generated = 0 }, "No products without a barcode");
 
         // Uniqueness within the store: seed with all existing barcodes
         var existing = (await _context.products.AsNoTracking()
@@ -372,11 +372,11 @@ public class ProductToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "generate_barcodes",
-            $"Сгенерированы EAN-13 баркоды для {products.Count} товаров",
+            $"Generated EAN-13 barcodes for {products.Count} products",
             new BarcodeRollbackData { Products = snapshots }, canRollback: true, ct);
 
         return (new { generated = products.Count },
-            $"Сгенерированы баркоды для {products.Count} товаров");
+            $"Generated barcodes for {products.Count} products");
     }
 }
 

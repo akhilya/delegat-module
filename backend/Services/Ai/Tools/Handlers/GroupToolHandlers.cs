@@ -32,7 +32,7 @@ public class GroupToolHandlers : ToolHandlerBase
         var groups = await q
             .Select(g => new { g.Id, g.name, g.description, memberCount = g.members.Count })
             .ToListAsync(ct);
-        return (new { groups, count = groups.Count }, $"{groups.Count} групп");
+        return (new { groups, count = groups.Count }, $"{groups.Count} groups");
     }
 
     internal async Task<(object, string)> GetGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -53,8 +53,8 @@ public class GroupToolHandlers : ToolHandlerBase
                 }).ToList()
             })
             .FirstOrDefaultAsync(ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
-        return (group, $"Группа \"{group.name}\": {group.members.Count} товаров");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
+        return (group, $"Group \"{group.name}\": {group.members.Count} products");
     }
 
     internal async Task<(object, string)> CreateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -69,7 +69,7 @@ public class GroupToolHandlers : ToolHandlerBase
                 _context.productGroupMembers.Add(new ProductGroupMember { groupId = group.Id, productId = pid });
             await _context.SaveChangesAsync(ct);
         }
-        return (new { id = group.Id }, $"Группа \"{p.Name}\" создана");
+        return (new { id = group.Id }, $"Group \"{p.Name}\" created");
     }
 
     internal async Task<(object, string)> UpdateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -77,7 +77,7 @@ public class GroupToolHandlers : ToolHandlerBase
         var p = ParseInput<UpdateGroupInput>(json);
         var group = await _context.productGroups
             .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
 
         var oldName = group.name;
         if (!string.IsNullOrEmpty(p.Name)) group.name = p.Name;
@@ -86,8 +86,8 @@ public class GroupToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "update_group",
-            $"Группа \"{oldName}\" → \"{group.name}\"", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Группа \"{group.name}\" обновлена");
+            $"Group \"{oldName}\" -> \"{group.name}\"", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Group \"{group.name}\" updated");
     }
 
     internal async Task<(object, string)> DeleteGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -96,7 +96,7 @@ public class GroupToolHandlers : ToolHandlerBase
         var group = await _context.productGroups
             .Include(g => g.members)
             .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
 
         var name = group.name;
         var memberCount = group.members.Count;
@@ -104,8 +104,8 @@ public class GroupToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "delete_group",
-            $"Удалена группа \"{name}\" ({memberCount} товаров остались в магазине)", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Группа \"{name}\" удалена, товары остались");
+            $"Deleted group \"{name}\" ({memberCount} products remain in the store)", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Group \"{name}\" deleted, products remain");
     }
 
     internal async Task<(object, string)> AddProductsToGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -118,7 +118,7 @@ public class GroupToolHandlers : ToolHandlerBase
         foreach (var pid in toAdd)
             _context.productGroupMembers.Add(new ProductGroupMember { groupId = p.GroupId, productId = pid });
         await _context.SaveChangesAsync(ct);
-        return (new { added = toAdd.Count }, $"Добавлено {toAdd.Count} товаров в группу");
+        return (new { added = toAdd.Count }, $"Added {toAdd.Count} products to the group");
     }
 
     internal async Task<(object, string)> RemoveProductsFromGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -126,7 +126,7 @@ public class GroupToolHandlers : ToolHandlerBase
         var p = ParseInput<GroupProductsInput>(json);
         var groupExists = await _context.productGroups.AsNoTracking()
             .AnyAsync(g => g.Id == p.GroupId && g.storeId == storeId, ct);
-        if (!groupExists) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (!groupExists) return (new { error = "Group not found" }, "Not found");
 
         var members = await _context.productGroupMembers
             .Where(m => m.groupId == p.GroupId && p.ProductIds.Contains(m.productId))
@@ -135,8 +135,8 @@ public class GroupToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "remove_from_group",
-            $"Из группы {p.GroupId} убрано {members.Count} товаров", new { }, canRollback: false, ct);
-        return (new { removed = members.Count }, $"Убрано {members.Count} товаров из группы");
+            $"Removed {members.Count} products from group {p.GroupId}", new { }, canRollback: false, ct);
+        return (new { removed = members.Count }, $"Removed {members.Count} products from the group");
     }
 }
 

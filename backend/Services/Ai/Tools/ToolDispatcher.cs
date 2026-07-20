@@ -158,13 +158,13 @@ public class ToolDispatcher
                 // Navigation (client-side only; backend validates URL safety)
                 "navigate_to"                => NavigateTo(inputJson),
 
-                _ => (new { error = $"Unknown tool: {toolName}" } as object, $"Неизвестный инструмент: {toolName}")
+                _ => (new { error = $"Unknown tool: {toolName}" } as object, $"Unknown tool: {toolName}")
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Tool {Tool} failed", toolName);
-            return (new { error = ex.Message }, $"Ошибка: {ex.Message}");
+            return (new { error = ex.Message }, $"Error: {ex.Message}");
         }
     }
 
@@ -179,7 +179,7 @@ public class ToolDispatcher
 
         if (!url.StartsWith('/')) url = "/" + url;
         if (url.Length > 200 || !_safePathRx.IsMatch(url))
-            return (new { navigate = false, error = "Недопустимый URL" }, "Отказано");
+            return (new { navigate = false, error = "Invalid URL" }, "Denied");
 
         return (new { navigate = true, url, label }, label);
     }

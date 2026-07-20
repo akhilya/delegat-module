@@ -34,7 +34,7 @@ public class SyncToolHandlers : ToolHandlerBase
             .Where(c => c.storeId == storeId)
             .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
             .ToListAsync(ct);
-        return (new { connections = conns, count = conns.Count }, $"{conns.Count} подключений");
+        return (new { connections = conns, count = conns.Count }, $"{conns.Count} connections");
     }
 
     internal async Task<(object, string)> GetConnectionAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -44,7 +44,7 @@ public class SyncToolHandlers : ToolHandlerBase
             .Where(c => c.Id == p.Id && c.storeId == storeId)
             .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
             .FirstOrDefaultAsync(ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         return (conn, conn.name);
     }
 
@@ -53,17 +53,17 @@ public class SyncToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         try
         {
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             var result = await adapter.TestConnectionAsync(conn, ct);
             return (new { success = result.Success, message = result.Message },
-                result.Success ? $"Подключение {conn.name} работает" : $"Ошибка: {result.Message}");
+                result.Success ? $"Connection {conn.name} works" : $"Error: {result.Message}");
         }
         catch (Exception ex)
         {
-            return (new { success = false, message = ex.Message }, $"Ошибка: {ex.Message}");
+            return (new { success = false, message = ex.Message }, $"Error: {ex.Message}");
         }
     }
 
@@ -72,16 +72,16 @@ public class SyncToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Not found" }, "Not found");
         try
         {
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             var quotas = await adapter.GetQuotasAsync(conn, ct);
-            return (quotas, "Лимиты получены");
+            return (quotas, "Limits retrieved");
         }
         catch
         {
-            return (new { error = "Недоступно" }, "Лимиты недоступны");
+            return (new { error = "Unavailable" }, "Limits unavailable");
         }
     }
 
@@ -105,7 +105,7 @@ public class SyncToolHandlers : ToolHandlerBase
             {
                 scheme = "field",
                 fieldKey = fieldGrouping.GroupFieldKey,
-                description = "Товары объединяются в карточку по значению этого поля маппинга (по умолчанию — groupName)",
+                description = "Products are merged into a card by the value of this mapping field (default: groupName)",
             };
         }
         else if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping))
@@ -114,7 +114,7 @@ public class SyncToolHandlers : ToolHandlerBase
             {
                 scheme = "endpoint",
                 fieldKey = ProductSyncService.SyntheticGroupFieldKey,
-                description = "Товары с одинаковым вычисленным значением поля группировки объединяются API-вызовами после экспорта",
+                description = "Products with the same computed grouping field value are merged via API calls after export",
             };
         }
 
@@ -127,7 +127,7 @@ public class SyncToolHandlers : ToolHandlerBase
             isActive = conn.isActive,
             capabilities,
             grouping,
-        }, $"Адаптер {adapter.DisplayName}: {capabilities.Count} возможностей");
+        }, $"Adapter {adapter.DisplayName}: {capabilities.Count} capabilities");
     }
 
     internal async Task<(object, string)> PreviewMarketplaceProductsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -153,13 +153,13 @@ public class SyncToolHandlers : ToolHandlerBase
         }).ToList();
 
         return (new { items, hasMore = page.HasMore, nextCursor = page.NextCursor, totalCount = page.TotalCount },
-            $"На маркетплейсе: {items.Count} товаров (страница){(page.HasMore ? ", есть ещё" : "")}");
+            $"On the marketplace: {items.Count} products (page){(page.HasMore ? ", more available" : "")}");
     }
 
     internal async Task<(object, string)> ImportProductsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ImportProductsInput>(json);
-        if (p.ExternalProductIds.Count == 0) return (new { error = "Не указаны externalProductIds" }, "Нет товаров");
+        if (p.ExternalProductIds.Count == 0) return (new { error = "externalProductIds not specified" }, "No products");
         var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportProduct, ct);
         if (error != null) return (new { error }, error);
 
@@ -181,9 +181,9 @@ public class SyncToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "import_products",
-            $"Импорт {p.ExternalProductIds.Count} товаров с {conn!.name}", new { }, canRollback: false, ct);
+            $"Import {p.ExternalProductIds.Count} products from {conn!.name}", new { }, canRollback: false, ct);
         return (new { batchId, queued = p.ExternalProductIds.Count },
-            $"Импорт {p.ExternalProductIds.Count} товаров поставлен в очередь (batchId: {batchId})");
+            $"Import of {p.ExternalProductIds.Count} products queued (batchId: {batchId})");
     }
 
     internal async Task<(object, string)> ImportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -193,12 +193,12 @@ public class SyncToolHandlers : ToolHandlerBase
         if (error != null) return (new { error }, error);
 
         var result = await _priceSyncService.ImportPricesAsync(p.ConnectionId, null, ct, storeId: storeId);
-        if (!result.IsSuccess) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+        if (!result.IsSuccess) return (new { error = result.ErrorMessage }, $"Error: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "import_prices",
-            $"Импорт цен с {conn!.name}: обновлено {result.UpdatedCount}", new { }, canRollback: false, ct);
+            $"Import prices from {conn!.name}: updated {result.UpdatedCount}", new { }, canRollback: false, ct);
         return (new { updated = result.UpdatedCount, skipped = result.SkippedCount },
-            $"Импорт цен: обновлено {result.UpdatedCount}, пропущено {result.SkippedCount}");
+            $"Price import: updated {result.UpdatedCount}, skipped {result.SkippedCount}");
     }
 
     internal async Task<(object, string)> ImportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -233,9 +233,9 @@ public class SyncToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "import_stocks",
-            $"Импорт остатков с {conn!.name}: обновлено {updated}", new { }, canRollback: false, ct);
+            $"Import stocks from {conn!.name}: updated {updated}", new { }, canRollback: false, ct);
         return (new { updated, totalOnMarketplace = byExternalId.Count },
-            $"Импорт остатков: обновлено {updated} товаров");
+            $"Stock import: updated {updated} products");
     }
 
     internal async Task<(object, string)> ArchiveProductOnMarketplaceAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -246,14 +246,14 @@ public class SyncToolHandlers : ToolHandlerBase
 
         var link = await _context.productMarketplaceLinks.AsNoTracking()
             .FirstOrDefaultAsync(l => l.connectionId == p.ConnectionId && l.productId == p.ProductId, ct);
-        if (link == null) return (new { error = "Товар не связан с этим маркетплейсом" }, "Связь не найдена");
+        if (link == null) return (new { error = "Product is not linked to this marketplace" }, "Link not found");
 
         var result = await adapter!.ArchiveProductAsync(conn!, link.externalProductId, ct);
-        if (!result.Success) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+        if (!result.Success) return (new { error = result.ErrorMessage }, $"Error: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "archive_product",
-            $"Товар {p.ProductId} архивирован на {conn!.name}", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Товар архивирован на {conn!.name}");
+            $"Product {p.ProductId} archived on {conn!.name}", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Product archived on {conn!.name}");
     }
 
     internal async Task<(object, string)> ExportProductsBatchAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -261,7 +261,7 @@ public class SyncToolHandlers : ToolHandlerBase
         var p = ParseInput<ExportBatchInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
         List<int> productIds;
         if (p.ProductIds?.Count > 0)
@@ -280,7 +280,7 @@ public class SyncToolHandlers : ToolHandlerBase
                 .Where(x => x.storeId == storeId).Select(x => x.Id).ToListAsync(ct);
         }
 
-        if (productIds.Count == 0) return (new { queued = 0 }, "Нет товаров для экспорта");
+        if (productIds.Count == 0) return (new { queued = 0 }, "No products to export");
 
         var batchId = Guid.NewGuid().ToString("N");
         foreach (var pid in productIds)
@@ -297,21 +297,21 @@ public class SyncToolHandlers : ToolHandlerBase
             });
         }
         await _context.SaveChangesAsync(ct);
-        return (new { batchId, queued = productIds.Count }, $"Добавлено {productIds.Count} товаров в очередь экспорта");
+        return (new { batchId, queued = productIds.Count }, $"Added {productIds.Count} products to the export queue");
     }
 
     internal Task<(object, string)> ExportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return Task.FromResult(((object)new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
-            $"Экспорт цен на подключение {p.ConnectionId} запущен"));
+        return Task.FromResult(((object)new { note = "Price export started. Use the UI to monitor progress." },
+            $"Price export to connection {p.ConnectionId} started"));
     }
 
     internal Task<(object, string)> ExportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return Task.FromResult(((object)new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
-            $"Экспорт остатков на подключение {p.ConnectionId} запущен"));
+        return Task.FromResult(((object)new { note = "Stock export started. Use the UI to monitor progress." },
+            $"Stock export to connection {p.ConnectionId} started"));
     }
 
     internal async Task<(object, string)> GetBatchStatusAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -326,7 +326,7 @@ public class SyncToolHandlers : ToolHandlerBase
         var done = exports.Where(e => e.status == ProductExportStatus.Completed).Sum(e => e.count);
         var failed = exports.Where(e => e.status == ProductExportStatus.Failed).Sum(e => e.count);
         return (new { batchId = p.BatchId, total, done, failed, inProgress = total - done - failed },
-            $"Пакет {p.BatchId}: {done}/{total} выполнено, {failed} ошибок");
+            $"Batch {p.BatchId}: {done}/{total} done, {failed} failed");
     }
 
     internal async Task<(object, string)> ListProductLinksAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -339,7 +339,7 @@ public class SyncToolHandlers : ToolHandlerBase
         var links = await q.Take(50)
             .Select(l => new { l.productId, l.externalProductId, l.status, l.connectionId })
             .ToListAsync(ct);
-        return (new { links, count = links.Count }, $"{links.Count} связей");
+        return (new { links, count = links.Count }, $"{links.Count} links");
     }
 
     // Resolves connection (scoped to store) + adapter, with optional capability check.
@@ -348,11 +348,11 @@ public class SyncToolHandlers : ToolHandlerBase
     {
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
-        if (conn == null) return (null, null, "Подключение не найдено");
+        if (conn == null) return (null, null, "Connection not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
-        if (adapter == null) return (null, null, $"Адаптер '{conn.adapterKey}' не найден");
+        if (adapter == null) return (null, null, $"Adapter '{conn.adapterKey}' not found");
         if (required.HasValue && !adapter.Capabilities.HasFlag(required.Value))
-            return (null, null, $"Маркетплейс {adapter.DisplayName} не поддерживает операцию {required.Value}");
+            return (null, null, $"Marketplace {adapter.DisplayName} does not support operation {required.Value}");
         return (conn, adapter, null);
     }
 }

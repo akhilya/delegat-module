@@ -28,7 +28,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
         var attrs = await _context.storeAttributes.AsNoTracking()
             .Where(a => a.storeId == storeId).OrderBy(a => a.sortOrder)
             .Select(a => new { a.Id, a.name, a.key, a.type }).ToListAsync(ct);
-        return (new { attributes = attrs, count = attrs.Count }, $"{attrs.Count} атрибутов магазина");
+        return (new { attributes = attrs, count = attrs.Count }, $"{attrs.Count} store attributes");
     }
 
     internal async Task<(object, string)> GetStoreStatsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -48,7 +48,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
             mappings = mappingCount,
             pendingExports,
             groups = groupCount
-        }, $"Товаров: {productCount}, категорий: {categoryCount}, подключений: {connectionCount}");
+        }, $"Products: {productCount}, categories: {categoryCount}, connections: {connectionCount}");
     }
 
     internal async Task<(object, string)> FindProductsWithoutImagesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -57,7 +57,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
             .Where(p => p.storeId == storeId && !_context.images.Any(i => i.productId == p.Id))
             .Select(p => new { p.Id, p.name, p.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без изображений");
+        return (new { products, count = products.Count }, $"{products.Count} products without images");
     }
 
     internal async Task<(object, string)> FindProductsWithoutBarcodeAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -66,7 +66,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
             .Where(p => p.storeId == storeId && (p.barcode == null || p.barcode == ""))
             .Select(p => new { p.Id, p.name, p.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без баркода");
+        return (new { products, count = products.Count }, $"{products.Count} products without barcode");
     }
 
     internal async Task<(object, string)> FindProductsMissingFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -77,14 +77,14 @@ public class AnalyticsToolHandlers : ToolHandlerBase
             .Select(a => (int?)a.Id).FirstOrDefaultAsync(ct);
 
         if (attrId == null)
-            return (new { error = $"Поле '{p.Search}' не найдено" }, "Поле не найдено");
+            return (new { error = $"Field '{p.Search}' not found" }, "Field not found");
 
         var products = await _context.products.AsNoTracking()
             .Where(pr => pr.storeId == storeId &&
                 !_context.productAttributeValues.Any(v => v.productId == pr.Id && v.attributeId == attrId && v.value != null && v.value != ""))
             .Select(pr => new { pr.Id, pr.name, pr.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без поля '{p.Search}'");
+        return (new { products, count = products.Count }, $"{products.Count} products without field '{p.Search}'");
     }
 
     internal async Task<(object, string)> FindProductsWithSyncErrorsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -96,7 +96,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
         var links = await q.Take(50)
             .Select(l => new { l.productId, l.externalProductId, l.connectionId, l.lastErrorMessage })
             .ToListAsync(ct);
-        return (new { products = links, count = links.Count }, $"{links.Count} товаров с ошибками синхронизации");
+        return (new { products = links, count = links.Count }, $"{links.Count} products with sync errors");
     }
 
     internal async Task<(object, string)> AnalyzeMappingQualityAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -121,7 +121,7 @@ public class AnalyticsToolHandlers : ToolHandlerBase
         var totalFields = report.Sum(r => (int)((dynamic)r).Total);
         var connectedFields = report.Sum(r => (int)((dynamic)r).Connected);
         return (new { mappings = report, totalFields, connectedFields },
-            $"Проанализировано {mappings.Count} маппингов: {connectedFields}/{totalFields} полей подключено");
+            $"Analyzed {mappings.Count} mappings: {connectedFields}/{totalFields} fields connected");
     }
 
     internal async Task<(object, string)> GetImageDownloadStatusAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -131,6 +131,6 @@ public class AnalyticsToolHandlers : ToolHandlerBase
             .GroupBy(d => d.status)
             .Select(g => new { status = g.Key, count = g.Count() })
             .ToListAsync(ct);
-        return (new { status = groups }, "Статус загрузки изображений");
+        return (new { status = groups }, "Image download status");
     }
 }

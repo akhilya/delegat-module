@@ -34,8 +34,8 @@ public class FileToolHandlers : ToolHandlerBase
         var p = ParseInput<ListFilesInput>(json);
         if (p.Scope == "product")
         {
-            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
-            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+            if (!p.ProductId.HasValue) return (new { error = "scope=product requires productId" }, "No productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Product not found" }, "Not found");
 
             var fq = _context.files.AsNoTracking().Where(f => f.productId == p.ProductId);
             if (!string.IsNullOrEmpty(p.Search))
@@ -49,7 +49,7 @@ public class FileToolHandlers : ToolHandlerBase
                 .Where(f => f.productId == p.ProductId)
                 .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
                 .ToListAsync(ct);
-            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+            return (new { files, folders }, $"{files.Count} files, {folders.Count} folders");
         }
         else
         {
@@ -65,81 +65,81 @@ public class FileToolHandlers : ToolHandlerBase
                 .Where(f => f.storeId == storeId)
                 .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
                 .ToListAsync(ct);
-            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+            return (new { files, folders }, $"{files.Count} files, {folders.Count} folders");
         }
     }
 
     internal async Task<(object, string)> CreateFolderAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<CreateFolderInput>(json);
-        if (string.IsNullOrWhiteSpace(p.Name)) return (new { error = "Имя папки обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.Name)) return (new { error = "Folder name is required" }, "No name");
 
         if (p.Scope == "product")
         {
-            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
-            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+            if (!p.ProductId.HasValue) return (new { error = "scope=product requires productId" }, "No productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Product not found" }, "Not found");
             if (p.ParentFolderId.HasValue && !await _context.productFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.ParentFolderId && f.productId == p.ProductId, ct))
-                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+                return (new { error = "Parent folder not found" }, "Not found");
 
             var folder = new ProductFolder { name = p.Name.Trim(), productId = p.ProductId.Value, parentFolderId = p.ParentFolderId };
             _context.productFolders.Add(folder);
             await _context.SaveChangesAsync(ct);
-            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+            return (new { id = folder.Id }, $"Folder \"{folder.name}\" created");
         }
         else
         {
             if (p.ParentFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.ParentFolderId && f.storeId == storeId, ct))
-                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+                return (new { error = "Parent folder not found" }, "Not found");
 
             var folder = new StoreFolder { name = p.Name.Trim(), storeId = storeId, parentFolderId = p.ParentFolderId };
             _context.storeFolders.Add(folder);
             await _context.SaveChangesAsync(ct);
-            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+            return (new { id = folder.Id }, $"Folder \"{folder.name}\" created");
         }
     }
 
     internal async Task<(object, string)> RenameFileAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<RenameFileInput>(json);
-        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "New name is required" }, "No name");
         if (p.Scope == "product")
         {
             var file = await _context.files.FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
-            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            if (file == null) return (new { error = "File not found" }, "Not found");
             file.displayName = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
         else
         {
             var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
-            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            if (file == null) return (new { error = "File not found" }, "Not found");
             file.displayName = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
-        return (new { success = true }, $"Файл переименован в \"{p.NewName}\"");
+        return (new { success = true }, $"File renamed to \"{p.NewName}\"");
     }
 
     internal async Task<(object, string)> RenameFolderAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<RenameFolderInput>(json);
-        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "New name is required" }, "No name");
         if (p.Scope == "product")
         {
             var folder = await _context.productFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             folder.name = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
         else
         {
             var folder = await _context.storeFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             folder.name = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
-        return (new { success = true }, $"Папка переименована в \"{p.NewName}\"");
+        return (new { success = true }, $"Folder renamed to \"{p.NewName}\"");
     }
 
     internal async Task<(object, string)> MoveFilesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -152,7 +152,7 @@ public class FileToolHandlers : ToolHandlerBase
         {
             if (p.TargetFolderId.HasValue && !await _context.productFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.TargetFolderId && f.product.storeId == storeId, ct))
-                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+                return (new { error = "Target folder not found" }, "Not found");
 
             if (p.FileIds?.Count > 0)
             {
@@ -169,7 +169,7 @@ public class FileToolHandlers : ToolHandlerBase
                     .ToListAsync(ct);
                 foreach (var f in folders)
                 {
-                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    if (p.TargetFolderId == f.Id) return (new { error = "Cannot move a folder into itself" }, "Error");
                     f.parentFolderId = p.TargetFolderId;
                 }
                 movedFolders = folders.Count;
@@ -179,7 +179,7 @@ public class FileToolHandlers : ToolHandlerBase
         {
             if (p.TargetFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.TargetFolderId && f.storeId == storeId, ct))
-                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+                return (new { error = "Target folder not found" }, "Not found");
 
             if (p.FileIds?.Count > 0)
             {
@@ -196,12 +196,12 @@ public class FileToolHandlers : ToolHandlerBase
                     .ToListAsync(ct);
                 foreach (var f in folders)
                 {
-                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    if (p.TargetFolderId == f.Id) return (new { error = "Cannot move a folder into itself" }, "Error");
                     // Prevent moving into own descendant
                     var currentId = p.TargetFolderId;
                     while (currentId.HasValue)
                     {
-                        if (currentId.Value == f.Id) return (new { error = "Нельзя переместить папку в своего потомка" }, "Ошибка");
+                        if (currentId.Value == f.Id) return (new { error = "Cannot move a folder into its own descendant" }, "Error");
                         currentId = await _context.storeFolders.AsNoTracking()
                             .Where(x => x.Id == currentId.Value).Select(x => x.parentFolderId).FirstOrDefaultAsync(ct);
                     }
@@ -211,13 +211,13 @@ public class FileToolHandlers : ToolHandlerBase
             }
         }
         await _context.SaveChangesAsync(ct);
-        return (new { movedFiles, movedFolders }, $"Перемещено: {movedFiles} файлов, {movedFolders} папок");
+        return (new { movedFiles, movedFolders }, $"Moved: {movedFiles} files, {movedFolders} folders");
     }
 
     internal async Task<(object, string)> DeleteFilesAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<DeleteFilesInput>(json);
-        if (p.FileIds.Count == 0) return (new { error = "Не указаны fileIds" }, "Нет файлов");
+        if (p.FileIds.Count == 0) return (new { error = "fileIds not specified" }, "No files");
 
         if (p.Scope == "product")
         {
@@ -238,8 +238,8 @@ public class FileToolHandlers : ToolHandlerBase
             }
             await _context.SaveChangesAsync(ct);
             await _operationService.RecordAsync(storeId, userId, "delete_files",
-                $"Удалено {files.Count} файлов товаров", new { }, canRollback: false, ct);
-            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+                $"Deleted {files.Count} product files", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Deleted {files.Count} files");
         }
         else
         {
@@ -260,8 +260,8 @@ public class FileToolHandlers : ToolHandlerBase
             }
             await _context.SaveChangesAsync(ct);
             await _operationService.RecordAsync(storeId, userId, "delete_files",
-                $"Удалено {files.Count} файлов магазина", new { }, canRollback: false, ct);
-            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+                $"Deleted {files.Count} store files", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Deleted {files.Count} files");
         }
     }
 
@@ -275,9 +275,9 @@ public class FileToolHandlers : ToolHandlerBase
             var folder = await _context.productFolders.AsNoTracking()
                 .Include(f => f.files).Include(f => f.childFolders)
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+                return (new { error = "Folder is not empty — specify recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -306,17 +306,17 @@ public class FileToolHandlers : ToolHandlerBase
                 await _context.productFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
 
             await _operationService.RecordAsync(storeId, userId, "delete_folder",
-                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
-            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+                $"Deleted folder \"{folder.name}\" ({files.Count} files)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Folder \"{folder.name}\" deleted ({files.Count} files)");
         }
         else
         {
             var folder = await _context.storeFolders.AsNoTracking()
                 .Include(f => f.files).Include(f => f.childFolders)
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+                return (new { error = "Folder is not empty — specify recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -345,8 +345,8 @@ public class FileToolHandlers : ToolHandlerBase
                 await _context.storeFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
 
             await _operationService.RecordAsync(storeId, userId, "delete_folder",
-                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
-            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+                $"Deleted folder \"{folder.name}\" ({files.Count} files)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Folder \"{folder.name}\" deleted ({files.Count} files)");
         }
     }
 
@@ -355,9 +355,9 @@ public class FileToolHandlers : ToolHandlerBase
         var p = ParseInput<ShareFileInput>(json);
         var ttl = p.TtlHours ?? 168;
         if (ttl is not (1 or 24 or 168 or 720))
-            return (new { error = "Допустимые ttlHours: 1, 24, 168 (неделя), 720 (месяц)" }, "Неверный TTL");
+            return (new { error = "Allowed ttlHours: 1, 24, 168 (a week), 720 (a month)" }, "Invalid TTL");
         if (!p.FileId.HasValue && !p.FolderId.HasValue)
-            return (new { error = "Укажите fileId или folderId" }, "Нет объекта");
+            return (new { error = "Specify fileId or folderId" }, "No target");
 
         var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var expiresAt = DateTime.UtcNow.AddHours(ttl);
@@ -369,7 +369,7 @@ public class FileToolHandlers : ToolHandlerBase
             {
                 var file = await _context.files.AsNoTracking()
                     .FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
-                if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+                if (file == null) return (new { error = "File not found" }, "Not found");
                 _context.fileShareTokens.Add(new FileShareToken
                 {
                     fileId = file.Id, token = token, expiresAt = expiresAt, createdByUserId = userId,
@@ -380,7 +380,7 @@ public class FileToolHandlers : ToolHandlerBase
             {
                 var folder = await _context.productFolders.AsNoTracking()
                     .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-                if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+                if (folder == null) return (new { error = "Folder not found" }, "Not found");
                 _context.folderShareTokens.Add(new FolderShareToken
                 {
                     productId = folder.productId, folderId = folder.Id, token = token,
@@ -395,7 +395,7 @@ public class FileToolHandlers : ToolHandlerBase
             {
                 var exists = await _context.storeFiles.AsNoTracking()
                     .AnyAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
-                if (!exists) return (new { error = "Файл не найден" }, "Не найден");
+                if (!exists) return (new { error = "File not found" }, "Not found");
                 _context.storeFileShareTokens.Add(new StoreFileShareToken
                 {
                     fileId = p.FileId.Value, token = token, expiresAt = expiresAt, createdByUserId = userId,
@@ -406,7 +406,7 @@ public class FileToolHandlers : ToolHandlerBase
             {
                 var exists = await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-                if (!exists) return (new { error = "Папка не найдена" }, "Не найдена");
+                if (!exists) return (new { error = "Folder not found" }, "Not found");
                 _context.storeFolderShareTokens.Add(new StoreFolderShareToken
                 {
                     storeId = storeId, folderId = p.FolderId, token = token,
@@ -416,7 +416,7 @@ public class FileToolHandlers : ToolHandlerBase
             }
         }
         await _context.SaveChangesAsync(ct);
-        return (new { url, expiresAt }, $"Ссылка создана, действует до {expiresAt:yyyy-MM-dd HH:mm} UTC");
+        return (new { url, expiresAt }, $"Link created, valid until {expiresAt:yyyy-MM-dd HH:mm} UTC");
     }
 
     private async Task<bool> ProductInStoreAsync(int productId, int storeId, CancellationToken ct)

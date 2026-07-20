@@ -29,7 +29,7 @@ public class CategoryToolHandlers : ToolHandlerBase
             .OrderBy(c => c.name)
             .Select(c => new { c.Id, c.name, c.description, attributeCount = c.attributes.Count })
             .ToListAsync(ct);
-        return (new { categories = cats, count = cats.Count }, $"{cats.Count} категорий");
+        return (new { categories = cats, count = cats.Count }, $"{cats.Count} categories");
     }
 
     internal async Task<(object, string)> GetCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -38,7 +38,7 @@ public class CategoryToolHandlers : ToolHandlerBase
         var cat = await _context.categories.AsNoTracking()
             .Include(c => c.attributes)
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
         return (new
         {
             cat.Id, cat.name, cat.description,
@@ -59,30 +59,30 @@ public class CategoryToolHandlers : ToolHandlerBase
         var cat = new Category { name = p.Name, description = p.Description, storeId = storeId };
         _context.categories.Add(cat);
         await _context.SaveChangesAsync(ct);
-        return (new { id = cat.Id }, $"Категория \"{p.Name}\" создана");
+        return (new { id = cat.Id }, $"Category \"{p.Name}\" created");
     }
 
     internal async Task<(object, string)> UpdateCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateCategoryInput>(json);
         var cat = await _context.categories.FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
         if (p.Name != null) cat.name = p.Name;
         if (p.Description != null) cat.description = p.Description;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Категория обновлена");
+        return (new { success = true }, $"Category updated");
     }
 
     internal async Task<(object, string)> DeleteCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<IdInput>(json);
         var cat = await _context.categories.FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
 
         var activeCount = await _context.products.CountAsync(x => x.categoryId == p.Id, ct);
         if (activeCount > 0)
-            return (new { error = $"В категории {activeCount} товаров — сначала перемести или удали их" },
-                $"Нельзя удалить: в категории {activeCount} товаров");
+            return (new { error = $"The category has {activeCount} products — move or delete them first" },
+                $"Cannot delete: category has {activeCount} products");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
         // block the DELETE — detach them from the category (they stay in the trash)
@@ -92,7 +92,7 @@ public class CategoryToolHandlers : ToolHandlerBase
 
         _context.categories.Remove(cat);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Категория \"{cat.name}\" удалена");
+        return (new { success = true }, $"Category \"{cat.name}\" deleted");
     }
 
     internal async Task<(object, string)> ListCategoryFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -110,7 +110,7 @@ public class CategoryToolHandlers : ToolHandlerBase
             a.isRequired, a.group,
             options = ParseAttributeOptions(a.options),
         }).ToList();
-        return (new { fields, count = fields.Count }, $"{fields.Count} полей");
+        return (new { fields, count = fields.Count }, $"{fields.Count} fields");
     }
 
     internal async Task<(object, string)> AddCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -118,7 +118,7 @@ public class CategoryToolHandlers : ToolHandlerBase
         var p = ParseInput<AddFieldInput>(json);
         var cat = await _context.categories.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.CategoryId && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
 
         var maxSort = await _context.categoryAttributes.AsNoTracking()
             .Where(a => a.categoryId == p.CategoryId)
@@ -138,9 +138,9 @@ public class CategoryToolHandlers : ToolHandlerBase
         _context.categoryAttributes.Add(attr);
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "add_category_field",
-            $"Добавлено поле \"{p.Name}\" в категорию {p.CategoryId}",
+            $"Added field \"{p.Name}\" to category {p.CategoryId}",
             AiOperationService.BuildFieldRollback(attr.Id), ct: ct);
-        return (new { id = attr.Id, key }, $"Поле \"{p.Name}\" добавлено");
+        return (new { id = attr.Id, key }, $"Field \"{p.Name}\" added");
     }
 
     internal async Task<(object, string)> UpdateCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -148,11 +148,11 @@ public class CategoryToolHandlers : ToolHandlerBase
         var p = ParseInput<UpdateFieldInput>(json);
         var attr = await _context.categoryAttributes
             .FirstOrDefaultAsync(a => a.Id == p.FieldId && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Поле не найдено" }, "Поле не найдено");
+        if (attr == null) return (new { error = "Field not found" }, "Field not found");
         if (p.Name != null) attr.name = p.Name;
         if (p.IsRequired.HasValue) attr.isRequired = p.IsRequired.Value;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Поле обновлено");
+        return (new { success = true }, $"Field updated");
     }
 
     internal async Task<(object, string)> DeleteCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -160,10 +160,10 @@ public class CategoryToolHandlers : ToolHandlerBase
         var p = ParseInput<FieldIdInput>(json);
         var attr = await _context.categoryAttributes
             .FirstOrDefaultAsync(a => a.Id == p.FieldId && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Поле не найдено" }, "Поле не найдено");
+        if (attr == null) return (new { error = "Field not found" }, "Field not found");
         _context.categoryAttributes.Remove(attr);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Поле \"{attr.name}\" удалено");
+        return (new { success = true }, $"Field \"{attr.name}\" deleted");
     }
 
     internal async Task<(object, string)> FindCategoriesWithFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -180,7 +180,7 @@ public class CategoryToolHandlers : ToolHandlerBase
                     .ToList()
             })
             .ToListAsync(ct);
-        return (new { categories = cats, count = cats.Count }, $"Найдено {cats.Count} категорий с полем '{p.Search}'");
+        return (new { categories = cats, count = cats.Count }, $"Found {cats.Count} categories with field '{p.Search}'");
     }
 
     // Select/MultiSelect options are stored as a JSON string — parse so the model sees real values

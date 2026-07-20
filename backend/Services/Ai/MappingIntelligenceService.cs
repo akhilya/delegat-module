@@ -53,9 +53,9 @@ public class MappingIntelligenceService
                 ConnectionName = source.connectionName,
                 AdapterKey = source.adapterKey,
                 ExternalCategoryName = source.externalCategoryName ?? source.name,
-                Hint = "Локальная категория, скорее всего, создана/наполнена при импорте с этого маркетплейса. " +
-                       "Значения атрибутов (options) и ключи словарей — оттуда. При маппинге на другой адаптер " +
-                       "для Select/MultiSelect с allowedValues обязательно добавляй optionMap: локальное value → target allowedValue.",
+                Hint = "The local category was most likely created/populated during import from this marketplace. " +
+                       "Attribute values (options) and dictionary keys come from there. When mapping to another adapter " +
+                       "for Select/MultiSelect with allowedValues, always add an optionMap: local value -> target allowedValue.",
             },
             SiblingMappings = siblings
                 .Where(m => m.Id != mapping.Id)
@@ -180,8 +180,8 @@ public class MappingIntelligenceService
                         ProductStoredValue = productValue,
                         ProductMappedTargetValue = productTarget,
                         Note = mappings.Count > 0
-                            ? $"Словарь категории: {mappings.Count}/{localOpts.Count} опций (score={score})"
-                            : $"Совпадение имён (score={score}), optionMap не требуется",
+                            ? $"Category dictionary: {mappings.Count}/{localOpts.Count} options (score={score})"
+                            : $"Name match (score={score}), optionMap not required",
                     };
                 }
             }

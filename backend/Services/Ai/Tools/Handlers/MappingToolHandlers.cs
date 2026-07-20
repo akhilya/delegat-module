@@ -47,7 +47,7 @@ public class MappingToolHandlers : ToolHandlerBase
                 m.connectionId, connectionName = m.connection.name
             })
             .ToListAsync(ct);
-        return (new { mappings, count = mappings.Count }, $"{mappings.Count} маппингов");
+        return (new { mappings, count = mappings.Count }, $"{mappings.Count} mappings");
     }
 
     internal async Task<(object, string)> GetMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -56,7 +56,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var coverageReport = await _graphMutation.GetCoverageReportAsync(p.Id, ct);
         var fields = await _graphMutation.GetFieldStatesAsync(p.Id, ct);
@@ -93,9 +93,9 @@ public class MappingToolHandlers : ToolHandlerBase
             schemaContext,
             productSample,
             optionAlignmentHints = alignmentHints,
-        }, $"Маппинг {mapping.name ?? mapping.externalCategoryName}: карточка {card.Connected}/{card.Total}" +
-           (price != null ? $", цены {price.Connected}/{price.Total}" : "") +
-           $" (обяз. карточка {card.RequiredConnected}/{card.RequiredTotal})");
+        }, $"Mapping {mapping.name ?? mapping.externalCategoryName}: card {card.Connected}/{card.Total}" +
+           (price != null ? $", prices {price.Connected}/{price.Total}" : "") +
+           $" (required card {card.RequiredConnected}/{card.RequiredTotal})");
     }
 
     internal async Task<(object, string)> CreateMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -103,7 +103,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<CreateMappingInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
         var mapping = new CategoryMapping
         {
@@ -116,7 +116,7 @@ public class MappingToolHandlers : ToolHandlerBase
         _context.categoryMappings.Add(mapping);
         await _context.SaveChangesAsync(ct);
 
-        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Для заполнения вызови get_mapping и подключи поля через connect_field / set_field_static_value.");
+        return (new { id = mapping.Id }, $"Mapping created (id={mapping.Id}). To fill it, call get_mapping and connect fields via connect_field / set_field_static_value.");
     }
 
     internal async Task<(object, string)> UpdateMappingNameAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -124,10 +124,10 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<UpdateNameInput>(json);
         var mapping = await _context.categoryMappings
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         mapping.name = p.Name;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Имя маппинга обновлено: \"{p.Name}\"");
+        return (new { success = true }, $"Mapping name updated: \"{p.Name}\"");
     }
 
     internal async Task<(object, string)> DeleteMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -135,10 +135,10 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         _context.categoryMappings.Remove(mapping);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Маппинг удалён");
+        return (new { success = true }, $"Mapping deleted");
     }
 
     internal async Task<(object, string)> DuplicateMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -146,19 +146,19 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         var copy = new CategoryMapping
         {
             connectionId = mapping.connectionId,
             localCategoryId = mapping.localCategoryId,
             externalCategoryId = mapping.externalCategoryId,
             externalCategoryName = mapping.externalCategoryName,
-            name = (mapping.name ?? mapping.externalCategoryName) + " (копия)",
+            name = (mapping.name ?? mapping.externalCategoryName) + " (copy)",
             graphJson = mapping.graphJson
         };
         _context.categoryMappings.Add(copy);
         await _context.SaveChangesAsync(ct);
-        return (new { id = copy.Id }, $"Маппинг скопирован (id={copy.Id})");
+        return (new { id = copy.Id }, $"Mapping duplicated (id={copy.Id})");
     }
 
     internal async Task<(object, string)> ListExternalCategoriesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -166,10 +166,10 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<ExternalCategoriesInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
         var cats = await adapter.GetCategoriesAsync(conn, p.ParentId, p.Search, ct);
-        return (new { categories = cats.Take(50) }, $"{cats.Count} категорий");
+        return (new { categories = cats.Take(50) }, $"{cats.Count} categories");
     }
 
     internal async Task<(object, string)> GetExternalFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -184,21 +184,21 @@ public class MappingToolHandlers : ToolHandlerBase
             // page knows mappingId but not the marketplace category id
             var mapping = await _context.categoryMappings.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
             connectionId = mapping.connectionId;
             externalCategoryId = mapping.externalCategoryId;
         }
         else
         {
             if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
-                return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+                return (new { error = "Provide mappingId OR connectionId+externalCategoryId" }, "No parameters");
             connectionId = p.ConnectionId.Value;
             externalCategoryId = p.ExternalCategoryId;
         }
 
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
         var fields = await adapter.GetCategoryFieldsAsync(conn, externalCategoryId, ct);
 
@@ -210,10 +210,10 @@ public class MappingToolHandlers : ToolHandlerBase
         {
             fields = fields.Concat([new ExternalField(
                 Key: ProductSyncService.SyntheticGroupFieldKey,
-                Name: "Объединение в карточку (группа)",
+                Name: "Merge into a card (group)",
                 IsRequired: false,
                 Type: "string",
-                Description: "Товары с одинаковым вычисленным значением объединяются в одну карточку. По умолчанию привязано к groupName.")]).ToList();
+                Description: "Products with the same computed value are merged into one card. Bound to groupName by default.")]).ToList();
         }
 
         var projected = fields.Select(f => new
@@ -236,7 +236,7 @@ public class MappingToolHandlers : ToolHandlerBase
             sinkType = "card",
             fields = projected,
             total = projected.Count, required = fields.Count(f => f.IsRequired)
-        }, $"{projected.Count} полей карточки ({fields.Count(f => f.IsRequired)} обязательных)");
+        }, $"{projected.Count} card fields ({fields.Count(f => f.IsRequired)} required)");
     }
 
     internal async Task<(object, string)> GetPriceFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -249,25 +249,25 @@ public class MappingToolHandlers : ToolHandlerBase
         {
             var mapping = await _context.categoryMappings.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
             connectionId = mapping.connectionId;
             externalCategoryId = mapping.externalCategoryId;
         }
         else
         {
             if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
-                return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+                return (new { error = "Provide mappingId OR connectionId+externalCategoryId" }, "No parameters");
             connectionId = p.ConnectionId.Value;
             externalCategoryId = p.ExternalCategoryId;
         }
 
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             return (new { sinkType = "price", fields = Array.Empty<object>(), total = 0 },
-                "Адаптер не поддерживает отдельный price API");
+                "Adapter does not support a separate price API");
 
         var fields = await adapter.GetPriceFieldsAsync(conn, externalCategoryId, ct);
         var projected = fields.Select(f => new
@@ -284,7 +284,7 @@ public class MappingToolHandlers : ToolHandlerBase
             fields = projected,
             total = projected.Count,
             required = fields.Count(f => f.IsRequired),
-        }, $"{projected.Count} полей цен ({fields.Count(f => f.IsRequired)} обязательных)");
+        }, $"{projected.Count} price fields ({fields.Count(f => f.IsRequired)} required)");
     }
 
     internal async Task<(object, string)> SearchFieldOptionsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -297,11 +297,11 @@ public class MappingToolHandlers : ToolHandlerBase
             mapping = await _context.categoryMappings.AsNoTracking()
                 .Include(m => m.connection)
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
         }
         else if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
         {
-            return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+            return (new { error = "Provide mappingId OR connectionId+externalCategoryId" }, "No parameters");
         }
 
         List<ExternalField> defs;
@@ -313,17 +313,17 @@ public class MappingToolHandlers : ToolHandlerBase
         {
             var conn = await _context.marketplaceConnections.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-            if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+            if (conn == null) return (new { error = "Connection not found" }, "Not found");
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             defs = await adapter.GetCategoryFieldsAsync(conn, p.ExternalCategoryId!, ct);
         }
 
         var field = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
         if (field == null)
-            return (new { error = $"Поле '{p.AdapterFieldKey}' не найдено у адаптера" }, "Поле не найдено");
+            return (new { error = $"Field '{p.AdapterFieldKey}' not found on the adapter" }, "Field not found");
         if (field.Options is not { Count: > 0 })
             return (new { options = Array.Empty<object>(), totalOptions = 0 },
-                $"У поля '{field.Name}' нет предопределённых опций — значение свободное");
+                $"Field '{field.Name}' has no predefined options — the value is free-form");
 
         var query = p.Query ?? "";
         var matches = string.IsNullOrWhiteSpace(query)
@@ -339,16 +339,16 @@ public class MappingToolHandlers : ToolHandlerBase
             options = matches.Take(limit).Select(o => new { o.Value, o.Label }).ToList(),
             totalMatches = matches.Count,
             totalOptions = field.Options.Count,
-        }, $"Найдено {matches.Count} опций по «{query}» (всего у поля {field.Options.Count})");
+        }, $"Found {matches.Count} options for \"{query}\" (field has {field.Options.Count} total)");
     }
 
     internal async Task<(object, string)> MergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<MergeFieldsInput>(json);
-        if (p.AliasFieldKeys.Count == 0) return (new { error = "Не указаны aliasFieldKeys" }, "Нет полей");
+        if (p.AliasFieldKeys.Count == 0) return (new { error = "aliasFieldKeys not provided" }, "No fields");
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         try
@@ -360,19 +360,19 @@ public class MappingToolHandlers : ToolHandlerBase
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "merge_fields",
-            $"Поля [{string.Join(", ", p.AliasFieldKeys)}] объединены с '{p.PrimaryFieldKey}'",
+            $"Fields [{string.Join(", ", p.AliasFieldKeys)}] merged with '{p.PrimaryFieldKey}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
         return (new { success = true },
-            $"Объединено: {string.Join(", ", p.AliasFieldKeys)} → '{p.PrimaryFieldKey}' (экспорт в оба ключа, импорт только через primary)");
+            $"Merged: {string.Join(", ", p.AliasFieldKeys)} → '{p.PrimaryFieldKey}' (export to both keys, import only via primary)");
     }
 
     internal async Task<(object, string)> UnmergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UnmergeFieldsInput>(json);
-        if (p.FieldKeys.Count == 0) return (new { error = "Не указаны fieldKeys" }, "Нет полей");
+        if (p.FieldKeys.Count == 0) return (new { error = "fieldKeys not provided" }, "No fields");
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         try
@@ -384,9 +384,9 @@ public class MappingToolHandlers : ToolHandlerBase
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "unmerge_fields",
-            $"Разъединены поля [{string.Join(", ", p.FieldKeys)}]",
+            $"Fields unmerged [{string.Join(", ", p.FieldKeys)}]",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Разъединено: {string.Join(", ", p.FieldKeys)}");
+        return (new { success = true }, $"Unmerged: {string.Join(", ", p.FieldKeys)}");
     }
 
     internal async Task<(object, string)> GetAvailableSourcesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -394,7 +394,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var catAttrs = await _context.categoryAttributes.AsNoTracking()
             .Where(a => a.categoryId == mapping.localCategoryId)
@@ -419,7 +419,7 @@ public class MappingToolHandlers : ToolHandlerBase
             productFields = new[] { "sku", "name", "price", "barcode", "description", "storageQuantity" },
             categoryAttributes = catAttrsProjected,
             storeAttributes = storeAttrs
-        }, $"Источники: {catAttrs.Count} атрибутов категории, {storeAttrs.Count} атрибутов магазина");
+        }, $"Sources: {catAttrs.Count} category attributes, {storeAttrs.Count} store attributes");
     }
 
     internal async Task<(object, string)> GetMappingCoverageAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -427,11 +427,11 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         var report = await _graphMutation.GetCoverageReportAsync(p.Id, ct);
-        return (report, $"Покрытие — карточка: {report.Card.Connected}/{report.Card.Total}" +
-            (report.Price != null ? $", цены: {report.Price.Connected}/{report.Price.Total}" : "") +
-            $"; обяз. карточка: {report.Card.RequiredConnected}/{report.Card.RequiredTotal}");
+        return (report, $"Coverage — card: {report.Card.Connected}/{report.Card.Total}" +
+            (report.Price != null ? $", prices: {report.Price.Connected}/{report.Price.Total}" : "") +
+            $"; required card: {report.Card.RequiredConnected}/{report.Card.RequiredTotal}");
     }
 
     internal async Task<(object, string)> PreviewMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -439,10 +439,10 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<PreviewMappingInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         // Preview is complex - return basic info
-        return (new { mappingId = p.MappingId, productId = p.ProductId, note = "Используйте UI редактора для предпросмотра" },
-            "Предпросмотр доступен в редакторе маппинга");
+        return (new { mappingId = p.MappingId, productId = p.ProductId, note = "Use the editor UI for preview" },
+            "Preview is available in the mapping editor");
     }
 
     internal async Task<(object, string)> GetOptionAlignmentHintsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -451,7 +451,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var adapterFields = await GetAdapterFieldDefsAsync(mapping, ct);
         var hints = await _intelligence.BuildAlignmentHintsAsync(mapping, adapterFields, p.ProductId, ct);
@@ -459,8 +459,8 @@ public class MappingToolHandlers : ToolHandlerBase
         var productSample = await _intelligence.GetProductSampleAsync(mapping.localCategoryId, p.ProductId, ct);
 
         return (new { schemaContext, productSample, hints },
-            $"{hints.Count} подсказок optionMap" +
-            (schemaContext.SchemaSource != null ? $" (схема с {schemaContext.SchemaSource.ConnectionName})" : ""));
+            $"{hints.Count} optionMap hints" +
+            (schemaContext.SchemaSource != null ? $" (schema from {schemaContext.SchemaSource.ConnectionName})" : ""));
     }
 
     internal async Task<(object, string)> ConnectFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -469,7 +469,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         // Field def lets GraphMutationService append missing-but-valid fields to the graph
         var fieldDef = await ResolveFieldDefAsync(mapping, p.AdapterFieldKey, p.Sink, ct);
@@ -477,21 +477,21 @@ public class MappingToolHandlers : ToolHandlerBase
         var prevGraph = mapping.graphJson ?? "";
         await _graphMutation.ConnectFieldAsync(p.MappingId, p.AdapterFieldKey, p.SourceType, p.SourceField, p.SourceAttributeId, p.Sink, fieldDef, ct);
         await _operationService.RecordAsync(storeId, userId, "connect_field",
-            $"Поле '{p.AdapterFieldKey}' подключено к {p.SourceType}:{p.SourceField ?? p.SourceAttributeId?.ToString()}",
+            $"Field '{p.AdapterFieldKey}' connected to {p.SourceType}:{p.SourceField ?? p.SourceAttributeId?.ToString()}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.AdapterFieldKey}' подключено");
+        return (new { success = true }, $"Field '{p.AdapterFieldKey}' connected");
     }
 
     internal async Task<(object, string)> ConnectFieldsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectFieldsBulkInput>(json);
         if (p.Connections is not { Count: > 0 })
-            return (new { error = "Список подключений пуст" }, "Список пуст");
+            return (new { error = "Connection list is empty" }, "List is empty");
 
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         var applied = 0; var errors = new List<string>();
@@ -509,11 +509,11 @@ public class MappingToolHandlers : ToolHandlerBase
         }
 
         await _operationService.RecordAsync(storeId, userId, "connect_field",
-            $"Подключено {applied} полей маппинга {p.MappingId}",
+            $"Connected {applied} fields of mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
 
-        var summary = $"Подключено полей: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count}";
+        var summary = $"Fields connected: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count}";
         return (new { applied, errors }, summary);
     }
 
@@ -523,9 +523,9 @@ public class MappingToolHandlers : ToolHandlerBase
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
-        // Field def: enables option validation ("Стандартное значение") and graph auto-add
+        // Field def: enables option validation ("Default value") and graph auto-add
         var fieldDef = await ResolveFieldDefAsync(mapping, p.AdapterFieldKey, p.Sink, ct);
 
         var prevGraph = mapping.graphJson ?? "";
@@ -539,21 +539,21 @@ public class MappingToolHandlers : ToolHandlerBase
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
-            $"Поле '{p.AdapterFieldKey}' = '{p.Value}'",
+            $"Field '{p.AdapterFieldKey}' = '{p.Value}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.AdapterFieldKey}' = '{p.Value}'");
+        return (new { success = true }, $"Field '{p.AdapterFieldKey}' = '{p.Value}'");
     }
 
     internal async Task<(object, string)> SetFieldsStaticBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<SetFieldsStaticBulkInput>(json);
         if (p.Fields is not { Count: > 0 })
-            return (new { error = "Список полей пуст" }, "Список пуст");
+            return (new { error = "Field list is empty" }, "List is empty");
 
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
         var prevGraph = mapping.graphJson ?? "";
@@ -571,11 +571,11 @@ public class MappingToolHandlers : ToolHandlerBase
         }
 
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
-            $"Установлено статических значений: {applied} для маппинга {p.MappingId}",
+            $"Set {applied} static values for mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
 
-        var summary = $"Установлено значений: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        var summary = $"Values set: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count} ({string.Join("; ", errors)})";
         return (new { applied, errors }, summary);
     }
 
@@ -585,7 +585,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var fieldDef = await ResolveFieldDefAsync(mapping, p.AdapterFieldKey, p.Sink, ct);
 
@@ -600,9 +600,9 @@ public class MappingToolHandlers : ToolHandlerBase
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "add_modifier",
-            $"Модификатор '{p.ModifierType}' добавлен к полю '{p.AdapterFieldKey}'",
+            $"Modifier '{p.ModifierType}' added to field '{p.AdapterFieldKey}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Модификатор '{p.ModifierType}' добавлен");
+        return (new { success = true }, $"Modifier '{p.ModifierType}' added");
     }
 
     internal async Task<(object, string)> RemoveFieldConnectionAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -610,14 +610,14 @@ public class MappingToolHandlers : ToolHandlerBase
         var p = ParseInput<FieldKeyInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         await _graphMutation.DisconnectFieldAsync(p.MappingId, p.FieldKey, p.Sink, ct);
         await _operationService.RecordAsync(storeId, userId, "disconnect_field",
-            $"Поле '{p.FieldKey}' отключено в маппинге {p.MappingId}",
+            $"Field '{p.FieldKey}' disconnected in mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.FieldKey}' отключено");
+        return (new { success = true }, $"Field '{p.FieldKey}' disconnected");
     }
 
     internal async Task<(object, string)> FindProductsWithoutMappingAsync(
@@ -636,8 +636,8 @@ public class MappingToolHandlers : ToolHandlerBase
             .ToListAsync(ct);
 
         if (mappingCategoryIds.Count == 0)
-            return (new { error = "У подключения нет маппингов категорий" },
-                "Нет маппингов для подключения");
+            return (new { error = "The connection has no category mappings" },
+                "No mappings for the connection");
 
         var mappingsByCategory = await _context.categoryMappings.AsNoTracking()
             .Where(m => m.connectionId == conn.Id)
@@ -701,8 +701,8 @@ public class MappingToolHandlers : ToolHandlerBase
             shown = projected.Count,
             products = projected,
         }, totalWithout == 0
-            ? $"Все товары с маппингами категорий уже привязаны к «{conn.name}»"
-            : $"{totalWithout} товаров без назначенного маппинга для «{conn.name}» (показано {projected.Count})");
+            ? $"All products with category mappings are already assigned to \"{conn.name}\""
+            : $"{totalWithout} products without an assigned mapping for \"{conn.name}\" (showing {projected.Count})");
     }
 
     internal async Task<(object, string)> GetProductMappingSummaryAsync(
@@ -800,8 +800,8 @@ public class MappingToolHandlers : ToolHandlerBase
         }
 
         var headline = conn != null && singleWithout.HasValue
-            ? $"«{conn.name}»: {singleWithout} без маппинга, {singleWith} с маппингом"
-            : $"Сводка по {connections.Count} подключениям";
+            ? $"\"{conn.name}\": {singleWithout} without a mapping, {singleWith} with a mapping"
+            : $"Summary for {connections.Count} connections";
 
         return (new { connections = summaries }, headline);
     }
@@ -811,13 +811,13 @@ public class MappingToolHandlers : ToolHandlerBase
     {
         var p = ParseInput<AssignProductMappingsInput>(json);
         if (p.MappingId <= 0)
-            return (new { error = "Укажите mappingId" }, "Нет mappingId");
+            return (new { error = "Provide mappingId" }, "No mappingId");
 
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
         if (mapping == null)
-            return (new { error = "Маппинг не найден" }, "Маппинг не найден");
+            return (new { error = "Mapping not found" }, "Mapping not found");
 
         var query = new ConnectionMappingQueryInput
         {
@@ -827,7 +827,7 @@ public class MappingToolHandlers : ToolHandlerBase
         var (conn, connError) = await ResolveConnectionAsync(storeId, query, ct);
         if (conn == null) return (new { error = connError }, connError!);
         if (conn.Id != mapping.connectionId)
-            return (new { error = "Маппинг принадлежит другому подключению" }, "Неверное подключение");
+            return (new { error = "Mapping belongs to a different connection" }, "Wrong connection");
 
         List<int> productIds;
         if (p.ProductIds is { Count: > 0 })
@@ -850,12 +850,12 @@ public class MappingToolHandlers : ToolHandlerBase
         }
         else
         {
-            return (new { error = "Укажите productIds или applyToAllWithoutMapping=true" },
-                "Нет целевых товаров");
+            return (new { error = "Provide productIds or applyToAllWithoutMapping=true" },
+                "No target products");
         }
 
         if (productIds.Count == 0)
-            return (new { updated = 0, skipped = 0 }, "Нет товаров для назначения маппинга");
+            return (new { updated = 0, skipped = 0 }, "No products to assign a mapping to");
 
         var products = await _context.products.AsNoTracking()
             .Where(pr => productIds.Contains(pr.Id) && pr.storeId == storeId && pr.deletedAt == null)
@@ -869,8 +869,8 @@ public class MappingToolHandlers : ToolHandlerBase
         var skipped = productIds.Count - validIds.Count;
 
         if (validIds.Count == 0)
-            return (new { error = "Ни один товар не подходит к категории маппинга", skipped },
-                "Товары другой категории");
+            return (new { error = "No product matches the mapping's category", skipped },
+                "Products of a different category");
 
         var existingLinks = await _context.productMarketplaceLinks
             .Where(l => validIds.Contains(l.productId) && l.connectionId == conn.Id)
@@ -905,7 +905,7 @@ public class MappingToolHandlers : ToolHandlerBase
 
         var mappingLabel = mapping.name ?? mapping.externalCategoryName ?? $"#{mapping.Id}";
         await _operationService.RecordAsync(storeId, userId, "assign_product_mappings",
-            $"Маппинг «{mappingLabel}» назначен {updated} товарам ({conn.name})",
+            $"Mapping \"{mappingLabel}\" assigned to {updated} products ({conn.name})",
             new { mappingId = mapping.Id, connectionId = conn.Id, productIds = validIds.ToList() },
             canRollback: false, ct: ct);
 
@@ -917,8 +917,8 @@ public class MappingToolHandlers : ToolHandlerBase
             mappingName = mappingLabel,
             connectionId = conn.Id,
             connectionName = conn.name,
-        }, $"Маппинг «{mappingLabel}» назначен {updated} товарам" +
-           (skipped > 0 ? $", пропущено {skipped}" : ""));
+        }, $"Mapping \"{mappingLabel}\" assigned to {updated} products" +
+           (skipped > 0 ? $", skipped {skipped}" : ""));
     }
 
     private async Task<(MarketplaceConnection? conn, string? error)> ResolveConnectionAsync(
@@ -929,13 +929,13 @@ public class MappingToolHandlers : ToolHandlerBase
             var byId = await _context.marketplaceConnections.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
             return byId == null
-                ? (null, "Подключение не найдено")
+                ? (null, "Connection not found")
                 : (byId, null);
         }
 
         var search = (p.ConnectionName ?? p.AdapterKey ?? "").Trim();
         if (search.Length == 0)
-            return (null, "Укажите connectionId или connectionName (например «Озон»)");
+            return (null, "Provide connectionId or connectionName (e.g. \"Ozon\")");
 
         var matches = await _context.marketplaceConnections.AsNoTracking()
             .Where(c => c.storeId == storeId &&
@@ -945,10 +945,10 @@ public class MappingToolHandlers : ToolHandlerBase
             .ToListAsync(ct);
 
         if (matches.Count == 0)
-            return (null, $"Подключение «{search}» не найдено — вызовите list_connections");
+            return (null, $"Connection \"{search}\" not found — call list_connections");
         if (matches.Count > 1)
             return (null,
-                $"Найдено {matches.Count} подключений: {string.Join(", ", matches.Select(m => $"{m.name} (#{m.Id})"))}. Уточните connectionId.");
+                $"Found {matches.Count} connections: {string.Join(", ", matches.Select(m => $"{m.name} (#{m.Id})"))}. Specify connectionId.");
 
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstAsync(c => c.Id == matches[0].Id, ct);

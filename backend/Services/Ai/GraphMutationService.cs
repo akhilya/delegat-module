@@ -40,7 +40,7 @@ public class GraphMutationService
         {
             if (!string.IsNullOrEmpty(field.aliasOf))
                 throw new InvalidOperationException(
-                    $"Поле '{adapterFieldKey}' объединено с '{field.aliasOf}' — подключай '{field.aliasOf}' или сначала вызови unmerge_adapter_fields");
+                    $"Field '{adapterFieldKey}' is merged with '{field.aliasOf}' — connect '{field.aliasOf}' or call unmerge_adapter_fields first");
             return field;
         }
 
@@ -48,7 +48,7 @@ public class GraphMutationService
         {
             var hint = sinkKind == "price" ? "get_price_fields" : "get_external_fields";
             throw new InvalidOperationException(
-                $"Поле '{adapterFieldKey}' не найдено — проверь ключ через {hint}");
+                $"Field '{adapterFieldKey}' not found — check the key via {hint}");
         }
 
         field = new AdapterField
@@ -106,7 +106,7 @@ public class GraphMutationService
     }
 
     // Set a static value for a field (creates static node + edge, removes direct source).
-    // When fieldDef with options is provided, creates a "Стандартное значение" node instead:
+    // When fieldDef with options is provided, creates a "Static value" node instead:
     // value is resolved against the adapter's predefined options (by value or label).
     public async Task SetStaticValueAsync(int mappingId, string adapterFieldKey, string value,
         string? sink = null, ExternalField? fieldDef = null, CancellationToken ct = default)
@@ -146,7 +146,7 @@ public class GraphMutationService
     {
         if (!ModifierPipeline.IsKnownModifier(modifierType))
             throw new InvalidOperationException(
-                $"Модификатор '{modifierType}' не существует. Допустимые типы: {string.Join(", ", ModifierPipeline.KnownModifierTypes)}");
+                $"Modifier '{modifierType}' does not exist. Allowed types: {string.Join(", ", ModifierPipeline.KnownModifierTypes)}");
 
         var mapping = await LoadMappingAsync(mappingId, ct);
         var graph = ParseGraph(mapping.graphJson);
@@ -280,18 +280,18 @@ public class GraphMutationService
             .ToDictionary(f => f.fieldKey!);
 
         if (!byKey.TryGetValue(primaryFieldKey, out var primary))
-            throw new InvalidOperationException($"Поле '{primaryFieldKey}' не найдено в маппинге");
+            throw new InvalidOperationException($"Field '{primaryFieldKey}' not found in the mapping");
         if (!string.IsNullOrEmpty(primary.aliasOf))
-            throw new InvalidOperationException($"Поле '{primaryFieldKey}' само является алиасом '{primary.aliasOf}' — сначала разъедини его");
+            throw new InvalidOperationException($"Field '{primaryFieldKey}' is itself an alias of '{primary.aliasOf}' — unmerge it first");
 
         foreach (var key in aliasFieldKeys)
         {
             if (key == primaryFieldKey)
-                throw new InvalidOperationException("Поле не может быть алиасом самого себя");
+                throw new InvalidOperationException("A field cannot be an alias of itself");
             if (!byKey.TryGetValue(key, out var alias))
-                throw new InvalidOperationException($"Поле '{key}' не найдено в маппинге");
+                throw new InvalidOperationException($"Field '{key}' not found in the mapping");
             if (byKey.Values.Any(f => f.aliasOf == key))
-                throw new InvalidOperationException($"Поле '{key}' является primary для других алиасов — сначала разъедини их");
+                throw new InvalidOperationException($"Field '{key}' is the primary for other aliases — unmerge them first");
 
             alias.aliasOf = primaryFieldKey;
             // Remove the alias's own connections — its value now comes from the primary
@@ -316,7 +316,7 @@ public class GraphMutationService
         {
             var field = sinkNode.data.fields.FirstOrDefault(f => f.fieldKey == key);
             if (field == null)
-                throw new InvalidOperationException($"Поле '{key}' не найдено в маппинге");
+                throw new InvalidOperationException($"Field '{key}' not found in the mapping");
             field.aliasOf = null;
         }
 
@@ -477,7 +477,7 @@ public class GraphMutationService
 
             if (suggestion.SourceType == "static" && suggestion.StaticValue != null)
             {
-                // Prefer a "Стандартное значение" node bound to adapter options over a free-text constant
+                // Prefer a "Static value" node bound to adapter options over a free-text constant
                 var fieldDef = adapterFieldDefs?.FirstOrDefault(d => d.Key == suggestion.AdapterFieldKey);
                 GraphNodeData data;
                 try { data = BuildStaticNodeData(suggestion.StaticValue, fieldDef); }
@@ -570,7 +570,7 @@ public class GraphMutationService
             // Promote legacy wire bindings to direct pill (same as initial graph import).
             TryPromoteDirectWireToPill(field, graph, sinkNode);
 
-            // Drop invalid bindings (e.g. minPrice → «Старая цена» attribute).
+            // Drop invalid bindings (e.g. minPrice -> "Old price" attribute).
             if (!IsValidPriceFieldBinding(field, graph, sinkNode, def, attributeMap))
                 ClearFieldBinding(field, graph, sinkNode);
 
@@ -807,7 +807,7 @@ public class GraphMutationService
     }
 
     // Builds node data for a static value. If the adapter field has predefined options,
-    // produces a "Стандартное значение" node: staticValue = option value(s), label = option label(s).
+    // produces a "Static value" node: staticValue = option value(s), label = option label(s).
     // Accepts either the option value or its label (case-insensitive); comma-separated for multiselect.
     internal static GraphNodeData BuildStaticNodeData(string value, Delegat.Models.Marketplace.DTOs.ExternalField? fieldDef)
     {
@@ -831,8 +831,8 @@ public class GraphMutationService
             {
                 var sample = string.Join(", ", fieldDef.Options.Take(15).Select(o => $"\"{o.Label}\""));
                 throw new InvalidOperationException(
-                    $"Значение \"{input}\" не входит в допустимые опции поля \"{fieldDef.Name}\". Доступно: {sample}" +
-                    (fieldDef.Options.Count > 15 ? $" и ещё {fieldDef.Options.Count - 15}" : ""));
+                    $"Value \"{input}\" is not among the allowed options for field \"{fieldDef.Name}\". Available: {sample}" +
+                    (fieldDef.Options.Count > 15 ? $" and {fieldDef.Options.Count - 15} more" : ""));
             }
             values.Add(opt.Value ?? input);
             labels.Add(opt.Label ?? opt.Value ?? input);
@@ -1093,7 +1093,7 @@ public class GraphMutationService
                     data = new GraphNodeData
                     {
                         attributeId = attributeId,
-                        label = attr?.name ?? $"Атрибут #{attributeId}",
+                        label = attr?.name ?? $"Attribute #{attributeId}",
                         valueType = AttrValueType(attr?.type),
                     }
                 };
@@ -1112,7 +1112,7 @@ public class GraphMutationService
                     data = new GraphNodeData
                     {
                         attributeId = attributeId,
-                        label = attr?.name ?? $"Атрибут #{attributeId}",
+                        label = attr?.name ?? $"Attribute #{attributeId}",
                         valueType = AttrValueType(attr?.type),
                     }
                 };
@@ -1159,7 +1159,7 @@ public class FieldState
     public bool Connected { get; set; }
     public string? Source { get; set; }
     public string? AliasOf { get; set; }
-    /// <summary>"card" = Поля адаптера (карточка), "price" = Поля цен (price API)</summary>
+    /// <summary>"card" = adapter fields (card), "price" = price fields (price API)</summary>
     public string SinkType { get; set; } = "card";
 }
 

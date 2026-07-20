@@ -48,6 +48,17 @@ public class AiChatService
     private readonly DataContext _context;
     private readonly ILogger<AiChatService> _logger;
     private readonly Delegat.Services.Ai.Tools.ToolDispatcher _toolDispatcher;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    /// <summary>
+    /// Resolves the UI locale from the current request's X-UI-Locale header so AI
+    /// responses match the language the user sees. Defaults to Russian when absent.
+    /// </summary>
+    private string ResolveLocale()
+    {
+        var header = _httpContextAccessor.HttpContext?.Request.Headers["X-UI-Locale"].ToString();
+        return AiPrompts.NormalizeLocale(header);
+    }
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
@@ -93,6 +104,7 @@ public class AiChatService
         ThumbnailService thumbnailService,
         DataContext context,
         Delegat.Services.Ai.Tools.ToolDispatcher toolDispatcher,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<AiChatService> logger)
     {
         _modelService = modelService;
@@ -105,6 +117,7 @@ public class AiChatService
         _thumbnailService = thumbnailService;
         _context = context;
         _toolDispatcher = toolDispatcher;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -133,7 +146,7 @@ public class AiChatService
         {
             yield return Sse(SseEventType.Error, new
             {
-                message = "Нет подключённых или включённых AI-моделей. Администратор может добавить и включить модели в Настройки → ИИ.",
+                message = "No connected or enabled AI models. An administrator can add and enable models in Settings → AI.",
             });
             yield return Sse(SseEventType.Done, new { });
             yield break;
@@ -146,7 +159,7 @@ public class AiChatService
             .Where(s => s.Id == storeId)
             .Select(s => new { s.name, s.timezone })
             .FirstOrDefaultAsync(ct);
-        var storeName = storeInfo?.name ?? "Магазин";
+        var storeName = storeInfo?.name ?? "Store";
         var storeTimezone = storeInfo?.timezone;
         var productCount = await _context.products.AsNoTracking()
             .CountAsync(p => p.storeId == storeId, ct);
@@ -166,7 +179,7 @@ public class AiChatService
                 .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
                 .ToList(),
             currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false,
-            pageContext, storeSettings, storeTimezone);
+            pageContext, storeSettings, storeTimezone, ResolveLocale());
 
         // Convert user messages to AI format
         var messages = userMessages.Select(m => new AiMessage
@@ -246,7 +259,7 @@ public class AiChatService
 
             if (gotApiError)
             {
-                yield return Sse(SseEventType.Error, new { message = "Ошибка запроса к AI API. Попробуйте снова." });
+                yield return Sse(SseEventType.Error, new { message = "Error requesting the AI API. Please try again." });
                 break;
             }
 
@@ -259,7 +272,7 @@ public class AiChatService
 
             if (toolUses.Count == 0)
             {
-                // Anti-early-stopping: the model announced an action ("сейчас обновлю...")
+                // Anti-early-stopping: the model announced an action ("I'll now update...")
                 // but ended the turn without calling any tool. Nudge it once to follow through.
                 var finalText = textBuffer.ToString();
                 if (!autoContinued && EndsWithUnfulfilledIntent(finalText))
@@ -271,7 +284,7 @@ public class AiChatService
                     messages.Add(new AiMessage
                     {
                         role = "user",
-                        content = "Продолжай — выполни действие, которое ты анонсировал, вызвав соответствующий инструмент. Не отвечай текстом без вызова инструмента."
+                        content = "Continue — perform the action you announced by calling the corresponding tool. Do not reply with text without a tool call."
                     });
                     continue;
                 }
@@ -351,20 +364,20 @@ public class AiChatService
         int? productId, int? connectionId, CancellationToken ct = default)
     {
         var model = await _modelService.GetDefaultModelAsync(ct);
-        if (model == null) return "Нет включённых AI-моделей.";
+        if (model == null) return "No enabled AI models.";
 
         var decrypted = _modelService.DecryptForUse(model);
         var request = new AiRequest
         {
             model = decrypted.modelId,
             max_tokens = 512,
-            system = AiPrompts.ExplainErrorSystem,
+            system = AiPrompts.ExplainErrorSystem(ResolveLocale()),
             messages =
             [
                 new AiMessage
                 {
                     role = "user",
-                    content = AiPrompts.ExplainErrorUser(errorMessage, context)
+                    content = AiPrompts.ExplainErrorUser(errorMessage, context, ResolveLocale())
                 }
             ]
         };
@@ -383,14 +396,15 @@ public class AiChatService
     public async Task<string> GenerateTitleAsync(string firstMessage, CancellationToken ct = default)
     {
         var model = await _modelService.GetDefaultModelAsync(ct);
-        if (model == null) return "Новый диалог";
+        if (model == null) return "New chat";
 
+        var lang = AiPrompts.LanguageName(ResolveLocale());
         var decrypted = _modelService.DecryptForUse(model);
         var request = new AiRequest
         {
             model = decrypted.modelId,
             max_tokens = 20,
-            system = "Придумай короткое название (3-5 слов, без знаков препинания) для диалога на основе первого сообщения пользователя. Ответь ТОЛЬКО названием, без объяснений.",
+            system = $"Come up with a short title (3-5 words, no punctuation) in {lang} for a chat based on the user's first message. Reply with the title ONLY, no explanations.",
             messages =
             [
                 new AiMessage { role = "user", content = (firstMessage.Length > 300 ? firstMessage[..300] : firstMessage) }
@@ -399,9 +413,9 @@ public class AiChatService
         try
         {
             var response = await _apiClient.SendAsync(decrypted, request, ct);
-            return response.content.FirstOrDefault(b => b.type == "text")?.text?.Trim() ?? "Новый диалог";
+            return response.content.FirstOrDefault(b => b.type == "text")?.text?.Trim() ?? "New chat";
         }
-        catch { return "Новый диалог"; }
+        catch { return "New chat"; }
     }
 
     public async Task<string> GenerateProductDescriptionAsync(
@@ -416,7 +430,7 @@ public class AiChatService
     {
         var modelConfig = await _modelService.ResolveEnabledModelAsync(modelId, ct);
         if (modelConfig == null)
-            throw new InvalidOperationException("Нет подключённых или включённых AI-моделей");
+            throw new InvalidOperationException("No connected or enabled AI models");
 
         var storeSettings = await _context.aiStoreSettings.AsNoTracking()
             .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
@@ -426,7 +440,9 @@ public class AiChatService
         {
             model = decrypted.modelId,
             max_tokens = Math.Min(Math.Max(decrypted.maxTokens, 256), 4096),
-            system = AiPrompts.GenerateProductDescriptionSystem,
+            system = AiPrompts.GenerateProductDescriptionSystem(
+                ResolveLocale(),
+                improveExisting: !string.IsNullOrWhiteSpace(existingDescription)),
             messages =
             [
                 new AiMessage
@@ -452,7 +468,7 @@ public class AiChatService
                 _logger.LogWarning(
                     "AI returned empty description (model config {ModelConfigId}, provider {Provider}, stop_reason {StopReason})",
                     modelConfig.Id, modelConfig.provider, response.stop_reason);
-                throw new InvalidOperationException("Модель вернула пустой ответ. Попробуйте другую модель или повторите запрос.");
+                throw new InvalidOperationException("The model returned an empty response. Try a different model or retry the request.");
             }
 
             return text;
@@ -464,7 +480,7 @@ public class AiChatService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "AI description generation failed for model config {ModelConfigId}", modelConfig.Id);
-            throw new InvalidOperationException($"Не удалось получить ответ от AI: {ex.Message}", ex);
+            throw new InvalidOperationException($"Failed to get a response from AI: {ex.Message}", ex);
         }
     }
 
@@ -498,7 +514,7 @@ public class AiChatService
             string resultJson;
             if (forbidden.Contains(tool))
             {
-                summary = "Инструмент недопустим внутри плана";
+                summary = "Tool is not allowed inside a plan";
                 failed = true;
                 resultJson = "{}";
             }
@@ -518,10 +534,10 @@ public class AiChatService
         }
 
         var text = errors.Count == 0
-            ? $"✅ План выполнен: {ok} из {steps.Count} шагов."
-            : $"План выполнен частично: успешно {ok} из {steps.Count} шагов.\n\nОшибки:\n"
+            ? $"✅ Plan executed: {ok} of {steps.Count} steps."
+            : $"Plan executed partially: {ok} of {steps.Count} steps succeeded.\n\nErrors:\n"
               + string.Join("\n", errors.Select(e => $"- {e}"))
-              + "\n\nИзменения можно откатить: напишите «отмени».";
+              + "\n\nChanges can be undone: ask to undo.";
         yield return Sse(SseEventType.Text, new { delta = text });
         yield return Sse(SseEventType.Done, new { });
     }
@@ -640,13 +656,13 @@ public class AiChatService
                 // Rollback
                 "rollback_last_operation" => await RollbackOperationAsync(inputJson, storeId, userId, ct),
 
-                _ => (new { error = $"Unknown tool: {toolName}" }, $"Неизвестный инструмент: {toolName}")
+                _ => (new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}")
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Tool {Tool} failed", toolName);
-            return (new { error = ex.Message }, $"Ошибка: {ex.Message}");
+            return (new { error = ex.Message }, $"Error: {ex.Message}");
         }
     }
 
@@ -694,19 +710,19 @@ public class AiChatService
             .ToListAsync(ct);
 
         // Zero hits on a text search: nudge the model to retry with spelling variants —
-        // catalogs often mix Cyrillic and Latin (Вархаммер vs Warhammer)
+        // catalogs often mix local script and Latin (e.g. Cyrillic vs Latin for Russian-market stores)
         if (products.Count == 0 && !string.IsNullOrEmpty(p.Search))
         {
             return (new
             {
                 items = products,
                 count = 0,
-                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
-                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
-            }, $"0 товаров по '{p.Search}' — попробуй другое написание (латиница/кириллица)");
+                hint = $"0 products found for '{p.Search}'. Try other spellings: " +
+                       "Latin instead of local script (and vice versa), the brand's English name, a shorter stem without word endings.",
+            }, $"0 products for '{p.Search}' — try a different spelling");
         }
 
-        return (new { items = products, count = products.Count }, $"Найдено {products.Count} товаров");
+        return (new { items = products, count = products.Count }, $"Found {products.Count} products");
     }
 
     private async Task<(object, string)> GetProductsCountAsync(string json, int storeId, CancellationToken ct)
@@ -723,11 +739,11 @@ public class AiChatService
             return (new
             {
                 count = 0,
-                hint = $"0 товаров по запросу '{p.Search}'. Попробуй другие варианты написания: " +
-                       "латиница вместо кириллицы (и наоборот), английское название бренда, часть слова без окончаний.",
-            }, $"0 товаров по '{p.Search}' — попробуй другое написание");
+                hint = $"0 products for query '{p.Search}'. Try alternative spellings: " +
+                       "Latin instead of Cyrillic (and vice versa), the English brand name, a word stem without endings.",
+            }, $"0 products for '{p.Search}' — try a different spelling");
         }
-        return (new { count }, $"{count} товаров");
+        return (new { count }, $"{count} products");
     }
 
     private async Task<(object, string)> GetProductAsync(string json, int storeId, CancellationToken ct)
@@ -737,7 +753,7 @@ public class AiChatService
             .Include(x => x.category)
             .Include(x => x.attributeValues).ThenInclude(v => v.attribute)
             .FirstOrDefaultAsync(x => x.Id == p.Id && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
         var result = new
         {
             product.Id,
@@ -777,15 +793,15 @@ public class AiChatService
         _context.products.Add(product);
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "create_product",
-            $"Создан товар \"{p.Name}\"", new { productId = product.Id }, canRollback: false, ct: ct);
-        return (new { id = product.Id }, $"Товар \"{p.Name}\" создан (id={product.Id})");
+            $"Created product \"{p.Name}\"", new { productId = product.Id }, canRollback: false, ct: ct);
+        return (new { id = product.Id }, $"Product \"{p.Name}\" created (id={product.Id})");
     }
 
     private async Task<(object, string)> CreateProductsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<CreateProductsBulkInput>(json);
         if (p.Products is not { Count: > 0 })
-            return (new { error = "Список товаров пуст" }, "Список пуст");
+            return (new { error = "Product list is empty" }, "List is empty");
 
         var created = new List<object>();
         foreach (var spec in p.Products)
@@ -805,14 +821,14 @@ public class AiChatService
             await _context.SaveChangesAsync(ct);
             created.Add(new { id = product.Id, name = product.name });
         }
-        return (new { created }, $"Создано {created.Count} товаров");
+        return (new { created }, $"Created {created.Count} products");
     }
 
     private async Task<(object, string)> UpdateProductAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateProductInput>(json);
         var product = await _context.products.FirstOrDefaultAsync(x => x.Id == p.Id && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
 
         var changes = new List<string>();
         if (p.Name != null) { changes.Add($"name: {product.name}→{p.Name}"); product.name = p.Name; }
@@ -823,14 +839,14 @@ public class AiChatService
         if (p.CategoryId.HasValue) product.categoryId = p.CategoryId.Value;
 
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Товар обновлён: {string.Join(", ", changes)}");
+        return (new { success = true }, $"Product updated: {string.Join(", ", changes)}");
     }
 
     private async Task<(object, string)> UpdateProductAttributesBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateAttributesBulkInput>(json);
         if (p.Attributes is not { Count: > 0 })
-            return (new { error = "Список атрибутов пуст" }, "Список пуст");
+            return (new { error = "Attribute list is empty" }, "List is empty");
 
         var applied = 0;
         var errors = new List<string>();
@@ -840,7 +856,7 @@ public class AiChatService
         {
             var attrDef = await _context.categoryAttributes.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.key == attr.AttributeKey && a.category.storeId == storeId, ct);
-            if (attrDef == null) { errors.Add($"Атрибут '{attr.AttributeKey}' не найден"); continue; }
+            if (attrDef == null) { errors.Add($"Attribute '{attr.AttributeKey}' not found"); continue; }
 
             var productIds = p.ProductIds ?? await _context.products.AsNoTracking()
                 .Where(x => x.storeId == storeId && x.categoryId == attrDef.categoryId)
@@ -865,11 +881,11 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
         if (allOldValues.Count > 0)
             await _operationService.RecordAsync(storeId, userId, "update_attribute",
-                $"Обновлено {applied} атрибутов у товаров",
+                $"Updated {applied} attributes on products",
                 new ProductAttributeRollbackData { Products = allOldValues }, ct: ct);
 
-        var summary = $"Обновлено атрибутов: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        var summary = $"Attributes updated: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count} ({string.Join("; ", errors)})";
         return (new { applied, errors }, summary);
     }
 
@@ -877,11 +893,11 @@ public class AiChatService
     {
         var p = ParseInput<UpdateSkuInput>(json);
         var product = await _context.products.FirstOrDefaultAsync(x => x.Id == p.ProductId && x.storeId == storeId, ct);
-        if (product == null) return (new { error = "Товар не найден" }, "Товар не найден");
+        if (product == null) return (new { error = "Product not found" }, "Product not found");
         var oldSku = product.sku;
         product.sku = p.NewSku;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true, oldSku, newSku = p.NewSku }, $"SKU изменён: {oldSku} → {p.NewSku}");
+        return (new { success = true, oldSku, newSku = p.NewSku }, $"SKU changed: {oldSku} → {p.NewSku}");
     }
 
     private async Task<(object, string)> UpdateProductPricesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -907,10 +923,10 @@ public class AiChatService
 
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "update_prices",
-            $"Изменена цена у {products.Count} товаров ({p.Mode} {p.Amount})",
+            $"Changed price on {products.Count} products ({p.Mode} {p.Amount})",
             AiOperationService.BuildPriceRollback(rollback), ct: ct);
 
-        return (new { affected = products.Count }, $"Изменена цена у {products.Count} товаров");
+        return (new { affected = products.Count }, $"Changed price on {products.Count} products");
     }
 
     private async Task<(object, string)> UpdateProductAttributeAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -918,7 +934,7 @@ public class AiChatService
         var p = ParseInput<UpdateAttributeInput>(json);
         var attr = await _context.categoryAttributes.AsNoTracking()
             .FirstOrDefaultAsync(a => a.key == p.AttributeKey && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Атрибут не найден" }, "Атрибут не найден");
+        if (attr == null) return (new { error = "Attribute not found" }, "Attribute not found");
 
         var productIds = p.ProductIds ?? await _context.products.AsNoTracking()
             .Where(x => x.storeId == storeId && x.categoryId == attr.categoryId)
@@ -942,10 +958,10 @@ public class AiChatService
 
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "update_attribute",
-            $"Атрибут '{p.AttributeKey}' = '{p.Value}' у {productIds.Count} товаров",
+            $"Attribute '{p.AttributeKey}' = '{p.Value}' on {productIds.Count} products",
             new ProductAttributeRollbackData { Products = oldValues }, ct: ct);
 
-        return (new { affected = productIds.Count }, $"Атрибут обновлён у {productIds.Count} товаров");
+        return (new { affected = productIds.Count }, $"Attribute updated on {productIds.Count} products");
     }
 
     private async Task<(object, string)> DeleteProductsAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -956,7 +972,7 @@ public class AiChatService
             .ToListAsync(ct);
         foreach (var pr in products) pr.deletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
-        return (new { deleted = products.Count }, $"Удалено {products.Count} товаров");
+        return (new { deleted = products.Count }, $"Deleted {products.Count} products");
     }
 
     private async Task<(object, string)> RestoreProductsAsync(string json, int storeId, CancellationToken ct)
@@ -965,7 +981,7 @@ public class AiChatService
         await _context.products.IgnoreQueryFilters()
             .Where(x => p.Ids.Contains(x.Id) && x.storeId == storeId && x.deletedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.deletedAt, (DateTime?)null), ct);
-        return (new { success = true }, $"Восстановлено {p.Ids.Count} товаров");
+        return (new { success = true }, $"Restored {p.Ids.Count} products");
     }
 
     private async Task<(object, string)> ListTrashAsync(string json, int storeId, CancellationToken ct)
@@ -976,7 +992,7 @@ public class AiChatService
         if (!string.IsNullOrEmpty(p.Search)) q = q.Where(x => x.name.Contains(p.Search));
         var items = await q.OrderByDescending(x => x.deletedAt).Take(50)
             .Select(x => new { x.Id, x.name, x.deletedAt }).ToListAsync(ct);
-        return (new { items, count = items.Count }, $"{items.Count} товаров в корзине");
+        return (new { items, count = items.Count }, $"{items.Count} products in trash");
     }
 
     // ---- Category Tools ----
@@ -989,7 +1005,7 @@ public class AiChatService
             .OrderBy(c => c.name)
             .Select(c => new { c.Id, c.name, c.description, attributeCount = c.attributes.Count })
             .ToListAsync(ct);
-        return (new { categories = cats, count = cats.Count }, $"{cats.Count} категорий");
+        return (new { categories = cats, count = cats.Count }, $"{cats.Count} categories");
     }
 
     private async Task<(object, string)> GetCategoryAsync(string json, int storeId, CancellationToken ct)
@@ -998,7 +1014,7 @@ public class AiChatService
         var cat = await _context.categories.AsNoTracking()
             .Include(c => c.attributes)
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
         return (new
         {
             cat.Id, cat.name, cat.description,
@@ -1027,30 +1043,30 @@ public class AiChatService
         var cat = new Category { name = p.Name, description = p.Description, storeId = storeId };
         _context.categories.Add(cat);
         await _context.SaveChangesAsync(ct);
-        return (new { id = cat.Id }, $"Категория \"{p.Name}\" создана");
+        return (new { id = cat.Id }, $"Category \"{p.Name}\" created");
     }
 
     private async Task<(object, string)> UpdateCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UpdateCategoryInput>(json);
         var cat = await _context.categories.FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
         if (p.Name != null) cat.name = p.Name;
         if (p.Description != null) cat.description = p.Description;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Категория обновлена");
+        return (new { success = true }, $"Category updated");
     }
 
     private async Task<(object, string)> DeleteCategoryAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<IdInput>(json);
         var cat = await _context.categories.FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
 
         var activeCount = await _context.products.CountAsync(x => x.categoryId == p.Id, ct);
         if (activeCount > 0)
-            return (new { error = $"В категории {activeCount} товаров — сначала перемести или удали их" },
-                $"Нельзя удалить: в категории {activeCount} товаров");
+            return (new { error = $"The category has {activeCount} products — move or delete them first" },
+                $"Cannot delete: category has {activeCount} products");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
         // block the DELETE — detach them from the category (they stay in the trash)
@@ -1060,7 +1076,7 @@ public class AiChatService
 
         _context.categories.Remove(cat);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Категория \"{cat.name}\" удалена");
+        return (new { success = true }, $"Category \"{cat.name}\" deleted");
     }
 
     private async Task<(object, string)> ListCategoryFieldsAsync(string json, int storeId, CancellationToken ct)
@@ -1078,7 +1094,7 @@ public class AiChatService
             a.isRequired, a.group,
             options = ParseAttributeOptions(a.options),
         }).ToList();
-        return (new { fields, count = fields.Count }, $"{fields.Count} полей");
+        return (new { fields, count = fields.Count }, $"{fields.Count} fields");
     }
 
     private async Task<(object, string)> AddCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1086,7 +1102,7 @@ public class AiChatService
         var p = ParseInput<AddFieldInput>(json);
         var cat = await _context.categories.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.CategoryId && c.storeId == storeId, ct);
-        if (cat == null) return (new { error = "Категория не найдена" }, "Категория не найдена");
+        if (cat == null) return (new { error = "Category not found" }, "Category not found");
 
         var maxSort = await _context.categoryAttributes.AsNoTracking()
             .Where(a => a.categoryId == p.CategoryId)
@@ -1106,9 +1122,9 @@ public class AiChatService
         _context.categoryAttributes.Add(attr);
         await _context.SaveChangesAsync(ct);
         await _operationService.RecordAsync(storeId, userId, "add_category_field",
-            $"Добавлено поле \"{p.Name}\" в категорию {p.CategoryId}",
+            $"Added field \"{p.Name}\" to category {p.CategoryId}",
             AiOperationService.BuildFieldRollback(attr.Id), ct: ct);
-        return (new { id = attr.Id, key }, $"Поле \"{p.Name}\" добавлено");
+        return (new { id = attr.Id, key }, $"Field \"{p.Name}\" added");
     }
 
     private async Task<(object, string)> UpdateCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1116,11 +1132,11 @@ public class AiChatService
         var p = ParseInput<UpdateFieldInput>(json);
         var attr = await _context.categoryAttributes
             .FirstOrDefaultAsync(a => a.Id == p.FieldId && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Поле не найдено" }, "Поле не найдено");
+        if (attr == null) return (new { error = "Field not found" }, "Field not found");
         if (p.Name != null) attr.name = p.Name;
         if (p.IsRequired.HasValue) attr.isRequired = p.IsRequired.Value;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Поле обновлено");
+        return (new { success = true }, $"Field updated");
     }
 
     private async Task<(object, string)> DeleteCategoryFieldAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1128,10 +1144,10 @@ public class AiChatService
         var p = ParseInput<FieldIdInput>(json);
         var attr = await _context.categoryAttributes
             .FirstOrDefaultAsync(a => a.Id == p.FieldId && a.category.storeId == storeId, ct);
-        if (attr == null) return (new { error = "Поле не найдено" }, "Поле не найдено");
+        if (attr == null) return (new { error = "Field not found" }, "Field not found");
         _context.categoryAttributes.Remove(attr);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Поле \"{attr.name}\" удалено");
+        return (new { success = true }, $"Field \"{attr.name}\" deleted");
     }
 
     private async Task<(object, string)> FindCategoriesWithFieldAsync(string json, int storeId, CancellationToken ct)
@@ -1148,7 +1164,7 @@ public class AiChatService
                     .ToList()
             })
             .ToListAsync(ct);
-        return (new { categories = cats, count = cats.Count }, $"Найдено {cats.Count} категорий с полем '{p.Search}'");
+        return (new { categories = cats, count = cats.Count }, $"Found {cats.Count} categories with field '{p.Search}'");
     }
 
     // ---- Store Attributes ----
@@ -1158,7 +1174,7 @@ public class AiChatService
         var attrs = await _context.storeAttributes.AsNoTracking()
             .Where(a => a.storeId == storeId).OrderBy(a => a.sortOrder)
             .Select(a => new { a.Id, a.name, a.key, a.type }).ToListAsync(ct);
-        return (new { attributes = attrs, count = attrs.Count }, $"{attrs.Count} атрибутов магазина");
+        return (new { attributes = attrs, count = attrs.Count }, $"{attrs.Count} store attributes");
     }
 
     // ---- Connections ----
@@ -1169,7 +1185,7 @@ public class AiChatService
             .Where(c => c.storeId == storeId)
             .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
             .ToListAsync(ct);
-        return (new { connections = conns, count = conns.Count }, $"{conns.Count} подключений");
+        return (new { connections = conns, count = conns.Count }, $"{conns.Count} connections");
     }
 
     private async Task<(object, string)> GetConnectionAsync(string json, int storeId, CancellationToken ct)
@@ -1179,7 +1195,7 @@ public class AiChatService
             .Where(c => c.Id == p.Id && c.storeId == storeId)
             .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
             .FirstOrDefaultAsync(ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         return (conn, conn.name);
     }
 
@@ -1188,17 +1204,17 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         try
         {
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             var result = await adapter.TestConnectionAsync(conn, ct);
             return (new { success = result.Success, message = result.Message },
-                result.Success ? $"Подключение {conn.name} работает" : $"Ошибка: {result.Message}");
+                result.Success ? $"Connection {conn.name} is working" : $"Error: {result.Message}");
         }
         catch (Exception ex)
         {
-            return (new { success = false, message = ex.Message }, $"Ошибка: {ex.Message}");
+            return (new { success = false, message = ex.Message }, $"Error: {ex.Message}");
         }
     }
 
@@ -1207,23 +1223,24 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.Id && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Not found" }, "Not found");
         try
         {
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             var quotas = await adapter.GetQuotasAsync(conn, ct);
-            return (quotas, "Лимиты получены");
+            return (quotas, "Limits retrieved");
         }
         catch
         {
-            return (new { error = "Недоступно" }, "Лимиты недоступны");
+            return (new { error = "Unavailable" }, "Limits unavailable");
         }
     }
 
-    // Matches turn-final statements of intent: future-tense action verbs (ru) / intent phrases (en)
-    // in the last sentence. Used to detect "announced but never called the tool" early stopping.
+    // Matches turn-final statements of intent: future-tense action verbs (Russian, escaped as \uXXXX
+    // to keep this source file ASCII-only) / intent phrases (English) in the last sentence.
+    // Used to detect "announced but never called the tool" early stopping.
     private static readonly System.Text.RegularExpressions.Regex _unfulfilledIntentRegex = new(
-        @"\b(выполню|проверю|вызову|получу|сделаю|обновлю|создам|удалю|найду|посмотрю|загружу|запущу|запрошу|подключу|заполню|приступаю|начинаю|запускаю|выполняю|получаю|проверяю|I(?:'|’)?ll|I will|let me|going to|now I)\b[^.!?\n]{0,120}[.!…:]?\s*$",
+        "\\b(\u0432\u044b\u043f\u043e\u043b\u043d\u044e|\u043f\u0440\u043e\u0432\u0435\u0440\u044e|\u0432\u044b\u0437\u043e\u0432\u0443|\u043f\u043e\u043b\u0443\u0447\u0443|\u0441\u0434\u0435\u043b\u0430\u044e|\u043e\u0431\u043d\u043e\u0432\u043b\u044e|\u0441\u043e\u0437\u0434\u0430\u043c|\u0443\u0434\u0430\u043b\u044e|\u043d\u0430\u0439\u0434\u0443|\u043f\u043e\u0441\u043c\u043e\u0442\u0440\u044e|\u0437\u0430\u0433\u0440\u0443\u0436\u0443|\u0437\u0430\u043f\u0443\u0449\u0443|\u0437\u0430\u043f\u0440\u043e\u0448\u0443|\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0443|\u0437\u0430\u043f\u043e\u043b\u043d\u044e|\u043f\u0440\u0438\u0441\u0442\u0443\u043f\u0430\u044e|\u043d\u0430\u0447\u0438\u043d\u0430\u044e|\u0437\u0430\u043f\u0443\u0441\u043a\u0430\u044e|\u0432\u044b\u043f\u043e\u043b\u043d\u044f\u044e|\u043f\u043e\u043b\u0443\u0447\u0430\u044e|\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u044e|I(?:'|\u2019)?ll|I will|let me|going to|now I)\\b[^.!?\\n]{0,120}[.!\u2026:]?\\s*$",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static bool EndsWithUnfulfilledIntent(string text)
@@ -1239,11 +1256,11 @@ public class AiChatService
     {
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
-        if (conn == null) return (null, null, "Подключение не найдено");
+        if (conn == null) return (null, null, "Connection not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
-        if (adapter == null) return (null, null, $"Адаптер '{conn.adapterKey}' не найден");
+        if (adapter == null) return (null, null, $"Adapter '{conn.adapterKey}' not found");
         if (required.HasValue && !adapter.Capabilities.HasFlag(required.Value))
-            return (null, null, $"Маркетплейс {adapter.DisplayName} не поддерживает операцию {required.Value}");
+            return (null, null, $"Marketplace {adapter.DisplayName} does not support operation {required.Value}");
         return (conn, adapter, null);
     }
 
@@ -1267,7 +1284,7 @@ public class AiChatService
             {
                 scheme = "field",
                 fieldKey = fieldGrouping.GroupFieldKey,
-                description = "Товары объединяются в карточку по значению этого поля маппинга (по умолчанию — groupName)",
+                description = "Products are merged into one card by the value of this mapping field (defaults to groupName)",
             };
         }
         else if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping))
@@ -1276,7 +1293,7 @@ public class AiChatService
             {
                 scheme = "endpoint",
                 fieldKey = ProductSyncService.SyntheticGroupFieldKey,
-                description = "Товары с одинаковым вычисленным значением поля группировки объединяются API-вызовами после экспорта",
+                description = "Products with the same computed grouping field value are merged via API calls after export",
             };
         }
 
@@ -1289,7 +1306,7 @@ public class AiChatService
             isActive = conn.isActive,
             capabilities,
             grouping,
-        }, $"Адаптер {adapter.DisplayName}: {capabilities.Count} возможностей");
+        }, $"Adapter {adapter.DisplayName}: {capabilities.Count} capabilities");
     }
 
     private async Task<(object, string)> PreviewMarketplaceProductsAsync(string json, int storeId, CancellationToken ct)
@@ -1315,13 +1332,13 @@ public class AiChatService
         }).ToList();
 
         return (new { items, hasMore = page.HasMore, nextCursor = page.NextCursor, totalCount = page.TotalCount },
-            $"На маркетплейсе: {items.Count} товаров (страница){(page.HasMore ? ", есть ещё" : "")}");
+            $"On the marketplace: {items.Count} products (page){(page.HasMore ? ", more available" : "")}");
     }
 
     private async Task<(object, string)> ImportProductsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ImportProductsInput>(json);
-        if (p.ExternalProductIds.Count == 0) return (new { error = "Не указаны externalProductIds" }, "Нет товаров");
+        if (p.ExternalProductIds.Count == 0) return (new { error = "externalProductIds not specified" }, "No products");
         var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, MarketplaceCapabilities.ImportProduct, ct);
         if (error != null) return (new { error }, error);
 
@@ -1343,9 +1360,9 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "import_products",
-            $"Импорт {p.ExternalProductIds.Count} товаров с {conn!.name}", new { }, canRollback: false, ct);
+            $"Import {p.ExternalProductIds.Count} products from {conn!.name}", new { }, canRollback: false, ct);
         return (new { batchId, queued = p.ExternalProductIds.Count },
-            $"Импорт {p.ExternalProductIds.Count} товаров поставлен в очередь (batchId: {batchId})");
+            $"Import of {p.ExternalProductIds.Count} products queued (batchId: {batchId})");
     }
 
     private async Task<(object, string)> ImportPricesAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1355,12 +1372,12 @@ public class AiChatService
         if (error != null) return (new { error }, error);
 
         var result = await _priceSyncService.ImportPricesAsync(p.ConnectionId, null, ct, storeId: storeId);
-        if (!result.IsSuccess) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+        if (!result.IsSuccess) return (new { error = result.ErrorMessage }, $"Error: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "import_prices",
-            $"Импорт цен с {conn!.name}: обновлено {result.UpdatedCount}", new { }, canRollback: false, ct);
+            $"Import prices from {conn!.name}: updated {result.UpdatedCount}", new { }, canRollback: false, ct);
         return (new { updated = result.UpdatedCount, skipped = result.SkippedCount },
-            $"Импорт цен: обновлено {result.UpdatedCount}, пропущено {result.SkippedCount}");
+            $"Import prices: updated {result.UpdatedCount}, skipped {result.SkippedCount}");
     }
 
     private async Task<(object, string)> ImportStocksAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1395,9 +1412,9 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "import_stocks",
-            $"Импорт остатков с {conn!.name}: обновлено {updated}", new { }, canRollback: false, ct);
+            $"Import stocks from {conn!.name}: updated {updated}", new { }, canRollback: false, ct);
         return (new { updated, totalOnMarketplace = byExternalId.Count },
-            $"Импорт остатков: обновлено {updated} товаров");
+            $"Import stocks: updated {updated} products");
     }
 
     private async Task<(object, string)> ArchiveProductOnMarketplaceAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1408,14 +1425,14 @@ public class AiChatService
 
         var link = await _context.productMarketplaceLinks.AsNoTracking()
             .FirstOrDefaultAsync(l => l.connectionId == p.ConnectionId && l.productId == p.ProductId, ct);
-        if (link == null) return (new { error = "Товар не связан с этим маркетплейсом" }, "Связь не найдена");
+        if (link == null) return (new { error = "Product is not linked to this marketplace" }, "Link not found");
 
         var result = await adapter!.ArchiveProductAsync(conn!, link.externalProductId, ct);
-        if (!result.Success) return (new { error = result.ErrorMessage }, $"Ошибка: {result.ErrorMessage}");
+        if (!result.Success) return (new { error = result.ErrorMessage }, $"Error: {result.ErrorMessage}");
 
         await _operationService.RecordAsync(storeId, userId, "archive_product",
-            $"Товар {p.ProductId} архивирован на {conn!.name}", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Товар архивирован на {conn!.name}");
+            $"Product {p.ProductId} archived on {conn!.name}", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Product archived on {conn!.name}");
     }
 
     // ---- Mapping Tools ----
@@ -1434,7 +1451,7 @@ public class AiChatService
                 m.connectionId, connectionName = m.connection.name
             })
             .ToListAsync(ct);
-        return (new { mappings, count = mappings.Count }, $"{mappings.Count} маппингов");
+        return (new { mappings, count = mappings.Count }, $"{mappings.Count} mappings");
     }
 
     private async Task<(object, string)> GetMappingAsync(string json, int storeId, CancellationToken ct)
@@ -1443,7 +1460,7 @@ public class AiChatService
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var coverage = await _graphMutation.GetCoverageAsync(p.Id, ct);
         var fields = await _graphMutation.GetFieldStatesAsync(p.Id, ct);
@@ -1461,8 +1478,8 @@ public class AiChatService
                 requiredConnected = coverage.RequiredConnected,
             },
             fields,
-        }, $"Маппинг {mapping.name ?? mapping.externalCategoryName}: {coverage.Connected}/{coverage.Total} полей " +
-           $"(обязательных {coverage.RequiredConnected}/{coverage.RequiredTotal})");
+        }, $"Mapping {mapping.name ?? mapping.externalCategoryName}: {coverage.Connected}/{coverage.Total} fields " +
+           $"(required {coverage.RequiredConnected}/{coverage.RequiredTotal})");
     }
 
     private async Task<(object, string)> CreateMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1470,7 +1487,7 @@ public class AiChatService
         var p = ParseInput<CreateMappingInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
         var mapping = new CategoryMapping
         {
@@ -1483,7 +1500,7 @@ public class AiChatService
         _context.categoryMappings.Add(mapping);
         await _context.SaveChangesAsync(ct);
 
-        return (new { id = mapping.Id }, $"Маппинг создан (id={mapping.Id}). Вызови get_mapping и подключи поля через connect_field / set_field_static_value.");
+        return (new { id = mapping.Id }, $"Mapping created (id={mapping.Id}). Call get_mapping and connect fields via connect_field / set_field_static_value.");
     }
 
     private async Task<(object, string)> UpdateMappingNameAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1491,10 +1508,10 @@ public class AiChatService
         var p = ParseInput<UpdateNameInput>(json);
         var mapping = await _context.categoryMappings
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         mapping.name = p.Name;
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Имя маппинга обновлено: \"{p.Name}\"");
+        return (new { success = true }, $"Mapping name updated: \"{p.Name}\"");
     }
 
     private async Task<(object, string)> DeleteMappingAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1502,10 +1519,10 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         _context.categoryMappings.Remove(mapping);
         await _context.SaveChangesAsync(ct);
-        return (new { success = true }, $"Маппинг удалён");
+        return (new { success = true }, $"Mapping deleted");
     }
 
     private async Task<(object, string)> DuplicateMappingAsync(string json, int storeId, CancellationToken ct)
@@ -1513,19 +1530,19 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         var copy = new CategoryMapping
         {
             connectionId = mapping.connectionId,
             localCategoryId = mapping.localCategoryId,
             externalCategoryId = mapping.externalCategoryId,
             externalCategoryName = mapping.externalCategoryName,
-            name = (mapping.name ?? mapping.externalCategoryName) + " (копия)",
+            name = (mapping.name ?? mapping.externalCategoryName) + " (copy)",
             graphJson = mapping.graphJson
         };
         _context.categoryMappings.Add(copy);
         await _context.SaveChangesAsync(ct);
-        return (new { id = copy.Id }, $"Маппинг скопирован (id={copy.Id})");
+        return (new { id = copy.Id }, $"Mapping copied (id={copy.Id})");
     }
 
     private async Task<(object, string)> ListExternalCategoriesAsync(string json, int storeId, CancellationToken ct)
@@ -1533,10 +1550,10 @@ public class AiChatService
         var p = ParseInput<ExternalCategoriesInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
         var cats = await adapter.GetCategoriesAsync(conn, p.ParentId, p.Search, ct);
-        return (new { categories = cats.Take(50) }, $"{cats.Count} категорий");
+        return (new { categories = cats.Take(50) }, $"{cats.Count} categories");
     }
 
     private async Task<(object, string)> GetExternalFieldsAsync(string json, int storeId, CancellationToken ct)
@@ -1551,21 +1568,21 @@ public class AiChatService
             // page knows mappingId but not the marketplace category id
             var mapping = await _context.categoryMappings.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
             connectionId = mapping.connectionId;
             externalCategoryId = mapping.externalCategoryId;
         }
         else
         {
             if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
-                return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+                return (new { error = "Specify mappingId OR connectionId+externalCategoryId" }, "No parameters");
             connectionId = p.ConnectionId.Value;
             externalCategoryId = p.ExternalCategoryId;
         }
 
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
         var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
         var fields = await adapter.GetCategoryFieldsAsync(conn, externalCategoryId, ct);
 
@@ -1577,10 +1594,10 @@ public class AiChatService
         {
             fields = fields.Concat([new ExternalField(
                 Key: ProductSyncService.SyntheticGroupFieldKey,
-                Name: "Объединение в карточку (группа)",
+                Name: "Merge into card (group)",
                 IsRequired: false,
                 Type: "string",
-                Description: "Товары с одинаковым вычисленным значением объединяются в одну карточку. По умолчанию привязано к groupName.")]).ToList();
+                Description: "Products with the same computed value are merged into one card. Defaults to bind to groupName.")]).ToList();
         }
 
         var projected = fields.Select(f => new
@@ -1602,7 +1619,7 @@ public class AiChatService
         {
             fields = projected,
             total = projected.Count, required = fields.Count(f => f.IsRequired)
-        }, $"{projected.Count} полей ({fields.Count(f => f.IsRequired)} обязательных)");
+        }, $"{projected.Count} fields ({fields.Count(f => f.IsRequired)} required)");
     }
 
     private async Task<(object, string)> SearchFieldOptionsAsync(string json, int storeId, CancellationToken ct)
@@ -1615,11 +1632,11 @@ public class AiChatService
             mapping = await _context.categoryMappings.AsNoTracking()
                 .Include(m => m.connection)
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-            if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+            if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
         }
         else if (!p.ConnectionId.HasValue || string.IsNullOrEmpty(p.ExternalCategoryId))
         {
-            return (new { error = "Укажите mappingId ИЛИ connectionId+externalCategoryId" }, "Нет параметров");
+            return (new { error = "Specify mappingId OR connectionId+externalCategoryId" }, "No parameters");
         }
 
         List<ExternalField> defs;
@@ -1631,17 +1648,17 @@ public class AiChatService
         {
             var conn = await _context.marketplaceConnections.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-            if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+            if (conn == null) return (new { error = "Connection not found" }, "Not found");
             var adapter = _adapterRegistry.GetByKey(conn.adapterKey)!;
             defs = await adapter.GetCategoryFieldsAsync(conn, p.ExternalCategoryId!, ct);
         }
 
         var field = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
         if (field == null)
-            return (new { error = $"Поле '{p.AdapterFieldKey}' не найдено у адаптера" }, "Поле не найдено");
+            return (new { error = $"Field '{p.AdapterFieldKey}' not found on the adapter" }, "Field not found");
         if (field.Options is not { Count: > 0 })
             return (new { options = Array.Empty<object>(), totalOptions = 0 },
-                $"У поля '{field.Name}' нет предопределённых опций — значение свободное");
+                $"Field '{field.Name}' has no predefined options — free-form value");
 
         var query = p.Query ?? "";
         var matches = string.IsNullOrWhiteSpace(query)
@@ -1657,7 +1674,7 @@ public class AiChatService
             options = matches.Take(limit).Select(o => new { o.Value, o.Label }).ToList(),
             totalMatches = matches.Count,
             totalOptions = field.Options.Count,
-        }, $"Найдено {matches.Count} опций по «{query}» (всего у поля {field.Options.Count})");
+        }, $"Found {matches.Count} options for «{query}» (field has {field.Options.Count} total)");
     }
 
     private async Task<(object, string)> GetAvailableSourcesAsync(string json, int storeId, CancellationToken ct)
@@ -1665,7 +1682,7 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var catAttrs = await _context.categoryAttributes.AsNoTracking()
             .Where(a => a.categoryId == mapping.localCategoryId)
@@ -1679,7 +1696,7 @@ public class AiChatService
             productFields = new[] { "sku", "name", "price", "barcode", "description", "storageQuantity" },
             categoryAttributes = catAttrs,
             storeAttributes = storeAttrs
-        }, $"Источники: {catAttrs.Count} атрибутов категории, {storeAttrs.Count} атрибутов магазина");
+        }, $"Sources: {catAttrs.Count} category attributes, {storeAttrs.Count} store attributes");
     }
 
     private async Task<(object, string)> GetMappingCoverageAsync(string json, int storeId, CancellationToken ct)
@@ -1687,9 +1704,9 @@ public class AiChatService
         var p = ParseInput<IdInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         var coverage = await _graphMutation.GetCoverageAsync(p.Id, ct);
-        return (coverage, $"Покрытие: {coverage.Connected}/{coverage.Total} полей, обязательных: {coverage.RequiredConnected}/{coverage.RequiredTotal}");
+        return (coverage, $"Coverage: {coverage.Connected}/{coverage.Total} fields, required: {coverage.RequiredConnected}/{coverage.RequiredTotal}");
     }
 
     private async Task<(object, string)> PreviewMappingAsync(string json, int storeId, CancellationToken ct)
@@ -1697,10 +1714,10 @@ public class AiChatService
         var p = ParseInput<PreviewMappingInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
         // Preview is complex - return basic info
-        return (new { mappingId = p.MappingId, productId = p.ProductId, note = "Используйте UI редактора для предпросмотра" },
-            "Предпросмотр доступен в редакторе маппинга");
+        return (new { mappingId = p.MappingId, productId = p.ProductId, note = "Use the mapping editor UI to preview" },
+            "Preview is available in the mapping editor");
     }
 
     // Fetches adapter field definitions for a mapping (mapping must have connection loaded).
@@ -1722,7 +1739,7 @@ public class AiChatService
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         // Field def lets GraphMutationService append missing-but-valid fields to the graph
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
@@ -1731,9 +1748,9 @@ public class AiChatService
         var prevGraph = mapping.graphJson ?? "";
         await _graphMutation.ConnectFieldAsync(p.MappingId, p.AdapterFieldKey, p.SourceType, p.SourceField, p.SourceAttributeId, fieldDef: fieldDef, ct: ct);
         await _operationService.RecordAsync(storeId, userId, "connect_field",
-            $"Поле '{p.AdapterFieldKey}' подключено к {p.SourceType}:{p.SourceField ?? p.SourceAttributeId?.ToString()}",
+            $"Field '{p.AdapterFieldKey}' connected to {p.SourceType}:{p.SourceField ?? p.SourceAttributeId?.ToString()}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.AdapterFieldKey}' подключено");
+        return (new { success = true }, $"Field '{p.AdapterFieldKey}' connected");
     }
 
     private async Task<(object, string)> SetFieldStaticAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1742,9 +1759,9 @@ public class AiChatService
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
-        // Field def: enables option validation ("Стандартное значение") and graph auto-add
+        // Field def: enables option validation ("default value") and graph auto-add
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
         var fieldDef = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
 
@@ -1759,9 +1776,9 @@ public class AiChatService
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
-            $"Поле '{p.AdapterFieldKey}' = '{p.Value}'",
+            $"Field '{p.AdapterFieldKey}' = '{p.Value}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.AdapterFieldKey}' = '{p.Value}'");
+        return (new { success = true }, $"Field '{p.AdapterFieldKey}' = '{p.Value}'");
     }
 
     private async Task<(object, string)> AddFieldModifierAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1770,7 +1787,7 @@ public class AiChatService
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
         var fieldDef = defs.FirstOrDefault(d => d.Key == p.AdapterFieldKey);
@@ -1786,21 +1803,21 @@ public class AiChatService
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "add_modifier",
-            $"Модификатор '{p.ModifierType}' добавлен к полю '{p.AdapterFieldKey}'",
+            $"Modifier '{p.ModifierType}' added to field '{p.AdapterFieldKey}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Модификатор '{p.ModifierType}' добавлен");
+        return (new { success = true }, $"Modifier '{p.ModifierType}' added");
     }
 
     private async Task<(object, string)> ConnectFieldsBulkAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<ConnectFieldsBulkInput>(json);
         if (p.Connections is not { Count: > 0 })
-            return (new { error = "Список подключений пуст" }, "Список пуст");
+            return (new { error = "Connection list is empty" }, "List is empty");
 
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
         var prevGraph = mapping.graphJson ?? "";
@@ -1819,11 +1836,11 @@ public class AiChatService
         }
 
         await _operationService.RecordAsync(storeId, userId, "connect_field",
-            $"Подключено {applied} полей маппинга {p.MappingId}",
+            $"Connected {applied} fields of mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
 
-        var summary = $"Подключено полей: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count}";
+        var summary = $"Fields connected: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count}";
         return (new { applied, errors }, summary);
     }
 
@@ -1831,12 +1848,12 @@ public class AiChatService
     {
         var p = ParseInput<SetFieldsStaticBulkInput>(json);
         if (p.Fields is not { Count: > 0 })
-            return (new { error = "Список полей пуст" }, "Список пуст");
+            return (new { error = "Field list is empty" }, "List is empty");
 
         var mapping = await _context.categoryMappings.AsNoTracking()
             .Include(m => m.connection)
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Маппинг не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Mapping not found" }, "Not found");
 
         var defs = await GetAdapterFieldDefsAsync(mapping, ct);
         var prevGraph = mapping.graphJson ?? "";
@@ -1854,21 +1871,21 @@ public class AiChatService
         }
 
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
-            $"Установлено статических значений: {applied} для маппинга {p.MappingId}",
+            $"Set {applied} static values for mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
 
-        var summary = $"Установлено значений: {applied}";
-        if (errors.Count > 0) summary += $", ошибок: {errors.Count} ({string.Join("; ", errors)})";
+        var summary = $"Values set: {applied}";
+        if (errors.Count > 0) summary += $", errors: {errors.Count} ({string.Join("; ", errors)})";
         return (new { applied, errors }, summary);
     }
 
     private async Task<(object, string)> MergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<MergeFieldsInput>(json);
-        if (p.AliasFieldKeys.Count == 0) return (new { error = "Не указаны aliasFieldKeys" }, "Нет полей");
+        if (p.AliasFieldKeys.Count == 0) return (new { error = "aliasFieldKeys not specified" }, "No fields");
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         try
@@ -1880,19 +1897,19 @@ public class AiChatService
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "merge_fields",
-            $"Поля [{string.Join(", ", p.AliasFieldKeys)}] объединены с '{p.PrimaryFieldKey}'",
+            $"Fields [{string.Join(", ", p.AliasFieldKeys)}] merged with '{p.PrimaryFieldKey}'",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
         return (new { success = true },
-            $"Объединено: {string.Join(", ", p.AliasFieldKeys)} → '{p.PrimaryFieldKey}' (экспорт в оба ключа, импорт только через primary)");
+            $"Merged: {string.Join(", ", p.AliasFieldKeys)} → '{p.PrimaryFieldKey}' (exports to both keys, import only via primary)");
     }
 
     private async Task<(object, string)> UnmergeAdapterFieldsAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<UnmergeFieldsInput>(json);
-        if (p.FieldKeys.Count == 0) return (new { error = "Не указаны fieldKeys" }, "Нет полей");
+        if (p.FieldKeys.Count == 0) return (new { error = "fieldKeys not specified" }, "No fields");
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         try
@@ -1904,9 +1921,9 @@ public class AiChatService
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "unmerge_fields",
-            $"Разъединены поля [{string.Join(", ", p.FieldKeys)}]",
+            $"Unmerged fields [{string.Join(", ", p.FieldKeys)}]",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Разъединено: {string.Join(", ", p.FieldKeys)}");
+        return (new { success = true }, $"Unmerged: {string.Join(", ", p.FieldKeys)}");
     }
 
     private async Task<(object, string)> RemoveFieldConnectionAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -1914,14 +1931,14 @@ public class AiChatService
         var p = ParseInput<FieldKeyInput>(json);
         var mapping = await _context.categoryMappings.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
-        if (mapping == null) return (new { error = "Не найден" }, "Не найден");
+        if (mapping == null) return (new { error = "Not found" }, "Not found");
 
         var prevGraph = mapping.graphJson ?? "";
         await _graphMutation.DisconnectFieldAsync(p.MappingId, p.FieldKey, ct: ct);
         await _operationService.RecordAsync(storeId, userId, "disconnect_field",
-            $"Поле '{p.FieldKey}' отключено в маппинге {p.MappingId}",
+            $"Field '{p.FieldKey}' disconnected in mapping {p.MappingId}",
             AiOperationService.BuildGraphRollback(p.MappingId, prevGraph), ct: ct);
-        return (new { success = true }, $"Поле '{p.FieldKey}' отключено");
+        return (new { success = true }, $"Field '{p.FieldKey}' disconnected");
     }
 
     // ---- Export / Import ----
@@ -1931,7 +1948,7 @@ public class AiChatService
         var p = ParseInput<ExportBatchInput>(json);
         var conn = await _context.marketplaceConnections.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
-        if (conn == null) return (new { error = "Подключение не найдено" }, "Не найдено");
+        if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
         List<int> productIds;
         if (p.ProductIds?.Count > 0)
@@ -1950,7 +1967,7 @@ public class AiChatService
                 .Where(x => x.storeId == storeId).Select(x => x.Id).ToListAsync(ct);
         }
 
-        if (productIds.Count == 0) return (new { queued = 0 }, "Нет товаров для экспорта");
+        if (productIds.Count == 0) return (new { queued = 0 }, "No products to export");
 
         var batchId = Guid.NewGuid().ToString("N");
         foreach (var pid in productIds)
@@ -1967,21 +1984,21 @@ public class AiChatService
             });
         }
         await _context.SaveChangesAsync(ct);
-        return (new { batchId, queued = productIds.Count }, $"Добавлено {productIds.Count} товаров в очередь экспорта");
+        return (new { batchId, queued = productIds.Count }, $"Queued {productIds.Count} products for export");
     }
 
     private Task<(object, string)> ExportPricesAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return Task.FromResult(((object)new { note = "Экспорт цен запущен. Используйте UI для мониторинга." },
-            $"Экспорт цен на подключение {p.ConnectionId} запущен"));
+        return Task.FromResult(((object)new { note = "Price export started. Use the UI to monitor progress." },
+            $"Price export to connection {p.ConnectionId} started"));
     }
 
     private Task<(object, string)> ExportStocksAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<ConnectionIdInput>(json);
-        return Task.FromResult(((object)new { note = "Экспорт остатков запущен. Используйте UI для мониторинга." },
-            $"Экспорт остатков на подключение {p.ConnectionId} запущен"));
+        return Task.FromResult(((object)new { note = "Stock export started. Use the UI to monitor progress." },
+            $"Stock export to connection {p.ConnectionId} started"));
     }
 
     private async Task<(object, string)> GetBatchStatusAsync(string json, CancellationToken ct)
@@ -1996,7 +2013,7 @@ public class AiChatService
         var done = exports.Where(e => e.status == ProductExportStatus.Completed).Sum(e => e.count);
         var failed = exports.Where(e => e.status == ProductExportStatus.Failed).Sum(e => e.count);
         return (new { batchId = p.BatchId, total, done, failed, inProgress = total - done - failed },
-            $"Пакет {p.BatchId}: {done}/{total} выполнено, {failed} ошибок");
+            $"Batch {p.BatchId}: {done}/{total} done, {failed} errors");
     }
 
     private async Task<(object, string)> ListProductLinksAsync(string json, int storeId, CancellationToken ct)
@@ -2009,7 +2026,7 @@ public class AiChatService
         var links = await q.Take(50)
             .Select(l => new { l.productId, l.externalProductId, l.status, l.connectionId })
             .ToListAsync(ct);
-        return (new { links, count = links.Count }, $"{links.Count} связей");
+        return (new { links, count = links.Count }, $"{links.Count} links");
     }
 
     // ---- Groups ----
@@ -2026,7 +2043,7 @@ public class AiChatService
         var groups = await q
             .Select(g => new { g.Id, g.name, g.description, memberCount = g.members.Count })
             .ToListAsync(ct);
-        return (new { groups, count = groups.Count }, $"{groups.Count} групп");
+        return (new { groups, count = groups.Count }, $"{groups.Count} groups");
     }
 
     private async Task<(object, string)> GetGroupAsync(string json, int storeId, CancellationToken ct)
@@ -2047,8 +2064,8 @@ public class AiChatService
                 }).ToList()
             })
             .FirstOrDefaultAsync(ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
-        return (group, $"Группа \"{group.name}\": {group.members.Count} товаров");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
+        return (group, $"Group \"{group.name}\": {group.members.Count} products");
     }
 
     private async Task<(object, string)> UpdateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -2056,7 +2073,7 @@ public class AiChatService
         var p = ParseInput<UpdateGroupInput>(json);
         var group = await _context.productGroups
             .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
 
         var oldName = group.name;
         if (!string.IsNullOrEmpty(p.Name)) group.name = p.Name;
@@ -2065,8 +2082,8 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "update_group",
-            $"Группа \"{oldName}\" → \"{group.name}\"", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Группа \"{group.name}\" обновлена");
+            $"Group \"{oldName}\" → \"{group.name}\"", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Group \"{group.name}\" updated");
     }
 
     private async Task<(object, string)> DeleteGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -2075,7 +2092,7 @@ public class AiChatService
         var group = await _context.productGroups
             .Include(g => g.members)
             .FirstOrDefaultAsync(g => g.Id == p.Id && g.storeId == storeId, ct);
-        if (group == null) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (group == null) return (new { error = "Group not found" }, "Not found");
 
         var name = group.name;
         var memberCount = group.members.Count;
@@ -2083,8 +2100,8 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "delete_group",
-            $"Удалена группа \"{name}\" ({memberCount} товаров остались в магазине)", new { }, canRollback: false, ct);
-        return (new { success = true }, $"Группа \"{name}\" удалена, товары остались");
+            $"Deleted group \"{name}\" ({memberCount} products remained in the store)", new { }, canRollback: false, ct);
+        return (new { success = true }, $"Group \"{name}\" deleted, products remained");
     }
 
     private async Task<(object, string)> RemoveProductsFromGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -2092,7 +2109,7 @@ public class AiChatService
         var p = ParseInput<GroupProductsInput>(json);
         var groupExists = await _context.productGroups.AsNoTracking()
             .AnyAsync(g => g.Id == p.GroupId && g.storeId == storeId, ct);
-        if (!groupExists) return (new { error = "Группа не найдена" }, "Не найдена");
+        if (!groupExists) return (new { error = "Group not found" }, "Not found");
 
         var members = await _context.productGroupMembers
             .Where(m => m.groupId == p.GroupId && p.ProductIds.Contains(m.productId))
@@ -2101,8 +2118,8 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "remove_from_group",
-            $"Из группы {p.GroupId} убрано {members.Count} товаров", new { }, canRollback: false, ct);
-        return (new { removed = members.Count }, $"Убрано {members.Count} товаров из группы");
+            $"Removed {members.Count} products from group {p.GroupId}", new { }, canRollback: false, ct);
+        return (new { removed = members.Count }, $"Removed {members.Count} products from the group");
     }
 
     // ---- Files ----
@@ -2116,8 +2133,8 @@ public class AiChatService
         var p = ParseInput<ListFilesInput>(json);
         if (p.Scope == "product")
         {
-            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
-            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+            if (!p.ProductId.HasValue) return (new { error = "scope=product requires productId" }, "No productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Product not found" }, "Not found");
 
             var fq = _context.files.AsNoTracking().Where(f => f.productId == p.ProductId);
             if (!string.IsNullOrEmpty(p.Search))
@@ -2131,7 +2148,7 @@ public class AiChatService
                 .Where(f => f.productId == p.ProductId)
                 .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
                 .ToListAsync(ct);
-            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+            return (new { files, folders }, $"{files.Count} files, {folders.Count} folders");
         }
         else
         {
@@ -2147,81 +2164,81 @@ public class AiChatService
                 .Where(f => f.storeId == storeId)
                 .Select(f => new { f.Id, f.name, f.parentFolderId, fileCount = f.files.Count })
                 .ToListAsync(ct);
-            return (new { files, folders }, $"{files.Count} файлов, {folders.Count} папок");
+            return (new { files, folders }, $"{files.Count} files, {folders.Count} folders");
         }
     }
 
     private async Task<(object, string)> CreateFolderAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<CreateFolderInput>(json);
-        if (string.IsNullOrWhiteSpace(p.Name)) return (new { error = "Имя папки обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.Name)) return (new { error = "Folder name is required" }, "No name");
 
         if (p.Scope == "product")
         {
-            if (!p.ProductId.HasValue) return (new { error = "Для scope=product нужен productId" }, "Нет productId");
-            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Товар не найден" }, "Не найден");
+            if (!p.ProductId.HasValue) return (new { error = "scope=product requires productId" }, "No productId");
+            if (!await ProductInStoreAsync(p.ProductId.Value, storeId, ct)) return (new { error = "Product not found" }, "Not found");
             if (p.ParentFolderId.HasValue && !await _context.productFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.ParentFolderId && f.productId == p.ProductId, ct))
-                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+                return (new { error = "Parent folder not found" }, "Not found");
 
             var folder = new ProductFolder { name = p.Name.Trim(), productId = p.ProductId.Value, parentFolderId = p.ParentFolderId };
             _context.productFolders.Add(folder);
             await _context.SaveChangesAsync(ct);
-            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+            return (new { id = folder.Id }, $"Folder \"{folder.name}\" created");
         }
         else
         {
             if (p.ParentFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.ParentFolderId && f.storeId == storeId, ct))
-                return (new { error = "Родительская папка не найдена" }, "Не найдена");
+                return (new { error = "Parent folder not found" }, "Not found");
 
             var folder = new StoreFolder { name = p.Name.Trim(), storeId = storeId, parentFolderId = p.ParentFolderId };
             _context.storeFolders.Add(folder);
             await _context.SaveChangesAsync(ct);
-            return (new { id = folder.Id }, $"Папка \"{folder.name}\" создана");
+            return (new { id = folder.Id }, $"Folder \"{folder.name}\" created");
         }
     }
 
     private async Task<(object, string)> RenameFileAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<RenameFileInput>(json);
-        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "New name is required" }, "No name");
         if (p.Scope == "product")
         {
             var file = await _context.files.FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
-            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            if (file == null) return (new { error = "File not found" }, "Not found");
             file.displayName = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
         else
         {
             var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
-            if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+            if (file == null) return (new { error = "File not found" }, "Not found");
             file.displayName = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
-        return (new { success = true }, $"Файл переименован в \"{p.NewName}\"");
+        return (new { success = true }, $"File renamed to \"{p.NewName}\"");
     }
 
     private async Task<(object, string)> RenameFolderAsync(string json, int storeId, CancellationToken ct)
     {
         var p = ParseInput<RenameFolderInput>(json);
-        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "Новое имя обязательно" }, "Нет имени");
+        if (string.IsNullOrWhiteSpace(p.NewName)) return (new { error = "New name is required" }, "No name");
         if (p.Scope == "product")
         {
             var folder = await _context.productFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             folder.name = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
         else
         {
             var folder = await _context.storeFolders.FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             folder.name = p.NewName.Trim();
             await _context.SaveChangesAsync(ct);
         }
-        return (new { success = true }, $"Папка переименована в \"{p.NewName}\"");
+        return (new { success = true }, $"Folder renamed to \"{p.NewName}\"");
     }
 
     private async Task<(object, string)> MoveFilesAsync(string json, int storeId, CancellationToken ct)
@@ -2234,7 +2251,7 @@ public class AiChatService
         {
             if (p.TargetFolderId.HasValue && !await _context.productFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.TargetFolderId && f.product.storeId == storeId, ct))
-                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+                return (new { error = "Target folder not found" }, "Not found");
 
             if (p.FileIds?.Count > 0)
             {
@@ -2251,7 +2268,7 @@ public class AiChatService
                     .ToListAsync(ct);
                 foreach (var f in folders)
                 {
-                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    if (p.TargetFolderId == f.Id) return (new { error = "Cannot move a folder into itself" }, "Error");
                     f.parentFolderId = p.TargetFolderId;
                 }
                 movedFolders = folders.Count;
@@ -2261,7 +2278,7 @@ public class AiChatService
         {
             if (p.TargetFolderId.HasValue && !await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.TargetFolderId && f.storeId == storeId, ct))
-                return (new { error = "Целевая папка не найдена" }, "Не найдена");
+                return (new { error = "Target folder not found" }, "Not found");
 
             if (p.FileIds?.Count > 0)
             {
@@ -2278,12 +2295,12 @@ public class AiChatService
                     .ToListAsync(ct);
                 foreach (var f in folders)
                 {
-                    if (p.TargetFolderId == f.Id) return (new { error = "Нельзя переместить папку в саму себя" }, "Ошибка");
+                    if (p.TargetFolderId == f.Id) return (new { error = "Cannot move a folder into itself" }, "Error");
                     // Prevent moving into own descendant
                     var currentId = p.TargetFolderId;
                     while (currentId.HasValue)
                     {
-                        if (currentId.Value == f.Id) return (new { error = "Нельзя переместить папку в своего потомка" }, "Ошибка");
+                        if (currentId.Value == f.Id) return (new { error = "Cannot move a folder into its own descendant" }, "Error");
                         currentId = await _context.storeFolders.AsNoTracking()
                             .Where(x => x.Id == currentId.Value).Select(x => x.parentFolderId).FirstOrDefaultAsync(ct);
                     }
@@ -2293,13 +2310,13 @@ public class AiChatService
             }
         }
         await _context.SaveChangesAsync(ct);
-        return (new { movedFiles, movedFolders }, $"Перемещено: {movedFiles} файлов, {movedFolders} папок");
+        return (new { movedFiles, movedFolders }, $"Moved: {movedFiles} files, {movedFolders} folders");
     }
 
     private async Task<(object, string)> DeleteFilesAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<DeleteFilesInput>(json);
-        if (p.FileIds.Count == 0) return (new { error = "Не указаны fileIds" }, "Нет файлов");
+        if (p.FileIds.Count == 0) return (new { error = "fileIds not specified" }, "No files");
 
         if (p.Scope == "product")
         {
@@ -2320,8 +2337,8 @@ public class AiChatService
             }
             await _context.SaveChangesAsync(ct);
             await _operationService.RecordAsync(storeId, userId, "delete_files",
-                $"Удалено {files.Count} файлов товаров", new { }, canRollback: false, ct);
-            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+                $"Deleted {files.Count} product files", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Deleted {files.Count} files");
         }
         else
         {
@@ -2342,8 +2359,8 @@ public class AiChatService
             }
             await _context.SaveChangesAsync(ct);
             await _operationService.RecordAsync(storeId, userId, "delete_files",
-                $"Удалено {files.Count} файлов магазина", new { }, canRollback: false, ct);
-            return (new { deleted = files.Count }, $"Удалено {files.Count} файлов");
+                $"Deleted {files.Count} store files", new { }, canRollback: false, ct);
+            return (new { deleted = files.Count }, $"Deleted {files.Count} files");
         }
     }
 
@@ -2357,9 +2374,9 @@ public class AiChatService
             var folder = await _context.productFolders.AsNoTracking()
                 .Include(f => f.files).Include(f => f.childFolders)
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+                return (new { error = "Folder is not empty — pass recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -2388,17 +2405,17 @@ public class AiChatService
                 await _context.productFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
 
             await _operationService.RecordAsync(storeId, userId, "delete_folder",
-                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
-            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+                $"Deleted folder \"{folder.name}\" ({files.Count} files)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Folder \"{folder.name}\" deleted ({files.Count} files)");
         }
         else
         {
             var folder = await _context.storeFolders.AsNoTracking()
                 .Include(f => f.files).Include(f => f.childFolders)
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-            if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+            if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Папка не пуста — укажите recursive=true" }, "Не пуста");
+                return (new { error = "Folder is not empty — pass recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -2427,8 +2444,8 @@ public class AiChatService
                 await _context.storeFolders.Where(f => f.Id == fid).ExecuteDeleteAsync(ct);
 
             await _operationService.RecordAsync(storeId, userId, "delete_folder",
-                $"Удалена папка \"{folder.name}\" ({files.Count} файлов)", new { }, canRollback: false, ct);
-            return (new { deletedFiles = files.Count }, $"Папка \"{folder.name}\" удалена ({files.Count} файлов)");
+                $"Deleted folder \"{folder.name}\" ({files.Count} files)", new { }, canRollback: false, ct);
+            return (new { deletedFiles = files.Count }, $"Folder \"{folder.name}\" deleted ({files.Count} files)");
         }
     }
 
@@ -2459,9 +2476,9 @@ public class AiChatService
         var p = ParseInput<ShareFileInput>(json);
         var ttl = p.TtlHours ?? 168;
         if (ttl is not (1 or 24 or 168 or 720))
-            return (new { error = "Допустимые ttlHours: 1, 24, 168 (неделя), 720 (месяц)" }, "Неверный TTL");
+            return (new { error = "Allowed ttlHours: 1, 24, 168 (a week), 720 (a month)" }, "Invalid TTL");
         if (!p.FileId.HasValue && !p.FolderId.HasValue)
-            return (new { error = "Укажите fileId или folderId" }, "Нет объекта");
+            return (new { error = "Specify fileId or folderId" }, "No target");
 
         var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var expiresAt = DateTime.UtcNow.AddHours(ttl);
@@ -2473,7 +2490,7 @@ public class AiChatService
             {
                 var file = await _context.files.AsNoTracking()
                     .FirstOrDefaultAsync(f => f.Id == p.FileId && f.product.storeId == storeId, ct);
-                if (file == null) return (new { error = "Файл не найден" }, "Не найден");
+                if (file == null) return (new { error = "File not found" }, "Not found");
                 _context.fileShareTokens.Add(new FileShareToken
                 {
                     fileId = file.Id, token = token, expiresAt = expiresAt, createdByUserId = userId,
@@ -2484,7 +2501,7 @@ public class AiChatService
             {
                 var folder = await _context.productFolders.AsNoTracking()
                     .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
-                if (folder == null) return (new { error = "Папка не найдена" }, "Не найдена");
+                if (folder == null) return (new { error = "Folder not found" }, "Not found");
                 _context.folderShareTokens.Add(new FolderShareToken
                 {
                     productId = folder.productId, folderId = folder.Id, token = token,
@@ -2499,7 +2516,7 @@ public class AiChatService
             {
                 var exists = await _context.storeFiles.AsNoTracking()
                     .AnyAsync(f => f.Id == p.FileId && f.storeId == storeId, ct);
-                if (!exists) return (new { error = "Файл не найден" }, "Не найден");
+                if (!exists) return (new { error = "File not found" }, "Not found");
                 _context.storeFileShareTokens.Add(new StoreFileShareToken
                 {
                     fileId = p.FileId.Value, token = token, expiresAt = expiresAt, createdByUserId = userId,
@@ -2510,7 +2527,7 @@ public class AiChatService
             {
                 var exists = await _context.storeFolders.AsNoTracking()
                     .AnyAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
-                if (!exists) return (new { error = "Папка не найдена" }, "Не найдена");
+                if (!exists) return (new { error = "Folder not found" }, "Not found");
                 _context.storeFolderShareTokens.Add(new StoreFolderShareToken
                 {
                     storeId = storeId, folderId = p.FolderId, token = token,
@@ -2520,7 +2537,7 @@ public class AiChatService
             }
         }
         await _context.SaveChangesAsync(ct);
-        return (new { url, expiresAt }, $"Ссылка создана, действует до {expiresAt:yyyy-MM-dd HH:mm} UTC");
+        return (new { url, expiresAt }, $"Link created, valid until {expiresAt:yyyy-MM-dd HH:mm} UTC");
     }
 
     private async Task<(object, string)> CreateGroupAsync(string json, int storeId, int userId, CancellationToken ct)
@@ -2535,7 +2552,7 @@ public class AiChatService
                 _context.productGroupMembers.Add(new ProductGroupMember { groupId = group.Id, productId = pid });
             await _context.SaveChangesAsync(ct);
         }
-        return (new { id = group.Id }, $"Группа \"{p.Name}\" создана");
+        return (new { id = group.Id }, $"Group \"{p.Name}\" created");
     }
 
     private async Task<(object, string)> AddProductsToGroupAsync(string json, int storeId, CancellationToken ct)
@@ -2548,7 +2565,7 @@ public class AiChatService
         foreach (var pid in toAdd)
             _context.productGroupMembers.Add(new ProductGroupMember { groupId = p.GroupId, productId = pid });
         await _context.SaveChangesAsync(ct);
-        return (new { added = toAdd.Count }, $"Добавлено {toAdd.Count} товаров в группу");
+        return (new { added = toAdd.Count }, $"Added {toAdd.Count} products to the group");
     }
 
     // ---- Barcodes ----
@@ -2559,7 +2576,7 @@ public class AiChatService
         var q = _context.products.Where(x => x.storeId == storeId && (x.barcode == null || x.barcode == ""));
         if (p.ProductIds?.Count > 0) q = q.Where(x => p.ProductIds.Contains(x.Id));
         var products = await q.ToListAsync(ct);
-        if (products.Count == 0) return (new { generated = 0 }, "Нет товаров без баркода");
+        if (products.Count == 0) return (new { generated = 0 }, "No products without a barcode");
 
         // Uniqueness within the store: seed with all existing barcodes
         var existing = (await _context.products.AsNoTracking()
@@ -2577,11 +2594,11 @@ public class AiChatService
         await _context.SaveChangesAsync(ct);
 
         await _operationService.RecordAsync(storeId, userId, "generate_barcodes",
-            $"Сгенерированы EAN-13 баркоды для {products.Count} товаров",
+            $"Generated EAN-13 barcodes for {products.Count} products",
             new BarcodeRollbackData { Products = snapshots }, canRollback: true, ct);
 
         return (new { generated = products.Count },
-            $"Сгенерированы баркоды для {products.Count} товаров");
+            $"Generated barcodes for {products.Count} products");
     }
 
     // ---- Analytics ----
@@ -2603,7 +2620,7 @@ public class AiChatService
             mappings = mappingCount,
             pendingExports,
             groups = groupCount
-        }, $"Товаров: {productCount}, категорий: {categoryCount}, подключений: {connectionCount}");
+        }, $"Products: {productCount}, categories: {categoryCount}, connections: {connectionCount}");
     }
 
     private async Task<(object, string)> FindProductsWithoutImagesAsync(int storeId, CancellationToken ct)
@@ -2612,7 +2629,7 @@ public class AiChatService
             .Where(p => p.storeId == storeId && !_context.images.Any(i => i.productId == p.Id))
             .Select(p => new { p.Id, p.name, p.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без изображений");
+        return (new { products, count = products.Count }, $"{products.Count} products without images");
     }
 
     private async Task<(object, string)> FindProductsWithoutBarcodeAsync(int storeId, CancellationToken ct)
@@ -2621,7 +2638,7 @@ public class AiChatService
             .Where(p => p.storeId == storeId && (p.barcode == null || p.barcode == ""))
             .Select(p => new { p.Id, p.name, p.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без баркода");
+        return (new { products, count = products.Count }, $"{products.Count} products without a barcode");
     }
 
     private async Task<(object, string)> FindProductsMissingFieldAsync(string json, int storeId, CancellationToken ct)
@@ -2632,14 +2649,14 @@ public class AiChatService
             .Select(a => (int?)a.Id).FirstOrDefaultAsync(ct);
 
         if (attrId == null)
-            return (new { error = $"Поле '{p.Search}' не найдено" }, "Поле не найдено");
+            return (new { error = $"Field '{p.Search}' not found" }, "Field not found");
 
         var products = await _context.products.AsNoTracking()
             .Where(pr => pr.storeId == storeId &&
                 !_context.productAttributeValues.Any(v => v.productId == pr.Id && v.attributeId == attrId && v.value != null && v.value != ""))
             .Select(pr => new { pr.Id, pr.name, pr.sku })
             .Take(100).ToListAsync(ct);
-        return (new { products, count = products.Count }, $"{products.Count} товаров без поля '{p.Search}'");
+        return (new { products, count = products.Count }, $"{products.Count} products missing field '{p.Search}'");
     }
 
     private async Task<(object, string)> FindProductsWithSyncErrorsAsync(string json, int storeId, CancellationToken ct)
@@ -2651,7 +2668,7 @@ public class AiChatService
         var links = await q.Take(50)
             .Select(l => new { l.productId, l.externalProductId, l.connectionId, l.lastErrorMessage })
             .ToListAsync(ct);
-        return (new { products = links, count = links.Count }, $"{links.Count} товаров с ошибками синхронизации");
+        return (new { products = links, count = links.Count }, $"{links.Count} products with sync errors");
     }
 
     private async Task<(object, string)> AnalyzeMappingQualityAsync(string json, int storeId, CancellationToken ct)
@@ -2676,7 +2693,7 @@ public class AiChatService
         var totalFields = report.Sum(r => (int)((dynamic)r).Total);
         var connectedFields = report.Sum(r => (int)((dynamic)r).Connected);
         return (new { mappings = report, totalFields, connectedFields },
-            $"Проанализировано {mappings.Count} маппингов: {connectedFields}/{totalFields} полей подключено");
+            $"Analyzed {mappings.Count} mappings: {connectedFields}/{totalFields} fields connected");
     }
 
     private async Task<(object, string)> GetImageDownloadStatusAsync(int storeId, CancellationToken ct)
@@ -2686,7 +2703,7 @@ public class AiChatService
             .GroupBy(d => d.status)
             .Select(g => new { status = g.Key, count = g.Count() })
             .ToListAsync(ct);
-        return (new { status = groups }, "Статус загрузки изображений");
+        return (new { status = groups }, "Image download status");
     }
 
     // ---- Rollback ----
@@ -2705,38 +2722,38 @@ public class AiChatService
         else
             op = await _operationService.GetLastAsync(userId, storeId, ct);
 
-        if (op == null) return (new { error = "Нет операций для отмены" }, "Нет операций для отмены");
+        if (op == null) return (new { error = "No operations to undo" }, "No operations to undo");
         if (!op.canRollback || op.status == AiOperationStatus.RolledBack)
-            return (new { error = "Эту операцию нельзя отменить" }, "Нельзя отменить");
+            return (new { error = "This operation cannot be undone" }, "Cannot undo");
 
         // Stale guard: without an explicit operationId, don't silently undo something old —
         // it may belong to a long-finished task the user no longer has in mind
         if (!p.Id.HasValue && op.createdAt < DateTime.UtcNow.AddMinutes(-30))
         {
             var age = DateTime.UtcNow - op.createdAt;
-            var ageText = age.TotalHours >= 1 ? $"{(int)age.TotalHours} ч назад" : $"{(int)age.TotalMinutes} мин назад";
+            var ageText = age.TotalHours >= 1 ? $"{(int)age.TotalHours}h ago" : $"{(int)age.TotalMinutes}m ago";
             return (new
             {
                 requiresConfirmation = true,
                 operationId = op.Id,
                 description = op.description,
                 createdAt = op.createdAt,
-            }, $"Последняя операция выполнена {ageText}: «{op.description}». " +
-               $"Это давняя операция — уточни у пользователя, что откатить нужно именно её, " +
-               $"и повтори вызов с operationId={op.Id}");
+            }, $"The last operation ran {ageText}: «{op.description}». " +
+               $"This is an old operation — confirm with the user that this is specifically what they want to undo, " +
+               $"then retry the call with operationId={op.Id}");
         }
 
         var applied = await ApplyRollbackAsync(op, ct);
         if (!applied)
         {
             _logger.LogWarning("Rollback of operation {OpId} ({Type}) did not change any data", op.Id, op.operationType);
-            return (new { error = "Откат не удался — данные не были изменены" },
-                $"Откат операции «{op.description}» не удался: данные не изменены");
+            return (new { error = "Rollback failed — no data was changed" },
+                $"Rollback of operation «{op.description}» failed: no data was changed");
         }
 
         await _operationService.MarkRolledBackAsync(op.Id, ct);
         return (new { success = true, operationId = op.Id, description = op.description },
-            $"Отменено: {op.description}");
+            $"Undone: {op.description}");
     }
 
     // Returns true only when the rollback actually changed data.
@@ -2905,7 +2922,7 @@ public class AiChatService
                     properties = new Dictionary<string, AiToolProperty>
                     {
                         ["tool"] = new AiToolProperty { type = "string", description = "Tool name that will be called" },
-                        ["description"] = new AiToolProperty { type = "string", description = "Human-readable description of this step in Russian" },
+                        ["description"] = new AiToolProperty { type = "string", description = "Human-readable description of this step in the current UI language (same language as assistant replies)" },
                         ["args"] = new AiToolProperty { type = "object", description = "EXACT tool arguments as a JSON object — the same IDs/keys/values you already gathered. After user confirmation the system executes each step with these args automatically." }
                     },
                     required = ["tool", "description", "args"]
@@ -3200,7 +3217,7 @@ public class AiChatService
                 "randomInt", "randomFloat", "randomPick", "randomUuid")),
             ("params", new AiToolProperty { type = "object", description = "Modifier parameters: truncate→{maxLength:int}, multiply→{factor:number}, optionMap→{mappings:[{from,to}],default} PREFERRED for select fields, valueMap→{mappings:[{from,valueId}],default} fallback, llmGenerate→{prompt,modelId,seed?,cacheEnabled?,perProduct?}, template→{template:'...{{value}}...'}, randomInt→{min,max,seed?}, join→{delimiter}, limit→{count}" })
         ),
-        Prop("merge_adapter_fields", "Merge duplicate adapter fields: aliases receive the primary's exported value under their own key; import reverses only the primary. Use for semantically identical fields (e.g. 'Название' and 'Название товара').", Req(["mappingId", "primaryFieldKey", "aliasFieldKeys"]),
+        Prop("merge_adapter_fields", "Merge duplicate adapter fields: aliases receive the primary's exported value under their own key; import reverses only the primary. Use for semantically identical fields (e.g. 'Name' and 'Product name').", Req(["mappingId", "primaryFieldKey", "aliasFieldKeys"]),
             ("mappingId", Int("Mapping ID")),
             ("primaryFieldKey", Str("Field that stays connected and drives the value")),
             ("aliasFieldKeys", StrArray("Duplicate field keys to merge into the primary"))
@@ -3215,12 +3232,12 @@ public class AiChatService
         ),
         Prop("find_products_without_mapping", "Find store products whose category has mappings for a connection but no mapping is assigned yet (e.g. Ozon export mapping missing). Use list_connections / list_mappings first.", Req([]),
             ("connectionId", Int("Connection ID (preferred if known)")),
-            ("connectionName", Str("Connection name or adapter search, e.g. «Озон»")),
+            ("connectionName", Str("Connection name or adapter search, e.g. \"Ozon\"")),
             ("limit", Int("Max products to return (default 50, max 200)"))
         ),
         Prop("get_product_mapping_summary", "Summary: how many products are assigned to each mapping per connection, and how many have no mapping.", Req([]),
             ("connectionId", Int("Single connection ID (omit for all connections)")),
-            ("connectionName", Str("Filter by connection name, e.g. «Озон»"))
+            ("connectionName", Str("Filter by connection name, e.g. \"Ozon\""))
         ),
         Prop("assign_product_mappings", "Assign a category mapping to products for export/sync. Creates marketplace link if missing. Use find_products_without_mapping first, then list_mappings to pick mappingId.", Req(["mappingId"]),
             ("mappingId", Int("Mapping ID from list_mappings")),
@@ -3344,10 +3361,10 @@ public class AiChatService
         Prop("get_image_download_status", "Check image download queue status", Req([])),
 
         // Navigation
-        Prop("navigate_to", "Show a clickable navigation button in the chat that takes the user to a specific page. The button appears in the chat UI — the user clicks it to navigate. Do NOT say you 'redirected' the user; instead say something like 'Вот кнопка для перехода на страницу товара'. The panel stays open during navigation.",
+        Prop("navigate_to", "Show a clickable navigation button in the chat that takes the user to a specific page. The button appears in the chat UI — the user clicks it to navigate. Do NOT say you 'redirected' the user; instead say something like 'Here's a button to go to the product page'. The panel stays open during navigation.",
             Req(["url", "label"]),
             ("url", Str("App-relative path using the REAL numeric ID from the tool result, e.g. /products/1762/edit — NEVER invent or guess an ID")),
-            ("label", Str("Short destination description shown on the button, e.g. 'Носки шерстяные (150₽)'"))
+            ("label", Str("Short destination description shown on the button, e.g. 'Wool socks (150 RUB)'"))
         ),
     ];
 
