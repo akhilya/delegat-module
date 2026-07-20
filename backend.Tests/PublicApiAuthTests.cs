@@ -28,7 +28,7 @@ public class PublicApiAuthTests
     [Fact]
     public void ApiException_Forbidden_Is403()
     {
-        var ex = ApiException.Forbidden("Нет доступа к этому магазину");
+        var ex = ApiException.Forbidden("No access to this store");
         Assert.Equal(StatusCodes.Status403Forbidden, ex.StatusCode);
     }
 }

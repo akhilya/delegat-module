@@ -62,7 +62,7 @@ public class PublicStoreAttributesController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут не найден");
+            throw ApiException.NotFound("Attribute not found");
 
         return Ok(((IMapToDTO<StoreAttribute.AttributeDTO>)attribute).MapToDTO(_sp));
     }
@@ -75,7 +75,7 @@ public class PublicStoreAttributesController : ControllerBase
         var existing = await _db.storeAttributes
             .AnyAsync(a => a.storeId == storeId && a.key == input.key, ct);
         if (existing)
-            throw ApiException.Conflict("Атрибут с таким ключом уже существует");
+            throw ApiException.Conflict("An attribute with this key already exists");
 
         var maxSort = await _db.storeAttributes
             .Where(a => a.storeId == storeId)
@@ -107,7 +107,7 @@ public class PublicStoreAttributesController : ControllerBase
         var repo = _uow.Repository<StoreAttribute>();
         var attribute = await repo.FindAsync(a => a.Id == attributeId && a.storeId == storeId);
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут не найден");
+            throw ApiException.NotFound("Attribute not found");
 
         attribute.UpdateFill(input);
         await _uow.SaveChangesAsync();
@@ -122,7 +122,7 @@ public class PublicStoreAttributesController : ControllerBase
         var attribute = await _db.storeAttributes
             .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут не найден");
+            throw ApiException.NotFound("Attribute not found");
 
         _db.storeAttributes.Remove(attribute);
         await _db.SaveChangesAsync(ct);

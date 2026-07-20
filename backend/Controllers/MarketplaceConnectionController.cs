@@ -84,7 +84,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var result = await _db.marketplaceConnections
             .Where(c => c.storeId == selectedStoreId.Value)
@@ -113,14 +113,14 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var connection = await _db.marketplaceConnections
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var hasCredentials = !string.IsNullOrEmpty(connection.credentialsJson);
 
@@ -148,20 +148,20 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         await _quotaService.EnsureConnectionQuotaAsync(selectedStoreId.Value);
 
         // Verify that the adapter exists
         var adapter = _adapterRegistry.GetByKey(input.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {input.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {input.adapterKey}");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
         var encryptedCreds = !string.IsNullOrEmpty(input.credentialsJson)
             ? (_encryptionService?.Encrypt(input.credentialsJson)
-               ?? throw ApiException.InternalServerError("Шифрование не настроено"))
+               ?? throw ApiException.InternalServerError("Encryption is not configured"))
             : input.credentialsJson;
 
         var connection = new MarketplaceConnection();
@@ -189,7 +189,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -197,7 +197,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         // Empty/null credentialsJson means "keep existing" — do not overwrite with blanks
         if (string.IsNullOrWhiteSpace(input.credentialsJson) || IsBlankCredentialsObject(input.credentialsJson))
@@ -210,7 +210,7 @@ public class MarketplaceConnectionController : ControllerBase
         }
         else
         {
-            throw ApiException.InternalServerError("Шифрование не настроено");
+            throw ApiException.InternalServerError("Encryption is not configured");
         }
 
         connection.UpdateFill(input);
@@ -252,7 +252,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -263,7 +263,7 @@ public class MarketplaceConnectionController : ControllerBase
                 .Include(c => c.productLinks));
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         // Delete related entities
         var categoryMappingRepo = _unitOfWork.Repository<CategoryMapping>();
@@ -293,7 +293,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -301,11 +301,11 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         try
         {
@@ -338,7 +338,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -346,11 +346,11 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         var capabilities = adapter.Capabilities;
 
@@ -395,7 +395,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -403,11 +403,11 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         var rateLimitConfig = adapter.GetRateLimitConfig();
 

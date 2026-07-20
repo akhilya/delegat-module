@@ -70,10 +70,10 @@ public class ProductTransferService
             .FirstOrDefaultAsync(s => s.Id == targetStoreId, ct);
 
         if (targetStore == null)
-            throw new InvalidOperationException($"Целевой магазин #{targetStoreId} не найден");
+            throw new InvalidOperationException($"Target store #{targetStoreId} not found");
 
         if (!targetStore.members.Any(m => m.Id == userId))
-            throw new InvalidOperationException("Нет доступа к целевому магазину");
+            throw new InvalidOperationException("No access to the target store");
 
         var product = await _context.products
             .AsSplitQuery()
@@ -93,7 +93,7 @@ public class ProductTransferService
             .FirstOrDefaultAsync(p => p.Id == sourceProductId && p.storeId == sourceStoreId, ct);
 
         if (product == null)
-            throw new InvalidOperationException("Исходный товар не найден");
+            throw new InvalidOperationException("Source product not found");
 
         // SKU collision in target store (excluding soft-deleted to mirror UI behavior)
         var skuTaken = await _context.products
@@ -158,7 +158,7 @@ public class ProductTransferService
             .Select(l => new BrokenLinkPreview
             {
                 connectionId = l.connectionId,
-                connectionName = l.connection?.name ?? l.connection?.adapterKey ?? "—",
+                connectionName = l.connection?.name ?? l.connection?.adapterKey ?? "-",
                 externalProductId = l.externalProductId,
                 status = l.status.ToString()
             })
@@ -234,23 +234,23 @@ public class ProductTransferService
         // ---- Validate ----------------------------------------------------------------
 
         if (request.mode != "clone" && request.mode != "move")
-            throw new InvalidOperationException($"Неизвестный режим: {request.mode}");
+            throw new InvalidOperationException($"Unknown mode: {request.mode}");
 
         // Same-store is OK for clone (just an in-store duplicate), but move-into-self
         // is meaningless — it would soft-delete the original and create the same thing
         // back in the same store.
         if (request.targetStoreId == sourceStoreId && request.mode == "move")
-            throw new InvalidOperationException("Перемещение в тот же магазин невозможно. Используйте режим клонирования.");
+            throw new InvalidOperationException("Cannot move into the same store. Use clone mode instead.");
 
         var targetStore = await _context.stores
             .Include(s => s.members)
             .FirstOrDefaultAsync(s => s.Id == request.targetStoreId, ct);
 
         if (targetStore == null)
-            throw new InvalidOperationException($"Целевой магазин #{request.targetStoreId} не найден");
+            throw new InvalidOperationException($"Target store #{request.targetStoreId} not found");
 
         if (!targetStore.members.Any(m => m.Id == userId))
-            throw new InvalidOperationException("Нет доступа к целевому магазину");
+            throw new InvalidOperationException("No access to the target store");
 
         var source = await _context.products
             .AsSplitQuery()
@@ -271,12 +271,12 @@ public class ProductTransferService
             .FirstOrDefaultAsync(p => p.Id == request.sourceProductId && p.storeId == sourceStoreId, ct);
 
         if (source == null)
-            throw new InvalidOperationException("Исходный товар не найден");
+            throw new InvalidOperationException("Source product not found");
 
         // Require explicit user confirmation before breaking active marketplace links.
         if (source.marketplaceLinks.Any() && !request.confirmBreakLinks)
             throw new InvalidOperationException(
-                "У товара есть marketplace-связки. Подтвердите их разрыв (confirmBreakLinks=true)");
+                "The product has marketplace links. Confirm breaking them (confirmBreakLinks=true)");
 
         // SKU resolution (override or original) + collision check
         var newSku = !string.IsNullOrWhiteSpace(request.newSku)
@@ -288,7 +288,7 @@ public class ProductTransferService
 
         if (skuTaken)
             throw new InvalidOperationException(
-                $"SKU '{newSku}' уже занят в целевом магазине. Задайте другой через newSku.");
+                $"SKU '{newSku}' is already taken in the target store. Provide a different one via newSku.");
 
         // ---- Resolve target category --------------------------------------------------
 
@@ -313,19 +313,19 @@ public class ProductTransferService
 
                 case "use":
                     if (!request.categoryId.HasValue)
-                        throw new InvalidOperationException("categoryAction=use требует categoryId");
+                        throw new InvalidOperationException("categoryAction=use requires categoryId");
                     targetCategory = await _context.categories
                         .Include(c => c.attributes)
                         .FirstOrDefaultAsync(c =>
                             c.Id == request.categoryId.Value &&
                             c.storeId == request.targetStoreId, ct);
                     if (targetCategory == null)
-                        throw new InvalidOperationException("Указанная категория не найдена в целевом магазине");
+                        throw new InvalidOperationException("The specified category was not found in the target store");
                     break;
 
                 case "create":
                     if (source.category == null)
-                        throw new InvalidOperationException("categoryAction=create требует исходную категорию");
+                        throw new InvalidOperationException("categoryAction=create requires a source category");
                     targetCategory = await CloneCategoryAsync(
                         source.category, request.targetStoreId,
                         request.syncMissingCategoryAttributes, ct);
@@ -354,11 +354,11 @@ public class ProductTransferService
             var mapped = attributeIdMap.Count;
             var total = source.category?.attributes?.Count ?? 0;
             await Log("info",
-                $"Категория: «{targetCategory.name}» (ID {targetCategory.Id}), атрибутов смэппилось: {mapped}/{total}");
+                $"Category: \"{targetCategory.name}\" (ID {targetCategory.Id}), attributes mapped: {mapped}/{total}");
         }
         else if (source.categoryId.HasValue)
         {
-            await Log("warning", "Категория: не назначена в целевом магазине");
+            await Log("warning", "Category: not assigned in the target store");
         }
 
         // ---- Resolve store attribute id map ------------------------------------------
@@ -384,23 +384,23 @@ public class ProductTransferService
         {
             case "use":
                 if (!request.groupId.HasValue)
-                    throw new InvalidOperationException("groupAction=use требует groupId");
+                    throw new InvalidOperationException("groupAction=use requires groupId");
                 targetGroup = await _context.Set<ProductGroup>()
                     .FirstOrDefaultAsync(g =>
                         g.Id == request.groupId.Value &&
                         g.storeId == request.targetStoreId, ct);
                 if (targetGroup == null)
-                    throw new InvalidOperationException("Указанная группа не найдена в целевом магазине");
+                    throw new InvalidOperationException("The specified group was not found in the target store");
                 break;
 
             case "create":
                 if (string.IsNullOrWhiteSpace(request.groupName))
-                    throw new InvalidOperationException("groupAction=create требует groupName");
+                    throw new InvalidOperationException("groupAction=create requires groupName");
                 targetGroup = new ProductGroup();
                 targetGroup.AddFill(new ProductGroup.AddForm
                 {
                     name = request.groupName!.Trim(),
-                    description = $"Создана при переносе товара из магазина #{sourceStoreId}",
+                    description = $"Created when transferring a product from store #{sourceStoreId}",
                     storeId = request.targetStoreId
                 });
                 _context.Set<ProductGroup>().Add(targetGroup);
@@ -459,7 +459,7 @@ public class ProductTransferService
             {
                 // ---- Create new Product --------------------------------------------------
 
-                await Log("info", $"Создание товара ({newSku})");
+                await Log("info", $"Creating product ({newSku})");
 
                 Product newProduct;
                 try
@@ -485,12 +485,12 @@ public class ProductTransferService
 
                     completedItems++;
                     await Progress();
-                    await Log("success", $"Товар создан (ID: {newProduct.Id})");
+                    await Log("success", $"Product created (ID: {newProduct.Id})");
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при создании товара: {ex.Message}");
+                    await Log("error", $"Error creating product: {ex.Message}");
                     throw;
                 }
 
@@ -525,14 +525,14 @@ public class ProductTransferService
                         failedItems += skippedAttrValues;
                         await Progress();
                         await Log("info",
-                            $"Атрибуты категории: {copiedAttrValues} скопировано" +
-                            (skippedAttrValues > 0 ? $", {skippedAttrValues} пропущено (нет в целевой категории)" : ""));
+                            $"Category attributes: {copiedAttrValues} copied" +
+                            (skippedAttrValues > 0 ? $", {skippedAttrValues} skipped (not in target category)" : ""));
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при копировании атрибутов категории: {ex.Message}");
+                    await Log("error", $"Error copying category attributes: {ex.Message}");
                     throw;
                 }
 
@@ -564,14 +564,14 @@ public class ProductTransferService
                         failedItems += skippedStoreAttrs;
                         await Progress();
                         await Log("info",
-                            $"Атрибуты магазина: {copiedStoreAttrs} скопировано" +
-                            (skippedStoreAttrs > 0 ? $", {skippedStoreAttrs} пропущено" : ""));
+                            $"Store attributes: {copiedStoreAttrs} copied" +
+                            (skippedStoreAttrs > 0 ? $", {skippedStoreAttrs} skipped" : ""));
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при копировании атрибутов магазина: {ex.Message}");
+                    await Log("error", $"Error copying store attributes: {ex.Message}");
                     throw;
                 }
 
@@ -582,7 +582,7 @@ public class ProductTransferService
                 try
                 {
                     if (pendingFolders.Count > 0)
-                        await Log("info", $"Копирование папок: {pendingFolders.Count}");
+                        await Log("info", $"Copying folders: {pendingFolders.Count}");
 
                     while (pendingFolders.Count > 0)
                     {
@@ -610,7 +610,7 @@ public class ProductTransferService
                         }
                         if (!progressed)
                         {
-                            await Log("warning", $"Не удалось скопировать {pendingFolders.Count} папок (нарушена иерархия)");
+                            await Log("warning", $"Failed to copy {pendingFolders.Count} folders (hierarchy broken)");
                             break;
                         }
                     }
@@ -618,7 +618,7 @@ public class ProductTransferService
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при копировании папок: {ex.Message}");
+                    await Log("error", $"Error copying folders: {ex.Message}");
                     throw;
                 }
 
@@ -630,7 +630,7 @@ public class ProductTransferService
                 var failedFileCount = 0;
 
                 if (totalFiles > 0)
-                    await Log("info", $"Копирование файлов: {totalFiles}");
+                    await Log("info", $"Copying files: {totalFiles}");
 
                 foreach (var srcFile in source.files)
                 {
@@ -658,7 +658,7 @@ public class ProductTransferService
                         failedFileCount++;
                         failedItems++;
                         await Progress();
-                        await Log("warning", $"Файл не скопирован, пропущен: {displayName}");
+                        await Log("warning", $"File not copied, skipped: {displayName}");
                         continue;
                     }
 
@@ -736,7 +736,7 @@ public class ProductTransferService
                         failedFileCount++;
                         failedItems++;
                         await Progress();
-                        await Log("warning", $"Ошибка сохранения файла {displayName}: {ex.Message}");
+                        await Log("warning", $"Error saving file {displayName}: {ex.Message}");
                         continue;
                     }
 
@@ -746,7 +746,7 @@ public class ProductTransferService
                 }
 
                 if (totalFiles > 0)
-                    await Log("info", $"Файлы: {copiedFileCount} скопировано" + (failedFileCount > 0 ? $", {failedFileCount} с ошибками" : ""));
+                    await Log("info", $"Files: {copiedFileCount} copied" + (failedFileCount > 0 ? $", {failedFileCount} failed" : ""));
 
                 // ---- Copy ImageReferences (rebuilt with new fileIds) ---------------------
 
@@ -769,13 +769,13 @@ public class ProductTransferService
                     if (imagesCopied > 0)
                     {
                         await Progress();
-                        await Log("info", $"Изображения: {imagesCopied} привязано");
+                        await Log("info", $"Images: {imagesCopied} linked");
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при привязке изображений: {ex.Message}");
+                    await Log("error", $"Error linking images: {ex.Message}");
                     throw;
                 }
 
@@ -796,13 +796,13 @@ public class ProductTransferService
                     if (source.notes.Count > 0)
                     {
                         await Progress();
-                        await Log("info", $"Заметки: {source.notes.Count} скопировано");
+                        await Log("info", $"Notes: {source.notes.Count} copied");
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при копировании заметок: {ex.Message}");
+                    await Log("error", $"Error copying notes: {ex.Message}");
                     throw;
                 }
 
@@ -829,13 +829,13 @@ public class ProductTransferService
                     if (source.variants.Count > 0)
                     {
                         await Progress();
-                        await Log("info", $"Варианты: {source.variants.Count} скопировано");
+                        await Log("info", $"Variants: {source.variants.Count} copied");
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    await Log("error", $"Ошибка при копировании вариантов: {ex.Message}");
+                    await Log("error", $"Error copying variants: {ex.Message}");
                     throw;
                 }
 
@@ -857,12 +857,12 @@ public class ProductTransferService
                             sortOrder = maxOrder + 1,
                             addedAt = DateTime.UtcNow
                         });
-                        await Log("info", $"Добавлен в группу: {targetGroup.name}");
+                        await Log("info", $"Added to group: {targetGroup.name}");
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
                     {
-                        await Log("error", $"Ошибка при добавлении в группу: {ex.Message}");
+                        await Log("error", $"Error adding to group: {ex.Message}");
                         throw;
                     }
                 }
@@ -873,10 +873,10 @@ public class ProductTransferService
                 {
                     source.deletedAt = DateTime.UtcNow;
                     _context.products.Update(source);
-                    await Log("info", "Оригинал отправлен в корзину");
+                    await Log("info", "Original moved to trash");
                 }
 
-                await Log("info", "Сохранение");
+                await Log("info", "Saving");
                 await _context.SaveChangesAsync(ct);
 
                 result = new TransferResult

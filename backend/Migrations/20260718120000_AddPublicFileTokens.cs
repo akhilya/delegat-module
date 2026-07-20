@@ -1,3 +1,5 @@
+using Delegat;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Delegat.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(DataContext))]
+    [Migration("20260718120000_AddPublicFileTokens")]
     public partial class AddPublicFileTokens : Migration
     {
         /// <inheritdoc />

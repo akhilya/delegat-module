@@ -152,7 +152,7 @@ public class AiSettingsController : ControllerBase
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
         var (ok, error) = await _modelService.TestConnectionAsync(model, ct);
-        return Ok(new { success = ok, message = ok ? "Подключение работает" : $"Ошибка подключения: {error}" });
+        return Ok(new { success = ok, message = ok ? "Connection is working" : $"Connection error: {error}" });
     }
 
     // POST /api/ai/models/discover — fetch available model IDs from a provider API
@@ -238,7 +238,7 @@ public class AiSettingsController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync(ct);
         if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут управлять AI-моделями");
+            throw ApiException.Forbidden("Only administrators can manage AI models");
     }
 
     private static string MaskKey(string encrypted)

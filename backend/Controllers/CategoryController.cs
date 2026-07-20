@@ -53,7 +53,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -99,7 +99,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -108,7 +108,7 @@ public class CategoryController : ControllerBase
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var productsCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
 
@@ -139,7 +139,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -147,7 +147,7 @@ public class CategoryController : ControllerBase
         var existingCategory = await categoryRepo.FindAsync(
             c => c.storeId == selectedStoreId.Value && c.name == input.name);
         if (existingCategory != null)
-            throw ApiException.BadRequest("Категория с таким именем уже существует");
+            throw ApiException.BadRequest("A category with this name already exists");
 
         var category = new Category();
         category.AddFill(new Category.AddForm
@@ -174,7 +174,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -182,7 +182,7 @@ public class CategoryController : ControllerBase
             c => c.Id == categoryId && c.storeId == selectedStoreId.Value);
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         // Check name uniqueness if name is being changed
         if (!string.IsNullOrEmpty(input.name) && input.name != category.name)
@@ -190,7 +190,7 @@ public class CategoryController : ControllerBase
             var existingCategory = await categoryRepo.FindAsync(
                 c => c.storeId == selectedStoreId.Value && c.name == input.name && c.Id != categoryId);
             if (existingCategory != null)
-                throw ApiException.BadRequest("Категория с таким именем уже существует");
+                throw ApiException.BadRequest("A category with this name already exists");
         }
 
         category.UpdateFill(input);
@@ -210,7 +210,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -219,11 +219,11 @@ public class CategoryController : ControllerBase
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var activeCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
         if (activeCount > 0)
-            throw ApiException.BadRequest($"Невозможно удалить категорию с {activeCount} товарами. Сначала переместите или удалите товары.");
+            throw ApiException.BadRequest($"Cannot delete a category with {activeCount} products. Move or delete the products first.");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
         // block the DELETE — detach them from the category (they stay in the trash)
@@ -253,7 +253,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -262,7 +262,7 @@ public class CategoryController : ControllerBase
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var result = category.attributes
             .OrderBy(a => a.sortOrder)
@@ -284,7 +284,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -293,15 +293,15 @@ public class CategoryController : ControllerBase
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         // Check key uniqueness
         if (category.attributes.Any(a => a.key == input.key))
-            throw ApiException.BadRequest("Атрибут с таким ключом уже существует");
+            throw ApiException.BadRequest("An attribute with this key already exists");
 
         if (category.attributes.Any(a =>
                 string.Equals(a.name, input.name, StringComparison.OrdinalIgnoreCase)))
-            throw ApiException.BadRequest("Атрибут с таким названием уже существует");
+            throw ApiException.BadRequest("An attribute with this name already exists");
 
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
 
@@ -346,7 +346,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -354,7 +354,7 @@ public class CategoryController : ControllerBase
             c => c.Id == categoryId && c.storeId == selectedStoreId.Value);
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
 
@@ -362,7 +362,7 @@ public class CategoryController : ControllerBase
             a => a.Id == attributeId && a.categoryId == categoryId);
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут не найден");
+            throw ApiException.NotFound("Attribute not found");
 
         // Check key uniqueness if key is being changed
         if (!string.IsNullOrEmpty(input.key) && input.key != attribute.key)
@@ -370,7 +370,7 @@ public class CategoryController : ControllerBase
             var existingAttr = await attrRepo.FindAsync(
                 a => a.categoryId == categoryId && a.key == input.key && a.Id != attributeId);
             if (existingAttr != null)
-                throw ApiException.BadRequest("Атрибут с таким ключом уже существует");
+                throw ApiException.BadRequest("An attribute with this key already exists");
         }
 
         attribute.UpdateFill(input);
@@ -391,7 +391,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -399,7 +399,7 @@ public class CategoryController : ControllerBase
             c => c.Id == categoryId && c.storeId == selectedStoreId.Value);
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
 
@@ -408,7 +408,7 @@ public class CategoryController : ControllerBase
             query => query.Include(a => a.values));
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут не найден");
+            throw ApiException.NotFound("Attribute not found");
 
         // Delete attribute values and attribute in a single save
         var valueRepo = _unitOfWork.Repository<ProductAttributeValue>();
@@ -431,7 +431,7 @@ public class CategoryController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var categoryRepo = _unitOfWork.Repository<Category>();
 
@@ -440,7 +440,7 @@ public class CategoryController : ControllerBase
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Категория не найдена");
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
 
         var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
 

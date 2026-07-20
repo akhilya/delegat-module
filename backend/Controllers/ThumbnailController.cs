@@ -36,17 +36,17 @@ public class ThumbnailController : ControllerBase
     public async Task<IActionResult> GetThumbnail(int id, [FromQuery] int w = 256, CancellationToken ct = default)
     {
         if (!ThumbnailService.IsAllowedWidth(w))
-            throw ApiException.BadRequest($"Недопустимый размер. Допустимые: 64, 128, 256, 512");
+            throw ApiException.BadRequest($"Invalid size. Allowed: 64, 128, 256, 512");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
-            throw ApiException.NotFound("Файл не найден");
+            throw ApiException.NotFound("File not found", code: "file_not_found");
 
         // Include soft-deleted products — files remain accessible in trash views
         var product = await _context.products
@@ -54,14 +54,14 @@ public class ThumbnailController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == file.productId, ct);
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Файл не принадлежит вашему магазину");
+            throw ApiException.Forbidden("File does not belong to your store", code: "access_denied_store");
 
         if (!file.contentType.StartsWith("image/"))
-            throw ApiException.BadRequest("Файл не является изображением");
+            throw ApiException.BadRequest("File is not an image");
 
         var stream = await _thumbnailService.GetOrGenerateAsync(file.filePath, w, ct);
         if (stream == null)
-            throw ApiException.InternalServerError("Не удалось создать миниатюру");
+            throw ApiException.InternalServerError("Failed to create thumbnail");
 
         Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
         return File(stream, "image/webp");

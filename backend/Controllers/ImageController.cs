@@ -46,16 +46,16 @@ public class ImageController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
 
         var imageRepo = _unitOfWork.Repository<ImageReference>();
         var existingImages = await imageRepo.FindAllAsync(i => i.productId == productId);

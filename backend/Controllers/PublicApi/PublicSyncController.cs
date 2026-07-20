@@ -99,7 +99,7 @@ public class PublicSyncController : ControllerBase
         }
 
         if (productIds.Count == 0)
-            throw ApiException.BadRequest("Нет товаров для экспорта");
+            throw ApiException.BadRequest("No products to export", code: "required_fields_missing");
 
         var batchId = Guid.NewGuid().ToString("N");
         var names = await _db.products
@@ -125,7 +125,7 @@ public class PublicSyncController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-export",
-            $"Экспорт {productIds.Count} товаров",
+            $"Export {productIds.Count} products",
             connectionId: connectionId, connectionName: connection.name,
             batchId: batchId, batchType: "export", totalItems: productIds.Count);
 
@@ -146,7 +146,7 @@ public class PublicSyncController : ControllerBase
         var connection = await RequireConnectionAsync(storeId, connectionId, ct);
 
         if (body.products == null || body.products.Count == 0)
-            throw ApiException.BadRequest("Укажите products[] с externalId");
+            throw ApiException.BadRequest("Provide products[] with externalId", code: "required_fields_missing");
 
         var mappings = await _db.categoryMappings
             .AsNoTracking()
@@ -189,12 +189,12 @@ public class PublicSyncController : ControllerBase
         }
 
         if (queued == 0)
-            throw ApiException.BadRequest("Ни один товар не поставлен в очередь (проверьте маппинги категорий)");
+            throw ApiException.BadRequest("No product was queued (check category mappings)");
 
         await _db.SaveChangesAsync(ct);
 
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-import",
-            $"Импорт {queued} товаров",
+            $"Import {queued} products",
             connectionId: connectionId, connectionName: connection.name,
             batchId: batchId, batchType: "import", totalItems: queued);
 
@@ -207,7 +207,7 @@ public class PublicSyncController : ControllerBase
     public async Task<IActionResult> ExportPrices(
         int storeId, int connectionId, [FromBody] LinkIdsRequest? body, CancellationToken ct)
     {
-        return await StartPriceStockOpAsync(storeId, connectionId, "price-export", "Экспорт цен",
+        return await StartPriceStockOpAsync(storeId, connectionId, "price-export", "Export prices",
             async (scope, opId, sid, ct2) =>
             {
                 var svc = scope.ServiceProvider.GetRequiredService<PriceSyncService>();
@@ -221,7 +221,7 @@ public class PublicSyncController : ControllerBase
     public async Task<IActionResult> ImportPrices(
         int storeId, int connectionId, [FromBody] LinkIdsRequest? body, CancellationToken ct)
     {
-        return await StartPriceStockOpAsync(storeId, connectionId, "price-import", "Импорт цен",
+        return await StartPriceStockOpAsync(storeId, connectionId, "price-import", "Import prices",
             async (scope, opId, sid, ct2) =>
             {
                 var svc = scope.ServiceProvider.GetRequiredService<PriceSyncService>();
@@ -235,7 +235,7 @@ public class PublicSyncController : ControllerBase
     public async Task<IActionResult> ExportStocks(
         int storeId, int connectionId, [FromBody] LinkIdsRequest? body, CancellationToken ct)
     {
-        return await StartPriceStockOpAsync(storeId, connectionId, "stock-export", "Экспорт остатков",
+        return await StartPriceStockOpAsync(storeId, connectionId, "stock-export", "Export stock levels",
             async (scope, opId, sid, ct2) =>
             {
                 var svc = scope.ServiceProvider.GetRequiredService<PriceSyncService>();
@@ -254,7 +254,7 @@ public class PublicSyncController : ControllerBase
         var operationId = Guid.NewGuid().ToString("N");
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "stock-import",
-            "Импорт остатков", connectionId: connectionId, connectionName: connection.name);
+            "Import stock levels", connectionId: connectionId, connectionName: connection.name);
 
         var capturedConnectionId = connectionId;
         var capturedStoreId = storeId;
@@ -273,14 +273,14 @@ public class PublicSyncController : ControllerBase
                     .FirstOrDefaultAsync(c => c.Id == capturedConnectionId && c.storeId == capturedStoreId);
                 if (conn == null)
                 {
-                    await logger.FinishAsync(capturedOpId, capturedStoreId, "failed", "Подключение не найдено");
+                    await logger.FinishAsync(capturedOpId, capturedStoreId, "failed", "Connection not found");
                     return;
                 }
 
                 var adapter = adapters.GetByKey(conn.adapterKey);
                 if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportStocks))
                 {
-                    await logger.FinishAsync(capturedOpId, capturedStoreId, "failed", "Адаптер не поддерживает импорт остатков");
+                    await logger.FinishAsync(capturedOpId, capturedStoreId, "failed", "Adapter does not support importing stock levels");
                     return;
                 }
 
@@ -308,7 +308,7 @@ public class PublicSyncController : ControllerBase
                 }
                 await db.SaveChangesAsync();
                 await logger.FinishAsync(capturedOpId, capturedStoreId, "completed",
-                    $"Импорт остатков: обновлено {updated}");
+                    $"Stock import: updated {updated}");
             }
             catch (Exception ex)
             {
@@ -378,7 +378,7 @@ public class PublicSyncController : ControllerBase
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         return connection;
     }

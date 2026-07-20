@@ -59,12 +59,12 @@ namespace Delegat.Migrations
 INSERT INTO `appSettings`
 (`key`, `label`, `value`, `valueType`, `description`, `isEditable`, `updatedAt`, `updatedByUserId`)
 VALUES
-('MAX_PRODUCTS', 'Лимит товаров', NULL, 'integer', 'Максимальное количество товаров в одном магазине. Пусто - без ограничения или значение из MAX_PRODUCTS.', 1, UTC_TIMESTAMP(6), NULL),
-('MAX_STORAGE_GB', 'Лимит хранилища, GB', NULL, 'decimal', 'Максимальный общий объём файлов магазина и товаров. Пусто - без ограничения или значение из MAX_STORAGE_GB.', 1, UTC_TIMESTAMP(6), NULL),
-('MAX_FILES', 'Лимит файлов', NULL, 'integer', 'Максимальное количество файлов магазина и товаров. Пусто - без ограничения или значение из MAX_FILES.', 1, UTC_TIMESTAMP(6), NULL),
-('MAX_CONNECTIONS', 'Лимит подключений', NULL, 'integer', 'Максимальное количество активных адаптеров магазина. Пусто - без ограничения или значение из MAX_CONNECTIONS.', 1, UTC_TIMESTAMP(6), NULL),
-('GLOBAL_RATE_LIMIT', 'Глобальный rate limit', NULL, 'integer', 'Количество запросов в минуту на IP. Текущее middleware применяет значение после перезапуска приложения.', 1, UTC_TIMESTAMP(6), NULL),
-('AUTH_RATE_LIMIT', 'Auth rate limit', NULL, 'integer', 'Количество auth-запросов в минуту на IP. Текущее middleware применяет значение после перезапуска приложения.', 1, UTC_TIMESTAMP(6), NULL);
+('MAX_PRODUCTS', 'Product limit', NULL, 'integer', 'Maximum number of products in a single store. Empty - no limit or value from MAX_PRODUCTS.', 1, UTC_TIMESTAMP(6), NULL),
+('MAX_STORAGE_GB', 'Storage limit, GB', NULL, 'decimal', 'Maximum total size of store and product files. Empty - no limit or value from MAX_STORAGE_GB.', 1, UTC_TIMESTAMP(6), NULL),
+('MAX_FILES', 'File limit', NULL, 'integer', 'Maximum number of store and product files. Empty - no limit or value from MAX_FILES.', 1, UTC_TIMESTAMP(6), NULL),
+('MAX_CONNECTIONS', 'Connection limit', NULL, 'integer', 'Maximum number of active store adapters. Empty - no limit or value from MAX_CONNECTIONS.', 1, UTC_TIMESTAMP(6), NULL),
+('GLOBAL_RATE_LIMIT', 'Global rate limit', NULL, 'integer', 'Number of requests per minute per IP. The current middleware applies the value after the application restarts.', 1, UTC_TIMESTAMP(6), NULL),
+('AUTH_RATE_LIMIT', 'Auth rate limit', NULL, 'integer', 'Number of auth requests per minute per IP. The current middleware applies the value after the application restarts.', 1, UTC_TIMESTAMP(6), NULL);
 ");
         }
 

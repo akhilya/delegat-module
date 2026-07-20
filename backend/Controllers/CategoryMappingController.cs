@@ -66,10 +66,10 @@ public class CategoryMappingController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategories))
-            throw ApiException.BadRequest("Адаптер не поддерживает получение категорий");
+            throw ApiException.BadRequest("Adapter does not support fetching categories");
 
         try
         {
@@ -86,7 +86,7 @@ public class CategoryMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting categories from marketplace for connection {ConnectionId}", connectionId);
-            throw ApiException.BadRequest($"Не удалось получить категории: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to get categories: {ex.Message}");
         }
     }
 
@@ -144,13 +144,13 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
-        // Проверяем что локальная категория существует
+        // Verify that the local category exists
         var categoryRepo = _unitOfWork.Repository<Category>();
         var category = await categoryRepo.FindAsync(
             c => c.Id == input.localCategoryId && c.storeId == connection.storeId);
 
         if (category == null)
-            throw ApiException.NotFound("Локальная категория не найдена");
+            throw ApiException.NotFound("Local category not found", code: "category_not_found");
 
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
 
@@ -199,17 +199,17 @@ public class CategoryMappingController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.CreateCategory))
-            throw ApiException.BadRequest("Адаптер не поддерживает создание категорий");
+            throw ApiException.BadRequest("Adapter does not support creating categories");
 
         var category = await _unitOfWork.Repository<Category>().FindAsync(
             c => c.Id == input.localCategoryId && c.storeId == connection.storeId,
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Локальная категория не найдена");
+            throw ApiException.NotFound("Local category not found", code: "category_not_found");
 
         var request = new Models.Marketplace.DTOs.CreateCategoryRequest
         {
@@ -240,8 +240,8 @@ public class CategoryMappingController : ControllerBase
             var errorMessage = !string.IsNullOrWhiteSpace(result.ErrorMessage)
                 ? result.ErrorMessage
                 : result.Success
-                    ? "Адаптер сообщил об успешном создании категории, но не вернул внешний ID категории"
-                    : "Не удалось создать категорию в маркетплейсе";
+                    ? "Adapter reported successful category creation but did not return an external category ID"
+                    : "Failed to create category on the marketplace";
 
             throw ApiException.BadRequest(
                 errorMessage,
@@ -292,7 +292,7 @@ public class CategoryMappingController : ControllerBase
             m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         mapping.UpdateFill(new CategoryMapping.UpdateForm
         {
@@ -320,7 +320,7 @@ public class CategoryMappingController : ControllerBase
         var exists = await _context.categoryMappings.AnyAsync(
             m => m.Id == mappingId && m.connectionId == connectionId, ct);
         if (!exists)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         try
         {
@@ -328,9 +328,9 @@ public class CategoryMappingController : ControllerBase
                 connectionId, mappingId, ct);
 
             var message = result.TotalAdded > 0
-                ? $"Добавлено полей: {result.CardFieldsAdded} карточки"
-                  + (result.PriceFieldsAdded > 0 ? $", {result.PriceFieldsAdded} цены" : "")
-                : "Схема актуальна — новых полей нет";
+                ? $"Fields added: {result.CardFieldsAdded} card"
+                  + (result.PriceFieldsAdded > 0 ? $", {result.PriceFieldsAdded} price" : "")
+                : "Schema is up to date - no new fields";
 
             return Ok(new
             {
@@ -365,7 +365,7 @@ public class CategoryMappingController : ControllerBase
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         object? graph = null;
         var graphJson = mapping.graphJson;
@@ -414,7 +414,7 @@ public class CategoryMappingController : ControllerBase
         var mapping = await repo.FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         mapping.graphJson = input.graph.HasValue
             && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
@@ -445,7 +445,7 @@ public class CategoryMappingController : ControllerBase
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         var graphJson = input.graph.HasValue
             && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
@@ -475,7 +475,7 @@ public class CategoryMappingController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == input.productId, ct);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var mappingService = _serviceProvider.GetRequiredService<MappingService>();
         var eval = await mappingService.EvaluateGraphAsync(product, graphJson, mappingId, ct: ct);
@@ -513,7 +513,7 @@ public class CategoryMappingController : ControllerBase
             query => query);
 
         if (original == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         // Create the duplicate mapping
         var duplicate = new CategoryMapping();
@@ -524,8 +524,8 @@ public class CategoryMappingController : ControllerBase
             externalCategoryId = original.externalCategoryId,
             externalCategoryName = original.externalCategoryName,
             name = string.IsNullOrWhiteSpace(original.name)
-                ? "Копия"
-                : $"{original.name} (копия)"
+                ? "Copy"
+                : $"{original.name} (copy)"
         });
 
         await mappingRepo.AddAsync(duplicate);
@@ -559,7 +559,7 @@ public class CategoryMappingController : ControllerBase
             query => query);
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         var linkedProducts = await _context.productMarketplaceLinks
             .Where(l => l.connectionId == connectionId && l.categoryMappingId == mappingId)
@@ -595,7 +595,7 @@ public class CategoryMappingController : ControllerBase
                     .ToListAsync(ct);
 
                 throw new ApiException(
-                    $"Маппинг используется товарами: {linkedProducts.Count}. Выберите другой маппинг для переназначения перед удалением.",
+                    $"Mapping is used by products: {linkedProducts.Count}. Select another mapping to reassign before deleting.",
                     StatusCodes.Status409Conflict,
                     data: new
                     {
@@ -607,7 +607,8 @@ public class CategoryMappingController : ControllerBase
                             sku = l.product.sku
                         }),
                         replacementMappings = replacements
-                    });
+                    },
+                    code: "conflict");
             }
 
             var replacement = await _context.categoryMappings
@@ -619,7 +620,7 @@ public class CategoryMappingController : ControllerBase
                     ct);
 
             if (replacement == null)
-                throw ApiException.BadRequest("Маппинг для переназначения не найден или относится к другой локальной категории");
+                throw ApiException.BadRequest("Replacement mapping not found or belongs to a different local category");
 
             foreach (var link in linkedProducts)
                 link.categoryMappingId = replacement.Id;
@@ -651,14 +652,14 @@ public class CategoryMappingController : ControllerBase
             var existingCategory = await categoryRepo.FindAsync(
                 c => c.Id == input.localCategoryId.Value && c.storeId == connection.storeId);
             if (existingCategory == null)
-                throw ApiException.NotFound("Локальная категория не найдена");
+                throw ApiException.NotFound("Local category not found", code: "category_not_found");
         }
 
         var storeId = connection.storeId;
 
         if (!string.IsNullOrEmpty(input.operationId))
             await _operationLogger.LogAsync(input.operationId, storeId, "info",
-                $"Импорт категории: {input.externalCategoryName ?? input.externalCategoryId}...");
+                $"Importing category: {input.externalCategoryName ?? input.externalCategoryId}...");
 
         var result = await _categoryImportService.ImportExternalCategoryAsync(
             connection,
@@ -673,13 +674,13 @@ public class CategoryMappingController : ControllerBase
         {
             if (!string.IsNullOrEmpty(input.operationId))
                 await _operationLogger.LogAsync(input.operationId, storeId, "error",
-                    $"Ошибка импорта категории: {result.ErrorMessage}");
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка импорта");
+                    $"Failed to import category: {result.ErrorMessage}");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Import failed", code: "import_failed");
         }
 
         if (!string.IsNullOrEmpty(input.operationId))
             await _operationLogger.LogAsync(input.operationId, storeId, "success",
-                $"Категория импортирована: {result.Message} (атрибутов: {result.AttributesCreated})");
+                $"Category imported: {result.Message} (attributes: {result.AttributesCreated})");
 
         return Ok(new
         {
@@ -704,10 +705,10 @@ public class CategoryMappingController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
-            throw ApiException.BadRequest("Адаптер не поддерживает получение полей категории");
+            throw ApiException.BadRequest("Adapter does not support fetching category fields");
 
         try
         {
@@ -731,7 +732,7 @@ public class CategoryMappingController : ControllerBase
         {
             _logger.LogError(ex, "Error getting category fields for connection {ConnectionId}, category {CategoryId}",
                 connectionId, externalCategoryId);
-            throw ApiException.BadRequest($"Не удалось получить поля категории: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to get category fields: {ex.Message}");
         }
     }
 
@@ -896,7 +897,7 @@ public class CategoryMappingController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -904,7 +905,7 @@ public class CategoryMappingController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         return connection;
     }
@@ -1005,7 +1006,7 @@ public class CategoryMappingController : ControllerBase
         var keyLower = field.Key.ToLowerInvariant();
         var nameLower = field.Name.ToLowerInvariant();
 
-        // Попытка сопоставить с базовыми полями товара
+        // Try to match against basic product fields
         if (IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
@@ -1021,15 +1022,15 @@ public class CategoryMappingController : ControllerBase
         if (IsStockField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "storageQuantity", null);
 
-        // Поля объединения товаров маппим на название группы
+        // Map product-grouping fields to the group name
         if (IsGroupingField(field.Key, field.Name))
             return (FieldMappingSourceType.GroupName, null, null);
 
-        // Поля изображений маппим на images товара
+        // Map image fields to the product's images
         if (IsImageField(field.Key, field.Name))
             return (FieldMappingSourceType.ProductField, "images", null);
 
-        // Попытка сопоставить с атрибутами локальной категории по ключу или имени
+        // Try to match against local category attributes by key or name
         foreach (var kvp in attributeMap)
         {
             if (kvp.Key.Equals(field.Key, StringComparison.OrdinalIgnoreCase) ||
@@ -1039,28 +1040,29 @@ public class CategoryMappingController : ControllerBase
             }
         }
 
-        // По умолчанию - статическое пустое значение
+        // Default - static empty value
         return (FieldMappingSourceType.Static, null, null);
     }
 
     private static bool IsSkuField(string key, string name)
     {
-        // Ozon attribute 9024 = Артикул
+        // Ozon attribute 9024 = SKU/Article number
         if (key == "9024") return true;
         if (key == "model" || name == "model") return true;
 
-        var patterns = new[] { "sku", "артикул", "article", "vendor_code", "vendorcode" };
+        // NB: patterns include Russian words because Ozon field keys/names are in Russian
+        var patterns = new[] { "sku", "\u0430\u0440\u0442\u0438\u043a\u0443\u043b", "article", "vendor_code", "vendorcode" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     private static bool IsNameField(string key, string name)
     {
-        // Ozon attribute 4180 = Название товара
+        // Ozon attribute 4180 = Product name
         if (key == "4180") return true;
 
-        // Используем Contains для name, чтобы матчилось "Название товара"
+        // Use Contains for name so it matches Ozon's product-name field
         var exactPatterns = new[] { "name", "title" };
-        var containsPatterns = new[] { "название", "наименование" };
+        var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
 
         return exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
                containsPatterns.Any(p => name.Contains(p));
@@ -1068,22 +1070,22 @@ public class CategoryMappingController : ControllerBase
 
     private static bool IsDescriptionField(string key, string name)
     {
-        // Ozon attribute 4191 = Аннотация (Description)
+        // Ozon attribute 4191 = Annotation (Description)
         if (key == "4191") return true;
 
-        var patterns = new[] { "description", "описание", "desc", "аннотация", "annotation" };
+        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "desc", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     private static bool IsPriceField(string key, string name)
     {
-        var patterns = new[] { "price", "цена", "стоимость", "cost" };
+        var patterns = new[] { "price", "\u0446\u0435\u043d\u0430", "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c", "cost" };
         return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
     }
 
     private static bool IsStockField(string key, string name)
     {
-        var exactPatterns = new[] { "stock", "остаток", "остатки", "quantity", "count" };
+        var exactPatterns = new[] { "stock", "\u043e\u0441\u0442\u0430\u0442\u043e\u043a", "\u043e\u0441\u0442\u0430\u0442\u043a\u0438", "quantity", "count" };
         if (exactPatterns.Any(p => key == p || name == p))
             return true;
 
@@ -1095,13 +1097,13 @@ public class CategoryMappingController : ControllerBase
 
     private static bool IsGroupingField(string key, string name)
     {
-        // Ozon поле 9048 - "Название модели (для объединения в одну карточку)"
+        // Ozon field 9048 - "Model name (for merging into a single card)"
         if (key == "9048") return true;
 
         var nameLower = name.ToLowerInvariant();
-        return nameLower.Contains("для объединения") ||
-               nameLower.Contains("объединение в карточку") ||
-               nameLower.Contains("группировка товаров");
+        return nameLower.Contains("\u0434\u043b\u044f \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f") ||
+               nameLower.Contains("\u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443") ||
+               nameLower.Contains("\u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u043a\u0430 \u0442\u043e\u0432\u0430\u0440\u043e\u0432");
     }
 
     /// <summary>
@@ -1113,14 +1115,14 @@ public class CategoryMappingController : ControllerBase
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
 
-        // Стандартные ключи полей изображений
+        // Standard image field keys
         if (keyLower == "images" || keyLower == "primary_image" ||
             keyLower == "image_url" || keyLower == "image_urls" ||
             keyLower == "images360" || keyLower == "color_image")
             return true;
 
-        // Паттерны в названии для изображений
-        var patterns = new[] { "изображен", "фото", "картинк", "image", "photo", "picture" };
+        // Name patterns for image fields
+        var patterns = new[] { "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d", "\u0444\u043e\u0442\u043e", "\u043a\u0430\u0440\u0442\u0438\u043d\u043a", "image", "photo", "picture" };
         return patterns.Any(p => nameLower.Contains(p));
     }
 

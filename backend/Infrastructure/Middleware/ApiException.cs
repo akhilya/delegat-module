@@ -1,12 +1,12 @@
 namespace Delegat.Infrastructure.Middleware;
 
 /// <summary>
-/// Custom exception for API errors with HTTP status codes
-/// Replaces Zorro QueryException
+/// Custom exception for API errors with HTTP status codes and stable error codes.
 /// </summary>
 public class ApiException : Exception
 {
     public int StatusCode { get; }
+    public string? Code { get; }
     public Dictionary<string, string[]>? Errors { get; }
     public new object? Data { get; }
 
@@ -15,65 +15,40 @@ public class ApiException : Exception
         int statusCode = StatusCodes.Status400BadRequest,
         Dictionary<string, string[]>? errors = null,
         object? data = null,
-        Exception? innerException = null)
+        Exception? innerException = null,
+        string? code = null)
         : base(message, innerException)
     {
         StatusCode = statusCode;
         Errors = errors;
         Data = data;
+        Code = code;
     }
 
-    /// <summary>
-    /// Create a BadRequest exception
-    /// </summary>
-    public static ApiException BadRequest(string message = "Bad request")
-        => new(message, StatusCodes.Status400BadRequest);
+    public static ApiException BadRequest(string message = "Bad request", string? code = "bad_request")
+        => new(message, StatusCodes.Status400BadRequest, code: code);
 
-    /// <summary>
-    /// Create a BadRequest exception with structured details.
-    /// </summary>
-    public static ApiException BadRequest(string message, object? data)
-        => new(message, StatusCodes.Status400BadRequest, data: data);
+    public static ApiException BadRequest(string message, object? data, string? code = "bad_request")
+        => new(message, StatusCodes.Status400BadRequest, data: data, code: code);
 
-    /// <summary>
-    /// Create a BadRequest exception with structured details and original exception.
-    /// </summary>
-    public static ApiException BadRequest(string message, object? data, Exception? innerException)
-        => new(message, StatusCodes.Status400BadRequest, data: data, innerException: innerException);
+    public static ApiException BadRequest(string message, object? data, Exception? innerException, string? code = "bad_request")
+        => new(message, StatusCodes.Status400BadRequest, data: data, innerException: innerException, code: code);
 
-    /// <summary>
-    /// Create a BadRequest exception with multiple error messages
-    /// </summary>
-    public static ApiException BadRequest(string[] messages)
-        => new(string.Join("; ", messages), StatusCodes.Status400BadRequest);
+    public static ApiException BadRequest(string[] messages, string? code = "bad_request")
+        => new(string.Join("; ", messages), StatusCodes.Status400BadRequest, code: code);
 
-    /// <summary>
-    /// Create an Unauthorized exception
-    /// </summary>
-    public static ApiException Unauthorized(string message = "Unauthorized")
-        => new(message, StatusCodes.Status401Unauthorized);
+    public static ApiException Unauthorized(string message = "Unauthorized", string? code = "unauthorized")
+        => new(message, StatusCodes.Status401Unauthorized, code: code);
 
-    /// <summary>
-    /// Create a Forbidden exception
-    /// </summary>
-    public static ApiException Forbidden(string message = "Forbidden")
-        => new(message, StatusCodes.Status403Forbidden);
+    public static ApiException Forbidden(string message = "Forbidden", string? code = "forbidden")
+        => new(message, StatusCodes.Status403Forbidden, code: code);
 
-    /// <summary>
-    /// Create a NotFound exception
-    /// </summary>
-    public static ApiException NotFound(string message = "Resource not found")
-        => new(message, StatusCodes.Status404NotFound);
+    public static ApiException NotFound(string message = "Resource not found", string? code = "not_found")
+        => new(message, StatusCodes.Status404NotFound, code: code);
 
-    /// <summary>
-    /// Create a Conflict exception
-    /// </summary>
-    public static ApiException Conflict(string message = "Conflict")
-        => new(message, StatusCodes.Status409Conflict);
+    public static ApiException Conflict(string message = "Conflict", string? code = "conflict")
+        => new(message, StatusCodes.Status409Conflict, code: code);
 
-    /// <summary>
-    /// Create an InternalServerError exception
-    /// </summary>
-    public static ApiException InternalServerError(string message = "Internal server error")
-        => new(message, StatusCodes.Status500InternalServerError);
+    public static ApiException InternalServerError(string message = "Internal server error", string? code = "internal_error")
+        => new(message, StatusCodes.Status500InternalServerError, code: code);
 }

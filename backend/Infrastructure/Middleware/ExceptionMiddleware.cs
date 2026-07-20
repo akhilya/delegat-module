@@ -5,8 +5,7 @@ using Delegat.Services;
 namespace Delegat.Infrastructure.Middleware;
 
 /// <summary>
-/// Middleware for global exception handling
-/// Replaces Zorro.Middlewares.ErrorHandlingMiddleware
+/// Middleware for global exception handling.
 /// </summary>
 public class ExceptionMiddleware
 {
@@ -53,7 +52,6 @@ public class ExceptionMiddleware
     {
         var errorLogService = context.RequestServices.GetService<IErrorLogService>();
         if (errorLogService == null) return;
-
         await errorLogService.LogAsync(context, exception, statusCode);
     }
 
@@ -68,23 +66,15 @@ public class ExceptionMiddleware
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
+        var semanticCode = exception.Code ?? StatusToCode(exception.StatusCode);
+
         if (IsPublicApi(context))
         {
-            var code = exception.StatusCode switch
-            {
-                401 => "unauthorized",
-                403 => "forbidden",
-                404 => "not_found",
-                409 => "conflict",
-                422 => "validation_error",
-                429 => "rate_limited",
-                _ => "bad_request"
-            };
             var publicBody = new
             {
                 error = new
                 {
-                    code,
+                    code = semanticCode,
                     message = exception.Message,
                     details = exception.Data ?? (object?)exception.Errors
                 }
@@ -96,6 +86,7 @@ public class ExceptionMiddleware
         {
             Title = exception.Message,
             Status = exception.StatusCode,
+            Code = semanticCode,
             Errors = exception.Errors,
             Data = exception.Data
         };
@@ -123,7 +114,8 @@ public class ExceptionMiddleware
                     code = "internal_error",
                     message = _environment.IsDevelopment()
                         ? exception.Message
-                        : "An unexpected error occurred."
+                        : "An unexpected error occurred.",
+                    details = (object?)null
                 }
             };
             return context.Response.WriteAsync(JsonSerializer.Serialize(publicBody, options));
@@ -134,28 +126,37 @@ public class ExceptionMiddleware
             Title = _environment.IsDevelopment()
                 ? exception.Message
                 : "An unexpected error occurred.",
-            Status = (int)HttpStatusCode.InternalServerError
+            Status = (int)HttpStatusCode.InternalServerError,
+            Code = "internal_error"
         };
 
         if (_environment.IsDevelopment())
-        {
             response.Detail = exception.StackTrace;
-        }
 
         return context.Response.WriteAsync(JsonSerializer.Serialize(response, options));
     }
+
+    private static string StatusToCode(int statusCode) => statusCode switch
+    {
+        401 => "unauthorized",
+        403 => "forbidden",
+        404 => "not_found",
+        409 => "conflict",
+        422 => "validation_error",
+        429 => "rate_limited",
+        500 => "internal_error",
+        _ => "bad_request"
+    };
 
     private static bool IsPublicApi(HttpContext context) =>
         context.Request.Path.StartsWithSegments("/api/v1");
 }
 
-/// <summary>
-/// Error response model for API errors
-/// </summary>
 public class ErrorResponse
 {
     public string Title { get; set; } = string.Empty;
     public int Status { get; set; }
+    public string? Code { get; set; }
     public string? Detail { get; set; }
     public Dictionary<string, string[]>? Errors { get; set; }
     public object? Data { get; set; }

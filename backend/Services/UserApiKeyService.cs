@@ -30,9 +30,9 @@ public class UserApiKeyService
     {
         name = name?.Trim() ?? "";
         if (string.IsNullOrEmpty(name))
-            throw ApiException.BadRequest("Название ключа обязательно");
+            throw ApiException.BadRequest("Key name is required");
         if (name.Length > 100)
-            throw ApiException.BadRequest("Название ключа слишком длинное");
+            throw ApiException.BadRequest("Key name is too long");
 
         var plaintext = GenerateKey();
         var entity = new UserApiKey
@@ -57,7 +57,7 @@ public class UserApiKeyService
             .FirstOrDefaultAsync(k => k.Id == keyId && k.userId == userId, ct);
 
         if (key == null)
-            throw ApiException.NotFound("API-ключ не найден");
+            throw ApiException.NotFound("API key not found");
 
         if (key.revokedAt == null)
         {

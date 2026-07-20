@@ -29,7 +29,7 @@ Authorization: Bearer dk_your_key_here
 | Any instance (incl. production) | `https://{your-instance}/swagger` | `https://{your-instance}/swagger/v1-public/swagger.json` |
 | Local API (direct) | `http://localhost:5000/swagger` | `http://localhost:5000/swagger/v1-public/swagger.json` |
 
-In the app: **Settings → User → Public API** → link «Открыть Swagger».
+In the app: **Settings → User → Public API** → link "Open Swagger".
 
 1. Open Swagger → **Authorize**
 2. Paste only `dk_…` (do **not** type `Bearer`)
@@ -66,17 +66,19 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 ```json
 {
   "error": {
-    "code": "forbidden",
-    "message": "Нет доступа к этому магазину",
+    "code": "access_denied_store",
+    "message": "No access to this store",
     "details": null
   }
 }
 ```
 
+`code` is a stable machine-readable identifier (prefer semantic codes such as `product_not_found` when provided; otherwise HTTP-derived codes below). `message` is always English. Clients that need localized UI should map `code` to their own strings.
+
 | HTTP | code (typical) | When |
 |------|----------------|------|
 | 401 | `unauthorized` | Missing/invalid/revoked key, inactive user |
-| 403 | `forbidden` | User is not a member of `storeId` |
+| 403 | `forbidden` / `access_denied_store` | User is not a member of `storeId` |
 | 404 | `not_found` | Resource missing in that store |
 | 409 | `conflict` | Quota / uniqueness / state conflict |
 | 422 | `validation_error` | Invalid body (when used) |

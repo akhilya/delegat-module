@@ -27,12 +27,12 @@ public class YandexParameterHelpersTests
         var param = new CategoryParameterDto
         {
             Id = 17352854,
-            Name = "Материал",
+            Name = "Material",
             Filtering = true,
             RecommendationTypes = new List<string> { "ADDITIONAL", "FILTERABLE" }
         };
 
-        Assert.Equal("Доп. характеристики для фильтров", YandexParameterHelpers.ResolveParameterGroup(param));
+        Assert.Equal("Additional filter characteristics", YandexParameterHelpers.ResolveParameterGroup(param));
     }
 
     [Fact]
@@ -41,12 +41,12 @@ public class YandexParameterHelpersTests
         var param = new CategoryParameterDto
         {
             Id = 1,
-            Name = "Цвет",
+            Name = "Color",
             Filtering = false,
             RecommendationTypes = new List<string> { "MAIN" }
         };
 
-        Assert.Equal("Основные характеристики", YandexParameterHelpers.ResolveParameterGroup(param));
+        Assert.Equal("Main characteristics", YandexParameterHelpers.ResolveParameterGroup(param));
     }
 
     [Fact]
@@ -60,8 +60,8 @@ public class YandexParameterHelpersTests
                 MarketCategoryId = 79461128,
                 ParameterValues = new List<ParameterValueDto>
                 {
-                    new() { ParameterId = 17352854, ValueId = 25968950, Value = "Пластик" },
-                    new() { ParameterId = 17352854, ValueId = 36725530, Value = "Смола" }
+                    new() { ParameterId = 17352854, ValueId = 25968950, Value = "Plastic" },
+                    new() { ParameterId = 17352854, ValueId = 36725530, Value = "Resin" }
                 }
             }
         };
@@ -140,20 +140,20 @@ public class YandexParameterHelpersTests
     public void MergeParameterAttribute_SingleValueStaysScalar()
     {
         var attrs = new Dictionary<string, object>();
-        YandexParameterHelpers.MergeParameterAttribute(attrs, 200, null, "Солдатики");
-        Assert.Equal("Солдатики", attrs["200"]);
+        YandexParameterHelpers.MergeParameterAttribute(attrs, 200, null, "Soldiers");
+        Assert.Equal("Soldiers", attrs["200"]);
     }
 
     [Fact]
     public void BuildEnumParameterValue_IdLabel_IncludesBothFields()
     {
         var entry = YandexParameterHelpers.BuildEnumParameterValue(
-            17352854, "25968950:Пластик", out var warning);
+            17352854, "25968950:Plastic", out var warning);
         Assert.Null(warning);
         Assert.NotNull(entry);
         Assert.Equal(17352854, entry!.ParameterId);
         Assert.Equal(25968950, entry.ValueId);
-        Assert.Equal("Пластик", entry.Value);
+        Assert.Equal("Plastic", entry.Value);
 
         var json = JsonSerializer.Serialize(entry, JsonOpts);
         Assert.Contains("\"valueId\":25968950", json);
@@ -170,7 +170,7 @@ public class YandexParameterHelpersTests
             Filtering = true,
             Values = new List<ParameterValueOptionDto>
             {
-                new() { Id = 14805994, Value = "Вариант A" }
+                new() { Id = 14805994, Value = "Variant A" }
             }
         });
 
@@ -178,7 +178,7 @@ public class YandexParameterHelpersTests
             14805991, "14805994", out var warning);
         Assert.Null(warning);
         Assert.NotNull(entry);
-        Assert.Equal("Вариант A", entry!.Value);
+        Assert.Equal("Variant A", entry!.Value);
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class YandexParameterHelpersTests
         // even when the graph field type is select (and the value contains ':').
         var entry = YandexParameterHelpers.ResolveMappedParameterValue(
             14871214,
-            "Red Dead Redemption 2 : POP Артур",
+            "Red Dead Redemption 2 : POP Arthur",
             "select",
             out var warning);
 
@@ -206,31 +206,31 @@ public class YandexParameterHelpersTests
         Assert.NotNull(entry);
         Assert.Equal(14871214, entry!.ParameterId);
         Assert.Null(entry.ValueId);
-        Assert.Equal("Red Dead Redemption 2 : POP Артур", entry.Value);
+        Assert.Equal("Red Dead Redemption 2 : POP Arthur", entry.Value);
     }
 
     [Fact]
     public void ResolveMappedParameterValue_SelectDictionaryId_KeepsValueIdAndValue()
     {
         var entry = YandexParameterHelpers.ResolveMappedParameterValue(
-            13887626, "13898641:серый", "select", out var warning);
+            13887626, "13898641:gray", "select", out var warning);
 
         Assert.Null(warning);
         Assert.NotNull(entry);
         Assert.Equal(13898641, entry!.ValueId);
-        Assert.Equal("серый", entry.Value);
+        Assert.Equal("gray", entry.Value);
     }
 
     [Fact]
     public void ResolveMappedParameterValue_StringType_SendsPlainValue()
     {
         var entry = YandexParameterHelpers.ResolveMappedParameterValue(
-            14871214, "серый", "string", out var warning);
+            14871214, "gray", "string", out var warning);
 
         Assert.Null(warning);
         Assert.NotNull(entry);
         Assert.Null(entry!.ValueId);
-        Assert.Equal("серый", entry.Value);
+        Assert.Equal("gray", entry.Value);
     }
 
     [Fact]

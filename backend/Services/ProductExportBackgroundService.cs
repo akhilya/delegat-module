@@ -42,7 +42,7 @@ public class ProductExportBackgroundService : BackgroundService
     /// <param name="stoppingToken">Token to signal graceful shutdown.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("ProductExportBackgroundService запущен");
+        _logger.LogInformation("ProductExportBackgroundService started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -53,17 +53,17 @@ public class ProductExportBackgroundService : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Нормальная остановка
+                // Normal shutdown
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка в ProductExportBackgroundService");
+                _logger.LogError(ex, "Error in ProductExportBackgroundService");
                 await Task.Delay(ERROR_DELAY_MS, stoppingToken);
             }
         }
 
-        _logger.LogInformation("ProductExportBackgroundService остановлен");
+        _logger.LogInformation("ProductExportBackgroundService stopped");
     }
 
     private async Task ProcessPendingExportsAsync(CancellationToken ct)
@@ -75,7 +75,7 @@ public class ProductExportBackgroundService : BackgroundService
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
-        // Получаем пачку pending экспортов. Stale InProgress rows are retried after a
+        // Fetch a batch of pending exports. Stale InProgress rows are retried after a
         // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingExports = await context.pendingProductExports
             .Where(p => p.status == ProductExportStatus.Pending ||
@@ -90,7 +90,7 @@ public class ProductExportBackgroundService : BackgroundService
             return;
 
         _logger.LogInformation(
-            "Обрабатываю {Count} товаров из очереди экспорта: [{Ids}]",
+            "Processing {Count} products from the export queue: [{Ids}]",
             pendingExports.Count,
             string.Join(", ", pendingExports.Select(p => $"{p.Id}:{p.productId}")));
 
@@ -116,7 +116,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                 if (opStatus is "paused" or "cancelled")
                 {
-                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю экспорт", batchId, opStatus);
+                    _logger.LogInformation("Operation {BatchId} is in status {Status}, skipping export", batchId, opStatus);
                     continue;
                 }
             }
@@ -149,7 +149,7 @@ public class ProductExportBackgroundService : BackgroundService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Критическая ошибка при обработке экспорта товара {Id}:{ProductId}",
+                        _logger.LogError(ex, "Critical error while processing export for product {Id}:{ProductId}",
                             pending.Id, pending.productId);
                         isPermanent = IsPermanentError(ex.Message);
                     }
@@ -184,7 +184,7 @@ public class ProductExportBackgroundService : BackgroundService
         var pendingByProductId = pendingItems.ToDictionary(p => p.productId, p => p);
 
         _logger.LogInformation(
-            "Запуск bulk экспорта {Count} товаров для connectionId={ConnectionId}",
+            "Starting bulk export of {Count} products for connectionId={ConnectionId}",
             productIds.Count, connectionId);
 
         try
@@ -204,17 +204,17 @@ public class ProductExportBackgroundService : BackgroundService
                     pending.lastError = null;
 
                     _logger.LogInformation(
-                        "Bulk: экспортирован товар {ProductId} -> External={ExternalId}",
+                        "Bulk: exported product {ProductId} -> External={ExternalId}",
                         pending.productId, itemResult.ExternalProductId);
 
                     if (pending.batchId != null)
                         await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
-                            $"Экспортирован: {pending.productName ?? pending.productId.ToString()}");
+                            $"Exported: {pending.productName ?? pending.productId.ToString()}");
                 }
                 else
                 {
                     pending.status = ProductExportStatus.Failed;
-                    pending.lastError = itemResult.ErrorMessage ?? "Неизвестная ошибка";
+                    pending.lastError = itemResult.ErrorMessage ?? "Unknown error";
 
                     if (IsPermanentError(pending.lastError))
                     {
@@ -223,12 +223,12 @@ public class ProductExportBackgroundService : BackgroundService
                     }
 
                     _logger.LogWarning(
-                        "Bulk: не удалось экспортировать товар {ProductId}: {Error}",
+                        "Bulk: failed to export product {ProductId}: {Error}",
                         pending.productId, pending.lastError);
 
                     if (pending.batchId != null)
                         await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                            $"Ошибка: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
+                            $"Error: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
                 }
             }
         }
@@ -268,7 +268,7 @@ public class ProductExportBackgroundService : BackgroundService
             if (pending == 0)
                 await _operationLogger.FinishAsync(firstItem.batchId, firstItem.storeId,
                     failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                    $"Экспортировано: {completed} успешно, {failed} ошибок");
+                    $"Exported: {completed} succeeded, {failed} failed");
         }
     }
 
@@ -278,7 +278,7 @@ public class ProductExportBackgroundService : BackgroundService
         CancellationToken ct)
     {
         _logger.LogWarning(
-            "Обнаружена постоянная ошибка для подключения {ConnectionId}, отменяю оставшиеся экспорты",
+            "Detected a permanent error for connection {ConnectionId}, cancelling remaining exports",
             triggerItem.connectionId);
 
         var remaining = await context.pendingProductExports
@@ -297,18 +297,19 @@ public class ProductExportBackgroundService : BackgroundService
         if (remaining.Count > 0)
         {
             await context.SaveChangesAsync(ct);
-            _logger.LogWarning("Отменено {Count} оставшихся экспортов для подключения {ConnectionId}",
+            _logger.LogWarning("Cancelled {Count} remaining exports for connection {ConnectionId}",
                 remaining.Count, triggerItem.connectionId);
         }
     }
 
     /// <summary>
     /// Returns true if the error is permanent (account-level) and retrying won't help.
+    /// Matches the Russian quota-exceeded phrase some marketplace adapters (e.g. Ozon) return.
     /// </summary>
     private static bool IsPermanentError(string? errorMessage)
     {
         if (string.IsNullOrEmpty(errorMessage)) return false;
-        return errorMessage.Contains("исчерпали лимит", StringComparison.OrdinalIgnoreCase);
+        return errorMessage.Contains("\u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043b\u0438 \u043b\u0438\u043c\u0438\u0442", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <returns>true if a permanent (non-retryable) error was encountered.</returns>
@@ -319,7 +320,7 @@ public class ProductExportBackgroundService : BackgroundService
         CancellationToken ct)
     {
         _logger.LogInformation(
-            "Начинаю экспорт товара {Id}:{ProductId} (текущий статус: {Status})",
+            "Starting export of product {Id}:{ProductId} (current status: {Status})",
             pending.Id, pending.productId, pending.status);
 
         pending.status = ProductExportStatus.InProgress;
@@ -327,18 +328,18 @@ public class ProductExportBackgroundService : BackgroundService
         pending.retryCount++;
         await context.SaveChangesAsync(ct);
 
-        _logger.LogDebug("Статус экспорта {Id} изменён на InProgress", pending.Id);
+        _logger.LogDebug("Export status {Id} changed to InProgress", pending.Id);
 
         try
         {
-            // Экспортируем товар
+            // Export the product
             var result = await productSyncService.ExportProductAsync(
                 pending.productId,
                 pending.connectionId,
                 ct);
 
             _logger.LogInformation(
-                "Результат экспорта товара {Id}: IsSuccess={IsSuccess}, Error={Error}",
+                "Product export result {Id}: IsSuccess={IsSuccess}, Error={Error}",
                 pending.Id, result.IsSuccess, result.ErrorMessage);
 
             if (result.IsSuccess)
@@ -350,28 +351,28 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.lastError = null;
 
                 _logger.LogInformation(
-                    "Экспортирован товар {ProductName} (ID: {ProductId}, External: {ExternalId}) из очереди",
+                    "Exported product {ProductName} (ID: {ProductId}, External: {ExternalId}) from the queue",
                     pending.productName, pending.productId, result.ExternalProductId);
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
-                        $"Экспортирован: {pending.productName ?? pending.productId.ToString()}");
+                        $"Exported: {pending.productName ?? pending.productId.ToString()}");
             }
             else
             {
                 pending.status = ProductExportStatus.Failed;
-                pending.lastError = result.ErrorMessage ?? "Неизвестная ошибка";
+                pending.lastError = result.ErrorMessage ?? "Unknown error";
 
                 if (IsPermanentError(pending.lastError))
                     pending.retryCount = PendingProductExport.MAX_RETRIES;
 
                 _logger.LogWarning(
-                    "Не удалось экспортировать товар {ProductId}: {Error} (попытка {Retry})",
+                    "Failed to export product {ProductId}: {Error} (attempt {Retry})",
                     pending.productId, pending.lastError, pending.retryCount);
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Ошибка: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
+                        $"Error: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);
@@ -391,11 +392,11 @@ public class ProductExportBackgroundService : BackgroundService
                 if (total == completed + failed)
                     await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
                         failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                        $"Экспортировано: {completed} успешно, {failed} ошибок");
+                        $"Exported: {completed} succeeded, {failed} failed");
             }
 
             _logger.LogInformation(
-                "Товар {Id}:{ProductId} обработан, финальный статус: {Status}",
+                "Product {Id}:{ProductId} processed, final status: {Status}",
                 pending.Id, pending.productId, pending.status);
 
             return IsPermanentError(pending.lastError);
@@ -409,10 +410,10 @@ public class ProductExportBackgroundService : BackgroundService
             if (permanent)
                 pending.retryCount = PendingProductExport.MAX_RETRIES;
 
-            await context.SaveChangesAsync(CancellationToken.None); // Сохраняем даже если отмена
+            await context.SaveChangesAsync(CancellationToken.None); // Save even if cancelled
 
             _logger.LogError(ex,
-                "Ошибка экспорта товара {Id}:{ProductId} (попытка {Retry})",
+                "Error exporting product {Id}:{ProductId} (attempt {Retry})",
                 pending.Id, pending.productId, pending.retryCount);
 
             return permanent;

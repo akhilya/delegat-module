@@ -38,7 +38,7 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var tags = await _context.tagDefinitions
             .Where(td => td.storeId == storeId.Value)
@@ -63,20 +63,20 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         if (string.IsNullOrWhiteSpace(input.name))
-            throw ApiException.BadRequest("Название тэга обязательно");
+            throw ApiException.BadRequest("Tag name is required", code: "required_fields_missing");
 
         var trimmedName = input.name.Trim();
         if (trimmedName.Length > TagDefinition.TAG_NAME_MAX_LENGTH)
-            throw ApiException.BadRequest($"Название тэга не может быть длиннее {TagDefinition.TAG_NAME_MAX_LENGTH} символов");
+            throw ApiException.BadRequest($"Tag name cannot be longer than {TagDefinition.TAG_NAME_MAX_LENGTH} characters");
 
         // Check for duplicate name in store
         var exists = await _context.tagDefinitions
             .AnyAsync(td => td.storeId == storeId.Value && td.name == trimmedName, ct);
         if (exists)
-            throw ApiException.BadRequest($"Тэг «{trimmedName}» уже существует");
+            throw ApiException.BadRequest($"Tag \"{trimmedName}\" already exists");
 
         var tag = new TagDefinition
         {
@@ -98,26 +98,26 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var tag = await _context.tagDefinitions
             .FirstOrDefaultAsync(td => td.Id == id && td.storeId == storeId.Value, ct);
         if (tag == null)
-            throw ApiException.NotFound("Тэг не найден");
+            throw ApiException.NotFound("Tag not found");
 
         if (input.name != null)
         {
             var trimmed = input.name.Trim();
             if (trimmed.Length == 0)
-                throw ApiException.BadRequest("Название тэга обязательно");
+                throw ApiException.BadRequest("Tag name is required", code: "required_fields_missing");
             if (trimmed.Length > TagDefinition.TAG_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Название тэга не может быть длиннее {TagDefinition.TAG_NAME_MAX_LENGTH} символов");
+                throw ApiException.BadRequest($"Tag name cannot be longer than {TagDefinition.TAG_NAME_MAX_LENGTH} characters");
 
             // Check duplicate (different id, same name)
             var duplicate = await _context.tagDefinitions
                 .AnyAsync(td => td.storeId == storeId.Value && td.name == trimmed && td.Id != id, ct);
             if (duplicate)
-                throw ApiException.BadRequest($"Тэг «{trimmed}» уже существует");
+                throw ApiException.BadRequest($"Tag \"{trimmed}\" already exists");
 
             tag.name = trimmed;
         }
@@ -136,12 +136,12 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var tag = await _context.tagDefinitions
             .FirstOrDefaultAsync(td => td.Id == id && td.storeId == storeId.Value, ct);
         if (tag == null)
-            throw ApiException.NotFound("Тэг не найден");
+            throw ApiException.NotFound("Tag not found");
 
         // Remove all assignments first
         await _context.tags
@@ -166,19 +166,19 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         // Verify file belongs to this store
         var fileExists = await _context.files
             .AnyAsync(f => f.Id == fileId && f.product.storeId == storeId.Value, ct);
         if (!fileExists)
-            throw ApiException.NotFound("Файл не найден");
+            throw ApiException.NotFound("File not found", code: "file_not_found");
 
         // Verify tag belongs to this store
         var tagExists = await _context.tagDefinitions
             .AnyAsync(td => td.Id == tagId && td.storeId == storeId.Value, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Тэг не найден");
+            throw ApiException.NotFound("Tag not found");
 
         // Check if already assigned
         var alreadyAssigned = await _context.tags
@@ -199,7 +199,7 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         await _context.tags
             .Where(ft => ft.fileId == fileId && ft.tagDefinitionId == tagId)
@@ -215,16 +215,16 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         if (input.fileIds == null || input.fileIds.Length == 0)
-            throw ApiException.BadRequest("Файлы не указаны");
+            throw ApiException.BadRequest("No files specified", code: "required_fields_missing");
 
         // Verify tag
         var tagExists = await _context.tagDefinitions
             .AnyAsync(td => td.Id == input.tagId && td.storeId == storeId.Value, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Тэг не найден");
+            throw ApiException.NotFound("Tag not found");
 
         // Get already-assigned file IDs to avoid duplicates
         var alreadyAssigned = await _context.tags

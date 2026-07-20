@@ -38,7 +38,7 @@ public class OperationsController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         var query = _context.operations
             .AsNoTracking()
@@ -99,7 +99,7 @@ public class OperationsController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         // Verify operation belongs to this store
         var opExists = await _context.operations
@@ -107,7 +107,7 @@ public class OperationsController : ControllerBase
             .AnyAsync(o => o.operationId == operationId && o.storeId == storeId.Value, ct);
 
         if (!opExists)
-            return NotFound(new { message = "Операция не найдена" });
+            return NotFound(new { message = "Operation not found" });
 
         var logs = await _context.operationLogEntries
             .AsNoTracking()
@@ -132,7 +132,7 @@ public class OperationsController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         var userId = _currentUserService.GetUserId() ?? 0;
         var operationId = input.operationId ?? Guid.NewGuid().ToString("N");
@@ -230,12 +230,12 @@ public class OperationsController : ControllerBase
     {
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
-        if (op.status != "running") return BadRequest(new { message = "Операция не выполняется" });
+        if (op.status != "running") return BadRequest(new { message = "Operation is not running" });
 
         op.status = "paused";
         await _context.SaveChangesAsync(ct);
 
-        await _operationLogger.LogAsync(operationId, op.storeId, "warning", "Операция приостановлена");
+        await _operationLogger.LogAsync(operationId, op.storeId, "warning", "Operation paused");
         await _operationLogger.UpdateStatusAsync(operationId, op.storeId, "paused");
 
         // Cascade to child operations (e.g. image download)
@@ -246,7 +246,7 @@ public class OperationsController : ControllerBase
             {
                 child.status = "paused";
                 await _context.SaveChangesAsync(ct);
-                await _operationLogger.LogAsync(childId, op.storeId, "warning", "Приостановлено (каскад)");
+                await _operationLogger.LogAsync(childId, op.storeId, "warning", "Paused (cascade)");
                 await _operationLogger.UpdateStatusAsync(childId, op.storeId, "paused");
             }
         }
@@ -260,7 +260,7 @@ public class OperationsController : ControllerBase
     {
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
-        if (op.status != "paused") return BadRequest(new { message = "Операция не на паузе" });
+        if (op.status != "paused") return BadRequest(new { message = "Operation is not paused" });
 
         op.status = "running";
         await _context.SaveChangesAsync(ct);
@@ -288,7 +288,7 @@ public class OperationsController : ControllerBase
             }
         }
 
-        await _operationLogger.LogAsync(operationId, op.storeId, "info", "Операция возобновлена");
+        await _operationLogger.LogAsync(operationId, op.storeId, "info", "Operation resumed");
         await _operationLogger.UpdateStatusAsync(operationId, op.storeId, "running");
 
         // Cascade to child operations
@@ -308,7 +308,7 @@ public class OperationsController : ControllerBase
                         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Pending), ct);
                 }
 
-                await _operationLogger.LogAsync(childId, op.storeId, "info", "Возобновлено (каскад)");
+                await _operationLogger.LogAsync(childId, op.storeId, "info", "Resumed (cascade)");
                 await _operationLogger.UpdateStatusAsync(childId, op.storeId, "running");
             }
         }
@@ -323,7 +323,7 @@ public class OperationsController : ControllerBase
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
         if (op.status != "running" && op.status != "paused")
-            return BadRequest(new { message = "Операция уже завершена" });
+            return BadRequest(new { message = "Operation has already finished" });
 
         // Cancel remaining pending items
         int cancelledCount = 0;
@@ -382,7 +382,7 @@ public class OperationsController : ControllerBase
             }
         }
 
-        var summary = $"Остановлено. Выполнено: {completed}, ошибок: {failed}, отменено: {cancelledCount}";
+        var summary = $"Stopped. Completed: {completed}, errors: {failed}, cancelled: {cancelledCount}";
         await _operationLogger.LogAsync(operationId, op.storeId, "warning", summary);
         await _operationLogger.FinishAsync(operationId, op.storeId, "cancelled", summary);
 
@@ -404,7 +404,7 @@ public class OperationsController : ControllerBase
                         .Where(p => p.batchId == child.batchId).ToListAsync(ct);
                     var imgCompleted = imgItems.Count(p => p.status == ImageDownloadStatus.Completed);
                     var imgFailed = imgItems.Count(p => p.status == ImageDownloadStatus.Failed);
-                    var childSummary = $"Остановлено (каскад). Загружено: {imgCompleted}, ошибок: {imgFailed}, отменено: {childCancelled}";
+                    var childSummary = $"Stopped (cascade). Downloaded: {imgCompleted}, errors: {imgFailed}, cancelled: {childCancelled}";
                     await _operationLogger.LogAsync(childId, op.storeId, "warning", childSummary);
                     await _operationLogger.FinishAsync(childId, op.storeId, "cancelled", childSummary);
                 }
@@ -442,7 +442,7 @@ public class OperationsController : ControllerBase
 
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         var operations = await _context.operations
             .AsNoTracking()
@@ -460,7 +460,7 @@ public class OperationsController : ControllerBase
             operations = new
             {
                 key = "operations",
-                label = "Фоновые процессы",
+                label = "Background processes",
                 total = operations.Sum(x => x.count),
                 statuses = operations
             },
@@ -482,7 +482,7 @@ public class OperationsController : ControllerBase
 
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         var target = (input.target ?? "").Trim().ToLowerInvariant();
         var status = (input.status ?? "inactive").Trim().ToLowerInvariant();
@@ -498,7 +498,7 @@ public class OperationsController : ControllerBase
                 + await ClearImports(storeId.Value, status, ct)
                 + await ClearImages(storeId.Value, status, ct)
                 + await ClearTransfers(storeId.Value, status, ct),
-            _ => throw ApiException.BadRequest("Неизвестная очередь")
+            _ => throw ApiException.BadRequest("Unknown queue")
         };
 
         return Ok(new { deleted });
@@ -520,7 +520,7 @@ public class OperationsController : ControllerBase
             .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
             .ToList();
 
-        return new QueueSummary("exports", "Экспорт товаров", statuses.Sum(x => x.count), statuses);
+        return new QueueSummary("exports", "Product exports", statuses.Sum(x => x.count), statuses);
     }
 
     private async Task<QueueSummary> BuildImportQueueSummary(int storeId, CancellationToken ct)
@@ -535,7 +535,7 @@ public class OperationsController : ControllerBase
             .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
             .ToList();
 
-        return new QueueSummary("imports", "Импорт товаров", statuses.Sum(x => x.count), statuses);
+        return new QueueSummary("imports", "Product imports", statuses.Sum(x => x.count), statuses);
     }
 
     private async Task<QueueSummary> BuildImageQueueSummary(int storeId, CancellationToken ct)
@@ -550,7 +550,7 @@ public class OperationsController : ControllerBase
             .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
             .ToList();
 
-        return new QueueSummary("images", "Скачивание изображений", statuses.Sum(x => x.count), statuses);
+        return new QueueSummary("images", "Image downloads", statuses.Sum(x => x.count), statuses);
     }
 
     private async Task<QueueSummary> BuildTransferQueueSummary(int storeId, CancellationToken ct)
@@ -565,7 +565,7 @@ public class OperationsController : ControllerBase
             .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
             .ToList();
 
-        return new QueueSummary("transfers", "Переносы товаров", statuses.Sum(x => x.count), statuses);
+        return new QueueSummary("transfers", "Product transfers", statuses.Sum(x => x.count), statuses);
     }
 
     private static bool IsInactiveStatus(string status) =>
@@ -581,7 +581,7 @@ public class OperationsController : ControllerBase
             "failed" => query.Where(x => x.status == "failed"),
             "cancelled" => query.Where(x => x.status == "cancelled"),
             _ when IsInactiveStatus(status) => query.Where(x => x.status == "completed" || x.status == "failed" || x.status == "cancelled"),
-            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
     private static IQueryable<PendingProductExport> FilterExportsByStatus(IQueryable<PendingProductExport> query, string status) =>
@@ -594,7 +594,7 @@ public class OperationsController : ControllerBase
             "failed" => query.Where(x => x.status == ProductExportStatus.Failed),
             "cancelled" => query.Where(x => x.status == ProductExportStatus.Cancelled),
             _ when IsInactiveStatus(status) => query.Where(x => x.status == ProductExportStatus.Completed || x.status == ProductExportStatus.Failed || x.status == ProductExportStatus.Cancelled),
-            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
     private static IQueryable<PendingProductImport> FilterImportsByStatus(IQueryable<PendingProductImport> query, string status) =>
@@ -607,7 +607,7 @@ public class OperationsController : ControllerBase
             "failed" => query.Where(x => x.status == ProductImportStatus.Failed),
             "cancelled" => query.Where(x => x.status == ProductImportStatus.Cancelled),
             _ when IsInactiveStatus(status) => query.Where(x => x.status == ProductImportStatus.Completed || x.status == ProductImportStatus.Failed || x.status == ProductImportStatus.Cancelled),
-            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
     private static IQueryable<PendingImageDownload> FilterImagesByStatus(IQueryable<PendingImageDownload> query, string status) =>
@@ -620,7 +620,7 @@ public class OperationsController : ControllerBase
             "failed" => query.Where(x => x.status == ImageDownloadStatus.Failed),
             "cancelled" => query.Where(x => x.status == ImageDownloadStatus.Cancelled),
             _ when IsInactiveStatus(status) => query.Where(x => x.status == ImageDownloadStatus.Completed || x.status == ImageDownloadStatus.Failed || x.status == ImageDownloadStatus.Cancelled),
-            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
     private static IQueryable<PendingProductTransfer> FilterTransfersByStatus(IQueryable<PendingProductTransfer> query, string status) =>
@@ -638,7 +638,7 @@ public class OperationsController : ControllerBase
                 x.status == ProductTransferStatus.Failed ||
                 x.status == ProductTransferStatus.Cancelled ||
                 x.status == ProductTransferStatus.Partial),
-            _ => throw ApiException.BadRequest("Неизвестный статус очистки")
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
     private async Task<int> ClearOperationsHistory(int storeId, string status, CancellationToken ct)
@@ -680,7 +680,7 @@ public class OperationsController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут управлять очередями фоновых процессов");
+            throw ApiException.Forbidden("Only administrators can manage background process queues");
     }
 
     [HttpDelete]
@@ -689,7 +689,7 @@ public class OperationsController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         var op = await _context.operations
             .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId.Value, ct);
@@ -713,7 +713,7 @@ public class OperationsController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            return BadRequest(new { message = "Не выбран магазин" });
+            return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
 
         if (operationIds == null || operationIds.Count == 0)
             return NoContent();

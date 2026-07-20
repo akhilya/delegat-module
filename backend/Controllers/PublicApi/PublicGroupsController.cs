@@ -69,7 +69,7 @@ public class PublicGroupsController : ControllerBase
             .FirstOrDefaultAsync(g => g.Id == groupId && g.storeId == storeId, ct);
 
         if (group == null)
-            throw ApiException.NotFound("Группа не найдена");
+            throw ApiException.NotFound("Group not found", code: "group_not_found");
 
         return Ok(new
         {
@@ -106,7 +106,7 @@ public class PublicGroupsController : ControllerBase
         var repo = _uow.Repository<ProductGroup>();
         var group = await repo.FindAsync(g => g.Id == groupId && g.storeId == storeId);
         if (group == null)
-            throw ApiException.NotFound("Группа не найдена");
+            throw ApiException.NotFound("Group not found", code: "group_not_found");
 
         group.UpdateFill(input);
         await _uow.SaveChangesAsync();
@@ -122,7 +122,7 @@ public class PublicGroupsController : ControllerBase
             .Include(g => g.members)
             .FirstOrDefaultAsync(g => g.Id == groupId && g.storeId == storeId, ct);
         if (group == null)
-            throw ApiException.NotFound("Группа не найдена");
+            throw ApiException.NotFound("Group not found", code: "group_not_found");
 
         _db.productGroupMembers.RemoveRange(group.members);
         _db.productGroups.Remove(group);
@@ -143,7 +143,7 @@ public class PublicGroupsController : ControllerBase
             .Include(g => g.members)
             .FirstOrDefaultAsync(g => g.Id == groupId && g.storeId == storeId, ct);
         if (group == null)
-            throw ApiException.NotFound("Группа не найдена");
+            throw ApiException.NotFound("Group not found", code: "group_not_found");
 
         var productIds = body.productIds?.Distinct().ToList() ?? new List<int>();
         var validIds = await _db.products
@@ -173,12 +173,12 @@ public class PublicGroupsController : ControllerBase
         var groupExists = await _db.productGroups
             .AnyAsync(g => g.Id == groupId && g.storeId == storeId, ct);
         if (!groupExists)
-            throw ApiException.NotFound("Группа не найдена");
+            throw ApiException.NotFound("Group not found", code: "group_not_found");
 
         var member = await _db.productGroupMembers
             .FirstOrDefaultAsync(m => m.groupId == groupId && m.productId == productId, ct);
         if (member == null)
-            throw ApiException.NotFound("Товар не в группе");
+            throw ApiException.NotFound("Product is not in the group");
 
         _db.productGroupMembers.Remove(member);
         await _db.SaveChangesAsync(ct);

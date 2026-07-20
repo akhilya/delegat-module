@@ -26,7 +26,7 @@ public class QuotaService
             .CountAsync(p => p.storeId == storeId);
 
         if (count >= maxProducts.Value)
-            throw ApiException.Conflict($"Достигнут лимит товаров (MAX_PRODUCTS={maxProducts.Value})");
+            throw ApiException.Conflict($"Product limit reached (MAX_PRODUCTS={maxProducts.Value})");
     }
 
     public async Task EnsureStorageQuotaAsync(int storeId, long additionalBytes = 0)
@@ -45,7 +45,7 @@ public class QuotaService
             .SumAsync(f => f.length);
 
         if (productFilesBytes + storeFilesBytes + additionalBytes > maxStorageBytes.Value)
-            throw ApiException.Conflict("Достигнут лимит хранилища (MAX_STORAGE_GB)");
+            throw ApiException.Conflict("Storage limit reached (MAX_STORAGE_GB)");
     }
 
     public async Task EnsureFileQuotaAsync(int storeId, int additionalFiles = 1)
@@ -62,7 +62,7 @@ public class QuotaService
             .CountAsync(f => f.storeId == storeId);
 
         if (productFilesCount + storeFilesCount + additionalFiles > maxFiles.Value)
-            throw ApiException.Conflict($"Достигнут лимит файлов (MAX_FILES={maxFiles.Value})");
+            throw ApiException.Conflict($"File limit reached (MAX_FILES={maxFiles.Value})");
     }
 
     public async Task EnsureConnectionQuotaAsync(int storeId)
@@ -74,6 +74,6 @@ public class QuotaService
             .CountAsync(c => c.storeId == storeId);
 
         if (count >= maxConnections.Value)
-            throw ApiException.Conflict($"Достигнут лимит подключений (MAX_CONNECTIONS={maxConnections.Value})");
+            throw ApiException.Conflict($"Connection limit reached (MAX_CONNECTIONS={maxConnections.Value})");
     }
 }

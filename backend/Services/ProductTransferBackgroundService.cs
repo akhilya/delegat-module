@@ -42,7 +42,7 @@ public class ProductTransferBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("ProductTransferBackgroundService запущен");
+        _logger.LogInformation("ProductTransferBackgroundService started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,12 +57,12 @@ public class ProductTransferBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка в ProductTransferBackgroundService");
+                _logger.LogError(ex, "Error in ProductTransferBackgroundService");
                 await Task.Delay(ERROR_DELAY_MS, stoppingToken);
             }
         }
 
-        _logger.LogInformation("ProductTransferBackgroundService остановлен");
+        _logger.LogInformation("ProductTransferBackgroundService stopped");
     }
 
     private async Task ProcessPendingAsync(CancellationToken ct)
@@ -182,15 +182,15 @@ public class ProductTransferBackgroundService : BackgroundService
             {
                 item.status = ProductTransferStatus.Partial;
                 finalStatus = "partial";
-                summary = $"Готово ({item.mode}): файлов скопировано {result.filesCopied}, пропущено {result.filesFailed}";
+                summary = $"Done ({item.mode}): files copied {result.filesCopied}, skipped {result.filesFailed}";
             }
             else
             {
                 item.status = ProductTransferStatus.Completed;
                 finalStatus = "completed";
                 summary = item.mode == "move"
-                    ? $"Перенесено: {result.filesCopied} файлов, оригинал в корзине"
-                    : $"Клонировано: {result.filesCopied} файлов";
+                    ? $"Transferred: {result.filesCopied} files, original moved to trash"
+                    : $"Cloned: {result.filesCopied} files";
             }
 
             await context.SaveChangesAsync(stoppingToken);
@@ -203,7 +203,7 @@ public class ProductTransferBackgroundService : BackgroundService
             item.finishedAt = DateTime.UtcNow;
             await context.SaveChangesAsync(CancellationToken.None);
             await _operationLogger.FinishAsync(item.batchId, item.sourceStoreId, "cancelled",
-                "Перенос отменён, изменения откачены");
+                "Transfer cancelled, changes rolled back");
             try { await stopWatcher; } catch { /* ignored */ }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -223,11 +223,11 @@ public class ProductTransferBackgroundService : BackgroundService
             item.lastError = ex.Message;
             await context.SaveChangesAsync(CancellationToken.None);
 
-            _logger.LogError(ex, "Перенос товара {ProductId} провалился (operation {OpId})",
+            _logger.LogError(ex, "Product {ProductId} transfer failed (operation {OpId})",
                 item.sourceProductId, item.batchId);
 
             await _operationLogger.LogAsync(item.batchId, item.sourceStoreId, "error",
-                $"Ошибка переноса: {ex.Message}");
+                $"Transfer error: {ex.Message}");
             await _operationLogger.FinishAsync(item.batchId, item.sourceStoreId, "failed", ex.Message);
         }
     }

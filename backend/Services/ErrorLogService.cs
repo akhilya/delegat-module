@@ -10,12 +10,12 @@ public interface IErrorLogService
 
 public class ErrorLogService : IErrorLogService
 {
-    private readonly DataContext _context;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ErrorLogService> _logger;
 
-    public ErrorLogService(DataContext context, ILogger<ErrorLogService> logger)
+    public ErrorLogService(IServiceScopeFactory scopeFactory, ILogger<ErrorLogService> logger)
     {
-        _context = context;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -23,6 +23,11 @@ public class ErrorLogService : IErrorLogService
     {
         try
         {
+            // Use a fresh scope so a failed request DbContext (e.g. pending invalid Store)
+            // cannot block persisting the error log.
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+
             var userIdValue = context.User.FindFirst("userId")?.Value;
             int? userId = int.TryParse(userIdValue, out var parsedUserId) ? parsedUserId : null;
 
@@ -42,8 +47,8 @@ public class ErrorLogService : IErrorLogService
                 remoteIpAddress = context.Connection.RemoteIpAddress?.ToString()
             };
 
-            _context.errorLogs.Add(entry);
-            await _context.SaveChangesAsync();
+            db.errorLogs.Add(entry);
+            await db.SaveChangesAsync();
         }
         catch (Exception logException)
         {

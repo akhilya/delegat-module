@@ -62,7 +62,7 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         return Ok(store.MapToDTO(_serviceProvider));
     }
@@ -73,13 +73,13 @@ public class StoreController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isActive || !user.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут создавать магазины");
+            throw ApiException.Forbidden("Only administrators can create stores");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var existingStore = await storeRepo.FindAsync(s => s.name == input.name);
 
         if (existingStore != null)
-            throw ApiException.BadRequest("Магазин с таким именем уже существует");
+            throw ApiException.BadRequest("A store with this name already exists");
 
         var newStore = new Store();
         newStore.AddFill(input);
@@ -102,7 +102,7 @@ public class StoreController : ControllerBase
         {
             var creator = await userRepo.GetByIdTrackingAsync(user.Id);
             if (creator == null || !creator.isActive)
-                throw ApiException.Unauthorized("Пользователь не найден");
+                throw ApiException.Unauthorized("User not found", code: "user_not_found");
 
             newStore.members.Add(creator);
             newStore.storeAdmins.Add(creator);
@@ -120,22 +120,22 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Только администраторы могут добавлять участников");
+            throw ApiException.Forbidden("Only administrators can add members");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         if (store.members.Any(m => m.Id == input.userId))
-            throw ApiException.BadRequest("Пользователь уже является участником");
+            throw ApiException.BadRequest("User is already a member");
 
         var userRepo = _unitOfWork.Repository<User>();
         var inviteUser = await userRepo.GetByIdTrackingAsync(input.userId);
 
         if (inviteUser == null || !inviteUser.isActive)
-            throw ApiException.NotFound("Пользователь не найден");
+            throw ApiException.NotFound("User not found", code: "user_not_found");
 
         store.members.Add(inviteUser);
         await _unitOfWork.SaveChangesAsync();
@@ -149,17 +149,17 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Только администраторы могут удалять участников");
+            throw ApiException.Forbidden("Only administrators can remove members");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         var memberToRemove = store.members.FirstOrDefault(m => m.Id == userId);
         if (memberToRemove == null)
-            throw ApiException.BadRequest("Пользователь не является участником этого магазина");
+            throw ApiException.BadRequest("User is not a member of this store");
 
         store.members.Remove(memberToRemove);
         var adminToRemove = store.storeAdmins.FirstOrDefault(m => m.Id == userId);
@@ -183,13 +183,13 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Только администраторы могут просматривать детали магазина");
+            throw ApiException.Forbidden("Only administrators can view store details");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }
@@ -200,33 +200,33 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Недостаточно прав для изменения магазина");
+            throw ApiException.Forbidden("Insufficient permissions to modify the store");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         if (input.name != null)
         {
             var name = input.name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                throw ApiException.BadRequest("Название магазина не может быть пустым");
+                throw ApiException.BadRequest("Store name cannot be empty", code: "required_fields_missing");
 
             if (name.Length > Store.STORE_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Название магазина не может быть длиннее {Store.STORE_NAME_MAX_LENGTH} символов");
+                throw ApiException.BadRequest($"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters");
 
             var duplicate = await storeRepo.FindAsync(s => s.Id != id && s.name == name);
             if (duplicate != null)
-                throw ApiException.BadRequest("Магазин с таким именем уже существует");
+                throw ApiException.BadRequest("A store with this name already exists");
 
             store.name = name;
         }
 
         var isPlatformAdmin = currentUser?.isAdmin == true;
         if ((input.memberIds != null || input.storeAdminIds != null) && !isPlatformAdmin)
-            throw ApiException.Forbidden("Только администратор платформы может менять участников и администраторов магазина");
+            throw ApiException.Forbidden("Only a platform administrator can change store members and admins");
 
         if (input.memberIds != null)
         {
@@ -238,7 +238,7 @@ public class StoreController : ControllerBase
                 .ToListAsync();
 
             if (users.Count != memberIds.Count)
-                throw ApiException.BadRequest("Один или несколько пользователей не найдены");
+                throw ApiException.BadRequest("One or more users not found", code: "user_not_found");
 
             store.members.Clear();
             foreach (var user in users)
@@ -260,7 +260,7 @@ public class StoreController : ControllerBase
             var adminIds = input.storeAdminIds.Distinct().ToHashSet();
             var memberIds = store.members.Select(m => m.Id).ToHashSet();
             if (!adminIds.All(memberIds.Contains))
-                throw ApiException.BadRequest("Администратор магазина должен быть участником этого магазина");
+                throw ApiException.BadRequest("A store administrator must be a member of this store");
 
             var admins = store.members.Where(m => adminIds.Contains(m.Id)).ToList();
             store.storeAdmins.Clear();
@@ -272,7 +272,7 @@ public class StoreController : ControllerBase
         {
             var tz = input.timezone.Trim();
             if (!StoreTimeHelper.IsValidTimezoneId(tz))
-                throw ApiException.BadRequest("Некорректный часовой пояс");
+                throw ApiException.BadRequest("Invalid timezone");
             store.timezone = tz;
         }
 
@@ -290,11 +290,11 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Недостаточно прав");
+            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         return Ok(store.MapCurrencyDtos());
     }
@@ -305,24 +305,24 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Недостаточно прав");
+            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         var code = CurrencyService.NormalizeCode(input.code);
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"{baseCurrency} — базовая валюта, её не нужно добавлять");
+            throw ApiException.BadRequest($"{baseCurrency} is the base currency, no need to add it");
         if (!CurrencyService.IsValidCurrencyCode(code))
-            throw ApiException.BadRequest("Код валюты должен состоять из 3 букв");
+            throw ApiException.BadRequest("Currency code must be 3 letters");
         if (input.rateToBase <= 0)
-            throw ApiException.BadRequest("Курс должен быть больше нуля");
+            throw ApiException.BadRequest("Rate must be greater than zero");
 
         if (store.currencies.Any(c => c.code == code))
-            throw ApiException.BadRequest("Валюта уже добавлена");
+            throw ApiException.BadRequest("Currency has already been added");
 
         store.currencies.Add(new StoreCurrency
         {
@@ -343,26 +343,26 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Недостаточно прав");
+            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
 
         code = CurrencyService.NormalizeCode(code);
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"Базовую валюту {baseCurrency} нельзя изменить");
+            throw ApiException.BadRequest($"The base currency {baseCurrency} cannot be changed");
 
         var currency = store.currencies.FirstOrDefault(c => c.code == code);
         if (currency == null)
-            throw ApiException.NotFound("Валюта не найдена");
+            throw ApiException.NotFound("Currency not found");
 
         if (input.rateToBase.HasValue)
         {
             if (input.rateToBase.Value <= 0)
-                throw ApiException.BadRequest("Курс должен быть больше нуля");
+                throw ApiException.BadRequest("Rate must be greater than zero");
             currency.rateToBase = input.rateToBase.Value;
             currency.updatedAt = DateTime.UtcNow;
         }
@@ -379,21 +379,21 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Недостаточно прав");
+            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
 
         code = CurrencyService.NormalizeCode(code);
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"Базовую валюту {baseCurrency} нельзя удалить");
+            throw ApiException.BadRequest($"The base currency {baseCurrency} cannot be removed");
 
         var currency = store.currencies.FirstOrDefault(c => c.code == code);
         if (currency == null)
-            throw ApiException.NotFound("Валюта не найдена");
+            throw ApiException.NotFound("Currency not found");
 
         store.currencies.Remove(currency);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -406,7 +406,7 @@ public class StoreController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут просматривать всех пользователей");
+            throw ApiException.Forbidden("Only administrators can view all users");
 
         var userRepo = _unitOfWork.Repository<User>();
         var users = await userRepo.GetAllAsync(u => u.isActive);

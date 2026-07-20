@@ -42,7 +42,7 @@ public class ProductImportBackgroundService : BackgroundService
     /// <param name="stoppingToken">Token to signal graceful shutdown.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("ProductImportBackgroundService запущен");
+        _logger.LogInformation("ProductImportBackgroundService started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -53,17 +53,17 @@ public class ProductImportBackgroundService : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Нормальная остановка
+                // Normal shutdown
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка в ProductImportBackgroundService");
+                _logger.LogError(ex, "Error in ProductImportBackgroundService");
                 await Task.Delay(ERROR_DELAY_MS, stoppingToken);
             }
         }
 
-        _logger.LogInformation("ProductImportBackgroundService остановлен");
+        _logger.LogInformation("ProductImportBackgroundService stopped");
     }
 
     private async Task ProcessPendingImportsAsync(CancellationToken ct)
@@ -74,7 +74,7 @@ public class ProductImportBackgroundService : BackgroundService
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
-        // Получаем пачку pending импортов. Stale InProgress rows are retried after a
+        // Fetch a batch of pending imports. Stale InProgress rows are retried after a
         // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingImports = await context.pendingProductImports
             .Where(p => p.status == ProductImportStatus.Pending ||
@@ -89,7 +89,7 @@ public class ProductImportBackgroundService : BackgroundService
             return;
 
         _logger.LogInformation(
-            "Обрабатываю {Count} товаров из очереди импорта: [{Ids}]",
+            "Processing {Count} products from the import queue: [{Ids}]",
             pendingImports.Count,
             string.Join(", ", pendingImports.Select(p => $"{p.Id}:{p.externalProductId}")));
 
@@ -108,7 +108,7 @@ public class ProductImportBackgroundService : BackgroundService
 
                 if (opStatus is "paused" or "cancelled")
                 {
-                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю обработку", pending.batchId, opStatus);
+                    _logger.LogInformation("Operation {BatchId} is in status {Status}, skipping processing", pending.batchId, opStatus);
                     break;
                 }
             }
@@ -119,11 +119,11 @@ public class ProductImportBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Критическая ошибка при обработке товара {Id}:{ExternalId}",
+                _logger.LogError(ex, "Critical error while processing product {Id}:{ExternalId}",
                     pending.Id, pending.externalProductId);
             }
 
-            // Задержка между товарами чтобы не перегружать API маркетплейса
+            // Delay between products to avoid overloading the marketplace API
             if (!ct.IsCancellationRequested)
                 await Task.Delay(DELAY_BETWEEN_PRODUCTS_MS, ct);
         }
@@ -136,7 +136,7 @@ public class ProductImportBackgroundService : BackgroundService
         CancellationToken ct)
     {
         _logger.LogInformation(
-            "Начинаю обработку товара {Id}:{ExternalId} (текущий статус: {Status})",
+            "Starting to process product {Id}:{ExternalId} (current status: {Status})",
             pending.Id, pending.externalProductId, pending.status);
 
         pending.status = ProductImportStatus.InProgress;
@@ -144,11 +144,11 @@ public class ProductImportBackgroundService : BackgroundService
         pending.retryCount++;
         await context.SaveChangesAsync(ct);
 
-        _logger.LogDebug("Статус товара {Id} изменён на InProgress", pending.Id);
+        _logger.LogDebug("Product {Id} status changed to InProgress", pending.Id);
 
         try
         {
-            // Импортируем товар (detailed logging happens inside ImportProductAsync)
+            // Import the product (detailed logging happens inside ImportProductAsync)
             var result = await productSyncService.ImportProductAsync(
                 pending.connectionId,
                 pending.externalProductId,
@@ -160,7 +160,7 @@ public class ProductImportBackgroundService : BackgroundService
                 imageBatchId: pending.batchId != null ? $"{pending.batchId}-img" : null);
 
             _logger.LogInformation(
-                "Результат импорта товара {Id}: IsSuccess={IsSuccess}, AlreadyLinked={AlreadyLinked}, Error={Error}",
+                "Product import result {Id}: IsSuccess={IsSuccess}, AlreadyLinked={AlreadyLinked}, Error={Error}",
                 pending.Id, result.IsSuccess, result.AlreadyLinked, result.ErrorMessage);
 
             if (result.IsSuccess || result.AlreadyLinked)
@@ -174,13 +174,13 @@ public class ProductImportBackgroundService : BackgroundService
                 if (result.AlreadyLinked)
                 {
                     _logger.LogInformation(
-                        "Товар {ExternalId} уже был импортирован ранее (Product ID: {ProductId})",
+                        "Product {ExternalId} was already imported previously (Product ID: {ProductId})",
                         pending.externalProductId, result.ProductId);
                 }
                 else
                 {
                     _logger.LogInformation(
-                        "Импортирован товар {ProductName} (ID: {ProductId}) из очереди",
+                        "Imported product {ProductName} (ID: {ProductId}) from the queue",
                         result.ProductName, result.ProductId);
                 }
 
@@ -188,21 +188,21 @@ public class ProductImportBackgroundService : BackgroundService
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId,
                         result.AlreadyLinked ? "warning" : "success",
                         result.AlreadyLinked
-                            ? $"Уже импортирован: {pending.productName ?? pending.externalProductId}"
-                            : $"Импортирован: {result.ProductName ?? pending.externalProductId} (ID: {result.ProductId})");
+                            ? $"Already imported: {pending.productName ?? pending.externalProductId}"
+                            : $"Imported: {result.ProductName ?? pending.externalProductId} (ID: {result.ProductId})");
             }
             else
             {
                 pending.status = ProductImportStatus.Failed;
-                pending.lastError = result.ErrorMessage ?? "Неизвестная ошибка";
+                pending.lastError = result.ErrorMessage ?? "Unknown error";
 
                 _logger.LogWarning(
-                    "Не удалось импортировать товар {ExternalId}: {Error} (попытка {Retry})",
+                    "Failed to import product {ExternalId}: {Error} (attempt {Retry})",
                     pending.externalProductId, pending.lastError, pending.retryCount);
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Ошибка: {pending.productName ?? pending.externalProductId} — {pending.lastError}");
+                        $"Error: {pending.productName ?? pending.externalProductId} — {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);
@@ -222,21 +222,21 @@ public class ProductImportBackgroundService : BackgroundService
                 if (total == completed + failed)
                     await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
                         failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                        $"Импортировано: {completed} успешно, {failed} ошибок");
+                        $"Imported: {completed} succeeded, {failed} failed");
             }
 
             _logger.LogInformation(
-                "Товар {Id}:{ExternalId} обработан, финальный статус: {Status}",
+                "Product {Id}:{ExternalId} processed, final status: {Status}",
                 pending.Id, pending.externalProductId, pending.status);
         }
         catch (Exception ex)
         {
             pending.status = ProductImportStatus.Failed;
             pending.lastError = ex.Message;
-            await context.SaveChangesAsync(CancellationToken.None); // Сохраняем даже если отмена
+            await context.SaveChangesAsync(CancellationToken.None); // Save even if cancelled
 
             _logger.LogError(ex,
-                "Ошибка импорта товара {Id}:{ExternalId} (попытка {Retry})",
+                "Error importing product {Id}:{ExternalId} (attempt {Retry})",
                 pending.Id, pending.externalProductId, pending.retryCount);
         }
     }

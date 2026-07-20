@@ -49,7 +49,7 @@ public class AdapterHttpLogController : ControllerBase
             var ok = await _db.marketplaceConnections.AsNoTracking()
                 .AnyAsync(c => c.Id == connectionId.Value && c.storeId == storeId, ct);
             if (!ok)
-                throw ApiException.NotFound("Подключение не найдено");
+                throw ApiException.NotFound("Connection not found", code: "connection_not_found");
         }
 
         var (items, total, errorCount) = await _logs.QueryAsync(storeId, new AdapterHttpLogQuery
@@ -86,7 +86,7 @@ public class AdapterHttpLogController : ControllerBase
         var storeId = await RequireStoreIdAsync();
         var detail = await _logs.GetDetailAsync(storeId, id, ct);
         if (detail == null)
-            throw ApiException.NotFound("Запись лога не найдена");
+            throw ApiException.NotFound("Log entry not found");
         return Ok(detail);
     }
 
@@ -94,7 +94,7 @@ public class AdapterHttpLogController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync();
         if (storeId == null)
-            throw ApiException.BadRequest("Не выбран магазин");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
         return storeId.Value;
     }
 }

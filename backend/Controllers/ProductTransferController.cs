@@ -45,7 +45,7 @@ public class ProductTransferController : ControllerBase
     {
         var sourceStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (sourceStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var userId = _currentUserService.GetUserId();
         if (userId == null)
@@ -74,7 +74,7 @@ public class ProductTransferController : ControllerBase
     {
         var sourceStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (sourceStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var userId = _currentUserService.GetUserId();
         if (userId == null)
@@ -88,28 +88,28 @@ public class ProductTransferController : ControllerBase
         request.sourceProductId = productId;
 
         if (request.mode != "clone" && request.mode != "move")
-            throw ApiException.BadRequest($"Неизвестный режим: {request.mode}");
+            throw ApiException.BadRequest($"Unknown mode: {request.mode}");
         if (request.targetStoreId == sourceStoreId.Value && request.mode == "move")
-            throw ApiException.BadRequest("Перемещение в тот же магазин невозможно. Используйте режим клонирования.");
+            throw ApiException.BadRequest("Cannot move to the same store. Use clone mode instead.");
 
         var targetStore = await _context.stores
             .Include(s => s.members)
             .FirstOrDefaultAsync(s => s.Id == request.targetStoreId, ct);
         if (targetStore == null)
-            throw ApiException.BadRequest($"Целевой магазин #{request.targetStoreId} не найден");
+            throw ApiException.BadRequest($"Target store #{request.targetStoreId} not found");
         if (!targetStore.members.Any(m => m.Id == userId.Value))
-            throw ApiException.Forbidden("Нет доступа к целевому магазину");
+            throw ApiException.Forbidden("No access to the target store", code: "access_denied_store");
 
         var source = await _context.products
             .Include(p => p.marketplaceLinks)
             .Include(p => p.files)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == sourceStoreId.Value, ct);
         if (source == null)
-            throw ApiException.NotFound("Исходный товар не найден");
+            throw ApiException.NotFound("Source product not found", code: "product_not_found");
 
         if (source.marketplaceLinks.Any() && !request.confirmBreakLinks)
             throw ApiException.BadRequest(
-                "У товара есть marketplace-связки. Подтвердите их разрыв (confirmBreakLinks=true)");
+                "The product has marketplace links. Confirm breaking them (confirmBreakLinks=true)");
 
         var newSku = !string.IsNullOrWhiteSpace(request.newSku)
             ? request.newSku!.Trim()
@@ -117,7 +117,7 @@ public class ProductTransferController : ControllerBase
         var skuTaken = await _context.products
             .AnyAsync(p => p.storeId == request.targetStoreId && p.sku == newSku, ct);
         if (skuTaken)
-            throw ApiException.BadRequest($"SKU '{newSku}' уже занят в целевом магазине");
+            throw ApiException.BadRequest($"SKU '{newSku}' is already used in the target store", code: "sku_already_used");
 
         // ---- Enqueue ----
         var operationId = Guid.NewGuid().ToString("N");
@@ -153,8 +153,8 @@ public class ProductTransferController : ControllerBase
         // The new product still lands in the target store; only operation visibility is anchored
         // to where the action was initiated.
         var title = request.mode == "move"
-            ? $"Перенос товара «{source.name}» → {targetStore.name}"
-            : $"Клонирование товара «{source.name}» → {targetStore.name}";
+            ? $"Moving product \"{source.name}\" -> {targetStore.name}"
+            : $"Cloning product \"{source.name}\" -> {targetStore.name}";
         await _operationLogger.StartAsync(operationId, sourceStoreId.Value, userId.Value,
             "product-transfer", title, totalItems: totalItems);
 

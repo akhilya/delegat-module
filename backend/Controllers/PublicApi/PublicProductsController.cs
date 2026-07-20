@@ -111,7 +111,7 @@ public class PublicProductsController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         return Ok(MapDetail(product));
     }
@@ -128,7 +128,7 @@ public class PublicProductsController : ControllerBase
         var repo = _uow.Repository<Product>();
         var existing = await repo.FindAsync(p => p.storeId == storeId && p.sku == input.sku);
         if (existing != null)
-            throw ApiException.Conflict("Товар с таким артикулом уже существует");
+            throw ApiException.Conflict("A product with this SKU already exists", code: "sku_already_used");
 
         var product = new Product();
         product.AddFill(new Product.AddForm(input, storeId, input.categoryId));
@@ -182,7 +182,7 @@ public class PublicProductsController : ControllerBase
         var repo = _uow.Repository<Product>();
         var product = await repo.FindAsync(p => p.Id == productId && p.storeId == storeId);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         product.UpdateFill(input);
         await _uow.SaveChangesAsync();
@@ -200,7 +200,7 @@ public class PublicProductsController : ControllerBase
         var product = await _db.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         product.deletedAt = DateTime.UtcNow;
         product.updatedAt = DateTime.UtcNow;

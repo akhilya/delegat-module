@@ -45,16 +45,16 @@ public class JwtAuthController : ControllerBase
     {
         var user = await _userManager.FindByNameAsync(input.userName);
         if (user == null)
-            throw ApiException.Unauthorized("Неверные учётные данные");
+            throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
 
         if (!user.isActive)
-            throw ApiException.Forbidden("Пользователь деактивирован");
+            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, lockoutOnFailure: true);
         if (result.IsLockedOut)
             return StatusCode(429, new { title = "Account locked. Try again later.", status = 429 });
         if (!result.Succeeded)
-            throw ApiException.Unauthorized("Неверные учётные данные");
+            throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
 
         await IssueTokens(user.Id, user.UserName ?? "", input.rememberMe);
 
@@ -75,10 +75,10 @@ public class JwtAuthController : ControllerBase
         var tokenEntity = await tokenRepo.FindAsync(t => t.token == token);
 
         if (tokenEntity == null)
-            throw ApiException.BadRequest("Недействительный токен");
+            throw ApiException.BadRequest("Invalid token", code: "invalid_token");
 
         if (tokenEntity.used)
-            throw ApiException.BadRequest("Токен уже использован");
+            throw ApiException.BadRequest("Token has already been used", code: "invalid_token");
 
         var user = new User { UserName = input.userName, isActive = true };
         var result = await _userManager.CreateAsync(user, input.password);
@@ -141,7 +141,7 @@ public class JwtAuthController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null || !user.isActive)
-            throw ApiException.NotFound("Пользователь не найден");
+            throw ApiException.NotFound("User not found", code: "user_not_found");
 
         // Sync selected_store_id cookie with DB value
         if (user.selectedStoreId != null)
@@ -181,7 +181,7 @@ public class JwtAuthController : ControllerBase
     public async Task<IActionResult> PostRefresh()
     {
         if (!Request.Cookies.TryGetValue(REFRESH_COOKIE, out var refreshTokenValue) || string.IsNullOrEmpty(refreshTokenValue))
-            throw ApiException.Unauthorized("Refresh token отсутствует");
+            throw ApiException.Unauthorized("Refresh token is missing");
 
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
 
@@ -195,12 +195,12 @@ public class JwtAuthController : ControllerBase
             var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
             if (refreshToken == null || refreshToken.IsExpired)
-                throw ApiException.Unauthorized("Refresh token недействителен");
+                throw ApiException.Unauthorized("Refresh token is invalid", code: "invalid_token");
 
             var userId = refreshToken.userId;
             var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null || !user.isActive)
-                throw ApiException.Unauthorized("Пользователь не найден");
+                throw ApiException.Unauthorized("User not found", code: "user_not_found");
 
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
             resultRememberMe = rememberMe;
@@ -215,7 +215,7 @@ public class JwtAuthController : ControllerBase
                     rt.expiresAt > DateTime.UtcNow);
 
                 if (activeToken == null)
-                    throw ApiException.Unauthorized("Refresh token недействителен");
+                    throw ApiException.Unauthorized("Refresh token is invalid", code: "invalid_token");
 
                 resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
                 resultRefreshToken = activeToken.token;

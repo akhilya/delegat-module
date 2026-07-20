@@ -60,17 +60,17 @@ public class PluginVersionSyncService
             .FirstOrDefaultAsync(m => m.Id == mappingId && m.connectionId == connectionId, ct);
 
         if (mapping == null)
-            throw new InvalidOperationException("Маппинг не найден");
+            throw new InvalidOperationException("Mapping not found");
 
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            throw new InvalidOperationException("Подключение не найдено");
+            throw new InvalidOperationException("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw new InvalidOperationException($"Адаптер {connection.adapterKey} не найден");
+            throw new InvalidOperationException($"Adapter {connection.adapterKey} not found");
 
         return await SyncCategoryMappingFieldsAsync(mapping, connection, adapter, ct);
     }
@@ -209,7 +209,7 @@ public class PluginVersionSyncService
             _logger.LogWarning(ex, "Failed to fetch fields for category {CatId} on connection {ConnId}.",
                 mapping.externalCategoryId, connection.Id);
             throw new InvalidOperationException(
-                "Не удалось получить поля категории от маркетплейса. Проверьте подключение и попробуйте снова.", ex);
+                "Failed to fetch category fields from the marketplace. Check the connection and try again.", ex);
         }
 
         fields = fields.Where(f => f.Key != "_hasSizes").ToList();

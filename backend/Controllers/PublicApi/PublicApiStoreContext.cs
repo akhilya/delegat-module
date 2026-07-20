@@ -36,7 +36,7 @@ public class PublicApiStoreContext
             .AnyAsync(s => s.Id == storeId && s.members.Any(m => m.Id == userId && m.isActive), ct);
 
         if (!isMember)
-            throw ApiException.Forbidden("Нет доступа к этому магазину");
+            throw ApiException.Forbidden("No access to this store", code: "access_denied_store");
     }
 
     public async Task<(int userId, int storeId)> RequireStoreAsync(int storeId, CancellationToken ct = default)

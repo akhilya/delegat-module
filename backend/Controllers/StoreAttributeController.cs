@@ -35,7 +35,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 
@@ -56,7 +56,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 
@@ -64,7 +64,7 @@ public class StoreAttributeController : ControllerBase
             a => a.Id == attributeId && a.storeId == selectedStoreId.Value);
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут магазина не найден");
+            throw ApiException.NotFound("Store attribute not found");
 
         return Ok(((IMapToDTO<StoreAttribute.AttributeDTO>)attribute).MapToDTO(_serviceProvider));
     }
@@ -75,7 +75,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 
@@ -83,7 +83,7 @@ public class StoreAttributeController : ControllerBase
         var existingAttr = await attrRepo.FindAsync(
             a => a.storeId == selectedStoreId.Value && a.key == input.key);
         if (existingAttr != null)
-            throw ApiException.BadRequest("Атрибут с таким ключом уже существует");
+            throw ApiException.BadRequest("An attribute with this key already exists");
 
         // Get max sortOrder
         var allAttrs = await attrRepo.FindAllAsync(a => a.storeId == selectedStoreId.Value);
@@ -117,7 +117,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 
@@ -125,7 +125,7 @@ public class StoreAttributeController : ControllerBase
             a => a.Id == attributeId && a.storeId == selectedStoreId.Value);
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут магазина не найден");
+            throw ApiException.NotFound("Store attribute not found");
 
         // Check key uniqueness if key is being changed
         if (!string.IsNullOrEmpty(input.key) && input.key != attribute.key)
@@ -133,7 +133,7 @@ public class StoreAttributeController : ControllerBase
             var existingAttr = await attrRepo.FindAsync(
                 a => a.storeId == selectedStoreId.Value && a.key == input.key && a.Id != attributeId);
             if (existingAttr != null)
-                throw ApiException.BadRequest("Атрибут с таким ключом уже существует");
+                throw ApiException.BadRequest("An attribute with this key already exists");
         }
 
         attribute.UpdateFill(input);
@@ -148,7 +148,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 
@@ -157,7 +157,7 @@ public class StoreAttributeController : ControllerBase
             query => query.Include(a => a.values));
 
         if (attribute == null)
-            throw ApiException.NotFound("Атрибут магазина не найден");
+            throw ApiException.NotFound("Store attribute not found");
 
         // Delete attribute values first
         var valueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
@@ -177,7 +177,7 @@ public class StoreAttributeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var attrRepo = _unitOfWork.Repository<StoreAttribute>();
 

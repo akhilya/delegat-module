@@ -218,8 +218,8 @@ public class MappingService
             if (raw is string s)
             {
                 var t = s.Trim().ToLowerInvariant();
-                if (t is "true" or "1" or "да" or "yes") return true;
-                if (t is "false" or "0" or "нет" or "no") return false;
+                if (t is "true" or "1" or "\u0434\u0430" or "yes") return true;
+                if (t is "false" or "0" or "\u043d\u0435\u0442" or "no") return false;
             }
             return null;
         }
@@ -770,8 +770,8 @@ public class MappingService
         var str = value?.ToString()?.Trim().ToLowerInvariant();
         return str switch
         {
-            "true" or "1" or "yes" or "да" => true,
-            "false" or "0" or "no" or "нет" => false,
+            "true" or "1" or "yes" or "\u0434\u0430" => true,
+            "false" or "0" or "no" or "\u043d\u0435\u0442" => false,
             _ => value
         };
     }
@@ -955,37 +955,37 @@ public class MappingService
 
     public static List<ProductFieldInfo> GetBaseProductFields() =>
     [
-        new("sku", "SKU / Артикул", "string"),
-        new("barcode", "Штрихкод (EAN)", "string"),
-        new("name", "Название", "string"),
-        new("description", "Описание", "string"),
-        new("categoryName", "Название категории", "string"),
-        new("groupName", "Название группы товара", "string"),
-        new("images", "Изображения", "array"),
+        new("sku", "SKU / Article", "string"),
+        new("barcode", "Barcode (EAN)", "string"),
+        new("name", "Name", "string"),
+        new("description", "Description", "string"),
+        new("categoryName", "Category name", "string"),
+        new("groupName", "Product group name", "string"),
+        new("images", "Images", "array"),
     ];
 
     public static List<ProductFieldInfo> GetStockProductFields() =>
     [
-        new("storageQuantity", "Количество на складе", "number"),
+        new("storageQuantity", "Stock quantity", "number"),
     ];
 
     public static List<ProductFieldInfo> GetPriceProductFields(bool extendedPriceParameters = false)
     {
         var fields = new List<ProductFieldInfo>
         {
-            new("price", "Цена", "number"),
+            new("price", "Price", "number"),
         };
 
         if (extendedPriceParameters)
         {
             fields.AddRange(
             [
-                new ProductFieldInfo("oldPrice", "Старая цена", "number"),
-                new ProductFieldInfo("minPrice", "Минимальная цена", "number"),
-                new ProductFieldInfo("netPrice", "Себестоимость", "number"),
-                new ProductFieldInfo("discountedPrice", "Цена со скидкой", "number"),
-                new ProductFieldInfo("discount", "Скидка %", "number"),
-                new ProductFieldInfo("currency", "Валюта", "string"),
+                new ProductFieldInfo("oldPrice", "Old price", "number"),
+                new ProductFieldInfo("minPrice", "Minimum price", "number"),
+                new ProductFieldInfo("netPrice", "Cost price", "number"),
+                new ProductFieldInfo("discountedPrice", "Discounted price", "number"),
+                new ProductFieldInfo("discount", "Discount %", "number"),
+                new ProductFieldInfo("currency", "Currency", "string"),
             ]);
         }
 

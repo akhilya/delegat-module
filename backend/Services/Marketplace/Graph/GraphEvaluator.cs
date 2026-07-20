@@ -134,7 +134,7 @@ public static class GraphEvaluator
 
                             var genOut = ctx.GenerativeOutputs?.GetValueOrDefault(nodeId);
                             pins[nodeId] = new PinValue(
-                                genOut ?? "[ожидание генерации…]",
+                                genOut ?? "[waiting for generation...]",
                                 input.OriginOptions,
                                 input.ForcedType);
                             break;
@@ -378,7 +378,7 @@ public static class GraphEvaluator
 
     // ---- Logic / predicate helpers ----
 
-    /// <summary>Truthiness for the logic blocks: null / ""/"false"/"0"/"нет"/"no" / 0 / empty list ⇒ false.</summary>
+    /// <summary>Truthiness for the logic blocks: null / ""/"false"/"0"/"no" (RU or EN) / 0 / empty list => false.</summary>
     private static bool IsTruthy(object? v)
     {
         switch (v)
@@ -389,7 +389,7 @@ public static class GraphEvaluator
                 return b;
             case string s:
                 var t = s.Trim().ToLowerInvariant();
-                return t is not ("" or "false" or "0" or "нет" or "no");
+                return t is not ("" or "false" or "0" or "\u043d\u0435\u0442" or "no");
             case System.Collections.IEnumerable en:
                 return en.Cast<object?>().Any();
         }

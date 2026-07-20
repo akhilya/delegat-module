@@ -59,7 +59,7 @@ public class ProductSyncService
                 await _operationLogger.LogAsync(operationId, operationStoreId.Value, level, message);
         }
 
-        // Загружаем товар со всеми связями
+        // Load the product with all relations
         var product = await _context.products
             .Include(p => p.category)
             .Include(p => p.attributeValues)
@@ -74,56 +74,56 @@ public class ProductSyncService
             .FirstOrDefaultAsync(p => p.Id == productId, ct);
 
         if (product == null)
-            return ProductExportResult.Failure($"Товар с ID {productId} не найден");
+            return ProductExportResult.Failure($"Product with ID {productId} not found");
 
-        await Log("info", $"Экспорт товара: {product.name} ({product.sku})");
+        await Log("info", $"Exporting product: {product.name} ({product.sku})");
 
-        // Загружаем подключение
+        // Load the connection
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
         {
-            await Log("error", $"Подключение #{connectionId} не найдено");
-            return ProductExportResult.Failure($"Подключение с ID {connectionId} не найдено");
+            await Log("error", $"Connection #{connectionId} not found");
+            return ProductExportResult.Failure($"Connection with ID {connectionId} not found");
         }
 
         if (!connection.isActive)
         {
-            await Log("error", "Подключение неактивно");
-            return ProductExportResult.Failure("Подключение неактивно");
+            await Log("error", "Connection is inactive");
+            return ProductExportResult.Failure("Connection is inactive");
         }
 
-        // Получаем адаптер
+        // Get the adapter
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
         {
-            await Log("error", $"Адаптер '{connection.adapterKey}' не найден");
-            return ProductExportResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            await Log("error", $"Adapter '{connection.adapterKey}' not found");
+            return ProductExportResult.Failure($"Adapter '{connection.adapterKey}' not found");
         }
 
-        await Log("info", $"Подключение: {connection.name ?? connection.adapterKey}");
+        await Log("info", $"Connection: {connection.name ?? connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct))
         {
-            await Log("error", "Адаптер не поддерживает экспорт товаров");
-            return ProductExportResult.Failure("Адаптер не поддерживает экспорт товаров");
+            await Log("error", "Adapter does not support product export");
+            return ProductExportResult.Failure("Adapter does not support product export");
         }
 
-        // Проверяем наличие категории и маппинга
+        // Check that a category and mapping exist
         if (!product.categoryId.HasValue)
         {
-            await Log("error", "Товар не привязан к категории");
-            return ProductExportResult.Failure("Товар не привязан к категории");
+            await Log("error", "Product is not assigned to a category");
+            return ProductExportResult.Failure("Product is not assigned to a category");
         }
 
-        // Проверяем существующую связь товара
+        // Check the product's existing link
         var existingLink = await _context.productMarketplaceLinks
             .FirstOrDefaultAsync(l =>
                 l.productId == productId &&
                 l.connectionId == connectionId, ct);
 
-        // Если у товара есть выбранный маппинг — используем его, иначе fallback на первый по категории
+        // If the product has a selected mapping — use it, otherwise fall back to the first one for the category
         CategoryMapping? categoryMapping;
         if (existingLink?.categoryMappingId != null)
         {
@@ -140,25 +140,25 @@ public class ProductSyncService
 
         if (categoryMapping == null)
         {
-            await Log("error", $"Не найден маппинг для категории '{product.category?.name}'");
+            await Log("error", $"No mapping found for category '{product.category?.name}'");
             return ProductExportResult.Failure(
-                $"Не найден маппинг категории для подключения. " +
-                $"Создайте маппинг для категории '{product.category?.name}'");
+                $"No category mapping found for the connection. " +
+                $"Create a mapping for category '{product.category?.name}'");
         }
 
-        await Log("info", $"Маппинг категории: {product.category?.name} -> {categoryMapping.externalCategoryName ?? categoryMapping.externalCategoryId}");
+        await Log("info", $"Category mapping: {product.category?.name} -> {categoryMapping.externalCategoryName ?? categoryMapping.externalCategoryId}");
 
         try
         {
-            // Строим данные для экспорта
-            await Log("info", "Подготовка данных для экспорта");
+            // Build the export data
+            await Log("info", "Preparing export data");
             var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
 
-            // Добавляем externalCategoryId
+            // Add externalCategoryId
             exportData["_categoryId"] = categoryMapping.externalCategoryId;
 
-            // Добавляем group_id для field-based группировки,
-            // но только если пользователь НЕ настроил маппинг для этого поля
+            // Add group_id for field-based grouping,
+            // but only if the user has NOT configured a mapping for this field
             var fieldGroupingConfig = adapter.GetFieldBasedGroupingConfig();
             if (fieldGroupingConfig != null &&
                 adapter.Capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping) &&
@@ -169,7 +169,7 @@ public class ProductSyncService
                 {
                     exportData[fieldGroupingConfig.GroupFieldKey] = groupId;
                     _logger.LogDebug(
-                        "Добавлен group_id={GroupId} для товара {ProductId} (поле: {FieldKey})",
+                        "Added group_id={GroupId} for product {ProductId} (field: {FieldKey})",
                         groupId, productId, fieldGroupingConfig.GroupFieldKey);
                 }
             }
@@ -207,7 +207,7 @@ public class ProductSyncService
                 }).ToList();
             }
 
-            // Валидация обязательных полей перед отправкой (схема — поля адаптера графа)
+            // Validate required fields before sending (schema = graph adapter fields)
             var requiredMappings = MappingService.SchemaFields(categoryMapping.graphJson)
                 .Where(f => f.isRequired && !string.IsNullOrEmpty(f.fieldKey))
                 .ToList();
@@ -222,7 +222,7 @@ public class ProductSyncService
                     var fieldName = mapping.label ?? mapping.fieldKey!;
                     missingFields.Add(fieldName);
                     _logger.LogWarning(
-                        "Обязательное поле '{FieldKey}' ({FieldName}) пустое для товара {ProductId}.",
+                        "Required field '{FieldKey}' ({FieldName}) is empty for product {ProductId}.",
                         mapping.fieldKey, fieldName, productId);
                 }
             }
@@ -230,15 +230,15 @@ public class ProductSyncService
             if (missingFields.Count > 0)
             {
                 var fieldsStr = string.Join(", ", missingFields);
-                await Log("error", $"Не заполнены обязательные поля: {fieldsStr}");
+                await Log("error", $"Required fields are not filled: {fieldsStr}");
                 return ProductExportResult.Failure(
-                    $"Не заполнены обязательные поля: {fieldsStr}. " +
-                    $"Проверьте данные товара и настройки маппинга.");
+                    $"Required fields are not filled: {fieldsStr}. " +
+                    $"Check the product data and mapping settings.");
             }
 
-            await Log("info", $"Подготовлено полей: {exportData.Count(kv => kv.Value != null)}, обязательных: {requiredMappings.Count}");
+            await Log("info", $"Prepared fields: {exportData.Count(kv => kv.Value != null)}, required: {requiredMappings.Count}");
 
-            // Конвертируем в Dictionary<string, object> для совместимости
+            // Convert to Dictionary<string, object> for compatibility
             var exportDataNonNull = exportData
                 .Where(kv => kv.Value != null)
                 .ToDictionary(kv => kv.Key, kv => kv.Value!);
@@ -256,13 +256,13 @@ public class ProductSyncService
                 // Truncate to 3000 chars to avoid flooding the log
                 if (jsonPayload.Length > 3000)
                     jsonPayload = jsonPayload[..2997] + "...";
-                await Log("info", $"Данные для отправки:\n{jsonPayload}");
+                await Log("info", $"Payload to send:\n{jsonPayload}");
             }
             catch { /* serialization failure shouldn't block export */ }
 
-            await Log("info", "Отправка на маркетплейс");
+            await Log("info", "Sending to the marketplace");
 
-            // Экспортируем через адаптер
+            // Export via the adapter
             // "pending:*" placeholders are not real marketplace IDs — treat as null (new product)
             var realExternalId = existingLink?.externalProductId;
             if (realExternalId != null && realExternalId.StartsWith("pending:"))
@@ -276,12 +276,12 @@ public class ProductSyncService
 
             if (!result.Success)
             {
-                await Log("error", $"Маркетплейс вернул ошибку: {result.ErrorMessage ?? "неизвестно"}");
+                await Log("error", $"Marketplace returned an error: {result.ErrorMessage ?? "unknown"}");
                 var detailsMessage = FormatExportDetails(result.Details);
                 if (detailsMessage != null)
                     await Log("error", detailsMessage);
 
-                // Обновляем статус связи при ошибке
+                // Update the link status on error
                 if (existingLink != null)
                 {
                     existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
@@ -293,21 +293,21 @@ public class ProductSyncService
                     await _context.SaveChangesAsync(ct);
                 }
 
-                return ProductExportResult.Failure(result.ErrorMessage ?? "Ошибка экспорта");
+                return ProductExportResult.Failure(result.ErrorMessage ?? "Export error");
             }
 
-            await Log("success", $"Маркетплейс ответил: ExternalID = {result.ExternalProductId}");
+            await Log("success", $"Marketplace responded: ExternalID = {result.ExternalProductId}");
             var successDetailsMessage = FormatExportDetails(result.Details);
             if (successDetailsMessage != null)
                 await Log("info", successDetailsMessage);
 
-            // Валидация ExternalProductId — плагин мог вернуть Success=true, но с невалидным ID
+            // Validate ExternalProductId — the plugin may return Success=true but with an invalid ID
             if (string.IsNullOrWhiteSpace(result.ExternalProductId) ||
                 result.ExternalProductId == "0")
             {
-                await Log("warning", $"ExternalProductId недействителен: '{result.ExternalProductId}'");
+                await Log("warning", $"ExternalProductId is invalid: '{result.ExternalProductId}'");
                 _logger.LogWarning(
-                    "Плагин вернул Success=true, но ExternalProductId недействителен: '{ExternalProductId}' для товара {ProductId}",
+                    "Plugin returned Success=true but ExternalProductId is invalid: '{ExternalProductId}' for product {ProductId}",
                     result.ExternalProductId, productId);
 
                 if (existingLink != null)
@@ -315,23 +315,23 @@ public class ProductSyncService
                     existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
                     {
                         status = ProductMarketplaceStatus.SyncError,
-                        lastErrorMessage = $"Маркетплейс не вернул ID товара (получено: '{result.ExternalProductId}')",
+                        lastErrorMessage = $"Marketplace did not return a product ID (received: '{result.ExternalProductId}')",
                         lastSyncAt = DateTime.UtcNow
                     });
                     await _context.SaveChangesAsync(ct);
                 }
 
                 return ProductExportResult.Failure(
-                    $"Маркетплейс не вернул ID товара. Возможно, товар ещё обрабатывается — попробуйте повторить позже.");
+                    $"Marketplace did not return a product ID. The product may still be processing — try again later.");
             }
 
             var isNewProduct = existingLink == null;
 
-            // Создаём или обновляем связь
+            // Create or update the link
             if (existingLink == null)
             {
-                // Проверяем, нет ли уже связи для этого externalProductId + connectionId
-                // (уникальный индекс IX_productMarketplaceLinks_externalProductId_connectionId)
+                // Check whether a link already exists for this externalProductId + connectionId
+                // (unique index IX_productMarketplaceLinks_externalProductId_connectionId)
                 existingLink = await _context.productMarketplaceLinks
                     .FirstOrDefaultAsync(l =>
                         l.externalProductId == result.ExternalProductId &&
@@ -340,8 +340,8 @@ public class ProductSyncService
                 if (existingLink != null)
                 {
                     _logger.LogWarning(
-                        "Найдена существующая связь (Id={LinkId}) для externalProductId={ExtId} + connectionId={ConnId}, " +
-                        "привязана к productId={OldProductId}. Переназначаю на productId={NewProductId}",
+                        "Found an existing link (Id={LinkId}) for externalProductId={ExtId} + connectionId={ConnId}, " +
+                        "bound to productId={OldProductId}. Reassigning to productId={NewProductId}",
                         existingLink.Id, result.ExternalProductId, connectionId,
                         existingLink.productId, productId);
                     existingLink.productId = productId;
@@ -400,16 +400,16 @@ public class ProductSyncService
 
                 if (priceInfo != null)
                 {
-                    await Log("info", $"Автоматический экспорт цены: {priceInfo.Price}");
+                    await Log("info", $"Automatic price export: {priceInfo.Price}");
                     try
                     {
                         await adapter.ExportPricesAsync(connection, new List<PriceInfo> { priceInfo }, ct);
-                        await Log("info", "Цена экспортирована");
+                        await Log("info", "Price exported");
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Auto price export failed for product {ProductId}", productId);
-                        await Log("warning", $"Не удалось экспортировать цену: {ex.Message}");
+                        await Log("warning", $"Failed to export price: {ex.Message}");
                     }
                 }
             }
@@ -417,7 +417,7 @@ public class ProductSyncService
             // Auto-export stock after successful product export
             if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks))
             {
-                await Log("info", $"Автоматический экспорт остатков: {product.storageQuantity ?? 0}");
+                await Log("info", $"Automatic stock export: {product.storageQuantity ?? 0}");
                 try
                 {
                     var stockInfo = new StockInfo(
@@ -425,28 +425,28 @@ public class ProductSyncService
                         product.storageQuantity ?? 0
                     );
                     await adapter.ExportStocksAsync(connection, new List<StockInfo> { stockInfo }, ct);
-                    await Log("info", "Остатки экспортированы");
+                    await Log("info", "Stock exported");
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Auto stock export failed for product {ProductId}", productId);
-                    await Log("warning", $"Не удалось экспортировать остатки: {ex.Message}");
+                    await Log("warning", $"Failed to export stock: {ex.Message}");
                 }
             }
 
-            await Log("success", isNewProduct ? "Товар создан на маркетплейсе" : "Товар обновлен на маркетплейсе");
+            await Log("success", isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace");
 
             return ProductExportResult.Success(
                 existingLink.Id,
                 result.ExternalProductId!,
                 isNewProduct,
-                isNewProduct ? "Товар создан на маркетплейсе" : "Товар обновлён на маркетплейсе"
+                isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace"
             );
         }
         catch (Exception ex)
         {
-            await Log("error", $"Ошибка экспорта: {ex.Message}");
-            return ProductExportResult.Failure($"Ошибка экспорта: {ex.Message}");
+            await Log("error", $"Export error: {ex.Message}");
+            return ProductExportResult.Failure($"Export error: {ex.Message}");
         }
     }
 
@@ -467,16 +467,16 @@ public class ProductSyncService
 
         if (connection == null)
             return new BulkProductExportResult(0, 0, productIds.Count,
-                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Подключение не найдено")).ToList());
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Connection not found")).ToList());
 
         if (!connection.isActive)
             return new BulkProductExportResult(0, 0, productIds.Count,
-                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Подключение неактивно")).ToList());
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: "Connection is inactive")).ToList());
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
             return new BulkProductExportResult(0, 0, productIds.Count,
-                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: $"Адаптер '{connection.adapterKey}' не найден")).ToList());
+                productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: $"Adapter '{connection.adapterKey}' not found")).ToList());
 
         // One query: load all products with includes
         var products = await _context.products
@@ -512,7 +512,7 @@ public class ProductSyncService
             .Where(cm => cm.connectionId == connectionId && categoryIds.Contains(cm.localCategoryId))
             .ToListAsync(ct);
 
-        // Группируем по категории (может быть несколько маппингов на категорию)
+        // Group by category (there can be several mappings per category)
         var mappingsByCategoryId = categoryMappings
             .GroupBy(cm => cm.localCategoryId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -563,14 +563,14 @@ public class ProductSyncService
         {
             if (!productDict.TryGetValue(productId, out var product))
             {
-                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Товар с ID {productId} не найден"));
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Product with ID {productId} not found"));
                 failedProductIds.Add(productId);
                 continue;
             }
 
             if (!product.categoryId.HasValue)
             {
-                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: "Товар не привязан к категории"));
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: "Product is not assigned to a category"));
                 failedProductIds.Add(productId);
                 continue;
             }
@@ -592,7 +592,7 @@ public class ProductSyncService
             if (categoryMapping == null)
             {
                 itemResults.Add(new BulkProductExportItemResult(productId, false,
-                    ErrorMessage: $"Не найден маппинг категории для '{product.category?.name}'"));
+                    ErrorMessage: $"No category mapping found for '{product.category?.name}'"));
                 failedProductIds.Add(productId);
                 continue;
             }
@@ -656,7 +656,7 @@ public class ProductSyncService
                 if (missingFields.Count > 0)
                 {
                     itemResults.Add(new BulkProductExportItemResult(productId, false,
-                        ErrorMessage: $"Не заполнены обязательные поля: {string.Join(", ", missingFields)}"));
+                        ErrorMessage: $"Required fields are not filled: {string.Join(", ", missingFields)}"));
                     failedProductIds.Add(productId);
                     continue;
                 }
@@ -677,7 +677,7 @@ public class ProductSyncService
             }
             catch (Exception ex)
             {
-                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Ошибка подготовки: {ex.Message}"));
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Preparation error: {ex.Message}"));
                 failedProductIds.Add(productId);
             }
         }
@@ -714,7 +714,7 @@ public class ProductSyncService
                         {
                             itemResults.Add(new BulkProductExportItemResult(
                                 exportItemResult.LocalProductId, false,
-                                ErrorMessage: exportItemResult.ErrorMessage ?? "Ошибка экспорта",
+                                ErrorMessage: exportItemResult.ErrorMessage ?? "Export error",
                                 Details: exportItemResult.Details));
                             continue;
                         }
@@ -725,7 +725,7 @@ public class ProductSyncService
                         {
                             itemResults.Add(new BulkProductExportItemResult(
                                 exportItemResult.LocalProductId, false,
-                                ErrorMessage: "Маркетплейс не вернул ID товара"));
+                                ErrorMessage: "Marketplace did not return a product ID"));
                             continue;
                         }
 
@@ -796,7 +796,7 @@ public class ProductSyncService
                 foreach (var item in bulkItems)
                 {
                     if (!failedProductIds.Contains(item.LocalProductId))
-                        itemResults.Add(new BulkProductExportItemResult(item.LocalProductId, false, ErrorMessage: $"Ошибка экспорта: {ex.Message}"));
+                        itemResults.Add(new BulkProductExportItemResult(item.LocalProductId, false, ErrorMessage: $"Export error: {ex.Message}"));
                 }
             }
 
@@ -1007,31 +1007,31 @@ public class ProductSyncService
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            return ProductImportResult.Failure("Подключение не найдено");
+            return ProductImportResult.Failure("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            return ProductImportResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            return ProductImportResult.Failure($"Adapter '{connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
-            return ProductImportResult.Failure("Адаптер не поддерживает импорт товаров");
+            return ProductImportResult.Failure("Adapter does not support product import");
 
         try
         {
-            // Получаем товар с маркетплейса
-            await Log("info", $"Загрузка товара {externalProductId} с маркетплейса...");
+            // Get the product from the marketplace
+            await Log("info", $"Loading product {externalProductId} from the marketplace...");
             var externalProduct = await adapter.ImportProductAsync(connection, externalProductId, ct);
             if (externalProduct == null)
             {
-                await Log("error", $"Товар {externalProductId} не найден на маркетплейсе");
-                return ProductImportResult.Failure($"Товар с ID '{externalProductId}' не найден на маркетплейсе");
+                await Log("error", $"Product {externalProductId} not found on the marketplace");
+                return ProductImportResult.Failure($"Product with ID '{externalProductId}' not found on the marketplace");
             }
 
             var productLabel = externalProduct.Name ?? externalProductId;
-            await Log("info", $"Получен: {productLabel} | SKU: {externalProduct.Sku ?? "—"} | Цена: {externalProduct.Price} | Остаток: {externalProduct.Quantity} | Атрибутов: {externalProduct.Attributes?.Count ?? 0} | Фото: {externalProduct.ImageUrls?.Count ?? 0} | Вариантов: {externalProduct.Variants?.Count ?? 0}");
+            await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "—"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
 
             _logger.LogInformation(
-                "Импортируем товар {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Attributes={AttrCount}",
+                "Importing product {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Attributes={AttrCount}",
                 externalProductId,
                 externalProduct.Name,
                 externalProduct.Description?.Substring(0, Math.Min(50, externalProduct.Description?.Length ?? 0)) ?? "null",
@@ -1039,7 +1039,7 @@ public class ProductSyncService
                 externalProduct.Quantity,
                 externalProduct.Attributes?.Count ?? 0);
 
-            // Проверяем, нет ли уже связи
+            // Check whether a link already exists
             var existingLink = await _context.productMarketplaceLinks
                 .Include(l => l.product)
                 .FirstOrDefaultAsync(l =>
@@ -1048,15 +1048,15 @@ public class ProductSyncService
 
             if (existingLink != null)
             {
-                await Log("warning", $"{productLabel} — уже импортирован (ID: {existingLink.productId})");
+                await Log("warning", $"{productLabel} — already imported (ID: {existingLink.productId})");
                 return ProductImportResult.AlreadyExists(
                     existingLink.productId,
                     existingLink.product?.name ?? "Unknown"
                 );
             }
 
-            // Создаём локальный товар
-            await Log("info", $"Создание товара в базе: {productLabel}...");
+            // Create a local product
+            await Log("info", $"Creating product in the database: {productLabel}...");
             var product = new Product();
             product.AddFill(new Product.AddForm(
                 new Product.UserAddForm
@@ -1074,25 +1074,25 @@ public class ProductSyncService
 
             _context.products.Add(product);
             await _context.SaveChangesAsync(ct);
-            await Log("info", $"Товар создан (ID: {product.Id})");
+            await Log("info", $"Product created (ID: {product.Id})");
 
-            // Импортируем атрибуты на основе маппинга категории
+            // Import attributes based on the category mapping
             if (targetCategoryId.HasValue && externalProduct.Attributes?.Count > 0)
             {
-                await Log("info", $"Импорт {externalProduct.Attributes.Count} атрибутов...");
+                await Log("info", $"Importing {externalProduct.Attributes.Count} attributes...");
                 await ImportProductAttributesAsync(
                     product.Id,
                     connectionId,
                     targetCategoryId.Value,
                     externalProduct.Attributes,
                     ct);
-                await Log("info", $"Атрибуты импортированы");
+                await Log("info", $"Attributes imported");
             }
 
-            // Импортируем изображения
+            // Import images
             if (externalProduct.ImageUrls?.Any() == true && importByUserId.HasValue)
             {
-                await Log("info", $"Постановка {externalProduct.ImageUrls.Count} фото в очередь загрузки...");
+                await Log("info", $"Queuing {externalProduct.ImageUrls.Count} photos for download...");
                 await ImportProductImagesAsync(
                     product.Id,
                     connection.storeId,
@@ -1100,10 +1100,10 @@ public class ProductSyncService
                     externalProduct.ImageUrls,
                     ct,
                     imageBatchId: imageBatchId);
-                await Log("info", $"Фото поставлены в очередь");
+                await Log("info", $"Photos queued");
             }
 
-            // Создаём связь
+            // Create the link
             var link = new ProductMarketplaceLink();
             link.AddFill(new ProductMarketplaceLink.AddForm
             {
@@ -1123,31 +1123,31 @@ public class ProductSyncService
             // Sync variants (sizes) if present
             if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
             {
-                await Log("info", $"Синхронизация {externalProduct.Variants.Count} вариантов (размеров)...");
+                await Log("info", $"Syncing {externalProduct.Variants.Count} variants (sizes)...");
                 await SyncVariantsAsync(product.Id, connectionId, externalProduct.Variants, ct);
-                await Log("info", $"Варианты синхронизированы");
+                await Log("info", $"Variants synced");
             }
 
-            // Добавляем товар в группу, если GroupId указан
+            // Add the product to a group if GroupId is provided
             if (!string.IsNullOrEmpty(externalProduct.GroupId))
             {
-                await Log("info", $"Добавление в группу: {externalProduct.GroupName ?? externalProduct.GroupId}...");
+                await Log("info", $"Adding to group: {externalProduct.GroupName ?? externalProduct.GroupId}...");
                 await AddProductToGroupAsync(product.Id, connectionId, connection.storeId, externalProduct.GroupId, externalProduct.GroupName, ct);
-                await Log("info", $"Товар добавлен в группу");
+                await Log("info", $"Product added to the group");
             }
 
             return ProductImportResult.Success(
                 product.Id,
                 link.Id,
                 product.name,
-                "Товар успешно импортирован"
+                "Product imported successfully"
             );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка импорта товара {ExternalId}", externalProductId);
-            await Log("error", $"Ошибка импорта {externalProductId}: {ex.Message}");
-            return ProductImportResult.Failure($"Ошибка импорта: {ex.Message}");
+            _logger.LogError(ex, "Product import error {ExternalId}", externalProductId);
+            await Log("error", $"Import error {externalProductId}: {ex.Message}");
+            return ProductImportResult.Failure($"Import error: {ex.Message}");
         }
     }
 
@@ -1161,7 +1161,7 @@ public class ProductSyncService
         Dictionary<string, object> externalAttributes,
         CancellationToken ct)
     {
-        // Проверяем есть ли выбранный маппинг у товара
+        // Check whether the product has a selected mapping
         var existingLink = await _context.productMarketplaceLinks
             .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
 
@@ -1202,7 +1202,7 @@ public class ProductSyncService
 
         foreach (var fieldMapping in enabledMappings)
         {
-            // Проверяем, есть ли значение в external атрибутах
+            // Check whether the external attributes contain a value
             if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
             {
                 // Log: no match for this external field key
@@ -1281,7 +1281,7 @@ public class ProductSyncService
         if (categoryMapping == null)
         {
             _logger.LogWarning(
-                "Нет маппинга категории для connectionId={ConnectionId}, categoryId={CategoryId} — атрибуты не будут обновлены",
+                "No category mapping for connectionId={ConnectionId}, categoryId={CategoryId} — attributes will not be updated",
                 connectionId, categoryId);
             return changes;
         }
@@ -1292,7 +1292,7 @@ public class ProductSyncService
         if (enabledMappings.Count == 0)
         {
             _logger.LogWarning(
-                "Нет включённых маппингов полей для categoryMappingId={MappingId} — атрибуты не будут обновлены",
+                "No enabled field mappings for categoryMappingId={MappingId} — attributes will not be updated",
                 categoryMapping.Id);
         }
 
@@ -1316,7 +1316,7 @@ public class ProductSyncService
             .ToListAsync(ct)).ToHashSet();
 
         _logger.LogDebug(
-            "Обновление атрибутов: productId={ProductId}, enabledMappings={Count}, externalKeys=[{Keys}]",
+            "Updating attributes: productId={ProductId}, enabledMappings={Count}, externalKeys=[{Keys}]",
             productId, enabledMappings.Count,
             string.Join(", ", externalAttributes.Keys.Take(20)));
 
@@ -1325,7 +1325,7 @@ public class ProductSyncService
             if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
             {
                 _logger.LogDebug(
-                    "  Маппинг '{FieldName}' (key={Key}): ключ не найден в external атрибутах, sourceType={SourceType}",
+                    "  Mapping '{FieldName}' (key={Key}): key not found in external attributes, sourceType={SourceType}",
                     fieldMapping.externalFieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
                 continue;
             }
@@ -1350,7 +1350,7 @@ public class ProductSyncService
                     if (!categoryAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
                     {
                         _logger.LogWarning(
-                            "  Маппинг '{FieldName}': sourceAttributeId={AttrId} не найден в атрибутах категории {CategoryId}",
+                            "  Mapping '{FieldName}': sourceAttributeId={AttrId} not found in attributes of category {CategoryId}",
                             fieldName, fieldMapping.sourceAttributeId.Value, categoryId);
                         continue;
                     }
@@ -1414,7 +1414,7 @@ public class ProductSyncService
 
                 default:
                     _logger.LogDebug(
-                        "  Маппинг '{FieldName}' (key={Key}): sourceType={SourceType} — пропущен при импорте атрибутов",
+                        "  Mapping '{FieldName}' (key={Key}): sourceType={SourceType} — skipped during attribute import",
                         fieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
                     break;
             }
@@ -1424,7 +1424,7 @@ public class ProductSyncService
             await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Обновление атрибутов для productId={ProductId}: {ChangedCount} изменений из {TotalMappings} маппингов",
+            "Updating attributes for productId={ProductId}: {ChangedCount} changes out of {TotalMappings} mappings",
             productId, changes.Count, enabledMappings.Count);
 
         return changes;
@@ -1513,7 +1513,7 @@ public class ProductSyncService
         if (value == null)
             return null;
 
-        // Если это список, берём первое значение или объединяем через запятую
+        // If it is a list, take the first value or join them with a comma
         if (value is System.Collections.IList list)
         {
             if (list.Count == 0)
@@ -1553,14 +1553,14 @@ public class ProductSyncService
             .FirstOrDefaultAsync(l => l.Id == linkId, ct);
 
         if (link == null)
-            return ProductExportResult.Failure("Связь товара не найдена");
+            return ProductExportResult.Failure("Product link not found");
 
         var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
         if (adapter == null)
-            return ProductExportResult.Failure($"Адаптер '{link.connection.adapterKey}' не найден");
+            return ProductExportResult.Failure($"Adapter '{link.connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.UpdateSku))
-            return ProductExportResult.Failure("Маркетплейс не поддерживает обновление SKU");
+            return ProductExportResult.Failure("Marketplace does not support SKU updates");
 
         try
         {
@@ -1580,18 +1580,18 @@ public class ProductSyncService
                 });
                 await _context.SaveChangesAsync(ct);
 
-                return ProductExportResult.Success(link.Id, link.externalProductId, false, "SKU успешно обновлён");
+                return ProductExportResult.Success(link.Id, link.externalProductId, false, "SKU updated successfully");
             }
 
-            return ProductExportResult.Failure(result.ErrorMessage ?? "Ошибка обновления SKU");
+            return ProductExportResult.Failure(result.ErrorMessage ?? "SKU update error");
         }
         catch (NotSupportedException)
         {
-            return ProductExportResult.Failure("Маркетплейс не поддерживает обновление SKU");
+            return ProductExportResult.Failure("Marketplace does not support SKU updates");
         }
         catch (Exception ex)
         {
-            return ProductExportResult.Failure($"Ошибка: {ex.Message}");
+            return ProductExportResult.Failure($"Error: {ex.Message}");
         }
     }
 
@@ -1645,7 +1645,7 @@ public class ProductSyncService
 
         foreach (var imageUrl in imageUrls)
         {
-            // Проверяем, не добавлено ли уже это изображение в очередь
+            // Check whether this image is already queued
             var exists = await _context.pendingImageDownloads
                 .AnyAsync(p => p.productId == productId && p.imageUrl == imageUrl, ct);
 
@@ -1655,7 +1655,7 @@ public class ProductSyncService
                 continue;
             }
 
-            // Добавляем в очередь на фоновую загрузку
+            // Add to the background download queue
             var pending = new PendingImageDownload
             {
                 productId = productId,
@@ -1675,7 +1675,7 @@ public class ProductSyncService
         await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Добавлено {Count} изображений в очередь загрузки для товара {ProductId}",
+            "Queued {Count} images for download for product {ProductId}",
             imageUrls.Count, productId);
     }
 
@@ -1687,7 +1687,7 @@ public class ProductSyncService
         int connectionId,
         CancellationToken ct = default)
     {
-        // Ищем группу, в которой состоит товар, и которая уже связана с маркетплейсом
+        // Find a group the product belongs to that is already linked to the marketplace
         var groupLink = await _context.productGroupMarketplaceLinks
             .Include(gl => gl.productGroup)
                 .ThenInclude(g => g.members)
@@ -1711,7 +1711,7 @@ public class ProductSyncService
     {
         try
         {
-            // Ищем существующую связь группы с маркетплейсом
+            // Find an existing group link with the marketplace
             var groupLink = await _context.productGroupMarketplaceLinks
                 .Include(gl => gl.productGroup)
                     .ThenInclude(g => g.members)
@@ -1721,23 +1721,23 @@ public class ProductSyncService
 
             if (groupLink == null)
             {
-                // Название группы: используем externalGroupName если есть, иначе fallback
+                // Group name: use externalGroupName if present, otherwise fall back
                 var groupName = !string.IsNullOrEmpty(externalGroupName)
                     ? externalGroupName
-                    : $"Группа {externalGroupId}";
+                    : $"Group {externalGroupId}";
 
                 var newGroup = new ProductGroup();
                 newGroup.AddFill(new ProductGroup.AddForm
                 {
                     name = groupName,
-                    description = $"Автоматически создана при импорте (externalGroupId: {externalGroupId})",
+                    description = $"Automatically created during import (externalGroupId: {externalGroupId})",
                     storeId = storeId
                 });
 
                 _context.Set<ProductGroup>().Add(newGroup);
                 await _context.SaveChangesAsync(ct);
 
-                // Создаём связь группы с маркетплейсом
+                // Create the group link with the marketplace
                 groupLink = new ProductGroupMarketplaceLink();
                 groupLink.AddFill(new ProductGroupMarketplaceLink.AddForm
                 {
@@ -1756,21 +1756,21 @@ public class ProductSyncService
                 groupLink.productGroup.members = new List<ProductGroupMember>();
 
                 _logger.LogInformation(
-                    "Создана новая группа {GroupId} для externalGroupId={ExternalGroupId}",
+                    "Created a new group {GroupId} for externalGroupId={ExternalGroupId}",
                     newGroup.Id, externalGroupId);
             }
 
-            // Проверяем, не добавлен ли товар уже в эту группу
+            // Check whether the product is already in this group
             var isAlreadyMember = groupLink.productGroup.members.Any(m => m.productId == productId);
             if (isAlreadyMember)
             {
                 _logger.LogDebug(
-                    "Товар {ProductId} уже состоит в группе {GroupId}",
+                    "Product {ProductId} is already a member of group {GroupId}",
                     productId, groupLink.productGroupId);
                 return;
             }
 
-            // Добавляем товар в группу
+            // Add the product to the group
             var maxSortOrder = groupLink.productGroup.members.Any()
                 ? groupLink.productGroup.members.Max(m => m.sortOrder)
                 : 0;
@@ -1787,15 +1787,15 @@ public class ProductSyncService
             await _context.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "Товар {ProductId} добавлен в группу {GroupId} (externalGroupId={ExternalGroupId})",
+                "Product {ProductId} added to group {GroupId} (externalGroupId={ExternalGroupId})",
                 productId, groupLink.productGroupId, externalGroupId);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Ошибка при добавлении товара {ProductId} в группу с externalGroupId={ExternalGroupId}",
+                "Error adding product {ProductId} to group with externalGroupId={ExternalGroupId}",
                 productId, externalGroupId);
-            // Не прерываем импорт из-за ошибки добавления в группу
+            // Do not abort the import because of a group-add error
         }
     }
 
@@ -1813,14 +1813,14 @@ public class ProductSyncService
             if (lastDot > 0 && lastDot < path.Length - 1)
             {
                 var extension = path.Substring(lastDot).ToLowerInvariant();
-                // Валидируем расширение
+                // Validate the extension
                 if (extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".avif")
                     return extension;
             }
         }
         catch
         {
-            // Игнорируем ошибки парсинга URL
+            // Ignore URL parsing errors
         }
 
         return null;
@@ -1932,14 +1932,14 @@ public class ProductSyncService
             if (details.TryGetValue("images", out var images))
             {
                 var json = JsonSerializer.Serialize(images);
-                return $"Детали экспорта изображений: {json}";
+                return $"Image export details: {json}";
             }
 
-            return $"Детали экспорта: {JsonSerializer.Serialize(details)}";
+            return $"Export details: {JsonSerializer.Serialize(details)}";
         }
         catch
         {
-            return "Детали экспорта получены, но не удалось сериализовать их для лога";
+            return "Export details received, but could not be serialized for the log";
         }
     }
 }
@@ -2025,7 +2025,7 @@ public class ProductImportResult
             AlreadyLinked = true,
             ProductId = productId,
             ProductName = productName,
-            ErrorMessage = $"Товар уже связан с локальным товаром '{productName}'"
+            ErrorMessage = $"Product is already linked to local product '{productName}'"
         };
     }
 

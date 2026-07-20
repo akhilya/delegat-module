@@ -36,7 +36,7 @@ public class UserController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут просматривать пользователей");
+            throw ApiException.Forbidden("Only administrators can view users");
 
         var users = await _userManager.Users
             .OrderByDescending(u => u.isActive)
@@ -52,24 +52,24 @@ public class UserController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут редактировать пользователей");
+            throw ApiException.Forbidden("Only administrators can edit users");
 
         var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
-            throw ApiException.NotFound("Пользователь не найден");
+            throw ApiException.NotFound("User not found", code: "user_not_found");
 
         if (input.userName != null)
         {
             var normalizedName = input.userName.Trim();
             if (string.IsNullOrWhiteSpace(normalizedName))
-                throw ApiException.BadRequest("Имя пользователя не может быть пустым");
+                throw ApiException.BadRequest("Username cannot be empty", code: "required_fields_missing");
 
             if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {Delegat.Models.User.USER_NAME_MAX_LENGTH} символов");
+                throw ApiException.BadRequest($"Username cannot be longer than {Delegat.Models.User.USER_NAME_MAX_LENGTH} characters");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)
-                throw ApiException.BadRequest("Пользователь с таким именем уже существует");
+                throw ApiException.BadRequest("A user with this name already exists");
 
             user.UserName = normalizedName;
             user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
@@ -78,13 +78,13 @@ public class UserController : ControllerBase
         if (input.isAdmin.HasValue)
         {
             if (user.Id == currentUser.Id && !input.isAdmin.Value)
-                throw ApiException.BadRequest("Нельзя снять права администратора с самого себя");
+                throw ApiException.BadRequest("Cannot remove administrator rights from yourself");
 
             if (!input.isAdmin.Value)
             {
                 var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
                 if (user.isAdmin && activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Нельзя снять права с последнего активного администратора");
+                    throw ApiException.BadRequest("Cannot remove rights from the last active administrator");
             }
 
             user.isAdmin = input.isAdmin.Value;
@@ -93,13 +93,13 @@ public class UserController : ControllerBase
         if (input.isActive.HasValue)
         {
             if (user.Id == currentUser.Id && !input.isActive.Value)
-                throw ApiException.BadRequest("Нельзя деактивировать самого себя");
+                throw ApiException.BadRequest("Cannot deactivate yourself");
 
             if (!input.isActive.Value && user.isAdmin)
             {
                 var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
                 if (activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Нельзя деактивировать последнего активного администратора");
+                    throw ApiException.BadRequest("Cannot deactivate the last active administrator");
             }
 
             user.isActive = input.isActive.Value;
@@ -114,7 +114,7 @@ public class UserController : ControllerBase
         if (input.password != null)
         {
             if (string.IsNullOrWhiteSpace(input.password))
-                throw ApiException.BadRequest("Пароль не может быть пустым");
+                throw ApiException.BadRequest("Password cannot be empty", code: "required_fields_missing");
 
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, input.password);
@@ -162,27 +162,27 @@ public class UserController : ControllerBase
         if (input.password != null)
         {
             if (string.IsNullOrWhiteSpace(input.currentPassword))
-                throw ApiException.BadRequest("Введите текущий пароль");
+                throw ApiException.BadRequest("Enter your current password", code: "required_fields_missing");
 
             if (!await _userManager.CheckPasswordAsync(user, input.currentPassword))
-                throw ApiException.BadRequest("Текущий пароль указан неверно");
+                throw ApiException.BadRequest("Current password is incorrect", code: "invalid_credentials");
 
             if (string.IsNullOrWhiteSpace(input.password))
-                throw ApiException.BadRequest("Новый пароль не может быть пустым");
+                throw ApiException.BadRequest("New password cannot be empty", code: "required_fields_missing");
         }
 
         if (input.userName != null)
         {
             var normalizedName = input.userName.Trim();
             if (string.IsNullOrWhiteSpace(normalizedName))
-                throw ApiException.BadRequest("Имя пользователя не может быть пустым");
+                throw ApiException.BadRequest("Username cannot be empty", code: "required_fields_missing");
 
             if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Имя пользователя не может быть длиннее {Delegat.Models.User.USER_NAME_MAX_LENGTH} символов");
+                throw ApiException.BadRequest($"Username cannot be longer than {Delegat.Models.User.USER_NAME_MAX_LENGTH} characters");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)
-                throw ApiException.BadRequest("Пользователь с таким именем уже существует");
+                throw ApiException.BadRequest("A user with this name already exists");
 
             user.UserName = normalizedName;
             user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
@@ -214,10 +214,10 @@ public class UserController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
 
         if (store == null)
-            throw ApiException.NotFound("Магазин не найден");
+            throw ApiException.NotFound("Store not found");
 
         if (!store.members.Any(m => m.Id == user.Id))
-            throw ApiException.Forbidden("Вы не являетесь участником этого магазина");
+            throw ApiException.Forbidden("You are not a member of this store", code: "access_denied_store");
 
         var userRepo = _unitOfWork.Repository<User>();
         user.UpdateFill(new User.SelectStoreForm(id));

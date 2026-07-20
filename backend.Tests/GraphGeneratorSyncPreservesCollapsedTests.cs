@@ -13,7 +13,7 @@ public class GraphGeneratorSyncPreservesCollapsedTests
               "id": "src-1",
               "type": "productField",
               "position": { "x": 10, "y": 20 },
-              "data": { "field": "name", "label": "Название", "collapsed": true }
+              "data": { "field": "name", "label": "Name", "collapsed": true }
             },
             {
               "id": "adapter-fields",
@@ -65,7 +65,7 @@ public class GraphGeneratorSyncPreservesCollapsedTests
             .First(n => n.GetProperty("id").GetString() == "src-1");
 
         Assert.True(src.GetProperty("data").GetProperty("collapsed").GetBoolean());
-        Assert.Equal("Название", src.GetProperty("data").GetProperty("label").GetString());
+        Assert.Equal("Name", src.GetProperty("data").GetProperty("label").GetString());
     }
 
     [Fact]

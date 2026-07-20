@@ -13,45 +13,45 @@ public class AppSettingsService
     [
         new(
             AppSettingKeys.MaxProducts,
-            "Лимит товаров",
+            "Product limit",
             "integer",
-            "Максимальное количество товаров в одном магазине. Пусто - без ограничения или значение из MAX_PRODUCTS.",
+            "Maximum number of products in a single store. Empty - no limit or the value from MAX_PRODUCTS.",
             () => Environment.GetEnvironmentVariable("MAX_PRODUCTS")),
         new(
             AppSettingKeys.MaxStorageGb,
-            "Лимит хранилища, GB",
+            "Storage limit, GB",
             "decimal",
-            "Максимальный общий объём файлов магазина и товаров. Пусто - без ограничения или значение из MAX_STORAGE_GB.",
+            "Maximum total size of store and product files. Empty - no limit or the value from MAX_STORAGE_GB.",
             () => Environment.GetEnvironmentVariable("MAX_STORAGE_GB")),
         new(
             AppSettingKeys.MaxFiles,
-            "Лимит файлов",
+            "File limit",
             "integer",
-            "Максимальное количество файлов магазина и товаров. Пусто - без ограничения или значение из MAX_FILES.",
+            "Maximum number of store and product files. Empty - no limit or the value from MAX_FILES.",
             () => Environment.GetEnvironmentVariable("MAX_FILES")),
         new(
             AppSettingKeys.MaxConnections,
-            "Лимит подключений",
+            "Connection limit",
             "integer",
-            "Максимальное количество активных адаптеров магазина. Пусто - без ограничения или значение из MAX_CONNECTIONS.",
+            "Maximum number of active adapters per store. Empty - no limit or the value from MAX_CONNECTIONS.",
             () => Environment.GetEnvironmentVariable("MAX_CONNECTIONS")),
         new(
             AppSettingKeys.GlobalRateLimit,
-            "Глобальный rate limit",
+            "Global rate limit",
             "integer",
-            "Количество запросов в минуту на IP. Текущее middleware применяет значение после перезапуска приложения.",
+            "Number of requests per minute per IP. The current middleware applies the value after the app restarts.",
             () => "300"),
         new(
             AppSettingKeys.AuthRateLimit,
             "Auth rate limit",
             "integer",
-            "Количество auth-запросов в минуту на IP. Текущее middleware применяет значение после перезапуска приложения.",
+            "Number of auth requests per minute per IP. The current middleware applies the value after the app restarts.",
             () => "10"),
         new(
             AppSettingKeys.AdapterHttpLogRetentionDays,
-            "Срок хранения логов адаптеров, дни",
+            "Adapter log retention, days",
             "integer",
-            "Сколько дней хранить исходящие HTTP-логи адаптеров (1–30). По умолчанию 7.",
+            "How many days to keep outgoing adapter HTTP logs (1-30). Defaults to 7.",
             () => "7"),
     ];
 
@@ -94,10 +94,10 @@ public class AppSettingsService
 
         var setting = await _context.appSettings.FirstOrDefaultAsync(s => s.key == key, ct);
         if (setting == null)
-            throw ApiException.NotFound("Настройка не найдена");
+            throw ApiException.NotFound("Setting not found");
 
         if (!setting.isEditable)
-            throw ApiException.Forbidden("Настройку нельзя редактировать");
+            throw ApiException.Forbidden("Setting cannot be edited");
 
         var normalizedValue = NormalizeValue(setting, value);
         setting.value = normalizedValue;
@@ -189,7 +189,7 @@ public class AppSettingsService
         if (setting.valueType == "integer")
         {
             if (!int.TryParse(trimmed, out var integer) || integer <= 0)
-                throw ApiException.BadRequest("Значение должно быть положительным целым числом");
+                throw ApiException.BadRequest("Value must be a positive integer");
 
             return integer.ToString();
         }
@@ -197,7 +197,7 @@ public class AppSettingsService
         if (setting.valueType == "decimal")
         {
             if (!TryParsePositiveDecimal(trimmed, out var number))
-                throw ApiException.BadRequest("Значение должно быть положительным числом");
+                throw ApiException.BadRequest("Value must be a positive number");
 
             return number.ToString(CultureInfo.InvariantCulture);
         }

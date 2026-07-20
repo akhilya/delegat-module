@@ -58,7 +58,7 @@ public class GraphNodeData
     public string? staticValue { get; set; }
     /// <summary>Frontend-only display label for source nodes (ignored by the evaluator).</summary>
     public string? label { get; set; }
-    /// <summary>Marks a static node as a "Стандартное значение" block — its value is one of the
+    /// <summary>Marks a static node as a "Static value" block — its value is one of the
     /// adapter field's predefined options (frontend renders a select instead of free text).</summary>
     public bool? isAdapterValue { get; set; }
     /// <summary>Predefined options for "isAdapterValue" static nodes (copied from the adapter field).</summary>

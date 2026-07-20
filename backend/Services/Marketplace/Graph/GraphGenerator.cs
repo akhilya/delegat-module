@@ -77,7 +77,7 @@ public static class GraphGenerator
         specs.Add(new FieldSpec
         {
             externalFieldKey = key,
-            externalFieldName = "Объединение в карточку (группа)",
+            externalFieldName = "Merge into card (group)",
             externalFieldType = "string",
             isRequired = false,
             isEnabled = true,
@@ -320,7 +320,7 @@ public static class GraphGenerator
             {
                 id = newId("grp"),
                 type = "groupName",
-                data = new GraphNodeData { label = "Название группы", valueType = valueType },
+                data = new GraphNodeData { label = "Group name", valueType = valueType },
             },
             _ => new GraphNode
             {
@@ -329,7 +329,7 @@ public static class GraphGenerator
                 data = new GraphNodeData
                 {
                     staticValue = fm.staticValue,
-                    label = string.IsNullOrEmpty(fm.staticValue) ? "Статическое значение" : fm.staticValue,
+                    label = string.IsNullOrEmpty(fm.staticValue) ? "Static value" : fm.staticValue,
                     valueType = valueType,
                 },
             },

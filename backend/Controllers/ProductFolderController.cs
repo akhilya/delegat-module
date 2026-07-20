@@ -41,13 +41,13 @@ public class ProductFolderController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var product = await _unitOfWork.Repository<Product>().GetByIdAsync(productId);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Товар не принадлежит вашему магазину");
+            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
 
         return product;
     }
@@ -88,7 +88,7 @@ public class ProductFolderController : ControllerBase
         await GetAndValidateProduct(productId);
 
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("Имя папки обязательно");
+            throw ApiException.BadRequest("Folder name is required", code: "required_fields_missing");
 
         if (request.parentFolderId.HasValue)
         {
@@ -96,7 +96,7 @@ public class ProductFolderController : ControllerBase
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == request.parentFolderId.Value && f.productId == productId);
             if (parent == null)
-                throw ApiException.NotFound("Родительская папка не найдена");
+                throw ApiException.NotFound("Parent folder not found");
         }
 
         var folder = new ProductFolder
@@ -131,12 +131,12 @@ public class ProductFolderController : ControllerBase
         await GetAndValidateProduct(productId);
 
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("Имя папки обязательно");
+            throw ApiException.BadRequest("Folder name is required", code: "required_fields_missing");
 
         var folder = await _context.productFolders
             .FirstOrDefaultAsync(f => f.Id == id && f.productId == productId);
         if (folder == null)
-            throw ApiException.NotFound("Папка не найдена");
+            throw ApiException.NotFound("Folder not found");
 
         folder.name = request.name.Trim();
         await _context.SaveChangesAsync();
@@ -157,12 +157,12 @@ public class ProductFolderController : ControllerBase
             .FirstOrDefaultAsync(f => f.Id == id && f.productId == productId);
 
         if (folder == null)
-            throw ApiException.NotFound("Папка не найдена");
+            throw ApiException.NotFound("Folder not found");
 
         if (!recursive)
         {
             if (folder.files.Count > 0 || folder.childFolders.Count > 0)
-                throw ApiException.BadRequest("Папка не пуста. Используйте recursive=true для удаления с содержимым");
+                throw ApiException.BadRequest("Folder is not empty. Use recursive=true to delete it with its contents", code: "folder_not_empty");
 
             await _context.productFolders.Where(f => f.Id == id).ExecuteDeleteAsync();
             return Ok();
@@ -235,10 +235,10 @@ public class ProductFolderController : ControllerBase
         var folder = await _context.productFolders
             .FirstOrDefaultAsync(f => f.Id == id && f.productId == productId);
         if (folder == null)
-            throw ApiException.NotFound("Папка не найдена");
+            throw ApiException.NotFound("Folder not found");
 
         if (request.newParentFolderId == id)
-            throw ApiException.BadRequest("Нельзя переместить папку в саму себя");
+            throw ApiException.BadRequest("Cannot move a folder into itself");
 
         if (request.newParentFolderId.HasValue)
         {
@@ -246,14 +246,14 @@ public class ProductFolderController : ControllerBase
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == request.newParentFolderId.Value && f.productId == productId);
             if (target == null)
-                throw ApiException.NotFound("Целевая папка не найдена");
+                throw ApiException.NotFound("Target folder not found");
 
             // Cycle detection: walk up from target, if we encounter `id` it's a cycle
             var currentId = request.newParentFolderId;
             while (currentId.HasValue)
             {
                 if (currentId.Value == id)
-                    throw ApiException.BadRequest("Нельзя переместить папку в своего потомка");
+                    throw ApiException.BadRequest("Cannot move a folder into its own descendant");
 
                 var parent = await _context.productFolders
                     .AsNoTracking()
@@ -289,7 +289,7 @@ public class ProductFolderController : ControllerBase
     {
         var allowedTtl = new[] { 1, 24, 168, 720 };
         if (!allowedTtl.Contains(request.ttlHours))
-            throw ApiException.BadRequest("Недопустимый TTL");
+            throw ApiException.BadRequest("Invalid TTL");
 
         await GetAndValidateProduct(productId);
 
@@ -299,7 +299,7 @@ public class ProductFolderController : ControllerBase
         {
             var folder = await _context.productFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId);
-            if (folder == null) throw ApiException.NotFound("Папка не найдена");
+            if (folder == null) throw ApiException.NotFound("Folder not found");
         }
 
         var user = await _currentUserService.GetUserAsync();
@@ -340,7 +340,7 @@ public class ProductFolderController : ControllerBase
         {
             var folder = await _context.productFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId);
-            if (folder == null) throw ApiException.NotFound("Папка не найдена");
+            if (folder == null) throw ApiException.NotFound("Folder not found");
             folderName = folder.name;
             allFolderIds.Add(folderId.Value);
             await CollectDescendantFolderIds(folderId.Value, productId, allFolderIds);
@@ -482,7 +482,7 @@ public class SharedFolderController : ControllerBase
             .FirstOrDefaultAsync(t => t.token == token);
 
         if (shareToken == null || shareToken.IsExpired)
-            throw ApiException.NotFound("Ссылка не найдена или истекла");
+            throw ApiException.NotFound("Link not found or expired");
 
         // Reuse the zip streaming logic from ProductFolderController
         var folderController = HttpContext.RequestServices.GetRequiredService<ProductFolderController>();

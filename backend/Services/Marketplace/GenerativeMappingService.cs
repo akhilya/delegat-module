@@ -139,7 +139,7 @@ public class GenerativeMappingService
                     modelConfigId > 0 ? modelConfigId : null, ct);
 
                 if (model == null)
-                    throw new InvalidOperationException("Нет подключённых или включённых AI-моделей");
+                    throw new InvalidOperationException("No connected or enabled AI models");
 
                 var systemTemplate = GetString(p, "systemPrompt");
                 var resolvedSystem = string.IsNullOrWhiteSpace(systemTemplate)
@@ -345,8 +345,8 @@ public class GenerativeMappingService
         var s = val?.ToString()?.Trim().ToLowerInvariant();
         return s switch
         {
-            "true" or "1" or "yes" or "да" => true,
-            "false" or "0" or "no" or "нет" => false,
+            "true" or "1" or "yes" or "\u0434\u0430" => true,
+            "false" or "0" or "no" or "\u043d\u0435\u0442" => false,
             _ => def,
         };
     }

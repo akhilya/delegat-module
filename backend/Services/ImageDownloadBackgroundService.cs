@@ -41,7 +41,7 @@ public class ImageDownloadBackgroundService : BackgroundService
     /// <param name="stoppingToken">Token to signal graceful shutdown.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("ImageDownloadBackgroundService запущен");
+        _logger.LogInformation("ImageDownloadBackgroundService started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -52,17 +52,17 @@ public class ImageDownloadBackgroundService : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Нормальная остановка
+                // Normal shutdown
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка в ImageDownloadBackgroundService");
+                _logger.LogError(ex, "Error in ImageDownloadBackgroundService");
                 await Task.Delay(ERROR_DELAY_MS, stoppingToken);
             }
         }
 
-        _logger.LogInformation("ImageDownloadBackgroundService остановлен");
+        _logger.LogInformation("ImageDownloadBackgroundService stopped");
     }
 
     private async Task ProcessPendingImagesAsync(CancellationToken ct)
@@ -73,7 +73,7 @@ public class ImageDownloadBackgroundService : BackgroundService
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
-        // Получаем пачку pending изображений. Stale InProgress rows are retried after a
+        // Fetch a batch of pending images. Stale InProgress rows are retried after a
         // worker restart/crash; otherwise they would keep the operation running forever.
         var pendingImages = await context.pendingImageDownloads
             .Where(p => p.status == ImageDownloadStatus.Pending ||
@@ -88,7 +88,7 @@ public class ImageDownloadBackgroundService : BackgroundService
         if (pendingImages.Count == 0)
             return;
 
-        _logger.LogInformation("Обрабатываю {Count} изображений из очереди", pendingImages.Count);
+        _logger.LogInformation("Processing {Count} images from the queue", pendingImages.Count);
 
         foreach (var pending in pendingImages)
         {
@@ -105,7 +105,7 @@ public class ImageDownloadBackgroundService : BackgroundService
 
                 if (opStatus is "paused" or "cancelled")
                 {
-                    _logger.LogInformation("Операция {BatchId} в статусе {Status}, пропускаю загрузку", pending.batchId, opStatus);
+                    _logger.LogInformation("Operation {BatchId} is in status {Status}, skipping download", pending.batchId, opStatus);
                     break;
                 }
 
@@ -121,18 +121,18 @@ public class ImageDownloadBackgroundService : BackgroundService
                     if (existingOp != null)
                     {
                         existingOp.totalItems = totalImages;
-                        existingOp.title = $"Загрузка {totalImages} изображений";
+                        existingOp.title = $"Downloading {totalImages} images";
                         await context.SaveChangesAsync(ct);
                     }
                     else
                     {
                         await _operationLogger.StartAsync(pending.batchId, pending.storeId, pending.authorUserId,
-                            "image-download", $"Загрузка {totalImages} изображений",
+                            "image-download", $"Downloading {totalImages} images",
                             batchId: pending.batchId, batchType: "image-download", totalItems: totalImages);
                     }
 
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "info",
-                        $"Начата загрузка {totalImages} изображений");
+                        $"Started downloading {totalImages} images");
                     _startedImageOps.Add(pending.batchId);
                 }
             }
@@ -152,10 +152,10 @@ public class ImageDownloadBackgroundService : BackgroundService
                 if (total == completed + failed)
                     await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
                         failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                        $"Загружено: {completed} успешно, {failed} ошибок");
+                        $"Downloaded: {completed} succeeded, {failed} failed");
             }
 
-            // Задержка между изображениями чтобы не перегружать CDN
+            // Delay between images to avoid overloading the CDN
             if (!ct.IsCancellationRequested)
                 await Task.Delay(DELAY_BETWEEN_IMAGES_MS, ct);
         }
@@ -185,29 +185,29 @@ public class ImageDownloadBackgroundService : BackgroundService
 
         try
         {
-            // Генерируем путь для файла
+            // Generate the file path
             var fileId = Guid.NewGuid().ToString("N");
             var extension = GetExtensionFromUrl(pending.imageUrl) ?? ".jpg";
             var filePath = $"stores/{pending.storeId}/products/{pending.productId}/images/{fileId}{extension}";
 
-            // Скачиваем и загружаем в хранилище
+            // Download and upload to storage
             var uploadResult = await storageService.UploadFromUriWithMetadataAsync(pending.imageUrl, filePath, ct);
 
             if (uploadResult == null)
             {
                 pending.status = ImageDownloadStatus.Failed;
-                pending.lastError = "Не удалось скачать изображение";
+                pending.lastError = "Failed to download image";
                 await context.SaveChangesAsync(ct);
 
                 _logger.LogWarning(
-                    "Не удалось скачать изображение {ImageUrl} для товара {ProductId} (попытка {Retry})",
+                    "Failed to download image {ImageUrl} for product {ProductId} (attempt {Retry})",
                     pending.imageUrl, pending.productId, pending.retryCount);
 
-                await Log("warning", $"Не удалось скачать: {shortUrl} (попытка {pending.retryCount})");
+                await Log("warning", $"Failed to download: {shortUrl} (attempt {pending.retryCount})");
                 return;
             }
 
-            // Создаём запись File
+            // Create the File record
             var file = new Models.File();
             file.AddFill(new Models.File.AddForm(
                 filePath,
@@ -221,13 +221,13 @@ public class ImageDownloadBackgroundService : BackgroundService
             context.files.Add(file);
             await context.SaveChangesAsync(ct);
 
-            // Проверяем, есть ли уже изображение с таким индексом
+            // Check whether an image with this index already exists
             var existingImage = await context.images
                 .FirstOrDefaultAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
 
             if (existingImage == null)
             {
-                // Создаём ImageReference
+                // Create the ImageReference
                 var imageRef = new ImageReference();
                 imageRef.AddFill(new ImageReference.AddForm(
                     file.Id,
@@ -239,11 +239,11 @@ public class ImageDownloadBackgroundService : BackgroundService
             }
             else
             {
-                // Обновляем существующий
+                // Update the existing one
                 existingImage.fileId = file.Id;
             }
 
-            // Помечаем как завершённый
+            // Mark as completed
             pending.status = ImageDownloadStatus.Completed;
             pending.completedAt = DateTime.UtcNow;
             pending.lastError = null;
@@ -251,7 +251,7 @@ public class ImageDownloadBackgroundService : BackgroundService
             await context.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "Загружено изображение {Index} для товара {ProductId}: {ImageUrl}",
+                "Downloaded image {Index} for product {ProductId}: {ImageUrl}",
                 pending.imageIndex, pending.productId, pending.imageUrl);
         }
         catch (Exception ex)
@@ -261,10 +261,10 @@ public class ImageDownloadBackgroundService : BackgroundService
             await context.SaveChangesAsync(CancellationToken.None);
 
             _logger.LogError(ex,
-                "Ошибка загрузки изображения {ImageUrl} для товара {ProductId}",
+                "Error downloading image {ImageUrl} for product {ProductId}",
                 pending.imageUrl, pending.productId);
 
-            await Log("error", $"Ошибка загрузки изображения #{pending.imageIndex}: {ex.Message}");
+            await Log("error", $"Error downloading image #{pending.imageIndex}: {ex.Message}");
         }
     }
 

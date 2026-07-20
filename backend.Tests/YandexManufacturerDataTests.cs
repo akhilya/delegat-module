@@ -28,12 +28,12 @@ public class YandexManufacturerDataTests
     [Fact]
     public void CapManufacturerCountries_LimitsToFive()
     {
-        var input = new[] { "Россия", "Китай", "Турция", "Индия", "Вьетнам", "Беларусь", "Казахстан" };
+        var input = new[] { "Russia", "China", "Turkey", "India", "Vietnam", "Belarus", "Kazakhstan" };
         var capped = YandexParameterHelpers.CapManufacturerCountries(input);
 
         Assert.NotNull(capped);
         Assert.Equal(5, capped!.Count);
-        Assert.Equal(new[] { "Россия", "Китай", "Турция", "Индия", "Вьетнам" }, capped);
+        Assert.Equal(new[] { "Russia", "China", "Turkey", "India", "Vietnam" }, capped);
     }
 
     [Fact]
@@ -43,12 +43,12 @@ public class YandexManufacturerDataTests
 
         YandexParameterHelpers.ApplyManufacturerFields(
             offer,
-            "ООО Ромашка, Москва, ОГРН 123",
-            new[] { "Россия", "Китай", "лишняя1", "лишняя2", "лишняя3", "лишняя4" });
+            "Romashka LLC, Moscow, OGRN 123",
+            new[] { "Russia", "China", "extra1", "extra2", "extra3", "extra4" });
 
-        Assert.Equal("ООО Ромашка, Москва, ОГРН 123", offer.Manufacturer);
+        Assert.Equal("Romashka LLC, Moscow, OGRN 123", offer.Manufacturer);
         Assert.Equal(5, offer.ManufacturerCountries!.Count);
-        Assert.DoesNotContain("лишняя4", offer.ManufacturerCountries);
+        Assert.DoesNotContain("extra4", offer.ManufacturerCountries);
     }
 
     [Fact]
@@ -56,10 +56,10 @@ public class YandexManufacturerDataTests
     {
         var offer = new UpdateOfferDto { OfferId = "SKU-1" };
 
-        YandexParameterHelpers.ApplyManufacturerFields(offer, "   ", new[] { "Россия" });
+        YandexParameterHelpers.ApplyManufacturerFields(offer, "   ", new[] { "Russia" });
 
         Assert.Null(offer.Manufacturer);
-        Assert.Equal(new List<string> { "Россия" }, offer.ManufacturerCountries);
+        Assert.Equal(new List<string> { "Russia" }, offer.ManufacturerCountries);
     }
 
     [Fact]
@@ -71,11 +71,11 @@ public class YandexManufacturerDataTests
             attrs,
             vendorCode: "  ",
             manufacturer: "Factory Ltd",
-            manufacturerCountries: new List<string> { "Россия", "Китай" });
+            manufacturerCountries: new List<string> { "Russia", "China" });
 
         Assert.False(attrs.ContainsKey("vendorCode"));
         Assert.Equal("Factory Ltd", attrs["manufacturer"]);
-        Assert.Equal("Россия, Китай", attrs["manufacturerCountries"]);
+        Assert.Equal("Russia, China", attrs["manufacturerCountries"]);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class YandexManufacturerDataTests
             OfferId = "SKU-1",
             VendorCode = "VC-9",
             Manufacturer = "Maker",
-            ManufacturerCountries = new List<string> { "Россия", "Китай" }
+            ManufacturerCountries = new List<string> { "Russia", "China" }
         };
 
         var json = JsonSerializer.Serialize(update, JsonOpts);
@@ -114,7 +114,7 @@ public class YandexManufacturerDataTests
             var countries = root.GetProperty("manufacturerCountries").EnumerateArray()
                 .Select(e => e.GetString())
                 .ToList();
-            Assert.Equal(new[] { "Россия", "Китай" }, countries);
+            Assert.Equal(new[] { "Russia", "China" }, countries);
         }
 
         var get = new GetOfferDto
@@ -122,14 +122,14 @@ public class YandexManufacturerDataTests
             OfferId = "SKU-1",
             VendorCode = "VC-9",
             Manufacturer = "Maker",
-            ManufacturerCountries = new List<string> { "Россия" }
+            ManufacturerCountries = new List<string> { "Russia" }
         };
         var getJson = JsonSerializer.Serialize(get, JsonOpts);
         using (var doc = JsonDocument.Parse(getJson))
         {
             Assert.Equal("VC-9", doc.RootElement.GetProperty("vendorCode").GetString());
             Assert.Equal(
-                new[] { "Россия" },
+                new[] { "Russia" },
                 doc.RootElement.GetProperty("manufacturerCountries").EnumerateArray()
                     .Select(e => e.GetString())
                     .ToArray());
@@ -153,11 +153,11 @@ public class YandexManufacturerDataTests
         Assert.True(byKey.ContainsKey("manufacturerCountries"));
         Assert.True(byKey.ContainsKey("barcodes"));
 
-        Assert.Equal("Данные производителя", byKey["vendor"].Group);
-        Assert.Equal("Данные производителя", byKey["vendorCode"].Group);
-        Assert.Equal("Данные производителя", byKey["manufacturer"].Group);
-        Assert.Equal("Данные производителя", byKey["manufacturerCountries"].Group);
-        Assert.Equal("Данные производителя", byKey["barcodes"].Group);
+        Assert.Equal("Manufacturer data", byKey["vendor"].Group);
+        Assert.Equal("Manufacturer data", byKey["vendorCode"].Group);
+        Assert.Equal("Manufacturer data", byKey["manufacturer"].Group);
+        Assert.Equal("Manufacturer data", byKey["manufacturerCountries"].Group);
+        Assert.Equal("Manufacturer data", byKey["barcodes"].Group);
 
         Assert.True(byKey["vendor"].IsRequired);
         Assert.False(byKey["vendorCode"].IsRequired);

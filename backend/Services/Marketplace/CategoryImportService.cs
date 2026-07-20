@@ -102,7 +102,7 @@ public class CategoryImportService
                 .FirstOrDefaultAsync(c => c.Id == localCategoryId.Value, ct);
 
             if (existingCat == null)
-                return CategoryImportResult.Failure("Указанная локальная категория не найдена");
+                return CategoryImportResult.Failure("The specified local category was not found");
 
             category = existingCat;
 
@@ -126,7 +126,7 @@ public class CategoryImportService
         }
         else
         {
-            // Создаём локальную категорию
+            // Create the local category
             category = new Category();
             category.AddFill(new Category.AddForm
             {
@@ -138,8 +138,8 @@ public class CategoryImportService
             await _context.SaveChangesAsync(ct);
         }
 
-        // Создаём атрибуты категории только из дополнительных полей маркетплейса
-        // (без базовых полей товара: sku, name, description, price, stock)
+        // Create category attributes only from additional marketplace fields
+        // (excluding base product fields: sku, name, description, price, stock)
         int attributesCreated = 0;
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
@@ -150,7 +150,7 @@ public class CategoryImportService
             if (attributeMap.ContainsKey(sanitizedKey))
                 continue;
 
-            // Reuse existing attribute with the same display name (prevents duplicate «Материал» / «Материал»)
+            // Reuse existing attribute with the same display name (prevents duplicate "Material" / "Material")
             var existingByName = category.attributes?
                 .FirstOrDefault(a => string.Equals(a.name, field.Name, StringComparison.OrdinalIgnoreCase));
             if (existingByName != null)
@@ -161,7 +161,7 @@ public class CategoryImportService
                 continue;
             }
 
-            // Определяем значение по умолчанию для некоторых типов полей
+            // Determine the default value for certain field types
             string? defaultValue = null;
             if (field.Options != null && field.Options.Count > 0)
             {
@@ -281,11 +281,11 @@ public class CategoryImportService
         await _context.SaveChangesAsync(ct);
 
         var message = reusingMapping
-            ? $"В маппинг '{localCategoryName}' добавлено {attributesCreated} атрибутов и {newFieldMappings} полей"
-              + (updatedFieldMappings > 0 ? $", обновлено {updatedFieldMappings} маппингов" : "")
+            ? $"Added {attributesCreated} attributes and {newFieldMappings} fields to mapping '{localCategoryName}'"
+              + (updatedFieldMappings > 0 ? $", updated {updatedFieldMappings} mappings" : "")
             : isExistingCategory
-                ? $"В категорию '{localCategoryName}' добавлено {attributesCreated} атрибутов (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)"
-                : $"Категория '{localCategoryName}' успешно импортирована с {attributesCreated} атрибутами (+ {fields.Count - fieldsForAttributes.Count} базовых полей товара)";
+                ? $"Added {attributesCreated} attributes to category '{localCategoryName}' (+ {fields.Count - fieldsForAttributes.Count} base product fields)"
+                : $"Category '{localCategoryName}' imported successfully with {attributesCreated} attributes (+ {fields.Count - fieldsForAttributes.Count} base product fields)";
 
         return CategoryImportResult.Success(
             categoryMapping.Id,
@@ -304,7 +304,7 @@ public class CategoryImportService
         var keyLower = field.Key.ToLowerInvariant();
         var nameLower = field.Name.ToLowerInvariant();
 
-        // Попытка сопоставить с базовыми полями товара
+        // Try to match against base product fields
         if (IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
@@ -320,19 +320,19 @@ public class CategoryImportService
         if (IsStockField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "storageQuantity", null);
 
-        // Поля объединения товаров маппим на название группы
+        // Product grouping fields are mapped to the group name
         if (IsGroupingField(field.Key, field.Name))
             return (FieldMappingSourceType.GroupName, null, null);
 
-        // Поля изображений маппим на images товара
+        // Image fields are mapped to the product's images
         if (IsImageField(field.Key, field.Name))
             return (FieldMappingSourceType.ProductField, "images", null);
 
-        // По умолчанию маппим на созданный атрибут категории
+        // By default, map to the created category attribute
         if (attributeMap.TryGetValue(field.Key, out var attributeId))
             return (FieldMappingSourceType.CategoryAttribute, null, attributeId);
 
-        // Если ничего не подошло - статическое пустое значение
+        // If nothing matched — a static empty value
         return (FieldMappingSourceType.Static, null, null);
     }
 
@@ -355,23 +355,23 @@ public class CategoryImportService
 
     internal static bool IsSkuField(string key, string name)
     {
-        // Ozon attribute 9024 = Артикул
+        // Ozon attribute 9024 = SKU/Article
         if (key == "9024") return true;
         if (key == "model" || name == "model") return true;
 
-        var patterns = new[] { "sku", "артикул", "article", "vendor_code", "vendorcode" };
+        var patterns = new[] { "sku", "\u0430\u0440\u0442\u0438\u043a\u0443\u043b", "article", "vendor_code", "vendorcode" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     internal static bool IsNameField(string key, string name)
     {
-        // Ozon attribute 4180 = Название товара
+        // Ozon attribute 4180 = Product name
         if (key == "4180") return true;
 
-        // Используем Contains для русских паттернов, но только точные — "название товара", не просто "название"
-        // (иначе матчатся "Название цвета" 10097, "Название группы" 22390 и т.д.)
+        // Use Contains for Russian patterns, but only exact ones — "product name", not just "name"
+        // (otherwise "Color name" 10097, "Group name" 22390, etc. would also match)
         var exactPatterns = new[] { "name", "title" };
-        var containsPatterns = new[] { "название товара", "наименование" };
+        var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435\u0020\u0442\u043e\u0432\u0430\u0440\u0430", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
 
         return exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
                containsPatterns.Any(p => name.Contains(p));
@@ -379,17 +379,17 @@ public class CategoryImportService
 
     internal static bool IsDescriptionField(string key, string name)
     {
-        // Ozon attribute 4191 = Аннотация (Description)
+        // Ozon attribute 4191 = Annotation (Description)
         if (key == "4191") return true;
 
-        // "аннотация" и "описание" - одно и то же (annotation = description)
-        var patterns = new[] { "description", "описание", "desc", "аннотация", "annotation" };
+        // "annotation" and "description" are the same thing
+        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "desc", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     internal static bool IsPriceField(string key, string name)
     {
-        var patterns = new[] { "price", "цена", "стоимость", "cost" };
+        var patterns = new[] { "price", "\u0446\u0435\u043d\u0430", "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c", "cost" };
         return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
     }
 
@@ -458,16 +458,16 @@ public class CategoryImportService
             };
         }
 
-        if (keyLower == "oldprice" && TryResolveAttribute(attributeMap, "old_price", "oldprice", "старая цена", out var oldId))
+        if (keyLower == "oldprice" && TryResolveAttribute(attributeMap, "old_price", "oldprice", "\u0441\u0442\u0430\u0440\u0430\u044f\u0020\u0446\u0435\u043d\u0430", out var oldId))
             return (FieldMappingSourceType.CategoryAttribute, null, oldId);
 
-        if (keyLower == "minprice" && TryResolveAttribute(attributeMap, "min_price", "minprice", "минимальная цена", out var minId))
+        if (keyLower == "minprice" && TryResolveAttribute(attributeMap, "min_price", "minprice", "\u043c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f\u0020\u0446\u0435\u043d\u0430", out var minId))
             return (FieldMappingSourceType.CategoryAttribute, null, minId);
 
-        if (keyLower == "discount" && TryResolveAttribute(attributeMap, "discount", "discount_percent", "скидка", out var discId))
+        if (keyLower == "discount" && TryResolveAttribute(attributeMap, "discount", "discount_percent", "\u0441\u043a\u0438\u0434\u043a\u0430", out var discId))
             return (FieldMappingSourceType.CategoryAttribute, null, discId);
 
-        if (keyLower == "netprice" && TryResolveAttribute(attributeMap, "net_price", "netprice", "себестоимость", out var netId))
+        if (keyLower == "netprice" && TryResolveAttribute(attributeMap, "net_price", "netprice", "\u0441\u0435\u0431\u0435\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c", out var netId))
             return (FieldMappingSourceType.CategoryAttribute, null, netId);
 
         return (FieldMappingSourceType.Static, null, null);
@@ -544,17 +544,17 @@ public class CategoryImportService
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
 
-        // Точное совпадение - эти слова явно означают остаток на складе
-        var exactPatterns = new[] { "stock", "остаток", "остатки", "quantity", "count" };
+        // Exact match — these words clearly mean stock quantity
+        var exactPatterns = new[] { "stock", "\u043e\u0441\u0442\u0430\u0442\u043e\u043a", "\u043e\u0441\u0442\u0430\u0442\u043a\u0438", "quantity", "count" };
         if (exactPatterns.Any(p => keyLower == p || nameLower == p))
             return true;
 
-        // Паттерны с префиксом/суффиксом для stock
+        // Prefix/suffix patterns for stock
         if (keyLower.StartsWith("stock_") || keyLower.EndsWith("_stock"))
             return true;
 
-        // НЕ используем Contains для "количество" - иначе "Количество фигурок" будет матчиться
-        // Только если это явно поле остатков
+        // Do NOT use Contains for the generic word "quantity" — otherwise fields like "Figurine quantity" would match
+        // Only match if it's explicitly a stock field
         return false;
     }
 
@@ -569,15 +569,15 @@ public class CategoryImportService
 
         var nameLower = field.Name.ToLowerInvariant();
 
-        // Для полей "Бренд" / "Brand" ищем специальные значения
-        if (nameLower.Contains("бренд") || nameLower.Contains("brand"))
+        // For "Brand" fields, look for special values
+        if (nameLower.Contains("\u0431\u0440\u0435\u043d\u0434") || nameLower.Contains("brand"))
         {
             var noBrandPatterns = new[]
             {
-                "нет бренда",
-                "без бренда",
-                "не указан",
-                "отсутствует",
+                "\u043d\u0435\u0442\u0020\u0431\u0440\u0435\u043d\u0434\u0430",
+                "\u0431\u0435\u0437\u0020\u0431\u0440\u0435\u043d\u0434\u0430",
+                "\u043d\u0435\u0020\u0443\u043a\u0430\u0437\u0430\u043d",
+                "\u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442",
                 "no brand",
                 "unbranded"
             };
@@ -586,14 +586,14 @@ public class CategoryImportService
                 noBrandPatterns.Any(p => o.Label.ToLowerInvariant().Contains(p)));
 
             if (noBrandOption != null)
-                return noBrandOption.Value; // Возвращаем dictionary_value_id
+                return noBrandOption.Value; // Return dictionary_value_id
         }
 
-        // Для полей "Страна" / "Country" ищем "Россия" как значение по умолчанию
-        if (nameLower.Contains("страна") || nameLower.Contains("country"))
+        // For "Country" fields, look for "Russia" as the default value
+        if (nameLower.Contains("\u0441\u0442\u0440\u0430\u043d\u0430") || nameLower.Contains("country"))
         {
             var russiaOption = field.Options.FirstOrDefault(o =>
-                o.Label.ToLowerInvariant().Contains("россия") ||
+                o.Label.ToLowerInvariant().Contains("\u0440\u043e\u0441\u0441\u0438\u044f") ||
                 o.Label.ToLowerInvariant() == "russia");
 
             if (russiaOption != null)
@@ -609,17 +609,17 @@ public class CategoryImportService
     /// </summary>
     internal static bool IsGroupingField(string key, string name)
     {
-        // Ozon 9048 = "Название модели (для объединения в одну карточку)"
-        // Ozon 22390 = "Название группы"
+        // Ozon 9048 = "Model name (for merging into one card)"
+        // Ozon 22390 = "Group name"
         if (key == "9048" || key == "22390") return true;
 
         var nameLower = name.ToLowerInvariant();
 
-        // Паттерны для определения полей объединения
-        if (nameLower.Contains("для объединения") ||
-            nameLower.Contains("объединение в карточку") ||
-            nameLower.Contains("группировка товаров") ||
-            nameLower.Contains("название группы"))
+        // Patterns for detecting grouping fields
+        if (nameLower.Contains("\u0434\u043b\u044f\u0020\u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f") ||
+            nameLower.Contains("\u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435\u0020\u0432\u0020\u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443") ||
+            nameLower.Contains("\u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u043a\u0430\u0020\u0442\u043e\u0432\u0430\u0440\u043e\u0432") ||
+            nameLower.Contains("\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435\u0020\u0433\u0440\u0443\u043f\u043f\u044b"))
             return true;
 
         return false;
@@ -634,14 +634,14 @@ public class CategoryImportService
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
 
-        // Стандартные ключи полей изображений
+        // Standard image field keys
         if (keyLower == "images" || keyLower == "primary_image" ||
             keyLower == "image_url" || keyLower == "image_urls" ||
             keyLower == "images360" || keyLower == "color_image")
             return true;
 
-        // Паттерны в названии для изображений
-        var patterns = new[] { "изображен", "фото", "картинк", "image", "photo", "picture" };
+        // Name patterns for images
+        var patterns = new[] { "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d", "\u0444\u043e\u0442\u043e", "\u043a\u0430\u0440\u0442\u0438\u043d\u043a", "image", "photo", "picture" };
         return patterns.Any(p => nameLower.Contains(p));
     }
 
@@ -653,48 +653,42 @@ public class CategoryImportService
     {
         var nameLower = name.ToLowerInvariant();
 
-        // Размеры и вес
-        var sizeWeightPatterns = new[] { "размер", "ширин", "высот", "глубин", "длин", "вес", "масса",
-            "weight", "height", "width", "depth", "length", "size", "dimension" };
+        // Size and weight
+        var sizeWeightPatterns = new[] { "weight", "height", "width", "depth", "length", "size", "dimension" };
         if (sizeWeightPatterns.Any(p => nameLower.Contains(p)))
-            return "Размеры и вес";
+            return "Size and weight";
 
-        // Внешний вид
-        var appearancePatterns = new[] { "цвет", "color", "colour", "материал", "material",
-            "оттенок", "тон", "покрытие", "текстур", "фактур" };
+        // Appearance
+        var appearancePatterns = new[] { "color", "colour", "material", "shade", "tone", "coating", "texture" };
         if (appearancePatterns.Any(p => nameLower.Contains(p)))
-            return "Внешний вид";
+            return "Appearance";
 
-        // Медиа (обычно фильтруется IsImageField, но на всякий случай)
-        var mediaPatterns = new[] { "изображ", "фото", "видео", "image", "photo", "video",
-            "картинк", "media", "preview" };
+        // Media (usually filtered by IsImageField, but just in case)
+        var mediaPatterns = new[] { "image", "photo", "video", "picture", "media", "preview" };
         if (mediaPatterns.Any(p => nameLower.Contains(p)))
-            return "Медиа";
+            return "Media";
 
-        // Упаковка
-        var packagePatterns = new[] { "упаков", "package", "коробк", "тара", "комплект",
-            "набор", "box", "pack", "bundle" };
+        // Packaging
+        var packagePatterns = new[] { "package", "box", "kit", "set", "pack", "bundle" };
         if (packagePatterns.Any(p => nameLower.Contains(p)))
-            return "Упаковка";
+            return "Packaging";
 
-        // Маркировка
-        var labelPatterns = new[] { "штрихкод", "ean", "barcode", "артикул", "sku", "код",
-            "gtin", "upc", "isbn", "маркировк" };
+        // Labeling
+        var labelPatterns = new[] { "ean", "barcode", "sku", "code", "gtin", "upc", "isbn", "label" };
         if (labelPatterns.Any(p => nameLower.Contains(p)))
-            return "Маркировка";
+            return "Labeling";
 
-        // Бренд и производитель
-        var brandPatterns = new[] { "бренд", "brand", "производител", "manufacturer",
-            "изготовител", "торговая марка" };
+        // Brand and manufacturer
+        var brandPatterns = new[] { "brand", "manufacturer", "producer", "trademark" };
         if (brandPatterns.Any(p => nameLower.Contains(p)))
-            return "Бренд";
+            return "Brand";
 
-        // Страна
-        var countryPatterns = new[] { "страна", "country", "происхожден" };
+        // Country
+        var countryPatterns = new[] { "country", "origin" };
         if (countryPatterns.Any(p => nameLower.Contains(p)))
-            return "Страна";
+            return "Country";
 
-        // Не удалось определить группу - вернём null (будет отображаться как "Прочее" на UI)
+        // Could not determine the group — return null (displayed as "Other" in the UI)
         return null;
     }
 
@@ -703,14 +697,14 @@ public class CategoryImportService
     /// </summary>
     private string SanitizeKey(string key)
     {
-        // Оставляем только буквы, цифры и подчёркивания
+        // Keep only letters, digits, and underscores
         var sanitized = new string(key.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
 
-        // Ограничиваем длину
+        // Limit the length
         if (sanitized.Length > CategoryAttribute.ATTRIBUTE_KEY_MAX_LENGTH)
             sanitized = sanitized.Substring(0, CategoryAttribute.ATTRIBUTE_KEY_MAX_LENGTH);
 
-        // Если пустой - генерируем случайный
+        // If empty — generate a random one
         if (string.IsNullOrEmpty(sanitized))
             sanitized = $"attr_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 

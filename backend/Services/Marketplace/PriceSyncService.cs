@@ -46,11 +46,11 @@ public class PriceSyncService
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            return PriceComparisonResult.Failure("Подключение не найдено");
+            return PriceComparisonResult.Failure("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            return PriceComparisonResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            return PriceComparisonResult.Failure($"Adapter '{connection.adapterKey}' not found");
 
         // Get all product links
         var links = await _context.productMarketplaceLinks
@@ -59,7 +59,7 @@ public class PriceSyncService
             .ToListAsync(ct);
 
         if (!links.Any())
-            return PriceComparisonResult.Success(new List<PriceComparisonItem>(), "Нет связанных товаров");
+            return PriceComparisonResult.Success(new List<PriceComparisonItem>(), "No linked products");
 
         // If the adapter supports price import - get current prices
         List<PriceInfo>? externalPrices = null;
@@ -113,7 +113,7 @@ public class PriceSyncService
 
         return PriceComparisonResult.Success(
             comparisons,
-            $"Сравнение для {comparisons.Count} товаров"
+            $"Comparison for {comparisons.Count} products"
         );
     }
 
@@ -131,14 +131,14 @@ public class PriceSyncService
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            return PriceSyncResult.Failure("Подключение не найдено");
+            return PriceSyncResult.Failure("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            return PriceSyncResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            return PriceSyncResult.Failure($"Adapter '{connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportPrices))
-            return PriceSyncResult.Failure("Адаптер не поддерживает импорт цен");
+            return PriceSyncResult.Failure("Adapter does not support price import");
 
         // Get links with mapping for reverse price import
         var linksQuery = _context.productMarketplaceLinks
@@ -157,7 +157,7 @@ public class PriceSyncService
             .ToDictionaryAsync(m => m.Id, ct);
 
         if (!links.Any())
-            return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
+            return PriceSyncResult.Success(0, 0, "No products to sync");
 
         var extendedPrice = await _context.stores.AsNoTracking()
             .Where(s => s.Id == connection.storeId)
@@ -169,7 +169,7 @@ public class PriceSyncService
 
         if (canLog)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                $"Найдено {links.Count} связанных товаров, запрос цен с {connection.adapterKey}...");
+                $"Found {links.Count} linked products, requesting prices from {connection.adapterKey}...");
 
         try
         {
@@ -181,7 +181,7 @@ public class PriceSyncService
 
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                    $"Получено {externalPrices.Count} цен с маркетплейса за {apiSw.ElapsedMilliseconds}мс");
+                    $"Received {externalPrices.Count} prices from the marketplace in {apiSw.ElapsedMilliseconds}ms");
 
             int updated = 0;
             int skipped = 0;
@@ -220,7 +220,7 @@ public class PriceSyncService
             await _context.SaveChangesAsync(ct);
             sw.Stop();
 
-            var msg = $"Обновлено {updated} товаров, пропущено {skipped} — {sw.ElapsedMilliseconds}мс";
+            var msg = $"Updated {updated} products, skipped {skipped} — {sw.ElapsedMilliseconds}ms";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
             return PriceSyncResult.Success(updated, skipped, msg);
@@ -228,10 +228,10 @@ public class PriceSyncService
         catch (Exception ex)
         {
             sw.Stop();
-            var errMsg = $"Ошибка импорта цен: {ex.Message}";
+            var errMsg = $"Price import error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }
@@ -250,14 +250,14 @@ public class PriceSyncService
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            return PriceSyncResult.Failure("Подключение не найдено");
+            return PriceSyncResult.Failure("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            return PriceSyncResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            return PriceSyncResult.Failure($"Adapter '{connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
-            return PriceSyncResult.Failure("Адаптер не поддерживает экспорт цен");
+            return PriceSyncResult.Failure("Adapter does not support price export");
 
         var linksQuery = _context.productMarketplaceLinks
             .Include(l => l.product)
@@ -271,7 +271,7 @@ public class PriceSyncService
         var links = await linksQuery.ToListAsync(ct);
 
         if (!links.Any())
-            return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
+            return PriceSyncResult.Success(0, 0, "No products to sync");
 
         var mappingIds = links.Where(l => l.categoryMappingId != null).Select(l => l.categoryMappingId!.Value).Distinct().ToList();
         var mappings = await _context.categoryMappings
@@ -291,7 +291,7 @@ public class PriceSyncService
 
         if (canLog)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                $"Найдено {links.Count} связанных товаров для подключения #{connectionId} ({connection.adapterKey})");
+                $"Found {links.Count} linked products for connection #{connectionId} ({connection.adapterKey})");
 
         var exportableLinks = links
             .Where(l => l.product != null)
@@ -355,25 +355,25 @@ public class PriceSyncService
         var skippedDuplicateExternalIds = exportableLinks.Count - uniqueExportableLinks.Count;
         if (canLog && skippedNoPrice > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
-                $"Пропущено {skippedNoPrice} товаров без цены");
+                $"Skipped {skippedNoPrice} products without a price");
         if (canLog && skippedNoIdentifier > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
-                $"Пропущено {skippedNoIdentifier} товаров без внешнего идентификатора");
+                $"Skipped {skippedNoIdentifier} products without an external identifier");
         if (canLog && skippedDuplicateExternalIds > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
-                $"Пропущено {skippedDuplicateExternalIds} дублей внешних ID в одном запросе");
+                $"Skipped {skippedDuplicateExternalIds} duplicate external IDs in one request");
 
         if (!pricesToExport.Any())
         {
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
-                    $"Нет товаров с ценами для экспорта ({sw.ElapsedMilliseconds}мс)");
-            return PriceSyncResult.Success(0, links.Count, "Нет товаров с ценами для экспорта");
+                    $"No products with prices to export ({sw.ElapsedMilliseconds}ms)");
+            return PriceSyncResult.Success(0, links.Count, "No products with prices to export");
         }
 
         if (canLog)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                $"Подготовлено {pricesToExport.Count} цен, отправка на {connection.adapterKey}...");
+                $"Prepared {pricesToExport.Count} prices, sending to {connection.adapterKey}...");
 
         try
         {
@@ -383,7 +383,7 @@ public class PriceSyncService
 
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                    $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
+                    $"Marketplace response received in {apiSw.ElapsedMilliseconds}ms");
 
             if (result.IsSuccess || result.IsPartialSuccess)
             {
@@ -403,7 +403,7 @@ public class PriceSyncService
                 await _context.SaveChangesAsync(ct);
                 sw.Stop();
 
-                var msg = $"Экспортировано {result.SuccessCount} цен, ошибок: {result.FailedCount}, пропущено: {skippedNoPrice + skippedDuplicateExternalIds} — {sw.ElapsedMilliseconds}мс";
+                var msg = $"Exported {result.SuccessCount} prices, errors: {result.FailedCount}, skipped: {skippedNoPrice + skippedDuplicateExternalIds} — {sw.ElapsedMilliseconds}ms";
                 if (canLog)
                 {
                     await _operationLogger.LogAsync(operationId!, storeId!.Value,
@@ -424,19 +424,19 @@ public class PriceSyncService
 
             sw.Stop();
             var errorMessages = result.Errors?.Select(e => e.Message).ToList();
-            var errMsg = errorMessages?.FirstOrDefault() ?? "Ошибка экспорта цен";
+            var errMsg = errorMessages?.FirstOrDefault() ?? "Price export error";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            var errMsg = $"Ошибка экспорта цен: {ex.Message}";
+            var errMsg = $"Price export error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }
@@ -455,14 +455,14 @@ public class PriceSyncService
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
 
         if (connection == null)
-            return PriceSyncResult.Failure("Подключение не найдено");
+            return PriceSyncResult.Failure("Connection not found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            return PriceSyncResult.Failure($"Адаптер '{connection.adapterKey}' не найден");
+            return PriceSyncResult.Failure($"Adapter '{connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks))
-            return PriceSyncResult.Failure("Адаптер не поддерживает экспорт остатков");
+            return PriceSyncResult.Failure("Adapter does not support stock export");
 
         // Get links
         var linksQuery = _context.productMarketplaceLinks
@@ -475,7 +475,7 @@ public class PriceSyncService
         var links = await linksQuery.ToListAsync(ct);
 
         if (!links.Any())
-            return PriceSyncResult.Success(0, 0, "Нет товаров для синхронизации");
+            return PriceSyncResult.Success(0, 0, "No products to sync");
 
         // Load variants with marketplace links for this connection
         var productIds = links.Select(l => l.productId).ToList();
@@ -527,7 +527,7 @@ public class PriceSyncService
         var skippedDuplicateStockTargets = stockExportEntries.Count - uniqueStockExportEntries.Count;
 
         if (!stocksToExport.Any())
-            return PriceSyncResult.Success(0, links.Count, "Нет товаров с остатками для экспорта");
+            return PriceSyncResult.Success(0, links.Count, "No products with stock to export");
 
         var canLog = operationId != null && storeId != null;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -536,10 +536,10 @@ public class PriceSyncService
         {
             var variantCount = stocksToExport.Count(s => s.VariantId != null);
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                $"Подготовлено {stocksToExport.Count} остатков ({variantCount} вариантов), отправка на {connection.adapterKey}...");
+                $"Prepared {stocksToExport.Count} stock entries ({variantCount} variants), sending to {connection.adapterKey}...");
             if (skippedDuplicateStockTargets > 0)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
-                    $"Пропущено {skippedDuplicateStockTargets} дублей внешних остатков в одном запросе");
+                    $"Skipped {skippedDuplicateStockTargets} duplicate external stock entries in one request");
         }
 
         try
@@ -550,7 +550,7 @@ public class PriceSyncService
 
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
-                    $"Ответ маркетплейса получен за {apiSw.ElapsedMilliseconds}мс");
+                    $"Marketplace response received in {apiSw.ElapsedMilliseconds}ms");
 
             if (result.IsSuccess || result.IsPartialSuccess)
             {
@@ -573,7 +573,7 @@ public class PriceSyncService
                 sw.Stop();
 
                 var skipped = result.FailedCount + skippedDuplicateStockTargets;
-                var msg = $"Экспортировано {result.SuccessCount} остатков, ошибок: {result.FailedCount}, пропущено: {skippedDuplicateStockTargets} — {sw.ElapsedMilliseconds}мс";
+                var msg = $"Exported {result.SuccessCount} stock entries, errors: {result.FailedCount}, skipped: {skippedDuplicateStockTargets} — {sw.ElapsedMilliseconds}ms";
                 if (canLog)
                 {
                     await _operationLogger.LogAsync(operationId!, storeId!.Value,
@@ -594,19 +594,19 @@ public class PriceSyncService
 
             sw.Stop();
             var errorMessages = result.Errors?.Select(e => e.Message).ToList();
-            var errMsg = errorMessages?.FirstOrDefault() ?? "Ошибка экспорта остатков";
+            var errMsg = errorMessages?.FirstOrDefault() ?? "Stock export error";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            var errMsg = $"Ошибка экспорта остатков: {ex.Message}";
+            var errMsg = $"Stock export error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}мс");
+                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }

@@ -75,7 +75,7 @@ public class PublicConnectionsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == connectionId && x.storeId == storeId, ct);
 
         if (c == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapters.GetByKey(c.adapterKey);
         return Ok(new
@@ -196,7 +196,7 @@ public class PublicConnectionsController : ControllerBase
             .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId, ct);
 
         if (op == null)
-            throw ApiException.NotFound("Операция не найдена");
+            throw ApiException.NotFound("Operation not found");
 
         var logs = await _db.operationLogEntries
             .AsNoTracking()

@@ -47,13 +47,13 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = new Note();
@@ -77,19 +77,19 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = await noteRepo.FindAsync(n => n.productId == productId && n.Id == id);
 
         if (note == null)
-            throw ApiException.NotFound("Заметка не найдена");
+            throw ApiException.NotFound("Note not found");
 
         note.UpdateFill(input);
         await noteRepo.UpdateAsync(note);
@@ -110,19 +110,19 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = await noteRepo.FindAsync(n => n.productId == productId && n.Id == id);
 
         if (note == null)
-            throw ApiException.NotFound("Заметка не найдена");
+            throw ApiException.NotFound("Note not found");
 
         await noteRepo.DeleteAsync(note);
         await _unitOfWork.SaveChangesAsync();

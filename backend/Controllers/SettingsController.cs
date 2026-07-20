@@ -43,6 +43,6 @@ public class SettingsController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync(ct);
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут менять настройки платформы");
+            throw ApiException.Forbidden("Only administrators can change platform settings");
     }
 }

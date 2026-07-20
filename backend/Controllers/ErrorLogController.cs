@@ -48,7 +48,7 @@ public class ErrorLogController : ControllerBase
 
         var log = await _context.errorLogs.FindAsync(id);
         if (log == null)
-            throw ApiException.NotFound("Лог ошибки не найден");
+            throw ApiException.NotFound("Error log entry not found");
 
         _context.errorLogs.Remove(log);
         await _context.SaveChangesAsync();
@@ -60,6 +60,6 @@ public class ErrorLogController : ControllerBase
     {
         var currentUser = await _currentUserService.GetUserAsync();
         if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут просматривать логи ошибок");
+            throw ApiException.Forbidden("Only administrators can view error logs");
     }
 }

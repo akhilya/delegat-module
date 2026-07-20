@@ -130,7 +130,7 @@ public class InvitationTokenDomainTests
         // Sign-up would throw BadRequest for used token
         Assert.Throws<ApiException>(() =>
         {
-            if (found.used) throw ApiException.BadRequest("Токен уже использован");
+            if (found.used) throw ApiException.BadRequest("Token already used");
         });
     }
 }

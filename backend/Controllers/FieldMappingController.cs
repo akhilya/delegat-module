@@ -53,14 +53,14 @@ public class FieldMappingController : ControllerBase
         var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
-            throw ApiException.BadRequest("Адаптер не поддерживает получение полей категории");
+            throw ApiException.BadRequest("Adapter does not support fetching category fields");
 
         try
         {
@@ -83,7 +83,7 @@ public class FieldMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting category fields for mapping {MappingId}", mappingId);
-            throw ApiException.BadRequest($"Не удалось получить поля категории: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to get category fields: {ex.Message}");
         }
     }
 
@@ -100,11 +100,11 @@ public class FieldMappingController : ControllerBase
         var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             return Ok(Array.Empty<object>());
@@ -129,7 +129,7 @@ public class FieldMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting price fields for mapping {MappingId}", mappingId);
-            throw ApiException.BadRequest($"Не удалось получить поля цен: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to get price fields: {ex.Message}");
         }
     }
 
@@ -257,7 +257,7 @@ public class FieldMappingController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<CategoryMapping>();
 
@@ -268,10 +268,10 @@ public class FieldMappingController : ControllerBase
                 .Include(m => m.localCategory));
 
         if (mapping == null)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         if (mapping.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.NotFound("Маппинг не найден");
+            throw ApiException.NotFound("Mapping not found");
 
         return mapping;
     }

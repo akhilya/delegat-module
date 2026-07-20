@@ -19,7 +19,7 @@ public class ToolDispatcherTests
         var (result, summary) = await dispatcher.DispatchAsync("does_not_exist", "{}", 1, 1, default);
 
         Assert.Contains("Unknown tool: does_not_exist", JsonSerializer.Serialize(result));
-        Assert.Contains("Неизвестный инструмент", summary);
+        Assert.Contains("Unknown tool", summary);
     }
 
     [Theory]

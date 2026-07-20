@@ -214,7 +214,7 @@ public class ProductSyncController : ControllerBase
 
         if (!opExists)
             await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
-                $"Экспорт товара #{productId}", connectionId: connectionId, connectionName: connection.name);
+                $"Export product #{productId}", connectionId: connectionId, connectionName: connection.name);
 
         var result = await _productSyncService.ExportProductAsync(
             productId, connectionId, ct,
@@ -225,7 +225,7 @@ public class ProductSyncController : ControllerBase
             result.IsSuccess ? result.Message : result.ErrorMessage);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка экспорта");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
 
         return Ok(new
         {
@@ -251,20 +251,20 @@ public class ProductSyncController : ControllerBase
         var connection = await GetConnectionAsync(connectionId);
 
         if (string.IsNullOrWhiteSpace(input.externalProductId) || input.externalProductId.Length > 100)
-            throw ApiException.BadRequest("externalProductId обязателен (макс. 100 символов)");
+            throw ApiException.BadRequest("externalProductId is required (max 100 characters)", code: "required_fields_missing");
 
         // Check product exists and belongs to the same store
         var product = await _context.products
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == connection.storeId, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         // Check no existing link
         var alreadyLinked = await _context.productMarketplaceLinks
             .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
         if (alreadyLinked)
-            throw ApiException.BadRequest("Товар уже привязан к этому подключению");
+            throw ApiException.BadRequest("Product is already linked to this connection");
 
         // Check if externalProductId is already used by another product on this connection
         var duplicateExternalId = await _context.productMarketplaceLinks
@@ -272,7 +272,7 @@ public class ProductSyncController : ControllerBase
                 && l.connectionId == connectionId, ct);
         if (duplicateExternalId)
             throw ApiException.BadRequest(
-                $"Внешний ID \"{input.externalProductId.Trim()}\" уже привязан к другому товару в этом подключении");
+                $"External ID \"{input.externalProductId.Trim()}\" is already linked to another product on this connection");
 
         // Resolve category mapping (optional — same logic as available-connections)
         int? categoryMappingId = null;
@@ -315,14 +315,14 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var link = await _context.productMarketplaceLinks
             .Include(l => l.connection)
             .FirstOrDefaultAsync(l => l.Id == linkId && l.connection.storeId == selectedStoreId.Value, ct);
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
 
         var productId = link.productId;
         var externalProductId = link.externalProductId;
@@ -349,18 +349,18 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(input.externalProductId) || input.externalProductId.Length > 100)
-            throw ApiException.BadRequest("externalProductId обязателен (макс. 100 символов)");
+            throw ApiException.BadRequest("externalProductId is required (max 100 characters)", code: "required_fields_missing");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var link = await _context.productMarketplaceLinks
             .Include(l => l.connection)
             .FirstOrDefaultAsync(l => l.Id == linkId && l.connection.storeId == selectedStoreId.Value, ct);
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
 
         link.externalProductId = input.externalProductId.Trim();
         link.externalSku = null;
@@ -450,7 +450,7 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (input.productIds == null || input.productIds.Count == 0)
-            throw ApiException.BadRequest("Не выбраны товары для экспорта");
+            throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
 
@@ -484,7 +484,7 @@ public class ProductSyncController : ControllerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-export",
-            $"Экспорт {input.productIds.Count} товаров",
+            $"Export {input.productIds.Count} products",
             connectionId: connectionId, connectionName: connection.name,
             batchId: batchId, batchType: "export", totalItems: input.productIds.Count);
 
@@ -492,7 +492,7 @@ public class ProductSyncController : ControllerBase
         {
             batchId,
             queued = input.productIds.Count,
-            message = $"Добавлено {input.productIds.Count} товаров в очередь экспорта"
+            message = $"Added {input.productIds.Count} products to the export queue"
         });
     }
 
@@ -504,7 +504,7 @@ public class ProductSyncController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetExportBatchStatus(string batchId, CancellationToken ct)
     {
-        // Запрет кэширования - критически важно для polling
+        // Disable caching - critical for polling
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
         Response.Headers["Expires"] = "0";
@@ -516,7 +516,7 @@ public class ProductSyncController : ControllerBase
             .ToListAsync(ct);
 
         if (entities.Count == 0)
-            throw ApiException.NotFound("Пакет не найден");
+            throw ApiException.NotFound("Batch not found");
 
         var items = entities.Select(p => new
         {
@@ -560,7 +560,7 @@ public class ProductSyncController : ControllerBase
             .ToListAsync(ct);
 
         if (failedItems.Count == 0)
-            return Ok(new { message = "Нет неудавшихся экспортов для повтора", retried = 0 });
+            return Ok(new { message = "No failed exports to retry", retried = 0 });
 
         foreach (var item in failedItems)
         {
@@ -571,7 +571,7 @@ public class ProductSyncController : ControllerBase
 
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { message = $"Поставлено в очередь на повтор: {failedItems.Count} товаров", retried = failedItems.Count });
+        return Ok(new { message = $"Queued for retry: {failedItems.Count} products", retried = failedItems.Count });
     }
 
     #endregion
@@ -594,10 +594,10 @@ public class ProductSyncController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
-            throw ApiException.BadRequest("Адаптер не поддерживает получение списка товаров");
+            throw ApiException.BadRequest("Adapter does not support fetching the product list");
 
         Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct> pagedResult;
         try
@@ -616,7 +616,7 @@ public class ProductSyncController : ControllerBase
                 connectionId);
 
             throw ApiException.BadRequest(
-                $"Не удалось получить товары из адаптера {adapter.DisplayName}: {ex.Message}",
+                $"Failed to get products from adapter {adapter.DisplayName}: {ex.Message}",
                 new
                 {
                     adapterKey = connection.adapterKey,
@@ -737,10 +737,10 @@ public class ProductSyncController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
-            throw ApiException.BadRequest("Адаптер не поддерживает импорт товаров");
+            throw ApiException.BadRequest("Adapter does not support importing products");
 
         // Get products from marketplace
         var pagedResult = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, null, ct);
@@ -834,13 +834,13 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (input.products == null || input.products.Count == 0)
-            throw ApiException.BadRequest("Не выбраны товары для импорта");
+            throw ApiException.BadRequest("No products selected for import", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         // Get category mappings (handle duplicates by taking first)
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
@@ -875,7 +875,7 @@ public class ProductSyncController : ControllerBase
                     skippedProducts.Add(new
                     {
                         externalId = productInput.externalId,
-                        error = $"Категория '{productInput.externalCategoryId}' не имеет маппинга"
+                        error = $"Category '{productInput.externalCategoryId}' has no mapping"
                     });
                     continue;
                 }
@@ -917,7 +917,7 @@ public class ProductSyncController : ControllerBase
                 // Update existing operation with final counts
                 var op = await _context.operations.FirstAsync(o => o.operationId == batchId, ct);
                 op.totalItems = queued;
-                op.title = $"Импорт {queued} товаров";
+                op.title = $"Import {queued} products";
                 op.batchType = "import";
                 await _context.SaveChangesAsync(ct);
                 await _operationLogger.ProgressAsync(batchId, storeId, queued, 0, 0);
@@ -925,7 +925,7 @@ public class ProductSyncController : ControllerBase
             else
             {
                 await _operationLogger.StartAsync(batchId, storeId, userId, "batch-import",
-                    $"Импорт {queued} товаров",
+                    $"Import {queued} products",
                     connectionId: connectionId, connectionName: connection.name,
                     batchId: batchId, batchType: "import", totalItems: queued);
             }
@@ -937,20 +937,20 @@ public class ProductSyncController : ControllerBase
             if (!imgOpExists)
             {
                 await _operationLogger.StartAsync(imageBatchId, storeId, userId, "image-download",
-                    $"Загрузка изображений",
+                    $"Image download",
                     connectionId: connectionId, connectionName: connection.name,
                     batchId: imageBatchId, batchType: "image-download", totalItems: 0);
             }
 
             await _operationLogger.LogAsync(batchId, storeId, "info",
-                $"В очередь добавлено {queued} товаров, ожидание обработки...");
+                $"Added {queued} products to the queue, awaiting processing...");
 
             // Log skipped products
             foreach (var skipped in skippedProducts)
             {
                 var sp = (dynamic)skipped;
                 await _operationLogger.LogAsync(batchId, storeId, "warning",
-                    $"Пропущен: {sp.externalId} — {sp.error}");
+                    $"Skipped: {sp.externalId} - {sp.error}");
             }
         }
 
@@ -960,7 +960,7 @@ public class ProductSyncController : ControllerBase
             queued,
             skipped = skippedProducts.Count,
             skippedProducts,
-            message = $"Добавлено {queued} товаров в очередь импорта"
+            message = $"Added {queued} products to the import queue"
         });
     }
 
@@ -972,24 +972,24 @@ public class ProductSyncController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetImportBatchStatus(string batchId, CancellationToken ct)
     {
-        // Запрет кэширования - критически важно для polling
+        // Disable caching - critical for polling
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
         Response.Headers["Expires"] = "0";
 
-        // Загружаем сущности напрямую с AsNoTracking
+        // Load entities directly with AsNoTracking
         var entities = await _context.pendingProductImports
             .AsNoTracking()
             .Where(p => p.batchId == batchId)
             .OrderBy(p => p.Id)
             .ToListAsync(ct);
 
-        _logger.LogWarning("[BatchStatus] Получено {Count} записей из БД, статусы: [{Statuses}]",
+        _logger.LogWarning("[BatchStatus] Retrieved {Count} records from DB, statuses: [{Statuses}]",
             entities.Count,
             string.Join(", ", entities.Select(e => $"{e.Id}:{e.status}")));
 
         if (entities.Count == 0)
-            throw ApiException.NotFound("Пакет не найден");
+            throw ApiException.NotFound("Batch not found");
 
         var items = entities.Select(p => new
         {
@@ -1008,7 +1008,7 @@ public class ProductSyncController : ControllerBase
         var failedCount = entities.Count(e => e.status == ProductImportStatus.Failed);
 
         _logger.LogWarning(
-            "[BatchStatus] ИТОГО: pending={Pending}, inProgress={InProgress}, completed={Completed}, failed={Failed}",
+            "[BatchStatus] TOTAL: pending={Pending}, inProgress={InProgress}, completed={Completed}, failed={Failed}",
             pendingCount, inProgressCount, completedCount, failedCount);
 
         return Ok(new
@@ -1036,7 +1036,7 @@ public class ProductSyncController : ControllerBase
             .ToListAsync(ct);
 
         if (failedItems.Count == 0)
-            return Ok(new { message = "Нет неудавшихся импортов для повтора", retried = 0 });
+            return Ok(new { message = "No failed imports to retry", retried = 0 });
 
         foreach (var item in failedItems)
         {
@@ -1047,7 +1047,7 @@ public class ProductSyncController : ControllerBase
 
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { message = $"Поставлено в очередь на повтор: {failedItems.Count} товаров", retried = failedItems.Count });
+        return Ok(new { message = $"Queued for retry: {failedItems.Count} products", retried = failedItems.Count });
     }
 
     /// <summary>
@@ -1073,7 +1073,7 @@ public class ProductSyncController : ControllerBase
             ct);
 
         if (!result.IsSuccess && !result.AlreadyLinked)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка импорта");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Import failed", code: "import_failed");
 
         return Ok(new
         {
@@ -1101,10 +1101,10 @@ public class ProductSyncController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Неизвестный адаптер: {connection.adapterKey}");
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
-            throw ApiException.BadRequest("Адаптер не поддерживает массовый импорт");
+            throw ApiException.BadRequest("Adapter does not support bulk import");
 
         int pageSize = input?.pageSize ?? 100;
         int maxProducts = input?.maxProducts ?? 1000;
@@ -1157,7 +1157,7 @@ public class ProductSyncController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during bulk import for connection {ConnectionId}", connectionId);
-            errors.Add($"Импорт прерван: {ex.Message}");
+            errors.Add($"Import aborted: {ex.Message}");
         }
 
         return Ok(new
@@ -1186,18 +1186,18 @@ public class ProductSyncController : ControllerBase
     {
         await GetConnectionAsync(connectionId);
 
-        // Находим связь товара
+        // Find the product's marketplace link
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
         var link = await linkRepo.FindAsync(
             l => l.connectionId == connectionId && l.productId == productId);
 
         if (link == null)
-            throw ApiException.NotFound("Товар не привязан к этому маркетплейсу");
+            throw ApiException.NotFound("Product is not linked to this marketplace");
 
         var result = await _productSyncService.UpdateSkuAsync(link.Id, input.newSku, ct);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка обновления артикула");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to update SKU");
 
         return Ok(new
         {
@@ -1222,7 +1222,7 @@ public class ProductSyncController : ControllerBase
         var result = await _priceSyncService.ComparePricesAsync(connectionId, ct);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка сравнения цен");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to compare prices");
 
         return Ok(new
         {
@@ -1261,7 +1261,7 @@ public class ProductSyncController : ControllerBase
         var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "price-import",
-            "Импорт цен", connectionId: connectionId, connectionName: connection.name);
+            "Import prices", connectionId: connectionId, connectionName: connection.name);
 
         var result = await _priceSyncService.ImportPricesAsync(
             connectionId,
@@ -1274,7 +1274,7 @@ public class ProductSyncController : ControllerBase
         await _operationLogger.FinishAsync(operationId, storeId, status, result.Message ?? result.ErrorMessage);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка импорта цен");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to import prices", code: "import_failed");
 
         return Ok(new
         {
@@ -1302,9 +1302,9 @@ public class ProductSyncController : ControllerBase
         var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "price-export",
-            "Экспорт цен", connectionId: connectionId, connectionName: connection.name);
+            "Export prices", connectionId: connectionId, connectionName: connection.name);
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", $"Экспорт цен для {input?.linkIds?.Count ?? 0} товаров...");
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Exporting prices for {input?.linkIds?.Count ?? 0} products...");
 
         var result = await _priceSyncService.ExportPricesAsync(
             connectionId,
@@ -1317,7 +1317,7 @@ public class ProductSyncController : ControllerBase
         await _operationLogger.FinishAsync(operationId, storeId, status, result.Message ?? result.ErrorMessage);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка экспорта цен");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to export prices", code: "export_failed");
 
         return Ok(new
         {
@@ -1345,9 +1345,9 @@ public class ProductSyncController : ControllerBase
         var storeId = connection.storeId;
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "stock-export",
-            "Экспорт остатков", connectionId: connectionId, connectionName: connection.name);
+            "Export stock levels", connectionId: connectionId, connectionName: connection.name);
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", $"Экспорт остатков для {input?.linkIds?.Count ?? 0} товаров...");
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Exporting stock levels for {input?.linkIds?.Count ?? 0} products...");
 
         var result = await _priceSyncService.ExportStocksAsync(
             connectionId,
@@ -1360,7 +1360,7 @@ public class ProductSyncController : ControllerBase
         await _operationLogger.FinishAsync(operationId, storeId, stockStatus, result.Message ?? result.ErrorMessage);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка экспорта остатков");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to export stock levels", code: "export_failed");
 
         return Ok(new
         {
@@ -1420,11 +1420,11 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var context = _serviceProvider.GetRequiredService<DataContext>();
 
-        // Статистика по статусам
+        // Statistics by status
         var stats = await context.pendingImageDownloads
             .Where(p => p.storeId == selectedStoreId)
             .GroupBy(p => p.status)
@@ -1436,7 +1436,7 @@ public class ProductSyncController : ControllerBase
         var completedCount = stats.FirstOrDefault(s => s.Status == Models.ImageDownloadStatus.Completed)?.Count ?? 0;
         var failedCount = stats.FirstOrDefault(s => s.Status == Models.ImageDownloadStatus.Failed)?.Count ?? 0;
 
-        // Последние неудавшиеся загрузки
+        // Most recent failed uploads
         var recentFailed = await context.pendingImageDownloads
             .Where(p => p.storeId == selectedStoreId && p.status == Models.ImageDownloadStatus.Failed)
             .OrderByDescending(p => p.lastAttemptAt)
@@ -1471,7 +1471,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var context = _serviceProvider.GetRequiredService<DataContext>();
 
@@ -1517,7 +1517,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var context = _serviceProvider.GetRequiredService<DataContext>();
 
@@ -1552,7 +1552,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
         var links = await linkRepo.FindAllAsync(
@@ -1603,7 +1603,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         // Get product with category
         var productRepo = _unitOfWork.Repository<Product>();
@@ -1612,7 +1612,7 @@ public class ProductSyncController : ControllerBase
             q => q.Include(p => p.category));
 
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         // Get existing links
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
@@ -1634,7 +1634,7 @@ public class ProductSyncController : ControllerBase
             .GroupBy(m => m.connectionId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Возвращаем ВСЕ подключения с информацией о статусе
+        // Return ALL connections with status information
         var result = connections
             .Select(conn =>
             {
@@ -1653,7 +1653,7 @@ public class ProductSyncController : ControllerBase
                     adapterKey = conn.adapterKey,
                     adapterName = adapter?.DisplayName ?? conn.adapterKey,
                     productEditUrlTemplate = adapter?.ProductEditUrlTemplate,
-                    // Статус маппинга
+                    // Mapping status
                     hasMapping,
                     needsMapping = !hasMapping && product.categoryId.HasValue,
                     // Multi-mapping: all available mappings + selected one from link
@@ -1665,13 +1665,13 @@ public class ProductSyncController : ControllerBase
                             name = m.name,
                             externalCategoryName = m.externalCategoryName
                         }).ToList(),
-                    // Статус связи
+                    // Link status
                     isLinked,
                     linkId = link?.Id,
                     linkStatus = link?.status.ToString(),
                     externalProductId = link?.externalProductId,
                     externalSku = link?.externalSku,
-                    // Возможности
+                    // Capabilities
                     canExport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct) ?? false,
                     canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false,
                     canArchive = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct) ?? false
@@ -1703,19 +1703,19 @@ public class ProductSyncController : ControllerBase
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
-        // Получаем связь с маркетплейсом (с tracking для обновления полей)
+        // Get the marketplace link (with tracking to allow updating fields)
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
         var link = await linkRepo.GetByIdWithIncludesTrackingAsync(
             linkId,
             q => q.Include(l => l.connection).Include(l => l.product));
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
 
         if (link.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Доступ запрещён");
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
 
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
@@ -1725,27 +1725,27 @@ public class ProductSyncController : ControllerBase
 
         if (!opExists)
             await _operationLogger.StartAsync(operationId, storeId, userId, "single-import",
-                $"Импорт: {link.product?.name ?? link.externalProductId}",
+                $"Import: {link.product?.name ?? link.externalProductId}",
                 connectionId: link.connectionId, connectionName: link.connection.name);
 
-        // Получаем адаптер
+        // Get the adapter
         var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Адаптер '{link.connection.adapterKey}' не найден");
+            throw ApiException.BadRequest($"Adapter '{link.connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
-            throw ApiException.BadRequest("Адаптер не поддерживает импорт");
+            throw ApiException.BadRequest("Adapter does not support import");
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", "Получение данных с маркетплейса...");
+        await _operationLogger.LogAsync(operationId, storeId, "info", "Fetching data from the marketplace...");
 
-        // Получаем актуальные данные с маркетплейса
+        // Get up-to-date data from the marketplace
         var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
         if (externalProduct == null)
-            throw ApiException.BadRequest($"Товар с ID '{link.externalProductId}' не найден на маркетплейсе");
+            throw ApiException.BadRequest($"Product with ID '{link.externalProductId}' not found on the marketplace");
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", "Данные получены, сравнение полей...");
+        await _operationLogger.LogAsync(operationId, storeId, "info", "Data received, comparing fields...");
 
-        // Сравниваем и обновляем локальный товар
+        // Compare and update the local product
         var updatedFields = new List<string>();
         var oldValues = new Dictionary<string, object?>();
         var newValues = new Dictionary<string, object?>();
@@ -1754,9 +1754,9 @@ public class ProductSyncController : ControllerBase
         var product = link.product;
 
         if (product == null)
-            throw ApiException.BadRequest("Локальный товар не найден");
+            throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
-        // Обновляем название
+        // Update the name
         if (excludeFields?.Contains("name") != true &&
             !string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
         {
@@ -1766,7 +1766,7 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("name");
         }
 
-        // Обновляем описание
+        // Update the description
         if (excludeFields?.Contains("description") != true &&
             externalProduct.Description != null)
         {
@@ -1780,7 +1780,7 @@ public class ProductSyncController : ControllerBase
             }
         }
 
-        // Обновляем цену
+        // Update the price
         if (excludeFields?.Contains("price") != true &&
             externalProduct.Price.HasValue && product.price != externalProduct.Price.Value)
         {
@@ -1790,7 +1790,7 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("price");
         }
 
-        // Обновляем остаток
+        // Update the stock quantity
         if (excludeFields?.Contains("storageQuantity") != true &&
             externalProduct.Quantity.HasValue && product.storageQuantity != externalProduct.Quantity.Value)
         {
@@ -1800,7 +1800,7 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("storageQuantity");
         }
 
-        // Обновляем атрибуты на основе маппинга категории
+        // Update attributes based on the category mapping
         // Build set of excluded attribute field names (strip "attr:" prefix)
         HashSet<string>? excludeAttrFieldNames = null;
         if (excludeFields != null)
@@ -1833,7 +1833,7 @@ public class ProductSyncController : ControllerBase
             }
         }
 
-        // Обновляем связь с актуальными данными МП
+        // Update the link with up-to-date marketplace data
         link.externalPrice = externalProduct.Price;
         link.externalStock = externalProduct.Quantity;
         link.lastSyncAt = DateTime.UtcNow;
@@ -1843,8 +1843,8 @@ public class ProductSyncController : ControllerBase
         await _unitOfWork.SaveChangesAsync(ct);
 
         var summary = updatedFields.Count > 0
-            ? $"Обновлено полей: {updatedFields.Count}"
-            : "Изменений не обнаружено";
+            ? $"Fields updated: {updatedFields.Count}"
+            : "No changes detected";
         await _operationLogger.FinishAsync(operationId, storeId, "completed", summary);
 
         return Ok(new
@@ -1867,7 +1867,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
         var link = await linkRepo.FindAsync(
@@ -1875,21 +1875,21 @@ public class ProductSyncController : ControllerBase
             q => q.Include(l => l.connection).Include(l => l.product));
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
 
         if (link.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Доступ запрещён");
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
 
         var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Адаптер '{link.connection.adapterKey}' не найден");
+            throw ApiException.BadRequest($"Adapter '{link.connection.adapterKey}' not found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
-            throw ApiException.BadRequest("Адаптер не поддерживает импорт");
+            throw ApiException.BadRequest("Adapter does not support import");
 
         var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
         if (externalProduct == null)
-            throw ApiException.BadRequest($"Товар с ID '{link.externalProductId}' не найден на маркетплейсе");
+            throw ApiException.BadRequest($"Product with ID '{link.externalProductId}' not found on the marketplace");
 
         var updatedFields = new List<string>();
         var oldValues = new Dictionary<string, object?>();
@@ -1897,7 +1897,7 @@ public class ProductSyncController : ControllerBase
         var product = link.product;
 
         if (product == null)
-            throw ApiException.BadRequest("Локальный товар не найден");
+            throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
         if (!string.IsNullOrEmpty(externalProduct.Name) && product.name != externalProduct.Name)
         {
@@ -1973,11 +1973,11 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (input.linkIds == null || input.linkIds.Count == 0)
-            throw ApiException.BadRequest("Связи не указаны");
+            throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         // Batch-load all links in one query
         var allLinks = await _context.productMarketplaceLinks
@@ -2026,13 +2026,13 @@ public class ProductSyncController : ControllerBase
         {
             if (!linkMap.TryGetValue(linkId, out var link) || link.connection?.storeId != selectedStoreId.Value)
             {
-                results.Add(new BulkPreviewItemResult(linkId, null, false, [], empty, empty, "Связь не найдена"));
+                results.Add(new BulkPreviewItemResult(linkId, null, false, [], empty, empty, "Marketplace link not found"));
                 continue;
             }
 
             if (!externalProductMap.TryGetValue(link.externalProductId, out var externalProduct))
             {
-                results.Add(new BulkPreviewItemResult(linkId, link.product?.name, false, [], empty, empty, "Товар не найден на маркетплейсе"));
+                results.Add(new BulkPreviewItemResult(linkId, link.product?.name, false, [], empty, empty, "Product not found on the marketplace"));
                 continue;
             }
 
@@ -2129,22 +2129,22 @@ public class ProductSyncController : ControllerBase
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
-        // Получаем связь с маркетплейсом
+        // Get the marketplace link
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
         var link = await linkRepo.FindAsync(
             l => l.Id == linkId,
             q => q.Include(l => l.connection).Include(l => l.product));
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
 
         if (link.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Доступ запрещён");
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
 
         if (link.product == null)
-            throw ApiException.BadRequest("Локальный товар не найден");
+            throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
@@ -2154,27 +2154,27 @@ public class ProductSyncController : ControllerBase
 
         if (!opExists)
             await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
-                $"Экспорт: {link.product.name ?? link.externalProductId}",
+                $"Export: {link.product.name ?? link.externalProductId}",
                 connectionId: link.connectionId, connectionName: link.connection.name);
 
-        // Экспортируем через сервис
+        // Export through the service
         var result = await _productSyncService.ExportProductAsync(
             link.productId, link.connectionId, ct,
             operationId: operationId, operationStoreId: storeId);
 
         await _operationLogger.FinishAsync(operationId, storeId,
             result.IsSuccess ? "completed" : "failed",
-            result.IsSuccess ? (result.Message ?? "Товар экспортирован") : result.ErrorMessage);
+            result.IsSuccess ? (result.Message ?? "Product exported") : result.ErrorMessage);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Ошибка экспорта");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
 
         return Ok(new
         {
             operationId,
             success = true,
             externalProductId = result.ExternalProductId,
-            message = result.Message ?? "Товар успешно экспортирован"
+            message = result.Message ?? "Product exported successfully"
         });
     }
 
@@ -2189,11 +2189,11 @@ public class ProductSyncController : ControllerBase
     {
         // 1. Validate
         if (string.IsNullOrWhiteSpace(input.newSku) || input.newSku.Length > 50)
-            throw ApiException.BadRequest("Новый артикул обязателен (макс. 50 символов)");
+            throw ApiException.BadRequest("New SKU is required (max 50 characters)", code: "required_fields_missing");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         // 2. Load link with connection and product (tracking)
         var link = await _context.productMarketplaceLinks
@@ -2202,20 +2202,20 @@ public class ProductSyncController : ControllerBase
             .FirstOrDefaultAsync(l => l.Id == linkId, ct);
 
         if (link == null)
-            throw ApiException.NotFound("Связь не найдена");
+            throw ApiException.NotFound("Marketplace link not found");
         if (link.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Доступ запрещён");
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
         if (link.product == null)
-            throw ApiException.BadRequest("Локальный товар не найден");
+            throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
         // 3. Check adapter capabilities
         var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest("Адаптер маркетплейса не найден");
+            throw ApiException.BadRequest("Marketplace adapter not found");
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct))
-            throw ApiException.BadRequest("Адаптер не поддерживает экспорт товаров");
+            throw ApiException.BadRequest("Adapter does not support exporting products");
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct))
-            throw ApiException.BadRequest("Адаптер не поддерживает архивацию товаров");
+            throw ApiException.BadRequest("Adapter does not support archiving products");
 
         // 4. Save old data
         var oldExternalProductId = link.externalProductId;
@@ -2249,7 +2249,7 @@ public class ProductSyncController : ControllerBase
                     status = ProductMarketplaceStatus.SyncError
                 });
                 await _context.SaveChangesAsync(ct);
-                throw ApiException.BadRequest(exportResult.ErrorMessage ?? "Ошибка экспорта нового товара");
+                throw ApiException.BadRequest(exportResult.ErrorMessage ?? "Failed to export the new product", code: "export_failed");
             }
 
             // 7. Success: restore product.sku + update new link
@@ -2325,7 +2325,7 @@ public class ProductSyncController : ControllerBase
                 _logger.LogError(rollbackEx, "Rollback also failed for link {LinkId}", linkId);
             }
 
-            throw ApiException.BadRequest($"Ошибка пересоздания: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to recreate: {ex.Message}");
         }
     }
 
@@ -2340,17 +2340,17 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (input.linkIds == null || input.linkIds.Count == 0)
-            throw ApiException.BadRequest("Связи не указаны");
+            throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
 
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var operationId = Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
         await _operationLogger.StartAsync(operationId, storeId, userId, "batch-import",
-            $"Импорт изменений ({input.linkIds.Count} товаров)", totalItems: input.linkIds.Count);
+            $"Import changes ({input.linkIds.Count} products)", totalItems: input.linkIds.Count);
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
 
@@ -2361,7 +2361,7 @@ public class ProductSyncController : ControllerBase
             .Where(l => input.linkIds.Contains(l.Id))
             .ToListAsync(ct);
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", $"Загрузка данных для {allLinks.Count} товаров...");
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Loading data for {allLinks.Count} products...");
 
         var linkMap = allLinks.ToDictionary(l => l.Id);
 
@@ -2394,7 +2394,7 @@ public class ProductSyncController : ControllerBase
             }
         }
 
-        await _operationLogger.LogAsync(operationId, storeId, "info", $"Данные получены: {externalProductMap.Count} товаров");
+        await _operationLogger.LogAsync(operationId, storeId, "info", $"Data received: {externalProductMap.Count} products");
 
         // Apply updates per link
         var results = new List<object>();
@@ -2407,14 +2407,14 @@ public class ProductSyncController : ControllerBase
             {
                 if (!linkMap.TryGetValue(linkId, out var link) || link.connection?.storeId != selectedStoreId.Value)
                 {
-                    results.Add(new { linkId, success = false, error = "Связь не найдена или доступ запрещён" });
+                    results.Add(new { linkId, success = false, error = "Marketplace link not found or access denied" });
                     failedCount++;
                     continue;
                 }
 
                 if (!externalProductMap.TryGetValue(link.externalProductId, out var externalProduct))
                 {
-                    results.Add(new { linkId, success = false, error = "Товар не найден на маркетплейсе" });
+                    results.Add(new { linkId, success = false, error = "Product not found on the marketplace" });
                     failedCount++;
                     continue;
                 }
@@ -2473,14 +2473,14 @@ public class ProductSyncController : ControllerBase
 
                 results.Add(new { linkId, success = true, updatedFields });
                 successCount++;
-                await _operationLogger.LogAsync(operationId, storeId, "success", $"Импортирован: {product?.name ?? link.externalProductId}");
+                await _operationLogger.LogAsync(operationId, storeId, "success", $"Imported: {product?.name ?? link.externalProductId}");
                 await _operationLogger.ProgressAsync(operationId, storeId, input.linkIds.Count, successCount, failedCount);
             }
             catch (Exception ex)
             {
                 results.Add(new { linkId, success = false, error = ex.Message });
                 failedCount++;
-                await _operationLogger.LogAsync(operationId, storeId, "error", $"Ошибка: {ex.Message}");
+                await _operationLogger.LogAsync(operationId, storeId, "error", $"Error: {ex.Message}");
                 await _operationLogger.ProgressAsync(operationId, storeId, input.linkIds.Count, successCount, failedCount);
             }
         }
@@ -2489,7 +2489,7 @@ public class ProductSyncController : ControllerBase
 
         await _operationLogger.FinishAsync(operationId, storeId,
             failedCount == 0 ? "completed" : (successCount == 0 ? "failed" : "partial"),
-            $"Импортировано: {successCount}, ошибок: {failedCount}");
+            $"Imported: {successCount}, errors: {failedCount}");
 
         return Ok(new { operationId, results, successCount, failedCount });
     }
@@ -2504,17 +2504,17 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         if (input.linkIds == null || input.linkIds.Count == 0)
-            throw ApiException.BadRequest("Связи не указаны");
+            throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
 
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var bulkOpId = Guid.NewGuid().ToString("N");
         var bulkStoreId = selectedStoreId.Value;
         await _operationLogger.StartAsync(bulkOpId, bulkStoreId, userId, "batch-export",
-            $"Экспорт изменений ({input.linkIds.Count} товаров)", totalItems: input.linkIds.Count);
+            $"Export changes ({input.linkIds.Count} products)", totalItems: input.linkIds.Count);
 
         var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
 
@@ -2523,7 +2523,7 @@ public class ProductSyncController : ControllerBase
             l => input.linkIds.Contains(l.Id),
             q => q.Include(l => l.connection));
 
-        await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info", $"Экспорт {links.Count()} товаров...");
+        await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info", $"Exporting {links.Count()} products...");
 
         var results = new List<object>();
         int successCount = 0;
@@ -2533,7 +2533,7 @@ public class ProductSyncController : ControllerBase
         var foundLinkIds = links.Select(l => l.Id).ToHashSet();
         foreach (var linkId in input.linkIds.Where(id => !foundLinkIds.Contains(id)))
         {
-            results.Add(new { linkId, success = false, error = "Связь не найдена или доступ запрещён" });
+            results.Add(new { linkId, success = false, error = "Marketplace link not found or access denied" });
             failedCount++;
         }
 
@@ -2541,7 +2541,7 @@ public class ProductSyncController : ControllerBase
         var authorizedLinks = links.Where(l => l.connection?.storeId == selectedStoreId.Value).ToList();
         foreach (var link in links.Where(l => l.connection?.storeId != selectedStoreId.Value))
         {
-            results.Add(new { linkId = link.Id, success = false, error = "Связь не найдена или доступ запрещён" });
+            results.Add(new { linkId = link.Id, success = false, error = "Marketplace link not found or access denied" });
             failedCount++;
         }
 
@@ -2572,7 +2572,7 @@ public class ProductSyncController : ControllerBase
                         {
                             results.Add(new { linkId, success = true, externalProductId = item.ExternalProductId });
                             successCount++;
-                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "success", $"Экспортирован: #{item.ProductId}");
+                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "success", $"Exported: #{item.ProductId}");
                             var details = FormatExportDetails(item.Details);
                             if (details != null)
                                 await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info", $"#{item.ProductId}: {details}");
@@ -2581,7 +2581,7 @@ public class ProductSyncController : ControllerBase
                         {
                             results.Add(new { linkId, success = false, error = item.ErrorMessage });
                             failedCount++;
-                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Ошибка #{item.ProductId}: {item.ErrorMessage}");
+                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Error #{item.ProductId}: {item.ErrorMessage}");
                             var details = FormatExportDetails(item.Details);
                             if (details != null)
                                 await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"#{item.ProductId}: {details}");
@@ -2597,14 +2597,14 @@ public class ProductSyncController : ControllerBase
                     results.Add(new { linkId = link.Id, success = false, error = ex.Message });
                     failedCount++;
                 }
-                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Ошибка группы: {ex.Message}");
+                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Group error: {ex.Message}");
                 await _operationLogger.ProgressAsync(bulkOpId, bulkStoreId, input.linkIds.Count, successCount, failedCount);
             }
         }
 
         await _operationLogger.FinishAsync(bulkOpId, bulkStoreId,
             failedCount == 0 ? "completed" : (successCount == 0 ? "failed" : "partial"),
-            $"Экспортировано: {successCount}, ошибок: {failedCount}");
+            $"Exported: {successCount}, errors: {failedCount}");
 
         return Ok(new { operationId = bulkOpId, results, successCount, failedCount });
     }
@@ -2622,12 +2622,12 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var variants = await _context.productVariants
             .Where(v => v.productId == productId)
@@ -2662,12 +2662,12 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         // Determine next sort order
         var maxSortOrder = await _context.productVariants
@@ -2705,17 +2705,17 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var variant = await _context.productVariants
             .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
         if (variant == null)
-            throw ApiException.NotFound("Вариант не найден");
+            throw ApiException.NotFound("Variant not found");
 
         variant.UpdateFill(new ProductVariant.UpdateForm
         {
@@ -2744,17 +2744,17 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
         if (product == null)
-            throw ApiException.NotFound("Товар не найден");
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
 
         var variant = await _context.productVariants
             .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
         if (variant == null)
-            throw ApiException.NotFound("Вариант не найден");
+            throw ApiException.NotFound("Variant not found");
 
         _context.productVariants.Remove(variant);
         await _context.SaveChangesAsync(ct);
@@ -2770,7 +2770,7 @@ public class ProductSyncController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Магазин не выбран");
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -2778,7 +2778,7 @@ public class ProductSyncController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Подключение не найдено");
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         return connection;
     }
@@ -2791,13 +2791,13 @@ public class ProductSyncController : ControllerBase
         try
         {
             if (details.TryGetValue("images", out var images))
-                return $"Детали экспорта изображений: {JsonSerializer.Serialize(images)}";
+                return $"Image export details: {JsonSerializer.Serialize(images)}";
 
-            return $"Детали экспорта: {JsonSerializer.Serialize(details)}";
+            return $"Export details: {JsonSerializer.Serialize(details)}";
         }
         catch
         {
-            return "Детали экспорта получены, но не удалось сериализовать их для лога";
+            return "Export details were received but could not be serialized for the log";
         }
     }
 

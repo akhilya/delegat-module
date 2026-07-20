@@ -25,20 +25,20 @@ public class ExcelProductService
         List<StoreAttribute> storeAttributes)
     {
         var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add("Товары");
+        var ws = wb.Worksheets.Add("Products");
 
         // --- Fixed columns ---
         var fixedColumns = new (string key, string header, bool readOnly)[]
         {
             ("id", "ID", true),
-            ("sku", "Артикул", true),
-            ("category", "Категория", true),
-            ("group", "Группа", true),
-            ("name", "Название", false),
-            ("description", "Описание", false),
-            ("price", "Цена", false),
-            ("storageQuantity", "Кол-во на складе", false),
-            ("barcode", "Штрих-код", false),
+            ("sku", "SKU", true),
+            ("category", "Category", true),
+            ("group", "Group", true),
+            ("name", "Name", false),
+            ("description", "Description", false),
+            ("price", "Price", false),
+            ("storageQuantity", "Stock qty", false),
+            ("barcode", "Barcode", false),
         };
 
         int col = 1;
@@ -210,7 +210,7 @@ public class ExcelProductService
                     Row = row.RowNumber,
                     ProductId = row.ProductId,
                     Field = "id",
-                    Message = "Товар не найден"
+                    Message = "Product not found"
                 });
                 continue;
             }
@@ -226,15 +226,15 @@ public class ExcelProductService
                 {
                     case "name":
                         oldValue = product.name;
-                        fieldName = "Название";
+                        fieldName = "Name";
                         break;
                     case "description":
                         oldValue = product.description;
-                        fieldName = "Описание";
+                        fieldName = "Description";
                         break;
                     case "price":
                         oldValue = product.price?.ToString() ?? "";
-                        fieldName = "Цена";
+                        fieldName = "Price";
                         if (!string.IsNullOrEmpty(newValue) && !decimal.TryParse(newValue, out _))
                         {
                             errors.Add(new ImportError
@@ -242,14 +242,14 @@ public class ExcelProductService
                                 Row = row.RowNumber,
                                 ProductId = row.ProductId,
                                 Field = key,
-                                Message = $"Невалидное значение цены: {newValue}"
+                                Message = $"Invalid price value: {newValue}"
                             });
                             continue;
                         }
                         break;
                     case "storageQuantity":
                         oldValue = product.storageQuantity?.ToString() ?? "";
-                        fieldName = "Кол-во на складе";
+                        fieldName = "Stock qty";
                         if (!string.IsNullOrEmpty(newValue) && !int.TryParse(newValue, out _))
                         {
                             errors.Add(new ImportError
@@ -257,14 +257,14 @@ public class ExcelProductService
                                 Row = row.RowNumber,
                                 ProductId = row.ProductId,
                                 Field = key,
-                                Message = $"Невалидное значение количества: {newValue}"
+                                Message = $"Invalid quantity value: {newValue}"
                             });
                             continue;
                         }
                         break;
                     case "barcode":
                         oldValue = product.barcode ?? "";
-                        fieldName = "Штрих-код";
+                        fieldName = "Barcode";
                         if (!string.IsNullOrEmpty(newValue) && !ProductController.IsValidEanBarcode(newValue))
                         {
                             errors.Add(new ImportError
@@ -272,7 +272,7 @@ public class ExcelProductService
                                 Row = row.RowNumber,
                                 ProductId = row.ProductId,
                                 Field = key,
-                                Message = $"Невалидный штрихкод: {newValue}"
+                                Message = $"Invalid barcode: {newValue}"
                             });
                             continue;
                         }
@@ -285,7 +285,7 @@ public class ExcelProductService
                             var existingVal = product.attributeValues
                                 .FirstOrDefault(av => av.attributeId == attrId);
                             oldValue = existingVal?.value ?? "";
-                            fieldName = existingVal?.attribute?.name ?? $"Атрибут категории #{attrId}";
+                            fieldName = existingVal?.attribute?.name ?? $"Category attribute #{attrId}";
                         }
                         else if (key.StartsWith("storeAttr:"))
                         {
@@ -294,7 +294,7 @@ public class ExcelProductService
                             var existingVal = product.storeAttributeValues
                                 .FirstOrDefault(sav => sav.storeAttributeId == attrId);
                             oldValue = existingVal?.value ?? "";
-                            fieldName = existingVal?.storeAttribute?.name ?? $"Атрибут магазина #{attrId}";
+                            fieldName = existingVal?.storeAttribute?.name ?? $"Store attribute #{attrId}";
                         }
                         else
                         {
@@ -364,7 +364,7 @@ public class ExcelProductService
                 {
                     ProductId = productChange.ProductId,
                     Field = "id",
-                    Message = "Товар не найден при применении"
+                    Message = "Product not found when applying"
                 });
                 continue;
             }

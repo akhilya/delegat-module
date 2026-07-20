@@ -62,7 +62,7 @@ public class PluginController : ControllerBase
     {
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
-            throw ApiException.NotFound($"Плагин '{key}' не найден");
+            throw ApiException.NotFound($"Plugin '{key}' not found");
 
         var plugin = loaded.Plugin;
 
@@ -92,21 +92,21 @@ public class PluginController : ControllerBase
         await EnsureAdminAsync();
 
         if (file == null || file.Length == 0)
-            throw ApiException.BadRequest("Файл не предоставлен");
+            throw ApiException.BadRequest("No file provided", code: "required_fields_missing");
 
         var safeFileName = FileNameSafety.Sanitize(file.FileName, "plugin.dll");
         if (!safeFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            throw ApiException.BadRequest("Разрешены только файлы .dll");
+            throw ApiException.BadRequest("Only .dll files are allowed");
 
         // Validate file size (max 50MB)
         if (file.Length > 50 * 1024 * 1024)
-            throw ApiException.BadRequest("Файл слишком большой. Максимальный размер — 50 МБ");
+            throw ApiException.BadRequest("File is too large. Maximum size is 50 MB");
 
         var pluginsDir = _pluginManager.PluginsDirectory;
         var destPath = Path.GetFullPath(Path.Combine(pluginsDir, safeFileName));
         if (!destPath.StartsWith(Path.GetFullPath(pluginsDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !destPath.Equals(Path.GetFullPath(pluginsDir), StringComparison.OrdinalIgnoreCase))
-            throw ApiException.BadRequest("Некорректное имя файла плагина");
+            throw ApiException.BadRequest("Invalid plugin file name");
 
         // If file exists, check if plugin is loaded and unload it first
         if (System.IO.File.Exists(destPath))
@@ -147,7 +147,7 @@ public class PluginController : ControllerBase
                 key = loaded.Key,
                 displayName = loaded.Plugin.DisplayName,
                 version = loaded.Version,
-                message = $"Плагин '{loaded.Plugin.DisplayName}' успешно установлен"
+                message = $"Plugin '{loaded.Plugin.DisplayName}' installed successfully"
             });
         }
         catch (Exception ex)
@@ -159,7 +159,7 @@ public class PluginController : ControllerBase
             }
 
             _logger.LogError(ex, "Failed to install plugin from {File}", safeFileName);
-            throw ApiException.BadRequest($"Не удалось загрузить плагин: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to load plugin: {ex.Message}");
         }
     }
 
@@ -173,16 +173,16 @@ public class PluginController : ControllerBase
 
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
-            throw ApiException.NotFound($"Плагин '{key}' не найден");
+            throw ApiException.NotFound($"Plugin '{key}' not found");
 
         if (loaded.Plugin.IsSystem)
-            throw ApiException.BadRequest("Системный плагин не может быть удалён");
+            throw ApiException.BadRequest("A system plugin cannot be deleted");
 
         var filePath = loaded.FilePath;
 
         // Unload plugin
         if (!_pluginManager.UnloadPlugin(key))
-            throw ApiException.BadRequest($"Не удалось выгрузить плагин '{key}'");
+            throw ApiException.BadRequest($"Failed to unload plugin '{key}'");
 
         // Invalidate registry cache
         _registry.InvalidateCache(key);
@@ -196,7 +196,7 @@ public class PluginController : ControllerBase
             }
 
             _logger.LogInformation("Plugin deleted: {Key}", key);
-            return Ok(new { success = true, message = $"Плагин '{key}' удалён" });
+            return Ok(new { success = true, message = $"Plugin '{key}' deleted" });
         }
         catch (Exception ex)
         {
@@ -204,7 +204,7 @@ public class PluginController : ControllerBase
             return Ok(new
             {
                 success = true,
-                warning = $"Плагин выгружен, но удаление файла не удалось: {ex.Message}. Возможно, вам придётся удалить файл вручную."
+                warning = $"Plugin unloaded, but the file could not be deleted: {ex.Message}. You may need to delete the file manually."
             });
         }
     }
@@ -221,7 +221,7 @@ public class PluginController : ControllerBase
         {
             var reloaded = _pluginManager.ReloadPlugin(key);
             if (reloaded == null)
-                throw ApiException.NotFound($"Плагин '{key}' не найден");
+                throw ApiException.NotFound($"Plugin '{key}' not found");
 
             // Invalidate registry cache
             _registry.InvalidateCache(key);
@@ -246,7 +246,7 @@ public class PluginController : ControllerBase
                 key = reloaded.Key,
                 displayName = reloaded.Plugin.DisplayName,
                 version = reloaded.Version,
-                message = $"Плагин '{reloaded.Plugin.DisplayName}' перезагружен"
+                message = $"Plugin '{reloaded.Plugin.DisplayName}' reloaded"
             });
         }
         catch (ApiException)
@@ -256,7 +256,7 @@ public class PluginController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reload plugin {Key}", key);
-            throw ApiException.BadRequest($"Не удалось перезагрузить плагин: {ex.Message}");
+            throw ApiException.BadRequest($"Failed to reload plugin: {ex.Message}");
         }
     }
 
@@ -264,6 +264,6 @@ public class PluginController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Только администраторы могут управлять плагинами");
+            throw ApiException.Forbidden("Only administrators can manage plugins");
     }
 }
