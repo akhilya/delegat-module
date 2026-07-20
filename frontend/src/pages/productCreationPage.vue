@@ -34,6 +34,7 @@ import {
   formRecordToAttributeValues,
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { t } from "@/i18n";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
@@ -101,8 +102,8 @@ export default {
     return {
       PAGE_PRODUCTS,
       breadcrumbs: [
-        { label: "Товары", to: PAGE_PRODUCTS },
-        { label: "Создание товара" },
+        { label: this.$t("routes.products"), to: PAGE_PRODUCTS },
+        { label: this.$t("pages.productCreationPage.breadcrumbTitle") },
       ],
     };
   },
@@ -136,14 +137,14 @@ export default {
     const formSchema = computed(() => toTypedSchema(
       z.object({
         product: z.object({
-          sku: z.string().min(1, "Артикул обязателен").max(20),
+          sku: z.string().min(1, t("pages.productCreationPage.validation.skuRequired")).max(20),
           barcode: z.string().max(13).optional().nullable(),
-          name: z.string().min(1, "Название обязательно").max(100),
+          name: z.string().min(1, t("pages.productCreationPage.validation.nameRequired")).max(100),
           description: z.string().max(5000).default(""),
           storageQuantity: z
             .number()
             .int()
-            .min(0, "Количество не может быть отрицательным")
+            .min(0, t("pages.productCreationPage.validation.quantityNonNegative"))
             .optional()
             .nullable(),
           price: priceField,
@@ -162,6 +163,7 @@ export default {
 
     const form = useForm({
       validationSchema: formSchema,
+      keepValuesOnUnmount: true,
       initialValues: {
         product: {
           sku: "",
@@ -181,6 +183,8 @@ export default {
       },
     });
 
+    const isFormValid = computed(() => form.meta.value.valid);
+
     const productGroups = ref([]);
     const selectedGroupId = ref(null);
     const isLoadingGroups = ref(false);
@@ -189,6 +193,12 @@ export default {
     const galleryFileInput = ref(null);
     const isUploadingGallery = ref(false);
     const groupDetail = ref(null);
+    const isDescriptionGenerating = ref(false);
+    const descriptionGeneratingHint = computed(() =>
+      form.values.product?.description?.trim()
+        ? t("ai.descriptionImprovingHint")
+        : t("ai.descriptionGeneratingHint"),
+    );
     let pendingImageId = 0;
 
     function revokeImagePreview(img) {
@@ -229,9 +239,9 @@ export default {
 
     async function removeGalleryImage(index) {
       const ok = await confirm({
-        title: "Убрать фото из списка?",
-        description: "Изображение не будет добавлено к товару.",
-        confirmLabel: "Убрать",
+        title: t("pages.productCreationPage.removePhotoConfirm.title"),
+        description: t("pages.productCreationPage.removePhotoConfirm.description"),
+        confirmLabel: t("pages.productCreationPage.removePhotoConfirm.confirmLabel"),
       });
       if (!ok) return;
 
@@ -295,10 +305,10 @@ export default {
     function attributeCountLabel(n) {
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return "атрибутов";
-      if (mod10 === 1) return "атрибут";
-      if (mod10 >= 2 && mod10 <= 4) return "атрибута";
-      return "атрибутов";
+      if (mod100 >= 11 && mod100 <= 14) return t("pages.productCreationPage.attributesCount.formMany");
+      if (mod10 === 1) return t("pages.productCreationPage.attributesCount.formOne");
+      if (mod10 >= 2 && mod10 <= 4) return t("pages.productCreationPage.attributesCount.formFew");
+      return t("pages.productCreationPage.attributesCount.formMany");
     }
 
     function pricePreview(amount) {
@@ -353,7 +363,7 @@ export default {
     );
 
     const groupSelectOptions = computed(() => [
-      { value: GROUP_NONE, label: "Без группы" },
+      { value: GROUP_NONE, label: t("pages.productCreationPage.fields.group.noGroupOption") },
       ...productGroups.value.map((g) => ({
         value: String(g.id),
         label: g.name,
@@ -562,80 +572,85 @@ export default {
       }
     });
 
-    const onSubmit = form.handleSubmit(async (values) => {
-      if (!selectedCategoryId.value) {
-        categoryError.value = "Выберите категорию";
-        displaySonnerError("Выберите категорию товара");
-        return;
-      }
-
-      isSubmitting.value = true;
-
-      const input = {
-        ...values.product,
-        categoryId: selectedCategoryId.value,
-        attributeValues: formRecordToAttributeValues(values.categoryAttributes, "attributeId"),
-        storeAttributeValues: formRecordToAttributeValues(values.storeAttributes, "storeAttributeId"),
-      };
-
-      try {
-        if (sortedImages.value.length > 0) {
-          isUploadingGallery.value = true;
+    const onSubmit = form.handleSubmit(
+      async (values) => {
+        if (!selectedCategoryId.value) {
+          categoryError.value = t("pages.productCreationPage.validation.categoryRequired");
+          displaySonnerError(t("pages.productCreationPage.validation.categoryRequiredToast"));
+          return;
         }
 
-        await store.dispatch("createProduct", {
-          input,
-          onSuccess: async (response) => {
-            const createdProduct = response.data.value;
-            let successMessage = "Товар успешно создан.";
+        isSubmitting.value = true;
 
-            if (sortedImages.value.length > 0) {
-              const imagesOk = await persistPendingImages(createdProduct.id);
-              sortedImages.value.forEach(revokeImagePreview);
-              sortedImages.value = [];
-              if (!imagesOk) {
-                successMessage = "Товар создан, но не удалось загрузить фотографии.";
+        const input = {
+          ...values.product,
+          categoryId: selectedCategoryId.value,
+          attributeValues: formRecordToAttributeValues(values.categoryAttributes, "attributeId"),
+          storeAttributeValues: formRecordToAttributeValues(values.storeAttributes, "storeAttributeId"),
+        };
+
+        try {
+          if (sortedImages.value.length > 0) {
+            isUploadingGallery.value = true;
+          }
+
+          await store.dispatch("createProduct", {
+            input,
+            onSuccess: async (response) => {
+              const createdProduct = response.data.value;
+              let imagesFailed = false;
+              let successMessage = t("pages.productCreationPage.toast.createdSuccess");
+
+              if (sortedImages.value.length > 0) {
+                const imagesOk = await persistPendingImages(createdProduct.id);
+                sortedImages.value.forEach(revokeImagePreview);
+                sortedImages.value = [];
+                if (!imagesOk) {
+                  imagesFailed = true;
+                  successMessage = t("pages.productCreationPage.toast.createdImagesFailed");
+                }
               }
-            }
 
-            if (selectedGroupId.value && createdProduct.id) {
-              await store.dispatch("addProductsToGroup", {
-                groupId: selectedGroupId.value,
-                productIds: [createdProduct.id],
-                onSuccess: () => {
-                  if (successMessage === "Товар успешно создан.") {
-                    displaySonnerSuccess("Товар создан и добавлен в группу.");
-                  } else {
-                    displaySonnerSuccess(`${successMessage} Товар добавлен в группу.`);
-                  }
-                },
-                onError: () => {
-                  displaySonnerSuccess(`${successMessage} Не удалось добавить в группу.`);
-                },
-              });
-            } else {
-              displaySonnerSuccess(successMessage);
-            }
+              if (selectedGroupId.value && createdProduct.id) {
+                await store.dispatch("addProductsToGroup", {
+                  groupId: selectedGroupId.value,
+                  productIds: [createdProduct.id],
+                  onSuccess: () => {
+                    if (!imagesFailed) {
+                      displaySonnerSuccess(t("pages.productCreationPage.toast.createdAndAddedToGroup"));
+                    } else {
+                      displaySonnerSuccess(t("pages.productCreationPage.toast.addedToGroupSuffix", { message: successMessage }));
+                    }
+                  },
+                  onError: () => {
+                    displaySonnerSuccess(t("pages.productCreationPage.toast.addToGroupFailedSuffix", { message: successMessage }));
+                  },
+                });
+              } else {
+                displaySonnerSuccess(successMessage);
+              }
 
-            router.push(createdProduct.next);
-          },
-          onError: (error) => {
-            if (error?.response?.data?.errors) form.setErrors(error.response.data.errors);
-            displaySonnerError(error);
-          },
-        });
-      } catch (error) {
-        displaySonnerError(error);
-      } finally {
-        isSubmitting.value = false;
-        isUploadingGallery.value = false;
-      }
-    });
+              router.push(createdProduct.next);
+            },
+            onError: (error) => {
+              if (error?.response?.data?.errors) form.setErrors(error.response.data.errors);
+              displaySonnerError(error);
+            },
+          });
+        } catch (error) {
+          displaySonnerError(error);
+        } finally {
+          isSubmitting.value = false;
+          isUploadingGallery.value = false;
+        }
+      },
+    );
 
     return {
       form,
       onSubmit,
       isSubmitting,
+      isFormValid,
       isLoadingCategories,
       categories,
       selectedCategoryId,
@@ -651,6 +666,8 @@ export default {
       selectedGroupId,
       isLoadingGroups,
       descriptionRef,
+      isDescriptionGenerating,
+      descriptionGeneratingHint,
       autoResizeDescription,
       groupDetail,
       getDuplicateUrl,
@@ -722,23 +739,22 @@ export default {
               <div class="flex w-full min-w-0 flex-col gap-6">
                 <Card class="border-0 shadow-none">
                   <CardHeader>
-                    <CardTitle class="text-base">Основные данные</CardTitle>
+                    <CardTitle class="text-base">{{ $t("pages.productCreationPage.sections.mainData.title") }}</CardTitle>
                     <CardDescription>
-                      Категория, артикул, штрихкод, название и цена. Количество и цена по размерам — если у категории
-                      включены размеры.
+                      {{ $t("pages.productCreationPage.sections.mainData.description") }}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <FieldGroup class="gap-5">
                       <SettingsFormField
-                        label="Категория"
+                        :label="$t('pages.productCreationPage.fields.category.label')"
                         :error="categoryError"
                         required
                       >
                         <SearchableSelect
                           :model-value="currentCategorySelectValue"
                           :options="categorySelectOptions"
-                          placeholder="Выберите категорию..."
+                          :placeholder="$t('pages.productCreationPage.fields.category.placeholder')"
                           :disabled="isLoadingCategories || isSubmitting"
                           :invalid="!!categoryError"
                           @update:model-value="onCategorySelectChange"
@@ -747,19 +763,19 @@ export default {
                           v-if="categories.length === 0 && !isLoadingCategories"
                           class="text-xs text-muted-foreground mt-1.5"
                         >
-                          Сначала создайте категорию товаров
+                          {{ $t("pages.productCreationPage.fields.category.emptyHint") }}
                         </p>
                       </SettingsFormField>
 
                       <SettingsFormField
                         v-if="productGroups.length > 0"
-                        label="Группа товаров"
+                        :label="$t('pages.productCreationPage.fields.group.label')"
                       >
                         <div class="space-y-1.5">
                           <SearchableSelect
                             :model-value="currentGroupSelectValue"
                             :options="groupSelectOptions"
-                            placeholder="Выберите группу..."
+                            :placeholder="$t('pages.productCreationPage.fields.group.placeholder')"
                             :disabled="isLoadingGroups || isSubmitting"
                             @update:model-value="onGroupSelectChange"
                           />
@@ -768,14 +784,14 @@ export default {
                             :to="`/product-groups/${groupDetail.id}/edit`"
                             class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            Редактировать группу
+                            {{ $t("pages.productCreationPage.fields.group.editLink") }}
                           </router-link>
                         </div>
                       </SettingsFormField>
 
                       <FormField v-slot="{ componentField, errorMessage }" name="product.sku">
                         <FormItem class="gap-0">
-                          <SettingsFormField label="Артикул" label-for="product-sku" :error="errorMessage">
+                          <SettingsFormField :label="$t('pages.productCreationPage.fields.sku.label')" label-for="product-sku" :error="errorMessage">
                             <FormControl>
                               <Input
                                 id="product-sku"
@@ -790,7 +806,7 @@ export default {
 
                       <FormField v-slot="{ value, setValue, errorMessage }" name="product.barcode">
                         <FormItem class="gap-0">
-                          <SettingsFormField label="Штрихкод (EAN)" label-for="product-barcode" :error="errorMessage">
+                          <SettingsFormField :label="$t('pages.productCreationPage.fields.barcode.label')" label-for="product-barcode" :error="errorMessage">
                             <FormControl>
                               <BarcodeInput
                                 id="product-barcode"
@@ -804,7 +820,7 @@ export default {
 
                       <FormField v-slot="{ componentField, errorMessage }" name="product.name">
                         <FormItem class="gap-0">
-                          <SettingsFormField label="Название" label-for="product-name" :error="errorMessage" required>
+                          <SettingsFormField :label="$t('pages.productCreationPage.fields.name.label')" label-for="product-name" :error="errorMessage" required>
                             <FormControl>
                               <Input id="product-name" type="text" v-bind="componentField" />
                             </FormControl>
@@ -815,24 +831,39 @@ export default {
                       <FormField v-slot="{ componentField, errorMessage }" name="product.description">
                         <FormItem class="gap-1.5">
                           <div class="flex items-center justify-between gap-2">
-                            <label for="product-description" class="text-sm font-medium leading-none">Описание</label>
+                            <label for="product-description" class="text-sm font-medium leading-none">{{ $t("pages.productCreationPage.fields.description.label") }}</label>
                             <AiDescriptionGenerator
                               :product-name="form.values.product?.name"
                               :category-name="selectedCategory?.name"
                               :existing-description="form.values.product?.description"
                               :attributes-summary="aiAttributesSummary"
+                              @update:generating="isDescriptionGenerating = $event"
                               @generated="(text) => { form.setFieldValue('product.description', text); nextTick(() => autoResizeDescription()); }"
                             />
                           </div>
-                          <FormControl>
-                            <Textarea
-                              id="product-description"
-                              ref="descriptionRef"
-                              v-bind="componentField"
-                              @input="autoResizeDescription"
-                              class="min-h-24 overflow-hidden resize-none"
-                            />
-                          </FormControl>
+                          <div class="relative">
+                            <FormControl>
+                              <Textarea
+                                id="product-description"
+                                ref="descriptionRef"
+                                v-bind="componentField"
+                                :disabled="isDescriptionGenerating"
+                                :aria-busy="isDescriptionGenerating"
+                                @input="autoResizeDescription"
+                                class="min-h-24 overflow-hidden resize-none transition-opacity"
+                                :class="isDescriptionGenerating ? 'opacity-60' : ''"
+                              />
+                            </FormControl>
+                            <div
+                              v-if="isDescriptionGenerating"
+                              class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
+                            >
+                              <p class="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Loader2 class="size-3.5 animate-spin" />
+                                {{ descriptionGeneratingHint }}
+                              </p>
+                            </div>
+                          </div>
                           <p v-if="errorMessage" class="text-sm text-destructive">{{ errorMessage }}</p>
                         </FormItem>
                       </FormField>
@@ -840,16 +871,16 @@ export default {
                       <template v-if="!selectedCategory?.hasSizes">
                         <div class="space-y-4 border-t pt-5">
                           <div>
-                            <h4 class="text-sm font-medium">Остатки</h4>
+                            <h4 class="text-sm font-medium">{{ $t("pages.productCreationPage.sections.stock.title") }}</h4>
                             <p class="text-xs text-muted-foreground mt-0.5">
-                              Наличие и складские параметры товара
+                              {{ $t("pages.productCreationPage.sections.stock.description") }}
                             </p>
                           </div>
                           <div class="grid grid-cols-1 gap-5">
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
                               <FormItem class="gap-0">
                                 <SettingsFormField
-                                  label="Количество на складе"
+                                  :label="$t('pages.productCreationPage.fields.quantity.label')"
                                   label-for="product-quantity"
                                   :error="errorMessage"
                                 >
@@ -877,15 +908,15 @@ export default {
 
                         <div class="space-y-4 border-t pt-5">
                           <div>
-                            <h4 class="text-sm font-medium">Цена</h4>
+                            <h4 class="text-sm font-medium">{{ $t("pages.productCreationPage.sections.price.title") }}</h4>
                             <p class="text-xs text-muted-foreground mt-0.5">
-                              Основная цена хранится в {{ storeBaseCurrency || "базовой валюте магазина" }}
+                              {{ $t("pages.productCreationPage.sections.price.description", { currency: storeBaseCurrency || $t("pages.productCreationPage.fields.price.defaultCurrencyFallback") }) }}
                             </p>
                           </div>
                           <div class="grid grid-cols-1 gap-5">
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
                               <FormItem class="gap-0">
-                                <SettingsFormField :label="`Цена (${storeBaseCurrency || '—'})`" label-for="product-price" :error="errorMessage">
+                                <SettingsFormField :label="$t('pages.productCreationPage.fields.price.label', { currency: storeBaseCurrency || $t('common.emDash') })" label-for="product-price" :error="errorMessage">
                                   <FormControl>
                                     <Input
                                       id="product-price"
@@ -908,18 +939,18 @@ export default {
 
                         <div v-if="extendedPriceParameters" class="space-y-4 border-t pt-5">
                           <div>
-                            <h4 class="text-sm font-medium">Расширенные параметры цены</h4>
+                            <h4 class="text-sm font-medium">{{ $t("pages.productCreationPage.sections.extendedPrice.title") }}</h4>
                             <p class="text-xs text-muted-foreground mt-0.5">
-                              Для маркетплейсов со скидками, минимальной ценой и экспортом в другой валюте
+                              {{ $t("pages.productCreationPage.sections.extendedPrice.description") }}
                             </p>
                           </div>
                           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.oldPrice">
                               <FormItem class="gap-0">
                                 <SettingsFormField
-                                  :label="`Старая цена (${storeBaseCurrency || '—'})`"
+                                  :label="$t('pages.productCreationPage.fields.oldPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })"
                                   :error="errorMessage"
-                                  description="Зачёркнутая цена до скидки. Скидка % считается от неё и поля «Цена» выше."
+                                  :description="$t('pages.productCreationPage.fields.oldPrice.description')"
                                 >
                                   <FormControl>
                                     <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
@@ -930,9 +961,9 @@ export default {
                             <FormField v-slot="{ value, errorMessage }" name="product.discount">
                               <FormItem class="gap-0">
                                 <SettingsFormField
-                                  label="Скидка (%)"
+                                  :label="$t('pages.productCreationPage.fields.discount.label')"
                                   :error="errorMessage"
-                                  description="Вычисляется из старой цены и текущей цены"
+                                  :description="$t('pages.productCreationPage.fields.discount.description')"
                                 >
                                   <FormControl>
                                     <Input
@@ -947,7 +978,7 @@ export default {
                             </FormField>
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.minPrice">
                               <FormItem class="gap-0">
-                                <SettingsFormField :label="`Минимальная цена (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                                <SettingsFormField :label="$t('pages.productCreationPage.fields.minPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
                                   <FormControl>
                                     <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
                                   </FormControl>
@@ -956,7 +987,7 @@ export default {
                             </FormField>
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.netPrice">
                               <FormItem class="gap-0">
-                                <SettingsFormField :label="`Себестоимость (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                                <SettingsFormField :label="$t('pages.productCreationPage.fields.netPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
                                   <FormControl>
                                     <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
                                   </FormControl>
@@ -966,9 +997,9 @@ export default {
                             <FormField v-slot="{ value, setValue, errorMessage }" name="product.currency">
                               <FormItem class="gap-0 sm:col-span-2">
                                 <SettingsFormField
-                                  label="Валюта (экспорт)"
+                                  :label="$t('pages.productCreationPage.fields.currency.label')"
                                   :error="errorMessage"
-                                  :description="`Суммы хранятся в ${storeBaseCurrency || 'базовой валюте'}. Валюта задаёт, в какой валюте уйдут цены на маркетплейс при экспорте.`"
+                                  :description="$t('pages.productCreationPage.fields.currency.description', { currency: storeBaseCurrency || $t('pages.productCreationPage.fields.currency.defaultCurrencyFallback') })"
                                 >
                                   <FormControl>
                                     <Select :model-value="value || storeBaseCurrency" @update:model-value="setValue($event)" class="w-full">
@@ -993,11 +1024,13 @@ export default {
                   class="border-0 shadow-none"
                 >
                   <CardHeader>
-                    <CardTitle class="text-base">Атрибуты категории</CardTitle>
+                    <CardTitle class="text-base">{{ $t("pages.productCreationPage.sections.categoryAttributes.title") }}</CardTitle>
                     <CardDescription>
-                      {{ visibleCategoryAttributes.length }}
-                      {{ attributeCountLabel(visibleCategoryAttributes.length) }}.
-                      Значения из настроек категории «{{ selectedCategory.name }}».
+                      {{ $t("pages.productCreationPage.sections.categoryAttributes.description", {
+                        count: visibleCategoryAttributes.length,
+                        unit: attributeCountLabel(visibleCategoryAttributes.length),
+                        category: selectedCategory.name,
+                      }) }}
                     </CardDescription>
                   </CardHeader>
                   <CardContent class="pt-0">
@@ -1012,11 +1045,12 @@ export default {
                   class="border-0 shadow-none"
                 >
                   <CardHeader>
-                    <CardTitle class="text-base">Глобальные атрибуты</CardTitle>
+                    <CardTitle class="text-base">{{ $t("nav.globalAttributes") }}</CardTitle>
                     <CardDescription>
-                      {{ visibleStoreAttributes.length }}
-                      {{ attributeCountLabel(visibleStoreAttributes.length) }}.
-                      Общие для всех товаров магазина.
+                      {{ $t("pages.productCreationPage.sections.storeAttributes.description", {
+                        count: visibleStoreAttributes.length,
+                        unit: attributeCountLabel(visibleStoreAttributes.length),
+                      }) }}
                     </CardDescription>
                   </CardHeader>
                   <CardContent class="pt-0">
@@ -1053,11 +1087,11 @@ export default {
                 type="submit"
                 form="product-create-form"
                 size="sm"
-                :disabled="isSubmitting || !selectedCategoryId"
+                :disabled="isSubmitting || !selectedCategoryId || !isFormValid"
               >
                 <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
                 <Plus v-else class="size-4 mr-2" />
-                Создать товар
+                {{ $t("pages.productCreationPage.actions.createProduct") }}
               </Button>
           </div>
           <div class="w-64 shrink-0 hidden lg:block" aria-hidden="true" />

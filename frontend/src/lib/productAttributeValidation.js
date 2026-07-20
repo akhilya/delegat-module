@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { t } from "@/i18n";
 
 export const TYPE_TEXT = [0, "Text", "text"];
 export const TYPE_NUMBER = [1, "Number", "number"];
@@ -29,7 +30,7 @@ function buildSingleAttributeSchema(attr) {
     if (attr.isRequired) {
       return z
         .string()
-        .min(1, "Обязательное поле")
+        .min(1, t("lib.productAttributeValidation.requiredField"))
         .refine((value) => {
           try {
             const parsed = JSON.parse(value);
@@ -37,19 +38,19 @@ function buildSingleAttributeSchema(attr) {
           } catch {
             return value.split(",").map((part) => part.trim()).filter(Boolean).length > 0;
           }
-        }, "Обязательное поле");
+        }, t("lib.productAttributeValidation.requiredField"));
     }
     return z.string().optional().default("");
   }
 
   let schema = attr.isRequired
-    ? z.string().min(1, "Обязательное поле")
+    ? z.string().min(1, t("lib.productAttributeValidation.requiredField"))
     : z.string().optional().default("");
 
   if (isAttributeType(attr.type, "number")) {
     schema = schema.refine(
       (value) => value === "" || value === undefined || /^-?\d+(\.\d+)?$/.test(String(value)),
-      "Введите число",
+      t("lib.productAttributeValidation.enterNumber"),
     );
   }
 

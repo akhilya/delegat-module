@@ -154,7 +154,7 @@ export default {
               <SearchableSelect
                 :model-value="value || ''"
                 :options="getSelectOptions(attribute)"
-                :placeholder="attribute.defaultValue || 'Выберите...'"
+                :placeholder="attribute.defaultValue || $t('products.storeAttributeForm.selectPlaceholder')"
                 :invalid="!!errorMessage"
                 @update:model-value="setValue"
               />
@@ -166,7 +166,7 @@ export default {
                 "
                 :model-value="getMultiSelectLabels(attribute, value)"
                 :invalid="!!errorMessage"
-                placeholder="Выберите..."
+                :placeholder="$t('products.storeAttributeForm.selectPlaceholder')"
                 @update:model-value="
                   setMultiSelectByLabels(attribute, $event, setValue)
                 "
@@ -182,7 +182,7 @@ export default {
               <Input
                 v-bind="componentField"
                 type="text"
-                :placeholder="`Неизвестный тип: ${attribute.type}`"
+                :placeholder="$t('products.storeAttributeForm.unknownTypePlaceholder', { type: attribute.type })"
               />
             </FormControl>
           </SettingsFormField>
@@ -193,8 +193,8 @@ export default {
     <EmptyState
       v-if="sortedAttributes.length === 0"
       size="sm"
-      title="Нет глобальных атрибутов"
-      description="Добавьте глобальные атрибуты в настройках магазина — они появятся здесь."
+      :title="$t('products.storeAttributeForm.emptyTitle')"
+      :description="$t('products.storeAttributeForm.emptyDescription')"
       class="md:col-span-2 py-8"
     />
   </div>

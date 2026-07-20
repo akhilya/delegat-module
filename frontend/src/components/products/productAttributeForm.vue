@@ -1,4 +1,6 @@
 <script>
+import { ref, watch, nextTick } from "vue";
+import { useFormErrors, useFormValues, useSubmitCount } from "vee-validate";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
@@ -14,7 +16,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ATTRIBUTE_GROUP_OPTIONS } from "@/constants/attributeGroups";
+import {
+  ATTRIBUTE_GROUP_OPTIONS,
+  attributeGroupKeyForValue,
+} from "@/constants/attributeGroups";
 import { isAttributeType } from "@/lib/productAttributeValidation";
 import {
   labelsToStoredValues,
@@ -22,6 +27,75 @@ import {
   resolveAttributeOptionLabel,
   resolveAttributeOptionLabels,
 } from "@/lib/attributeOptions";
+
+// Fallback bucket name for attributes without a group, kept as the literal Cyrillic
+// value stored on legacy attribute records (written as a Unicode escape to avoid
+// non-ASCII source). Displayed via t("attributeGroups.other").
+const OTHER_GROUP = "\u041f\u0440\u043e\u0447\u0435\u0435";
+
+/** Collect attribute ids under `prefix` that currently have a form error. */
+function collectInvalidIds(errors, prefix) {
+  const ids = new Set();
+  if (!errors || typeof errors !== "object") return ids;
+
+  const nested = errors[prefix];
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    for (const [key, value] of Object.entries(nested)) {
+      if (value) ids.add(String(key));
+    }
+  }
+
+  for (const [key, value] of Object.entries(errors)) {
+    if (!value || typeof value === "object") continue;
+
+    // vee-validate + zod normalize numeric keys to brackets:
+    // categoryAttributes[12]  (not categoryAttributes.12)
+    if (key.startsWith(`${prefix}[`)) {
+      const end = key.indexOf("]");
+      if (end > prefix.length + 1) {
+        ids.add(key.slice(prefix.length + 1, end));
+      }
+      continue;
+    }
+
+    if (key.startsWith(`${prefix}.`)) {
+      ids.add(key.slice(prefix.length + 1).split(/[.\[]/)[0]);
+    }
+  }
+
+  return ids;
+}
+
+function isEmptyAttributeValue(attr, raw) {
+  if (isAttributeType(attr.type, "boolean")) return false;
+  if (raw === "" || raw == null) return true;
+  if (isAttributeType(attr.type, "multiselect")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length === 0;
+    } catch {
+      return String(raw)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean).length === 0;
+    }
+  }
+  return false;
+}
+
+/** Required-but-empty attrs from form values (works when fields are unmounted). */
+function collectEmptyRequiredIds(attributes, valuesById) {
+  const ids = new Set();
+  const values = valuesById || {};
+  for (const attr of attributes || []) {
+    if (attr.showOnProductPage === false) continue;
+    if (!attr.isRequired) continue;
+    const id = String(attr.id);
+    const raw = values[id] ?? values[attr.id];
+    if (isEmptyAttributeValue(attr, raw)) ids.add(id);
+  }
+  return ids;
+}
 
 export default {
   components: {
@@ -51,9 +125,50 @@ export default {
       default: "categoryAttributes",
     },
   },
+  setup(props) {
+    const formErrors = useFormErrors();
+    const formValues = useFormValues();
+    const submitCount = useSubmitCount();
+    /** Attribute ids whose group header should show as destructive. */
+    const flaggedAttributeIds = ref([]);
+
+    /**
+     * Full replace — never sticky. Red while the field still has a form error
+     * or (after a save attempt) is still a required empty value.
+     */
+    function recomputeFlaggedIds() {
+      const next = collectInvalidIds(formErrors.value, props.fieldPrefix);
+
+      if (submitCount.value > 0) {
+        const bucket = formValues.value?.[props.fieldPrefix];
+        for (const id of collectEmptyRequiredIds(props.attributes, bucket)) {
+          next.add(id);
+        }
+      }
+
+      const alive = new Set(
+        (props.attributes || [])
+          .filter((a) => a.showOnProductPage !== false)
+          .map((a) => String(a.id)),
+      );
+      flaggedAttributeIds.value = [...next].filter((id) => alive.has(id));
+    }
+
+    watch(formErrors, recomputeFlaggedIds, { deep: true, immediate: true });
+    watch(formValues, recomputeFlaggedIds, { deep: true });
+    watch(submitCount, async () => {
+      await nextTick();
+      recomputeFlaggedIds();
+    });
+    watch(() => props.attributes, recomputeFlaggedIds);
+
+    return {
+      flaggedAttributeIds,
+    };
+  },
   data() {
     return {
-      groupOrder: ATTRIBUTE_GROUP_OPTIONS,
+      groupOrder: ATTRIBUTE_GROUP_OPTIONS.map((option) => option.value),
     };
   },
   computed: {
@@ -63,10 +178,13 @@ export default {
         .sort((a, b) => a.sortOrder - b.sortOrder);
     },
     groupedAttributes() {
+      // Groups are bucketed by the raw value stored on each attribute record; the
+      // display label is resolved separately via groupLabel() so predefined groups
+      // can be translated while custom (user-typed) group names pass through as-is.
       const groups = {};
 
       for (const attr of this.sortedAttributes) {
-        const groupName = attr.group || "Прочее";
+        const groupName = attr.group || OTHER_GROUP;
         if (!groups[groupName]) {
           groups[groupName] = [];
         }
@@ -76,20 +194,32 @@ export default {
       const result = [];
 
       for (const groupName of this.groupOrder) {
-        if (groupName === "Прочее") continue;
+        if (groupName === OTHER_GROUP) continue;
         if (groups[groupName]) {
-          result.push({ name: groupName, attributes: groups[groupName] });
+          result.push({
+            name: groupName,
+            label: this.groupLabel(groupName),
+            attributes: groups[groupName],
+          });
           delete groups[groupName];
         }
       }
 
       for (const [groupName, attrs] of Object.entries(groups)) {
-        if (groupName === "Прочее") continue;
-        result.push({ name: groupName, attributes: attrs });
+        if (groupName === OTHER_GROUP) continue;
+        result.push({
+          name: groupName,
+          label: this.groupLabel(groupName),
+          attributes: attrs,
+        });
       }
 
-      if (groups["Прочее"]) {
-        result.push({ name: "Прочее", attributes: groups["Прочее"] });
+      if (groups[OTHER_GROUP]) {
+        result.push({
+          name: OTHER_GROUP,
+          label: this.groupLabel(OTHER_GROUP),
+          attributes: groups[OTHER_GROUP],
+        });
       }
 
       return result;
@@ -98,14 +228,30 @@ export default {
       return (
         this.groupedAttributes.length > 1 ||
         (this.groupedAttributes.length === 1 &&
-          this.groupedAttributes[0].name !== "Прочее")
+          this.groupedAttributes[0].name !== OTHER_GROUP)
       );
     },
     defaultOpenGroups() {
       return this.groupedAttributes.map((group) => group.name);
     },
+    /** Reactive map: group name → has flagged invalid attribute. */
+    groupErrorState() {
+      const flagged = new Set(this.flaggedAttributeIds);
+      const state = {};
+      for (const group of this.groupedAttributes) {
+        state[group.name] = group.attributes.some((attr) =>
+          flagged.has(String(attr.id)),
+        );
+      }
+      return state;
+    },
   },
   methods: {
+    groupLabel(groupName) {
+      const key = attributeGroupKeyForValue(groupName);
+      return key ? this.$t(`attributeGroups.${key}`) : groupName;
+    },
+
     isType(attrType, typeName) {
       return isAttributeType(attrType, typeName);
     },
@@ -159,9 +305,31 @@ export default {
         v-for="group in groupedAttributes"
         :key="group.name"
         :value="group.name"
+        :data-invalid="groupErrorState[group.name] ? 'true' : undefined"
+        :class="groupErrorState[group.name] ? 'border-destructive' : undefined"
       >
-        <AccordionTrigger class="text-muted-foreground py-3">
-          {{ group.name }}
+        <AccordionTrigger
+          class="py-3"
+          :class="
+            groupErrorState[group.name]
+              ? 'text-destructive [&_svg]:text-destructive'
+              : 'text-muted-foreground'
+          "
+        >
+          <span
+            :class="
+              groupErrorState[group.name]
+                ? 'text-destructive'
+                : undefined
+            "
+            :style="
+              groupErrorState[group.name]
+                ? { color: 'var(--destructive)' }
+                : undefined
+            "
+          >
+            {{ group.label }}
+          </span>
         </AccordionTrigger>
         <AccordionContent>
           <div
@@ -176,6 +344,7 @@ export default {
               <FormField
                 v-slot="{ componentField, value, setValue, errorMessage }"
                 :name="fieldName(attribute.id)"
+                keep-value-on-unmount
               >
                 <FormItem class="gap-0">
                   <SettingsFormField
@@ -227,7 +396,7 @@ export default {
                       <SearchableSelect
                         :model-value="value || ''"
                         :options="getSelectOptions(attribute)"
-                        :placeholder="attribute.defaultValue || 'Выберите...'"
+                        :placeholder="attribute.defaultValue || $t('products.productAttributeForm.selectPlaceholder')"
                         :invalid="!!errorMessage"
                         @update:model-value="setValue"
                       />
@@ -243,7 +412,7 @@ export default {
                         "
                         :model-value="getMultiSelectLabels(attribute, value)"
                         :invalid="!!errorMessage"
-                        placeholder="Выберите..."
+                        :placeholder="$t('products.productAttributeForm.selectPlaceholder')"
                         @update:model-value="
                           setMultiSelectByLabels(attribute, $event, setValue)
                         "
@@ -259,7 +428,7 @@ export default {
                       <Input
                         v-bind="componentField"
                         type="text"
-                        :placeholder="`Неизвестный тип: ${attribute.type}`"
+                        :placeholder="$t('products.productAttributeForm.unknownTypePlaceholder', { type: attribute.type })"
                       />
                     </FormControl>
                   </SettingsFormField>
@@ -340,7 +509,7 @@ export default {
                     <SearchableSelect
                       :model-value="value || ''"
                       :options="getSelectOptions(attribute)"
-                      :placeholder="attribute.defaultValue || 'Выберите...'"
+                      :placeholder="attribute.defaultValue || $t('products.productAttributeForm.selectPlaceholder')"
                       :invalid="!!errorMessage"
                       @update:model-value="setValue"
                     />
@@ -356,7 +525,7 @@ export default {
                       "
                       :model-value="getMultiSelectLabels(attribute, value)"
                       :invalid="!!errorMessage"
-                      placeholder="Выберите..."
+                      :placeholder="$t('products.productAttributeForm.selectPlaceholder')"
                       @update:model-value="
                         setMultiSelectByLabels(attribute, $event, setValue)
                       "
@@ -372,7 +541,7 @@ export default {
                     <Input
                       v-bind="componentField"
                       type="text"
-                      :placeholder="`Неизвестный тип: ${attribute.type}`"
+                      :placeholder="$t('products.productAttributeForm.unknownTypePlaceholder', { type: attribute.type })"
                     />
                   </FormControl>
                 </SettingsFormField>
@@ -386,8 +555,8 @@ export default {
     <EmptyState
       v-if="sortedAttributes.length === 0"
       size="sm"
-      title="Нет атрибутов для заполнения"
-      description="Добавьте атрибуты в категорию товара — они появятся здесь."
+      :title="$t('products.productAttributeForm.emptyTitle')"
+      :description="$t('products.productAttributeForm.emptyDescription')"
     />
   </div>
 </template>

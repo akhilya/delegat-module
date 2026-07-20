@@ -81,6 +81,7 @@ import {
   mergeCategoryAttributesIntoCache,
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
@@ -188,11 +189,11 @@ export default {
   },
   computed: {
     breadcrumbs() {
-      const items = [{ label: "Товары", to: PAGE_PRODUCTS }];
+      const items = [{ label: this.$t("routes.products"), to: PAGE_PRODUCTS }];
       if (this.productSKU) {
         items.push({ label: this.productSKU });
       } else {
-        items.push({ label: "Редактирование" });
+        items.push({ label: this.$t("pages.productEditPage.breadcrumbEditing") });
       }
       return items;
     },
@@ -245,10 +246,10 @@ export default {
     const formSchema = computed(() => toTypedSchema(
       z.object({
         product: z.object({
-          name: z.string().min(1, "Название обязательно").max(100),
+          name: z.string().min(1, t("pages.productEditPage.validation.nameRequired")).max(100),
           description: z.string().max(5000).optional(),
           barcode: z.string().max(13).optional().nullable(),
-          storageQuantity: z.number().int().min(0, "Количество не может быть отрицательным").optional().nullable(),
+          storageQuantity: z.number().int().min(0, t("pages.productEditPage.validation.quantityNonNegative")).optional().nullable(),
           price: priceField,
           ...(extendedPriceParameters.value ? {
             oldPrice: priceField,
@@ -265,6 +266,7 @@ export default {
 
     const form = useForm({
       validationSchema: formSchema,
+      keepValuesOnUnmount: true,
       initialValues: {
         product: {
           name: "",
@@ -282,6 +284,8 @@ export default {
         storeAttributes: {},
       },
     });
+
+    const isFormValid = computed(() => form.meta.value.valid);
 
     function pricePreview(amount) {
       return formatEquivalents(amount, storeCurrencies.value, storeBaseCurrency.value);
@@ -354,10 +358,10 @@ export default {
     function attributeCountLabel(n) {
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return "атрибутов";
-      if (mod10 === 1) return "атрибут";
-      if (mod10 >= 2 && mod10 <= 4) return "атрибута";
-      return "атрибутов";
+      if (mod100 >= 11 && mod100 <= 14) return t("pages.productEditPage.attributesCount.formMany");
+      if (mod10 === 1) return t("pages.productEditPage.attributesCount.formOne");
+      if (mod10 >= 2 && mod10 <= 4) return t("pages.productEditPage.attributesCount.formFew");
+      return t("pages.productEditPage.attributesCount.formMany");
     }
     const hasUnsavedChanges = ref(false);
     const isInitialLoad = ref(true);
@@ -377,9 +381,9 @@ export default {
     );
 
     watch(productId, (newId) => {
-      // Если новый товар — в той же группе, просто обновляем isCurrent на клиенте.
-      // Это сохраняет скролл сайдбара и не вызывает перерисовку списка.
-      // Если товар из другой группы — перезагружаем группу полностью.
+      // If the new product is in the same group, just update isCurrent on the client.
+      // This preserves the sidebar scroll position and avoids re-rendering the list.
+      // If the product is from another group, reload the group entirely.
       const memberInCurrentGroup = productGroup.value?.members?.find(m => m.productId === newId);
       if (memberInCurrentGroup) {
         productGroup.value.members.forEach(m => { m.isCurrent = m.productId === newId; });
@@ -413,6 +417,13 @@ export default {
       form.setFieldValue('product.description', text);
       nextTick(() => autoResizeDescription());
     }
+
+    const isDescriptionGenerating = ref(false);
+    const descriptionGeneratingHint = computed(() =>
+      form.values.product?.description?.trim()
+        ? t("ai.descriptionImprovingHint")
+        : t("ai.descriptionGeneratingHint"),
+    );
 
     function syncDiscountFromPrices() {
       if (!extendedPriceParameters.value) return;
@@ -516,8 +527,8 @@ export default {
       await store.dispatch("getProduct", {
         productId: targetProductId,
         onSuccess: (response) => {
-          // Stale-response guard: пока запрос летел, пользователь мог уйти на другой товар.
-          // Применять данные A на UI/state товара B нельзя.
+          // Stale-response guard: the user may have navigated to a different product while the request was in flight.
+          // Data for product A must not be applied to product B's UI/state.
           if (targetProductId !== productId.value) return;
 
           const product = response.data.value;
@@ -573,8 +584,8 @@ export default {
           // Mark initial load as complete after a short delay,
           // and auto-resize description once value is rendered
           setTimeout(() => {
-            // Если productId сменился за эти 100мс — оставляем isInitialLoad=true,
-            // следующий fetchProduct сам сбросит его в нужный момент.
+            // If productId changed within these 100ms, keep isInitialLoad=true —
+            // the next fetchProduct will reset it at the right moment.
             if (targetProductId !== productId.value) return;
             autoResizeDescription();
             isInitialLoad.value = false;
@@ -634,10 +645,10 @@ export default {
     async function confirmDiscardChanges() {
       if (!hasUnsavedChanges.value) return true;
       return confirm({
-        title: "Несохранённые изменения",
-        description: "Есть несохранённые изменения. Уйти без сохранения?",
-        confirmLabel: "Уйти",
-        cancelLabel: "Остаться",
+        title: t("pages.productEditPage.discardChangesConfirm.title"),
+        description: t("pages.productEditPage.discardChangesConfirm.description"),
+        confirmLabel: t("pages.productEditPage.discardChangesConfirm.confirmLabel"),
+        cancelLabel: t("pages.productEditPage.discardChangesConfirm.cancelLabel"),
         destructive: false,
       });
     }
@@ -684,7 +695,7 @@ export default {
         await syncProductAfterSave();
         hasUnsavedChanges.value = false;
         if (showSuccessToast) {
-          displaySonnerSuccess("Товар успешно обновлён.");
+          displaySonnerSuccess(t("pages.productEditPage.toast.updated"));
         }
         return true;
       } catch (error) {
@@ -715,7 +726,7 @@ export default {
           id,
           productId: productId.value,
           onSuccess: () => {
-            displaySonnerSuccess("Файл успешно удалён.");
+            displaySonnerSuccess(t("pages.productEditPage.toast.fileDeleted"));
             const fileIndex = files.value.findIndex((f) => f.id == id);
             if (fileIndex > -1) {
               files.value.splice(fileIndex, 1);
@@ -736,7 +747,7 @@ export default {
         productId: productId.value,
         onSuccess: (response) => {
           router.push(response.data.value.next);
-          displaySonnerSuccess("Товар успешно удалён.");
+          displaySonnerSuccess(t("pages.productEditPage.toast.deleted"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -753,7 +764,7 @@ export default {
         },
         onSuccess: (response) => {
           notes.value.push(response.data.value);
-          displaySonnerSuccess("Новая заметка добавлена.");
+          displaySonnerSuccess(t("pages.productEditPage.toast.noteAdded"));
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -786,14 +797,14 @@ export default {
           if (failed.length > 0) {
             const details = failed.map((r) => `${r.name}: ${r.error}`).join("\n");
             displaySonnerSuccess(
-              `Артикул изменён локально. Ошибки на адаптерах (${failed.length}):\n${details}`,
+              t("pages.productEditPage.toast.skuChangedWithErrors", { count: failed.length, details }),
             );
           } else if (mpResults.length > 0) {
             displaySonnerSuccess(
-              `Артикул изменён локально и на ${mpResults.length} адаптер(ах)`,
+              t("pages.productEditPage.toast.skuChangedOnAdapters", { count: mpResults.length }),
             );
           } else {
-            displaySonnerSuccess("Артикул изменён");
+            displaySonnerSuccess(t("pages.productEditPage.toast.skuChanged"));
           }
         },
         onError: (error) => {
@@ -804,7 +815,7 @@ export default {
     }
 
     const groupSelectOptions = computed(() => [
-      { value: GROUP_NONE, label: "Без группы" },
+      { value: GROUP_NONE, label: t("pages.productEditPage.fields.group.noGroupOption") },
       ...allGroups.value.map((g) => ({
         value: String(g.id),
         label: g.name,
@@ -829,7 +840,7 @@ export default {
         if (newId) {
           await http.post(`/productgroups/${newId}/products`, { productIds: [productId.value] });
         }
-        displaySonnerSuccess(newId ? "Группа изменена" : "Товар убран из группы");
+        displaySonnerSuccess(newId ? t("pages.productEditPage.toast.groupChanged") : t("pages.productEditPage.toast.removedFromGroup"));
         await fetchProductGroup();
       } catch (error) {
         displaySonnerError(error);
@@ -877,9 +888,9 @@ export default {
 
     async function removeGalleryImage(index) {
       const ok = await confirm({
-        title: "Удалить фото из галереи?",
-        description: "Изображение будет откреплено от товара. Файл останется в хранилище.",
-        confirmLabel: "Удалить",
+        title: t("pages.productEditPage.removeGalleryImageConfirm.title"),
+        description: t("pages.productEditPage.removeGalleryImageConfirm.description"),
+        confirmLabel: t("common.delete"),
       });
       if (!ok) return;
 
@@ -910,10 +921,10 @@ export default {
       if (!fileList?.length) return;
 
       isUploadingGallery.value = true;
-      // Замораживаем productId на момент старта загрузки. Если пользователь
-      // уйдёт на другой товар во время аплоада — все последующие шаги
-      // (PUT files / POST images / fetch) направим на исходный товар,
-      // а итоговый fetchProduct делаем только если пользователь не ушёл.
+      // Freeze productId at the moment the upload starts. If the user
+      // navigates to a different product during the upload, all subsequent steps
+      // (PUT files / POST images / fetch) will target the original product,
+      // and the final fetchProduct only runs if the user hasn't navigated away.
       const targetProductId = productId.value;
       try {
         // Upload each file
@@ -935,10 +946,10 @@ export default {
         }
 
         // Attach new files as images at end of current list.
-        // sortedImages — это reactive ref, и если пользователь успел уйти
-        // на другой товар, sortedImages уже относится к другому товару.
-        // Поэтому пересчитываем relative-к-targetProductId список с осторожностью:
-        // отправляем только что-то осмысленное только если контекст не сменился.
+        // sortedImages is a reactive ref, and if the user has already navigated
+        // to a different product, sortedImages already refers to that other product.
+        // So we recompute the list relative to targetProductId carefully:
+        // only send something meaningful if the context hasn't changed.
         if (targetProductId === productId.value) {
           const existingFileIds = sortedImages.value.map((img) => img.fileId);
           const allFileIds = [...existingFileIds, ...newFileIds];
@@ -949,9 +960,9 @@ export default {
             onError: (error) => { displaySonnerError(error); },
           });
         } else {
-          // Контекст ушёл — прикрепляем хотя бы новые файлы к их исходному товару.
-          // Без этого загруженные файлы остаются "осиротевшими" в галерее.
-          // Загружаем актуальный список картинок исходного товара и дописываем новые.
+          // Context has changed — attach at least the new files to their original product.
+          // Without this, uploaded files would remain "orphaned" in the gallery.
+          // Load the up-to-date image list of the original product and append the new ones.
           try {
             const refresh = await http.get(`/products/${targetProductId}`);
             const existing = (refresh.data?.images || [])
@@ -969,8 +980,8 @@ export default {
           }
         }
 
-        // Refresh product to sync everything — но только если контекст не сменился,
-        // иначе перезапишем UI чужого товара.
+        // Refresh product to sync everything — but only if the context hasn't changed,
+        // otherwise we would overwrite the UI of a different product.
         if (targetProductId === productId.value) {
           await fetchProduct();
         }
@@ -1028,6 +1039,7 @@ export default {
       form,
       onSubmit,
       isSubmitting,
+      isFormValid,
       isProductLoading,
       files,
       deleteFile,
@@ -1069,6 +1081,8 @@ export default {
       groupSidebarRef,
       autoResizeDescription,
       onDescriptionGenerated,
+      isDescriptionGenerating,
+      descriptionGeneratingHint,
       aiAttributesSummary,
       extendedPriceParameters,
       storeCurrencies,
@@ -1101,12 +1115,12 @@ export default {
       <template #center>
         <Tabs v-model="tab">
           <TabsList>
-            <TabsTrigger value="properties">Свойства</TabsTrigger>
-            <TabsTrigger value="notes">Заметки</TabsTrigger>
-            <TabsTrigger value="files">Файлы</TabsTrigger>
-            <TabsTrigger value="images"><span class="sm:hidden">Фото</span><span class="hidden sm:inline">Изображения</span></TabsTrigger>
-            <TabsTrigger v-if="category?.hasSizes" value="sizes">Размеры</TabsTrigger>
-            <TabsTrigger value="marketplaces"><span class="sm:hidden">АД</span><span class="hidden sm:inline">Адаптеры</span></TabsTrigger>
+            <TabsTrigger value="properties">{{ $t("pages.productEditPage.tabs.properties") }}</TabsTrigger>
+            <TabsTrigger value="notes">{{ $t("pages.productEditPage.tabs.notes") }}</TabsTrigger>
+            <TabsTrigger value="files">{{ $t("pages.productEditPage.tabs.files") }}</TabsTrigger>
+            <TabsTrigger value="images"><span class="sm:hidden">{{ $t("pages.productEditPage.tabs.imagesShort") }}</span><span class="hidden sm:inline">{{ $t("pages.productEditPage.tabs.images") }}</span></TabsTrigger>
+            <TabsTrigger v-if="category?.hasSizes" value="sizes">{{ $t("pages.productEditPage.tabs.sizes") }}</TabsTrigger>
+            <TabsTrigger value="marketplaces"><span class="sm:hidden">{{ $t("pages.productEditPage.tabs.marketplacesShort") }}</span><span class="hidden sm:inline">{{ $t("nav.adapters") }}</span></TabsTrigger>
           </TabsList>
         </Tabs>
       </template>
@@ -1161,20 +1175,20 @@ export default {
             <Card class="border-0 shadow-none">
               <CardHeader>
                 <CardTitle class="text-base">
-                  Основные данные
+                  {{ $t("pages.productEditPage.sections.mainData.title") }}
                 </CardTitle>
                 <CardDescription>
-                  Артикул, штрихкод, название и цена. Количество и цена по размерам — на вкладке «Размеры».
+                  {{ $t("pages.productEditPage.sections.mainData.description") }}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup class="gap-5">
-                  <SettingsFormField label="Категория">
+                  <SettingsFormField :label="$t('pages.productEditPage.fields.category.label')">
                     <div class="space-y-1.5 w-full">
                       <SearchableSelect
                         :model-value="currentCategorySelectValue"
                         :options="categorySelectOptions"
-                        placeholder="Выберите категорию..."
+                        :placeholder="$t('pages.productEditPage.fields.category.placeholder')"
                         :disabled="isProductLoading || isChangingCategory || isLoadingCategories"
                         @update:model-value="onCategorySelectChange"
                       />
@@ -1183,17 +1197,17 @@ export default {
                         :to="`/categories/${category.id}/edit`"
                         class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        Редактировать категорию
+                        {{ $t("pages.productEditPage.fields.category.editLink") }}
                       </router-link>
                     </div>
                   </SettingsFormField>
 
-                  <SettingsFormField label="Группа товаров">
+                  <SettingsFormField :label="$t('pages.productEditPage.fields.group.label')">
                     <div class="space-y-1.5">
                       <SearchableSelect
                         :model-value="currentGroupSelectValue"
                         :options="groupSelectOptions"
-                        placeholder="Выберите группу..."
+                        :placeholder="$t('pages.productEditPage.fields.group.placeholder')"
                         :disabled="isProductLoading || isChangingGroup"
                         @update:model-value="onGroupSelectChange"
                       />
@@ -1202,12 +1216,12 @@ export default {
                         :to="`/product-groups/${productGroup.id}/edit`"
                         class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        Редактировать группу
+                        {{ $t("pages.productEditPage.fields.group.editLink") }}
                       </router-link>
                     </div>
                   </SettingsFormField>
 
-                  <SettingsFormField label="Артикул" label-for="product-sku">
+                  <SettingsFormField :label="$t('pages.productEditPage.fields.sku.label')" label-for="product-sku">
                     <div class="flex items-center gap-2">
                       <Input
                         id="product-sku"
@@ -1220,8 +1234,8 @@ export default {
                         variant="outline"
                         size="icon"
                         class="shrink-0 size-9"
-                        title="Изменить артикул"
-                        aria-label="Изменить артикул"
+                        :title="$t('pages.productEditPage.fields.sku.changeAction')"
+                        :aria-label="$t('pages.productEditPage.fields.sku.changeAction')"
                         type="button"
                         @click="openSkuDialog"
                       >
@@ -1232,7 +1246,7 @@ export default {
 
                   <FormField v-slot="{ value, setValue, errorMessage }" name="product.barcode">
                     <FormItem class="gap-0">
-                      <SettingsFormField label="Штрихкод (EAN)" label-for="product-barcode" :error="errorMessage">
+                      <SettingsFormField :label="$t('pages.productEditPage.fields.barcode.label')" label-for="product-barcode" :error="errorMessage">
                         <FormControl>
                           <BarcodeInput
                             id="product-barcode"
@@ -1246,7 +1260,7 @@ export default {
 
                   <FormField v-slot="{ componentField, errorMessage }" name="product.name">
                     <FormItem class="gap-0">
-                      <SettingsFormField label="Название" label-for="product-name" :error="errorMessage" required>
+                      <SettingsFormField :label="$t('pages.productEditPage.fields.name.label')" label-for="product-name" :error="errorMessage" required>
                         <FormControl>
                           <Input id="product-name" type="text" v-bind="componentField" />
                         </FormControl>
@@ -1257,25 +1271,40 @@ export default {
                   <FormField v-slot="{ componentField, errorMessage }" name="product.description">
                     <FormItem class="gap-1.5">
                       <div class="flex items-center justify-between gap-2">
-                        <label for="product-description" class="text-sm font-medium leading-none">Описание</label>
+                        <label for="product-description" class="text-sm font-medium leading-none">{{ $t("pages.productEditPage.fields.description.label") }}</label>
                         <AiDescriptionGenerator
                           :product-name="form.values.product?.name"
                           :product-sku="productSKU"
                           :category-name="category?.name"
                           :existing-description="form.values.product?.description"
                           :attributes-summary="aiAttributesSummary"
+                          @update:generating="isDescriptionGenerating = $event"
                           @generated="onDescriptionGenerated"
                         />
                       </div>
-                      <FormControl>
-                        <Textarea
-                          id="product-description"
-                          ref="descriptionRef"
-                          v-bind="componentField"
-                          @input="autoResizeDescription"
-                          class="min-h-24 overflow-hidden resize-none"
-                        />
-                      </FormControl>
+                      <div class="relative">
+                        <FormControl>
+                          <Textarea
+                            id="product-description"
+                            ref="descriptionRef"
+                            v-bind="componentField"
+                            :disabled="isDescriptionGenerating"
+                            :aria-busy="isDescriptionGenerating"
+                            @input="autoResizeDescription"
+                            class="min-h-24 overflow-hidden resize-none transition-opacity"
+                            :class="isDescriptionGenerating ? 'opacity-60' : ''"
+                          />
+                        </FormControl>
+                        <div
+                          v-if="isDescriptionGenerating"
+                          class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
+                        >
+                          <p class="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 class="size-3.5 animate-spin" />
+                            {{ descriptionGeneratingHint }}
+                          </p>
+                        </div>
+                      </div>
                       <p v-if="errorMessage" class="text-sm text-destructive">{{ errorMessage }}</p>
                     </FormItem>
                   </FormField>
@@ -1283,16 +1312,16 @@ export default {
                   <template v-if="!category?.hasSizes">
                     <div class="space-y-4 border-t pt-5">
                       <div>
-                        <h4 class="text-sm font-medium">Остатки</h4>
+                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.stock.title") }}</h4>
                         <p class="text-xs text-muted-foreground mt-0.5">
-                          Наличие и складские параметры товара
+                          {{ $t("pages.productEditPage.sections.stock.description") }}
                         </p>
                       </div>
                       <div class="grid grid-cols-1 gap-5">
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
                           <FormItem class="gap-0">
                             <SettingsFormField
-                              label="Количество на складе"
+                              :label="$t('pages.productEditPage.fields.quantity.label')"
                               label-for="product-quantity"
                               :error="errorMessage"
                             >
@@ -1320,15 +1349,15 @@ export default {
 
                     <div class="space-y-4 border-t pt-5">
                       <div>
-                        <h4 class="text-sm font-medium">Цена</h4>
+                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.price.title") }}</h4>
                         <p class="text-xs text-muted-foreground mt-0.5">
-                          Основная цена хранится в {{ storeBaseCurrency || "базовой валюте магазина" }}
+                          {{ $t("pages.productEditPage.sections.price.description", { currency: storeBaseCurrency || $t("pages.productEditPage.fields.price.defaultCurrencyFallback") }) }}
                         </p>
                       </div>
                       <div class="grid grid-cols-1 gap-5">
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
                           <FormItem class="gap-0">
-                            <SettingsFormField :label="`Цена (${storeBaseCurrency || '—'})`" label-for="product-price" :error="errorMessage">
+                            <SettingsFormField :label="$t('pages.productEditPage.fields.price.label', { currency: storeBaseCurrency || $t('common.emDash') })" label-for="product-price" :error="errorMessage">
                               <FormControl>
                                 <Input
                                   id="product-price"
@@ -1351,18 +1380,18 @@ export default {
 
                     <div v-if="extendedPriceParameters" class="space-y-4 border-t pt-5">
                       <div>
-                        <h4 class="text-sm font-medium">Расширенные параметры цены</h4>
+                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.extendedPrice.title") }}</h4>
                         <p class="text-xs text-muted-foreground mt-0.5">
-                          Для маркетплейсов со скидками, минимальной ценой и экспортом в другой валюте
+                          {{ $t("pages.productEditPage.sections.extendedPrice.description") }}
                         </p>
                       </div>
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.oldPrice">
                           <FormItem class="gap-0">
                             <SettingsFormField
-                              :label="`Старая цена (${storeBaseCurrency || '—'})`"
+                              :label="$t('pages.productEditPage.fields.oldPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })"
                               :error="errorMessage"
-                              description="Зачёркнутая цена до скидки. Скидка % считается от неё и поля «Цена» выше."
+                              :description="$t('pages.productEditPage.fields.oldPrice.description')"
                             >
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
@@ -1373,9 +1402,9 @@ export default {
                         <FormField v-slot="{ value, errorMessage }" name="product.discount">
                           <FormItem class="gap-0">
                             <SettingsFormField
-                              label="Скидка (%)"
+                              :label="$t('pages.productEditPage.fields.discount.label')"
                               :error="errorMessage"
-                              description="Вычисляется из старой цены и текущей цены"
+                              :description="$t('pages.productEditPage.fields.discount.description')"
                             >
                               <FormControl>
                                 <Input
@@ -1390,7 +1419,7 @@ export default {
                         </FormField>
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.minPrice">
                           <FormItem class="gap-0">
-                            <SettingsFormField :label="`Минимальная цена (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                            <SettingsFormField :label="$t('pages.productEditPage.fields.minPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
                               </FormControl>
@@ -1399,7 +1428,7 @@ export default {
                         </FormField>
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.netPrice">
                           <FormItem class="gap-0">
-                            <SettingsFormField :label="`Себестоимость (${storeBaseCurrency || '—'})`" :error="errorMessage">
+                            <SettingsFormField :label="$t('pages.productEditPage.fields.netPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
                               </FormControl>
@@ -1409,9 +1438,9 @@ export default {
                         <FormField v-slot="{ value, setValue, errorMessage }" name="product.currency">
                           <FormItem class="gap-0 sm:col-span-2">
                             <SettingsFormField
-                              label="Валюта (экспорт)"
+                              :label="$t('pages.productEditPage.fields.currency.label')"
                               :error="errorMessage"
-                              :description="`Суммы хранятся в ${storeBaseCurrency || 'базовой валюте'}. Валюта задаёт, в какой валюте уйдут цены на маркетплейс при экспорте.`"
+                              :description="$t('pages.productEditPage.fields.currency.description', { currency: storeBaseCurrency || $t('pages.productEditPage.fields.currency.defaultCurrencyFallback') })"
                             >
                               <FormControl>
                                 <Select :model-value="value || storeBaseCurrency" @update:model-value="setValue($event)" class="w-full">
@@ -1435,35 +1464,35 @@ export default {
             <Dialog v-model:open="showSkuDialog">
               <DialogContent size="md">
                 <DialogHeader>
-                  <DialogTitle>Изменить артикул</DialogTitle>
+                  <DialogTitle>{{ $t("pages.productEditPage.skuDialog.title") }}</DialogTitle>
                   <DialogDescription>
-                    Артикул будет изменён локально и на всех привязанных адаптерах.
+                    {{ $t("pages.productEditPage.skuDialog.description") }}
                   </DialogDescription>
                 </DialogHeader>
                 <div class="space-y-4 py-4">
-                  <SettingsFormField label="Текущий артикул">
+                  <SettingsFormField :label="$t('pages.productEditPage.skuDialog.currentSkuLabel')">
                     <Input type="text" disabled :model-value="productSKU" class="font-mono" />
                   </SettingsFormField>
-                  <SettingsFormField label="Новый артикул" label-for="new-sku">
+                  <SettingsFormField :label="$t('pages.productEditPage.skuDialog.newSkuLabel')" label-for="new-sku">
                     <Input
                       id="new-sku"
                       type="text"
                       v-model="newSkuValue"
                       maxlength="50"
-                      placeholder="Введите новый артикул"
+                      :placeholder="$t('pages.productEditPage.skuDialog.newSkuPlaceholder')"
                       class="font-mono"
                       @keydown.enter.prevent="submitSkuChange"
                     />
                   </SettingsFormField>
                 </div>
                 <DialogFooter>
-                  <DialogClose as-child><Button variant="outline" :disabled="isUpdatingSku">Отмена</Button></DialogClose>
+                  <DialogClose as-child><Button variant="outline" :disabled="isUpdatingSku">{{ $t("common.cancel") }}</Button></DialogClose>
                   <Button
                     @click="submitSkuChange"
                     :disabled="isUpdatingSku || !newSkuValue.trim() || newSkuValue.trim() === productSKU"
                   >
                     <Loader2 v-if="isUpdatingSku" class="size-4 mr-2 animate-spin" />
-                    Изменить
+                    {{ $t("pages.productEditPage.skuDialog.changeAction") }}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1476,11 +1505,14 @@ export default {
             >
               <CardHeader>
                 <CardTitle class="text-base">
-                  Атрибуты категории
+                  {{ $t("pages.productEditPage.sections.categoryAttributes.title") }}
                 </CardTitle>
                 <CardDescription>
-                  {{ visibleCategoryAttributes.length }} {{ attributeCountLabel(visibleCategoryAttributes.length) }}.
-                  Значения из настроек категории «{{ category.name }}».
+                  {{ $t("pages.productEditPage.sections.categoryAttributes.description", {
+                    count: visibleCategoryAttributes.length,
+                    unit: attributeCountLabel(visibleCategoryAttributes.length),
+                    category: category.name,
+                  }) }}
                 </CardDescription>
               </CardHeader>
               <CardContent class="pt-0">
@@ -1497,11 +1529,13 @@ export default {
             >
               <CardHeader>
                 <CardTitle class="text-base">
-                  Глобальные атрибуты
+                  {{ $t("nav.globalAttributes") }}
                 </CardTitle>
                 <CardDescription>
-                  {{ visibleStoreAttributes.length }} {{ attributeCountLabel(visibleStoreAttributes.length) }}.
-                  Общие для всех товаров магазина.
+                  {{ $t("pages.productEditPage.sections.storeAttributes.description", {
+                    count: visibleStoreAttributes.length,
+                    unit: attributeCountLabel(visibleStoreAttributes.length),
+                  }) }}
                 </CardDescription>
               </CardHeader>
               <CardContent class="pt-0">
@@ -1553,15 +1587,15 @@ export default {
               <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
                 <p class="text-sm font-medium flex items-center gap-2">
                   <NotebookPen class="size-4" />
-                  Заметки
+                  {{ $t("pages.productEditPage.tabs.notes") }}
                 </p>
                 <Button variant="ghost" size="sm" @click="addNote" class="h-7">
                   <Plus class="size-4 mr-1" />
-                  Добавить
+                  {{ $t("common.add") }}
                 </Button>
               </div>
               <div class="flex-1 overflow-y-auto">
-                <EmptyState v-if="notes.length === 0" title="Нет заметок" description="Заметки помогают фиксировать важную информацию о товаре">
+                <EmptyState v-if="notes.length === 0" :title="$t('pages.productEditPage.notesEmpty.title')" :description="$t('pages.productEditPage.notesEmpty.description')">
                   <template #icon>
                     <NotebookPen />
                   </template>
@@ -1610,7 +1644,7 @@ export default {
                   @click="goToDuplicate"
                 >
                   <Copy class="size-4 mr-2" />
-                  Дублировать
+                  {{ $t("pages.productEditPage.actions.duplicate") }}
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger as-child>
@@ -1621,20 +1655,20 @@ export default {
                       class="text-destructive hover:text-destructive"
                     >
                       <Trash2 class="size-4 mr-2" />
-                      Удалить
+                      {{ $t("common.delete") }}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Удалить товар {{ productSKU }}?</AlertDialogTitle>
+                      <AlertDialogTitle>{{ $t("pages.productEditPage.deleteConfirm.title", { sku: productSKU }) }}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Товар будет перемещён в корзину. Его можно будет восстановить.
+                        {{ $t("pages.productEditPage.deleteConfirm.description") }}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Отмена</AlertDialogCancel>
+                      <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                       <AlertDialogAction @click="handleDeleteProduct" class="bg-destructive text-white hover:bg-destructive/90">
-                        В корзину
+                        {{ $t("pages.productEditPage.deleteConfirm.confirmAction") }}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1645,17 +1679,17 @@ export default {
                   v-if="hasUnsavedChanges"
                   class="text-sm text-muted-foreground"
                 >
-                  Несохранённые изменения
+                  {{ $t("pages.productEditPage.unsavedChanges") }}
                 </p>
                 <Button
                   type="submit"
                   form="product-edit-form"
                   size="sm"
-                  :disabled="isSubmitting || !hasUnsavedChanges"
+                  :disabled="isSubmitting || !hasUnsavedChanges || !isFormValid"
                 >
                   <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
                   <Save v-else class="size-4 mr-2" />
-                  Сохранить
+                  {{ $t("common.save") }}
                 </Button>
               </div>
             </div>
@@ -1673,21 +1707,21 @@ export default {
         @click.self="closeLightbox"
       >
         <!-- Close button -->
-        <Button variant="ghost" size="icon" class="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Закрыть" @click="closeLightbox">
+        <Button variant="ghost" size="icon" class="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('common.close')" @click="closeLightbox">
           <X class="size-8" />
         </Button>
         <!-- Prev -->
-        <Button v-if="lightboxIndex > 0" variant="ghost" size="icon" class="absolute left-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Предыдущее фото" @click="prevImage">
+        <Button v-if="lightboxIndex > 0" variant="ghost" size="icon" class="absolute left-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('pages.productEditPage.lightbox.prevPhoto')" @click="prevImage">
           <ChevronLeft class="size-10" />
         </Button>
         <!-- Image -->
         <img
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
-          alt="Фото товара"
+          :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
           class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
-        <Button v-if="lightboxIndex < lightboxImages.length - 1" variant="ghost" size="icon" class="absolute right-4 text-white/70 hover:text-white hover:bg-transparent" aria-label="Следующее фото" @click="nextImage">
+        <Button v-if="lightboxIndex < lightboxImages.length - 1" variant="ghost" size="icon" class="absolute right-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')" @click="nextImage">
           <ChevronRight class="size-10" />
         </Button>
         <!-- Counter -->
