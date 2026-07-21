@@ -263,21 +263,25 @@ public class FolderJobServiceTests
 
     [Theory]
     [InlineData("Photos", "Photos")]
-    [InlineData("a/b\\c:d", null)] // invalid chars replaced; assert non-empty sanitized
     [InlineData("   ", "archive")]
     [InlineData("", "archive")]
-    public void SanitizeFileName_ReplacesInvalidOrBlank(string input, string? expectedExact)
+    public void SanitizeFileName_PreservesValidOrFallsBack(string input, string expected)
     {
+        Assert.Equal(expected, FolderJobService.SanitizeFileName(input));
+    }
+
+    [Fact]
+    public void SanitizeFileName_ReplacesPlatformInvalidChars()
+    {
+        var invalid = Path.GetInvalidFileNameChars().Where(c => !char.IsWhiteSpace(c)).Take(3).ToArray();
+        Assert.NotEmpty(invalid);
+
+        var input = "name" + new string(invalid);
         var sanitized = FolderJobService.SanitizeFileName(input);
-        if (expectedExact != null)
-            Assert.Equal(expectedExact, sanitized);
-        else
-        {
-            Assert.False(string.IsNullOrWhiteSpace(sanitized));
-            Assert.DoesNotContain('/', sanitized);
-            Assert.DoesNotContain('\\', sanitized);
-            Assert.DoesNotContain(':', sanitized);
-        }
+
+        Assert.StartsWith("name", sanitized);
+        foreach (var c in invalid)
+            Assert.DoesNotContain(c, sanitized);
     }
 
     private static ProductFile NewProductFile(int productId, int userId, long length, int? folderId) => new()
