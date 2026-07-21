@@ -183,20 +183,11 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-        var settings = scope.ServiceProvider.GetRequiredService<AppSettingsService>();
 
         var retentionDays = DefaultRetentionDays;
-        try
-        {
-            var all = await settings.GetSettingsAsync(ct);
-            var raw = all.FirstOrDefault(s => s.key == AppSettingKeys.AdapterHttpLogRetentionDays)?.effectiveValue;
-            if (int.TryParse(raw, out var days))
-                retentionDays = Math.Clamp(days, 1, 30);
-        }
-        catch
-        {
-            // keep default
-        }
+        var raw = Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS");
+        if (int.TryParse(raw, out var days))
+            retentionDays = Math.Clamp(days, 1, 30);
 
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var old = await db.adapterHttpLogs.Where(l => l.createdAt < cutoff).Take(5000).ToListAsync(ct);

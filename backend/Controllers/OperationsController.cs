@@ -14,18 +14,15 @@ public class OperationsController : ControllerBase
     private readonly DataContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOperationLogger _operationLogger;
-    private readonly AppSettingsService _settingsService;
 
     public OperationsController(
         DataContext context,
         ICurrentUserService currentUserService,
-        IOperationLogger operationLogger,
-        AppSettingsService settingsService)
+        IOperationLogger operationLogger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _operationLogger = operationLogger;
-        _settingsService = settingsService;
     }
 
     [HttpGet]
@@ -333,21 +330,30 @@ public class OperationsController : ControllerBase
             {
                 cancelledCount = await _context.pendingProductImports
                     .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductImportStatus.Pending || p.status == ProductImportStatus.Cancelled))
+                        (p.status == ProductImportStatus.Pending
+                         || p.status == ProductImportStatus.InProgress
+                         || p.status == ProductImportStatus.Failed
+                         || p.status == ProductImportStatus.Cancelled))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
             }
             else if (op.batchType == "export")
             {
                 cancelledCount = await _context.pendingProductExports
                     .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductExportStatus.Pending || p.status == ProductExportStatus.Cancelled))
+                        (p.status == ProductExportStatus.Pending
+                         || p.status == ProductExportStatus.InProgress
+                         || p.status == ProductExportStatus.Failed
+                         || p.status == ProductExportStatus.Cancelled))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
             }
             else if (op.batchType == "image-download")
             {
                 cancelledCount = await _context.pendingImageDownloads
                     .Where(p => p.batchId == op.batchId &&
-                        (p.status == ImageDownloadStatus.Pending || p.status == ImageDownloadStatus.Cancelled))
+                        (p.status == ImageDownloadStatus.Pending
+                         || p.status == ImageDownloadStatus.InProgress
+                         || p.status == ImageDownloadStatus.Failed
+                         || p.status == ImageDownloadStatus.Cancelled))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
             }
         }
@@ -451,12 +457,9 @@ public class OperationsController : ControllerBase
             .Select(g => new QueueStatusCount(g.Key, g.Count()))
             .ToListAsync(ct);
 
-        var limits = await _settingsService.GetSettingsAsync(ct);
-
         return Ok(new
         {
             storeId,
-            limits,
             operations = new
             {
                 key = "operations",

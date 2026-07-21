@@ -201,13 +201,21 @@ public class CatalogProductDomainTests
     [Fact]
     public async Task ProductQuota_AtLimitBlocksCreate()
     {
-        var (db, data) = Create();
-        var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxProducts, "1");
-        data.AddProduct(store.Id);
-        await data.SaveAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
-        var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureProductQuotaAsync(store.Id));
-        Assert.Equal(409, ex.StatusCode);
+        var previous = Environment.GetEnvironmentVariable("MAX_PRODUCTS");
+        Environment.SetEnvironmentVariable("MAX_PRODUCTS", "1");
+        try
+        {
+            var (db, data) = Create();
+            var store = data.AddStore();
+            data.AddProduct(store.Id);
+            await data.SaveAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureProductQuotaAsync(store.Id));
+            Assert.Equal(409, ex.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_PRODUCTS", previous);
+        }
     }
 }

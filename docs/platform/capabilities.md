@@ -74,13 +74,16 @@
 - `MAX_STORAGE_GB` — max storage per store
 - `MAX_FILES` — max files per store
 - `MAX_CONNECTIONS` — max marketplace connections
-- `AI_ENABLED` — whether AI assistant is available (`true` / `false`)
-- Configurable via env vars; editable through admin UI
+- `AI_ENABLED` — whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility)
+- **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
+- Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
+- Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
 
 ### Background Services
 - ImageDownloadBackgroundService — downloads images from marketplaces
 - ProductImportBackgroundService — processes product import queue (PendingProductImport)
 - ProductExportBackgroundService — processes product export queue (PendingProductExport)
+- QueueCleanupBackgroundService — deletes terminal queue rows and operations older than retention
 - Startup recovery: InProgress tasks reset to Pending on container restart
 
 ### Infrastructure
@@ -96,6 +99,10 @@
 - User management (add/remove from store)
 - Invitation token generation
 - Error log viewer
+- Adapter HTTP logs (admin-only)
+- AI model management (when `AI_ENABLED`)
+- Database dump download (`GET /settings/database/dump`)
+- Break-glass admin password: `dotnet Delegat.dll --reset-admin` (or `scripts/reset-admin.sh`) prints JSON credentials to stdout without restarting the API
 
 ---
 
@@ -108,8 +115,8 @@
 - **Needed:** Steps: account setup → store configuration → marketplace connection → first sync.
 
 #### Backup & Recovery
-- **Current:** Docker volumes with no automated backups.
-- **Needed:** Automated MySQL backups (mysqldump) + MinIO data. Cron job or sidecar container.
+- **Current:** Manual MySQL dump for administrators via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.
+- **Needed:** Automated MySQL backups (mysqldump on a schedule) + MinIO data. Cron job or sidecar container.
 
 ---
 

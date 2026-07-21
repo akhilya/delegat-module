@@ -239,56 +239,6 @@ namespace Delegat.Migrations
                     b.ToTable("aiStoreSettings");
                 });
 
-            modelBuilder.Entity("Delegat.Models.AppSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<bool>("isEditable")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("key")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("label")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<DateTime>("updatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("updatedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("value")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<string>("valueType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("varchar(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("key")
-                        .IsUnique();
-
-                    b.HasIndex("updatedByUserId");
-
-                    b.ToTable("appSettings");
-                });
-
             modelBuilder.Entity("Delegat.Models.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -498,9 +448,6 @@ namespace Delegat.Migrations
                     b.HasIndex("folderId");
 
                     b.HasIndex("productId");
-
-                    b.HasIndex("publicToken")
-                        .IsUnique();
 
                     b.ToTable("files");
                 });
@@ -1927,9 +1874,6 @@ namespace Delegat.Migrations
 
                     b.HasIndex("folderId");
 
-                    b.HasIndex("publicToken")
-                        .IsUnique();
-
                     b.HasIndex("storeId");
 
                     b.ToTable("storeFiles");
@@ -2391,16 +2335,6 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("conversation");
-                });
-
-            modelBuilder.Entity("Delegat.Models.AppSetting", b =>
-                {
-                    b.HasOne("Delegat.Models.User", "updatedByUser")
-                        .WithMany()
-                        .HasForeignKey("updatedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("updatedByUser");
                 });
 
             modelBuilder.Entity("Delegat.Models.Category", b =>

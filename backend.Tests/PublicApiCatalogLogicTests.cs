@@ -23,7 +23,7 @@ public class PublicApiCatalogLogicTests
             new PublicApiStoreContext(currentUser, db),
             db,
             TestDbFactory.CreateUnitOfWork(db),
-            new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db)),
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db)),
             new ServiceCollection().BuildServiceProvider());
 
     private static PublicCategoriesController Categories(DataContext db, FakeCurrentUserService currentUser) =>

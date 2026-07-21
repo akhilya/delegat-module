@@ -3,23 +3,26 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 using Delegat.Models.Products;
+using System.Globalization;
 
 namespace Delegat.Services;
 
+/// <summary>
+/// Enforces per-store quotas from environment variables only (Control Plane / tariff).
+/// Empty or invalid values mean no limit.
+/// </summary>
 public class QuotaService
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly AppSettingsService _settingsService;
 
-    public QuotaService(IUnitOfWork unitOfWork, AppSettingsService settingsService)
+    public QuotaService(IUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
-        _settingsService = settingsService;
     }
 
     public async Task EnsureProductQuotaAsync(int storeId)
     {
-        var maxProducts = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxProducts);
+        var maxProducts = ReadPositiveInt("MAX_PRODUCTS");
         if (maxProducts == null) return;
 
         var count = await _unitOfWork.Repository<Product>()
@@ -31,7 +34,7 @@ public class QuotaService
 
     public async Task EnsureStorageQuotaAsync(int storeId, long additionalBytes = 0)
     {
-        var maxStorageBytes = await _settingsService.GetPositiveGigabytesAsBytesAsync(AppSettingKeys.MaxStorageGb);
+        var maxStorageBytes = ReadPositiveGigabytesAsBytes("MAX_STORAGE_GB");
         if (maxStorageBytes == null) return;
 
         var productFilesBytes = await _unitOfWork.Repository<Models.File>()
@@ -50,7 +53,7 @@ public class QuotaService
 
     public async Task EnsureFileQuotaAsync(int storeId, int additionalFiles = 1)
     {
-        var maxFiles = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxFiles);
+        var maxFiles = ReadPositiveInt("MAX_FILES");
         if (maxFiles == null) return;
 
         var productFilesCount = await _unitOfWork.Repository<Models.File>()
@@ -67,7 +70,7 @@ public class QuotaService
 
     public async Task EnsureConnectionQuotaAsync(int storeId)
     {
-        var maxConnections = await _settingsService.GetPositiveIntAsync(AppSettingKeys.MaxConnections);
+        var maxConnections = ReadPositiveInt("MAX_CONNECTIONS");
         if (maxConnections == null) return;
 
         var count = await _unitOfWork.Repository<Models.Marketplace.MarketplaceConnection>()
@@ -75,5 +78,23 @@ public class QuotaService
 
         if (count >= maxConnections.Value)
             throw ApiException.Conflict($"Connection limit reached (MAX_CONNECTIONS={maxConnections.Value})");
+    }
+
+    private static int? ReadPositiveInt(string envName)
+    {
+        var raw = Environment.GetEnvironmentVariable(envName);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0
+            ? n
+            : null;
+    }
+
+    private static long? ReadPositiveGigabytesAsBytes(string envName)
+    {
+        var raw = Environment.GetEnvironmentVariable(envName);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!decimal.TryParse(raw.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var gb) || gb <= 0)
+            return null;
+        return (long)(gb * 1024m * 1024m * 1024m);
     }
 }

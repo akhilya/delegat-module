@@ -293,7 +293,11 @@
     "import_failed": "Import failed",
     "access_denied_store": "No access to this store",
     "internal_error": "Internal server error",
-    "ai_api_key_invalid": "Could not decrypt the AI model API key. Open Settings → AI and re-enter the key."
+    "ai_api_key_invalid": "Could not decrypt the AI model API key. Open Settings → AI and re-enter the key.",
+    "ai_disabled": "AI assistant is disabled for this instance",
+    "mysqldump_unavailable": "mysqldump is not available on the server. Install MySQL client tools or use the Docker image.",
+    "dump_in_progress": "A database dump is already in progress. Try again shortly.",
+    "dump_failed": "Database dump failed. Check MySQL connectivity and credentials."
   },
   "routes": {
     "products": "Products",
@@ -2599,30 +2603,12 @@
       "emptyHistoryDescription": "Completed operations will appear here: export, import, and AI tasks."
     },
     "settingsOverviewPage": {
-      "statusPending": "pending",
-      "statusInProgress": "in progress",
-      "settingsSaved": "General settings saved",
-      "clearQueueTitle": "Clear queue",
-      "clearAllDescription": "Clear all entries in the selected queue, including pending and running ones?",
-      "clearInactiveDescription": "Clear completed, failed, and cancelled entries?",
-      "deletedRecords": "Deleted records: {count}",
-      "description": "Platform settings, queues, and diagnostics",
-      "generalParamsTitle": "General settings",
-      "generalParamsDescription": "Platform limits, rate limits, and system constraints.",
-      "notSet": "not set",
-      "activeLabel": "· Active:",
-      "noParamsFound": "No general settings found.",
-      "changedParamsCount": "Changed settings: {count}",
-      "saveParamsButton": "Save settings",
-      "queuesSectionTitle": "Queues and processes",
-      "queuesSectionDescription": "Current export, import, and image queues, and background operation history.",
-      "historyLabel": "Background process history",
-      "recordsCount": "{count} records",
-      "noRecords": "no records",
-      "historyDescription": "Current and completed store operations.",
-      "clearCompletedButton": "Clear completed",
-      "clearAllButton": "Clear all",
-      "clearInactiveButton": "Clear inactive"
+      "description": "Platform backup and maintenance",
+      "databaseBackupTitle": "Database backup",
+      "databaseBackupDescription": "Download a full MySQL dump (.sql) of the platform database. Administrators only.",
+      "downloadDumpButton": "Download DB dump",
+      "dumpStarted": "Preparing database dump…",
+      "dumpDownloaded": "Database dump downloaded"
     },
     "settingsUserPage": {
       "userNameEmptyError": "User name cannot be empty",

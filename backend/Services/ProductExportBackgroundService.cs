@@ -116,7 +116,13 @@ public class ProductExportBackgroundService : BackgroundService
 
                 if (opStatus is "paused" or "cancelled")
                 {
-                    _logger.LogInformation("Operation {BatchId} is in status {Status}, skipping export", batchId, opStatus);
+                    _logger.LogInformation("Operation {BatchId} is in status {Status}, cancelling queue rows", batchId, opStatus);
+                    await context.pendingProductExports
+                        .Where(p => p.batchId == batchId &&
+                            (p.status == ProductExportStatus.Pending
+                             || p.status == ProductExportStatus.InProgress
+                             || p.status == ProductExportStatus.Failed))
+                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
                     continue;
                 }
             }

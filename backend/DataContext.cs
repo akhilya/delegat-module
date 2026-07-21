@@ -74,9 +74,6 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Outbound marketplace HTTP request logs
     public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }
 
-    // Platform settings editable by administrators
-    public DbSet<AppSetting> appSettings { get; set; }
-
     public DbSet<AiModelConfig> aiModelConfigs { get; set; }
     public DbSet<AiOperation> aiOperations { get; set; }
     public DbSet<AiStoreSettings> aiStoreSettings { get; set; }
@@ -401,17 +398,6 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(l => new { l.statusCode, l.createdAt });
         builder.Entity<AdapterHttpLog>()
             .HasIndex(l => new { l.adapterKey, l.createdAt });
-
-        // AppSetting indexes
-        builder.Entity<AppSetting>()
-            .HasIndex(s => s.key)
-            .IsUnique();
-
-        builder.Entity<AppSetting>()
-            .HasOne(s => s.updatedByUser)
-            .WithMany()
-            .HasForeignKey(s => s.updatedByUserId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         // AiModelConfig indexes
         builder.Entity<AiModelConfig>()

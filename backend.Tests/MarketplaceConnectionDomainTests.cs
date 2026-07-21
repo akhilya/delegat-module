@@ -182,56 +182,88 @@ public class MarketplaceConnectionDomainTests
     [Fact]
     public async Task ConnectionQuota_UnderLimitAllowsAnotherConnection()
     {
-        var (db, data, _) = Create();
-        var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "2");
-        data.AddConnection(store.Id);
-        await data.SaveAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
+        var previous = Environment.GetEnvironmentVariable("MAX_CONNECTIONS");
+        Environment.SetEnvironmentVariable("MAX_CONNECTIONS", "2");
+        try
+        {
+            var (db, data, _) = Create();
+            var store = data.AddStore();
+            data.AddConnection(store.Id);
+            await data.SaveAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
 
-        await quota.EnsureConnectionQuotaAsync(store.Id);
+            await quota.EnsureConnectionQuotaAsync(store.Id);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_CONNECTIONS", previous);
+        }
     }
 
     [Fact]
     public async Task ConnectionQuota_AtLimitThrowsConflict()
     {
-        var (db, data, _) = Create();
-        var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "1");
-        data.AddConnection(store.Id);
-        await data.SaveAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
+        var previous = Environment.GetEnvironmentVariable("MAX_CONNECTIONS");
+        Environment.SetEnvironmentVariable("MAX_CONNECTIONS", "1");
+        try
+        {
+            var (db, data, _) = Create();
+            var store = data.AddStore();
+            data.AddConnection(store.Id);
+            await data.SaveAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
 
-        var error = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureConnectionQuotaAsync(store.Id));
+            var error = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureConnectionQuotaAsync(store.Id));
 
-        Assert.Equal(409, error.StatusCode);
+            Assert.Equal(409, error.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_CONNECTIONS", previous);
+        }
     }
 
     [Fact]
     public async Task ConnectionQuota_DoesNotCountOtherStores()
     {
-        var (db, data, _) = Create();
-        var first = data.AddStore();
-        var second = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "1");
-        data.AddConnection(second.Id);
-        await data.SaveAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
+        var previous = Environment.GetEnvironmentVariable("MAX_CONNECTIONS");
+        Environment.SetEnvironmentVariable("MAX_CONNECTIONS", "1");
+        try
+        {
+            var (db, data, _) = Create();
+            var first = data.AddStore();
+            var second = data.AddStore();
+            data.AddConnection(second.Id);
+            await data.SaveAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
 
-        await quota.EnsureConnectionQuotaAsync(first.Id);
+            await quota.EnsureConnectionQuotaAsync(first.Id);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_CONNECTIONS", previous);
+        }
     }
 
     [Fact]
     public async Task ConnectionQuota_NoPositiveLimitAllowsConnections()
     {
-        var (db, data, _) = Create();
-        var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "0");
-        data.AddConnection(store.Id);
-        data.AddConnection(store.Id, "wildberries");
-        await data.SaveAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
+        var previous = Environment.GetEnvironmentVariable("MAX_CONNECTIONS");
+        Environment.SetEnvironmentVariable("MAX_CONNECTIONS", "0");
+        try
+        {
+            var (db, data, _) = Create();
+            var store = data.AddStore();
+            data.AddConnection(store.Id);
+            data.AddConnection(store.Id, "wildberries");
+            await data.SaveAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
 
-        await quota.EnsureConnectionQuotaAsync(store.Id);
+            await quota.EnsureConnectionQuotaAsync(store.Id);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_CONNECTIONS", previous);
+        }
     }
 }

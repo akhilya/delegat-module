@@ -164,6 +164,8 @@ builder.Services.AddSingleton<ThumbnailService>();
 // Settings as singletons for DI
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton(minioSettings);
+builder.Services.AddSingleton(mysqlSettings);
+builder.Services.AddSingleton<IDatabaseDumpService, DatabaseDumpService>();
 
 // Marketplace Integration Services - Plugin System
 
@@ -181,7 +183,6 @@ builder.Services.AddHostedService<PluginHostedService>();
 builder.Services.AddScoped<ProductFolderController>();
 
 // Quotas
-builder.Services.AddScoped<AppSettingsService>();
 builder.Services.AddScoped<QuotaService>();
 builder.Services.AddScoped<StoreStorageController>();
 
@@ -236,6 +237,7 @@ builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
 builder.Services.AddHostedService<ProductTransferBackgroundService>();
+builder.Services.AddHostedService<QueueCleanupBackgroundService>();
 
 // SignalR for real-time operation logs
 builder.Services.AddSignalR();
@@ -472,26 +474,26 @@ using (var scope = app.Services.CreateScope())
     await DatabaseSeeder.SeedAsync(scope.ServiceProvider, adminSettings);
 }
 
-// --reset-admin mode: reset superadmin credentials and exit without starting the web server.
+// --reset-admin mode: generate a new admin password, print JSON to stdout, exit.
 // Usage inside container: dotnet Delegat.dll --reset-admin
+// Does not require restarting the running API process (separate process, same DB).
 if (args.Contains("--reset-admin"))
 {
-    if (string.IsNullOrEmpty(adminSettings.Email) || string.IsNullOrEmpty(adminSettings.Password))
+    try
     {
-        Console.Error.WriteLine("ADMIN_EMAIL and ADMIN_PASSWORD must be set.");
+        using var resetScope = app.Services.CreateScope();
+        var result = await DatabaseSeeder.ResetAdminWithGeneratedPasswordAsync(
+            resetScope.ServiceProvider,
+            adminSettings.Email,
+            adminSettings.Username);
+        Console.WriteLine(result.ToJson());
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine(ex.Message);
         return 1;
     }
-    var resetSettings = new AdminSeedSettings
-    {
-        Email = adminSettings.Email,
-        Username = adminSettings.Username,
-        Password = adminSettings.Password,
-        ForceReset = true,
-    };
-    using var resetScope = app.Services.CreateScope();
-    await DatabaseSeeder.SeedAsync(resetScope.ServiceProvider, resetSettings);
-    Console.WriteLine("Admin reset complete.");
-    return 0;
 }
 
 // Reset stuck InProgress tasks to Pending on startup (prevents permanent hang after container restart)

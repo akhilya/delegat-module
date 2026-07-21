@@ -1,6 +1,5 @@
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
-using Delegat.Models.Products;
 using Delegat.Services;
 using Delegat.Tests.Infrastructure;
 
@@ -12,14 +11,26 @@ public class QuotaServiceTests
     {
         var db = TestDbFactory.CreateDb();
         var uow = TestDbFactory.CreateUnitOfWork(db);
-        var settings = new AppSettingsService(db);
-        var quota = new QuotaService(uow, settings);
+        var quota = new QuotaService(uow);
         return (db, quota, new TestDataBuilder(db));
+    }
+
+    private static IDisposable SetEnv(string name, string? value)
+    {
+        var previous = Environment.GetEnvironmentVariable(name);
+        Environment.SetEnvironmentVariable(name, value);
+        return new EnvRestore(name, previous);
+    }
+
+    private sealed class EnvRestore(string name, string? previous) : IDisposable
+    {
+        public void Dispose() => Environment.SetEnvironmentVariable(name, previous);
     }
 
     [Fact]
     public async Task EnsureProductQuota_NoLimit_Allows()
     {
+        using var _ = SetEnv("MAX_PRODUCTS", null);
         var (db, quota, data) = Create();
         var store = data.AddStore();
         data.AddProduct(store.Id);
@@ -31,9 +42,9 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureProductQuota_UnderLimit_Allows()
     {
+        using var _ = SetEnv("MAX_PRODUCTS", "5");
         var (db, quota, data) = Create();
         var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxProducts, "5");
         data.AddProduct(store.Id);
         data.AddProduct(store.Id);
         await data.SaveAsync();
@@ -44,9 +55,9 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureProductQuota_AtLimit_ThrowsConflict()
     {
+        using var _ = SetEnv("MAX_PRODUCTS", "2");
         var (db, quota, data) = Create();
         var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxProducts, "2");
         data.AddProduct(store.Id);
         data.AddProduct(store.Id);
         await data.SaveAsync();
@@ -58,9 +69,9 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureConnectionQuota_AtLimit_ThrowsConflict()
     {
+        using var _ = SetEnv("MAX_CONNECTIONS", "1");
         var (db, quota, data) = Create();
         var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "1");
         data.AddConnection(store.Id);
         await data.SaveAsync();
 
@@ -71,9 +82,9 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureConnectionQuota_UnderLimit_Allows()
     {
+        using var _ = SetEnv("MAX_CONNECTIONS", "3");
         var (db, quota, data) = Create();
         var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxConnections, "3");
         data.AddConnection(store.Id);
         await data.SaveAsync();
 
@@ -83,11 +94,11 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureFileQuota_AtLimit_ThrowsConflict()
     {
+        using var _ = SetEnv("MAX_FILES", "1");
         var (db, quota, data) = Create();
         var user = data.AddUser("author");
         var store = data.AddStore();
         var product = data.AddProduct(store.Id);
-        data.SetAppSetting(AppSettingKeys.MaxFiles, "1");
         await data.SaveAsync();
 
         db.files.Add(new Models.File
@@ -110,16 +121,10 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureStorageQuota_AtLimit_ThrowsConflict()
     {
+        using var _ = SetEnv("MAX_STORAGE_GB", "0.000000000000001");
         var (db, quota, data) = Create();
         var store = data.AddStore();
-        data.SetAppSetting(AppSettingKeys.MaxStorageGb, "0.000000001", "decimal"); // ~1 byte
         await data.SaveAsync();
-
-        // Force a tiny limit via bytes: set max storage so additionalBytes exceeds
-        // Re-set with a clearer approach: use store file of 1 byte and max ~0 GB parsed
-        // GetPositiveGigabytesAsBytes with very small GB
-        data.SetAppSetting(AppSettingKeys.MaxStorageGb, "0.000000000000001", "decimal");
-        await db.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<ApiException>(
             () => quota.EnsureStorageQuotaAsync(store.Id, additionalBytes: 1024));
@@ -129,10 +134,10 @@ public class QuotaServiceTests
     [Fact]
     public async Task EnsureProductQuota_CountsOnlySameStore()
     {
+        using var _ = SetEnv("MAX_PRODUCTS", "1");
         var (db, quota, data) = Create();
         var a = data.AddStore("A");
         var b = data.AddStore("B");
-        data.SetAppSetting(AppSettingKeys.MaxProducts, "1");
         data.AddProduct(b.Id);
         await data.SaveAsync();
 

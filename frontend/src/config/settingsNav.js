@@ -57,7 +57,6 @@ const ADMIN_PREFIX = "/settings/admin";
 export function getPersonalSettingsItems(ctx) {
   const items = [
     { id: "user", labelKey: "nav.user", to: PAGE_SETTINGS_USER, icon: User },
-    { id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
   ];
   if (ctx.canManageStore && !ctx.isAdmin) {
     items.push({ id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store });
@@ -78,7 +77,10 @@ export function getAdminSettingsItems(ctx) {
     { id: "tokens", labelKey: "nav.tokens", to: PAGE_ADMIN_TOKENS, icon: Key },
     { id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug },
     { id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-    { id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles },
+    { id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
+    ...(ctx.me?.aiEnabled !== false
+      ? [{ id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles }]
+      : []),
   ];
 }
 
@@ -91,7 +93,9 @@ export function getSettingsSidebarSubItems(ctx) {
 }
 
 export function isSettingsAdminPath(path) {
-  return path === PAGE_SETTINGS || path.startsWith(ADMIN_PREFIX);
+  return path === PAGE_SETTINGS
+    || path === PAGE_ADAPTER_LOGS
+    || path.startsWith(ADMIN_PREFIX);
 }
 
 export function resolveSettingsBreadcrumb(path) {

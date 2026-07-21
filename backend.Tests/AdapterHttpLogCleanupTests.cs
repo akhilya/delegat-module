@@ -1,5 +1,4 @@
 using Delegat.Models.Marketplace;
-using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -13,26 +12,33 @@ public class AdapterHttpLogCleanupTests
     [Fact]
     public async Task CleanupAsync_RemovesOnlyLogsOlderThanConfiguredRetention()
     {
-        await using var db = TestDbFactory.CreateDb();
-        db.adapterHttpLogs.AddRange(
-            CreateLog(DateTime.UtcNow.AddDays(-3), "old"),
-            CreateLog(DateTime.UtcNow.AddHours(-12), "recent"));
-        new TestDataBuilder(db).SetAppSetting(AppSettingKeys.AdapterHttpLogRetentionDays, "1");
-        await db.SaveChangesAsync();
+        var previous = Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS");
+        Environment.SetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS", "1");
+        try
+        {
+            await using var db = TestDbFactory.CreateDb();
+            db.adapterHttpLogs.AddRange(
+                CreateLog(DateTime.UtcNow.AddDays(-3), "old"),
+                CreateLog(DateTime.UtcNow.AddHours(-12), "recent"));
+            await db.SaveChangesAsync();
 
-        await using var provider = new ServiceCollection()
-            .AddSingleton(db)
-            .AddScoped<AppSettingsService>()
-            .BuildServiceProvider();
-        await using var service = new AdapterHttpLogService(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<AdapterHttpLogService>.Instance);
+            await using var provider = new ServiceCollection()
+                .AddSingleton(db)
+                .BuildServiceProvider();
+            await using var service = new AdapterHttpLogService(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<AdapterHttpLogService>.Instance);
 
-        await service.CleanupAsync();
+            await service.CleanupAsync();
 
-        var logs = await db.adapterHttpLogs.OrderBy(log => log.path).ToListAsync();
-        Assert.Single(logs);
-        Assert.Equal("recent", logs[0].path);
+            var logs = await db.adapterHttpLogs.OrderBy(log => log.path).ToListAsync();
+            Assert.Single(logs);
+            Assert.Equal("recent", logs[0].path);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS", previous);
+        }
     }
 
     private static AdapterHttpLog CreateLog(DateTime createdAt, string path) => new()

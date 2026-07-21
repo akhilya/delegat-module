@@ -245,19 +245,27 @@ public class ProductFilesDomainTests
     [Fact]
     public async Task FileQuota_AtLimitRejectsAnotherProductFile()
     {
-        await using var db = TestDbFactory.CreateDb();
-        var data = new TestDataBuilder(db);
-        var user = data.AddUser();
-        var store = data.AddStore();
-        var product = data.AddProduct(store.Id);
-        data.SetAppSetting(AppSettingKeys.MaxFiles, "1");
-        await data.SaveAsync();
-        db.files.Add(NewFile(product.Id, user.Id));
-        await db.SaveChangesAsync();
-        var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), new AppSettingsService(db));
+        var previous = Environment.GetEnvironmentVariable("MAX_FILES");
+        Environment.SetEnvironmentVariable("MAX_FILES", "1");
+        try
+        {
+            await using var db = TestDbFactory.CreateDb();
+            var data = new TestDataBuilder(db);
+            var user = data.AddUser();
+            var store = data.AddStore();
+            var product = data.AddProduct(store.Id);
+            await data.SaveAsync();
+            db.files.Add(NewFile(product.Id, user.Id));
+            await db.SaveChangesAsync();
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
 
-        var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureFileQuotaAsync(store.Id));
+            var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureFileQuotaAsync(store.Id));
 
-        Assert.Equal(409, ex.StatusCode);
+            Assert.Equal(409, ex.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MAX_FILES", previous);
+        }
     }
 }

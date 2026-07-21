@@ -293,7 +293,11 @@
     "import_failed": "Ошибка импорта",
     "access_denied_store": "Нет доступа к этому магазину",
     "internal_error": "Внутренняя ошибка сервера",
-    "ai_api_key_invalid": "Не удалось расшифровать API-ключ модели. Откройте Настройки → ИИ и введите ключ заново."
+    "ai_api_key_invalid": "Не удалось расшифровать API-ключ модели. Откройте Настройки → ИИ и введите ключ заново.",
+    "ai_disabled": "ИИ-ассистент отключён на этом инстансе",
+    "mysqldump_unavailable": "mysqldump недоступен на сервере. Установите клиент MySQL или используйте Docker-образ.",
+    "dump_in_progress": "Дамп базы данных уже выполняется. Попробуйте чуть позже.",
+    "dump_failed": "Не удалось создать дамп базы данных. Проверьте доступность MySQL и учётные данные."
   },
   "routes": {
     "products": "Товары",
@@ -2599,30 +2603,12 @@
       "emptyHistoryDescription": "Здесь появятся завершённые операции: экспорт, импорт и AI-задачи."
     },
     "settingsOverviewPage": {
-      "statusPending": "ожидает",
-      "statusInProgress": "в процессе",
-      "settingsSaved": "Общие параметры сохранены",
-      "clearQueueTitle": "Очистить очередь",
-      "clearAllDescription": "Очистить все записи выбранной очереди, включая ожидающие и выполняющиеся?",
-      "clearInactiveDescription": "Очистить завершённые, ошибочные и отменённые записи?",
-      "deletedRecords": "Удалено записей: {count}",
-      "description": "Платформенные параметры, очереди и диагностика",
-      "generalParamsTitle": "Общие параметры",
-      "generalParamsDescription": "Лимиты, rate limit и системные ограничения платформы.",
-      "notSet": "не задано",
-      "activeLabel": "· Активно:",
-      "noParamsFound": "Общие параметры не найдены.",
-      "changedParamsCount": "Изменено параметров: {count}",
-      "saveParamsButton": "Сохранить параметры",
-      "queuesSectionTitle": "Очереди и процессы",
-      "queuesSectionDescription": "Текущие очереди экспорта, импорта, изображений и история фоновых операций.",
-      "historyLabel": "История фоновых процессов",
-      "recordsCount": "{count} записей",
-      "noRecords": "нет записей",
-      "historyDescription": "Текущие и завершённые операции магазина.",
-      "clearCompletedButton": "Очистить завершённые",
-      "clearAllButton": "Очистить всё",
-      "clearInactiveButton": "Очистить неактивные"
+      "description": "Резервное копирование и обслуживание платформы",
+      "databaseBackupTitle": "Резервная копия БД",
+      "databaseBackupDescription": "Скачать полный дамп MySQL (.sql) платформенной базы. Только для администраторов.",
+      "downloadDumpButton": "Скачать дамп БД",
+      "dumpStarted": "Готовим дамп базы данных…",
+      "dumpDownloaded": "Дамп базы данных скачан"
     },
     "settingsUserPage": {
       "userNameEmptyError": "Имя пользователя не может быть пустым",

@@ -65,7 +65,8 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
             userName = UserName,
             selectedStoreId = selectedStoreId,
             isAdmin = isAdmin,
-            isActive = isActive
+            isActive = isActive,
+            aiEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAiEnabled()
         };
     }
 
@@ -103,6 +104,11 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// Whether the user can sign in and use the dashboard.
         /// </summary>
         public bool isActive { get; set; }
+
+        /// <summary>
+        /// Whether the AI assistant is enabled for this instance (from AI_ENABLED env).
+        /// </summary>
+        public bool aiEnabled { get; set; }
     }
 
     /// <summary>

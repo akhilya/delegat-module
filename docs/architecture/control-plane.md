@@ -63,7 +63,7 @@
 | 7 | Релизы | Новые инстансы и обновления флота идут с **последней подтверждённой в Ops ревизии**, не с «сырого» `latest` из CI |
 | 8 | Trial | **7 дней** пробного периода |
 | 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** — **purge** volumes/данных |
-| 10 | Первый вход | **Обязательная смена** временного admin-пароля при первом входе в инстанс |
+| 10 | Первый вход / break-glass | Сброс суперадмина — **Ops break-glass** через `dotnet Delegat.dll --reset-admin` в контейнере API (генерирует пароль, JSON в stdout, без рестарта API). Force change при первом входе в UI инстанса **не** делаем |
 | 11 | Репозиторий | Control plane — **отдельный monorepo** от `delegat-module` (платформа инстанса) |
 | 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: **Reference Catalog** (валюты, timezones, реестр плагинов…), 5xx, позже поддержка в UI инстанса |
 
@@ -215,7 +215,7 @@ Stop сохраняет volumes; purge через 2 месяца удаляет 
 6. Poll https://{subdomain}/api/health (timeout ~5 min)
 7. Welcome email: URL + admin + временный пароль
 8. status=active
-9. Первый вход в инстанс → обязательная смена временного admin-пароля (force change)
+9. Первый вход в инстанс → admin логинится с паролем из welcome / break-glass; force change в UI не требуется
 ```
 
 ### 8.3 Обновления флота
@@ -231,12 +231,16 @@ Trigger: Ops «обновить все / выбранные» до Release X
 
 ### 8.4 Break-glass (сброс суперадмина)
 
-Протокол (продуктовые требования):
+Протокол:
 
-- Инициируется только из Ops Console  
-- Пишется в audit log (кто, когда, какой instance)  
-- Результат: новый временный пароль / one-time link; старые сессии инстанса по возможности инвалидируются  
-- Техническая реализация (API инстанса vs пересоздание env `ADMIN_PASSWORD` + redeploy) — TBD  
+- Инициируется только из Ops Console (Control Plane)  
+- Пишется в audit log CP (кто, когда, какой instance)  
+- На инстансе: `docker exec <api> dotnet Delegat.dll --reset-admin` (или `scripts/reset-admin.sh`)  
+  - отдельный процесс в контейнере, **без** рестарта API  
+  - генерирует криптостойкий пароль, сохраняет в Identity  
+  - печатает в stdout одну JSON-строку: `{"email":"...","username":"...","password":"..."}`  
+- Результат: Ops передаёт временный пароль клиенту; существующие JWT остаются до expiry  
+- Force password change при первом входе в UI инстанса **не** реализован и не планируется как замена break-glass  
 
 ---
 
@@ -447,7 +451,7 @@ SSO в GitBook — опционально later (§13). Platform Link SSO (§9) 
 
 ## 13. Open questions
 
-Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., force password change, GitBook, Telegram DM (MVP), отдельный monorepo control plane, **Platform Link** (m2m + user SSO).
+Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., break-glass `--reset-admin` (без force password change в UI), GitBook, Telegram DM (MVP), отдельный monorepo control plane, **Platform Link** (m2m + user SSO).
 
 Ещё открыто:
 

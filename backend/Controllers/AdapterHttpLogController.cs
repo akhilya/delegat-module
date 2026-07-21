@@ -42,6 +42,7 @@ public class AdapterHttpLogController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken ct = default)
     {
+        await EnsureAdminAsync(ct);
         var storeId = await RequireStoreIdAsync();
 
         if (connectionId.HasValue)
@@ -83,11 +84,19 @@ public class AdapterHttpLogController : ControllerBase
     [Route("/adapter-http-logs/{id:int}")]
     public async Task<IActionResult> Detail(int id, CancellationToken ct = default)
     {
+        await EnsureAdminAsync(ct);
         var storeId = await RequireStoreIdAsync();
         var detail = await _logs.GetDetailAsync(storeId, id, ct);
         if (detail == null)
             throw ApiException.NotFound("Log entry not found");
         return Ok(detail);
+    }
+
+    private async Task EnsureAdminAsync(CancellationToken ct)
+    {
+        var user = await _currentUserService.GetUserAsync(ct);
+        if (user == null || !user.isAdmin)
+            throw ApiException.Forbidden("Only administrators can view adapter HTTP logs");
     }
 
     private async Task<int> RequireStoreIdAsync()

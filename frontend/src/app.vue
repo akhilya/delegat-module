@@ -15,6 +15,7 @@ import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
 import { BRAND_NAME } from "@/brand";
+import { http } from "@/main";
 
 export default {
   components: {
@@ -36,6 +37,7 @@ export default {
     const { t } = useI18n();
     const route = useRoute();
     const isPublicPage = computed(() => !!route.meta?.public);
+    const aiEnabled = ref(true);
 
     // Mobile warning: show once, remember dismissal in localStorage
     const mobileWarningDismissed = ref(
@@ -48,7 +50,7 @@ export default {
       localStorage.setItem("mobile-warning-dismissed", "1");
     }
 
-    return { t, BRAND_NAME, isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning };
+    return { t, BRAND_NAME, isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
   },
   computed: {
     appKey() {
@@ -70,6 +72,12 @@ export default {
   mounted() {
     this.$store.dispatch("operations/initSignalR");
     window.addEventListener("beforeunload", this._onBeforeUnload);
+    if (!this.isPublicPage) {
+      http.get("/auth/me", { cache: false }).then((res) => {
+        const me = res.data?.value ?? res.data;
+        this.aiEnabled = me?.aiEnabled !== false;
+      }).catch(() => {});
+    }
   },
   beforeUnmount() {
     this.$store.dispatch("operations/destroySignalR");
@@ -104,7 +112,7 @@ export default {
           <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
         </RouterView>
       </SidebarInset>
-      <AiChatPanel :key="appKey" />
+      <AiChatPanel v-if="aiEnabled" :key="appKey" />
     </div>
   </SidebarProvider>
   <Toaster />

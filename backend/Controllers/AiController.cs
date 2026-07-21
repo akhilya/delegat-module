@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
@@ -30,6 +31,7 @@ public class AiController : ControllerBase
     [HttpPost("chat")]
     public async Task<IActionResult> Chat([FromBody] AiChatRequest request, CancellationToken ct)
     {
+        EnsureAiEnabled();
         var userId = _currentUserService.GetUserId();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
 
@@ -56,6 +58,7 @@ public class AiController : ControllerBase
     [HttpPost("execute-plan")]
     public async Task<IActionResult> ExecutePlan([FromBody] ExecutePlanRequest request, CancellationToken ct)
     {
+        EnsureAiEnabled();
         var userId = _currentUserService.GetUserId();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
 
@@ -83,6 +86,7 @@ public class AiController : ControllerBase
     [HttpPost("stop")]
     public IActionResult Stop([FromBody] StopRequest req)
     {
+        EnsureAiEnabled();
         if (string.IsNullOrEmpty(req.SessionId)) return BadRequest("sessionId required");
         var stopped = AiChatService.StopSession(req.SessionId);
         return Ok(new { stopped });
@@ -92,6 +96,7 @@ public class AiController : ControllerBase
     [HttpPost("explain-error")]
     public async Task<IActionResult> ExplainError([FromBody] ExplainErrorRequest request, CancellationToken ct)
     {
+        EnsureAiEnabled();
         var explanation = await _chatService.ExplainErrorAsync(
             request.ErrorMessage,
             request.Context,
@@ -106,6 +111,7 @@ public class AiController : ControllerBase
         [FromBody] GenerateProductDescriptionRequest request,
         CancellationToken ct)
     {
+        EnsureAiEnabled();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return Unauthorized();
@@ -137,6 +143,7 @@ public class AiController : ControllerBase
     [HttpGet("operations")]
     public async Task<IActionResult> GetOperations(CancellationToken ct)
     {
+        EnsureAiEnabled();
         var userId = _currentUserService.GetUserId();
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (userId == null || storeId == null) return Unauthorized();
@@ -150,6 +157,12 @@ public class AiController : ControllerBase
             o.status,
             o.createdAt
         }));
+    }
+
+    private static void EnsureAiEnabled()
+    {
+        if (!FeatureFlags.IsAiEnabled())
+            throw ApiException.Forbidden("AI assistant is disabled for this instance", code: "ai_disabled");
     }
 }
 

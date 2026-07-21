@@ -269,27 +269,5 @@ public sealed class TestDataBuilder
         return op;
     }
 
-    public AppSetting SetAppSetting(string key, string? value, string valueType = "integer")
-    {
-        var existing = _db.appSettings.FirstOrDefault(s => s.key == key);
-        if (existing != null)
-        {
-            existing.value = value;
-            return existing;
-        }
-
-        var setting = new AppSetting
-        {
-            key = key,
-            label = key,
-            value = value,
-            valueType = valueType,
-            isEditable = true,
-            updatedAt = DateTime.UtcNow
-        };
-        _db.appSettings.Add(setting);
-        return setting;
-    }
-
     public async Task SaveAsync() => await _db.SaveChangesAsync();
 }

@@ -10,34 +10,29 @@ namespace Delegat.Controllers;
 public class SettingsController : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService;
-    private readonly AppSettingsService _settingsService;
+    private readonly IDatabaseDumpService _databaseDumpService;
 
-    public SettingsController(ICurrentUserService currentUserService, AppSettingsService settingsService)
+    public SettingsController(
+        ICurrentUserService currentUserService,
+        IDatabaseDumpService databaseDumpService)
     {
         _currentUserService = currentUserService;
-        _settingsService = settingsService;
+        _databaseDumpService = databaseDumpService;
     }
 
+    /// <summary>
+    /// Download a full MySQL logical dump (.sql). Administrators only.
+    /// </summary>
     [HttpGet]
-    [Route("/settings/app")]
-    public async Task<IActionResult> GetAppSettings(CancellationToken ct)
-    {
-        await EnsureAdminAsync(ct);
-        return Ok(await _settingsService.GetSettingsAsync(ct));
-    }
-
-    [HttpPatch]
-    [Route("/settings/app/{key}")]
-    public async Task<IActionResult> PatchAppSetting(string key, [FromBody] UpdateAppSettingInput input, CancellationToken ct)
+    [Route("/settings/database/dump")]
+    public async Task<IActionResult> DownloadDatabaseDump(CancellationToken ct)
     {
         await EnsureAdminAsync(ct);
 
-        var userId = _currentUserService.GetUserId();
-        var setting = await _settingsService.UpdateSettingAsync(key, input.value, userId, ct);
-        return Ok(setting);
+        var handle = await _databaseDumpService.CreateDumpAsync(ct);
+        HttpContext.Response.RegisterForDispose(handle);
+        return PhysicalFile(handle.FilePath, "application/sql", handle.FileName);
     }
-
-    public record UpdateAppSettingInput(string? value);
 
     private async Task EnsureAdminAsync(CancellationToken ct)
     {
