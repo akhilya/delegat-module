@@ -1,13 +1,19 @@
 # Platform Link (instance ↔ Control Plane)
 
 Contract for machine-to-machine calls from a Delegat instance to Control Plane.
-Product context: [control-plane.md](../architecture/control-plane.md) §9.
+Product context: [control-plane.md](../architecture/control-plane.md) §9.  
+MVP / domains: [../plans/2026-07-21-control-plane-mvp-brief.md](../plans/2026-07-21-control-plane-mvp-brief.md).
+
+**Production CP base URL:** `https://module.delegat.pro`  
+**Instance URL pattern:** `https://{label}.module.delegat.pro`
+
+> After `delegat-module-platform` is created, this file moves there as `docs/platform-link.md`; instance repo keeps a stub.
 
 ## Environment (injected at provision)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CONTROL_PLANE_URL` | for link | Base URL, e.g. `https://console.example.com` (no trailing slash) |
+| `CONTROL_PLANE_URL` | for link | Base URL, e.g. `https://module.delegat.pro` (no trailing slash) |
 | `INSTANCE_ID` | for link | Public instance id (`inst_…`) |
 | `INSTANCE_LINK_SECRET` | for link | Shared secret (backend only; never in frontend) |
 | `PLATFORM_CATALOG_REFRESH_MINUTES` | no | Default `360` (6h) |

@@ -3,15 +3,18 @@
 > Продуктово-архитектурный документ **control plane**: продажа, контроль и развёртывание
 > изолированных инстансов Delegat.Module.
 >
-> Инфраструктурные детали нод, квот и compose-шаблона: [saas-architecture.md](saas-architecture.md)  
-> Возможности самого инстанса: [../platform/capabilities.md](../platform/capabilities.md)  
-> Продуктовый brief инстанса (UI каталога): [../platform/product.md](../platform/product.md)
+> **MVP cut / DNS / acceptance:** [../plans/2026-07-21-control-plane-mvp-brief.md](../plans/2026-07-21-control-plane-mvp-brief.md)  
+> Инфраструктура нод и квот инстанса: [saas-architecture.md](saas-architecture.md)  
+> Возможности инстанса: [../platform/capabilities.md](../platform/capabilities.md)  
+> Brief UI каталога: [../platform/product.md](../platform/product.md)  
+> Platform Link contract: [../platform/platform-link.md](../platform/platform-link.md)
 >
-> **Статус:** дизайн / pre-implementation. Код control plane **не** живёт в этом репозитории -
-> для него заведён **отдельный monorepo** (см. §2). Здесь - каноническое описание продукта
-> и решений, пока control-plane repo пуст или зеркалит этот документ.
+> **Статус:** дизайн готов к реализации. Код - **отдельный** monorepo **`delegat-module-platform`**.  
+> Этот файл - канон **пока** CP-репо не создан; после создания канон переезжает туда (см. brief §0), здесь остаётся stub.
 >
-> Инстанс уже готов быть управляемым снаружи (`/api/health`, квоты через env, admin seed, GHCR).
+> Домены: CP `https://module.delegat.pro` · инстанс `https://{label}.module.delegat.pro` · docs `https://docs.module.delegat.pro`.
+>
+> Инстанс уже готов быть управляемым снаружи (`/api/health`, квоты через env, admin seed, GHCR, Platform Link client).
 
 ---
 
@@ -64,8 +67,13 @@
 | 8 | Trial | **7 дней** пробного периода |
 | 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** - **purge** volumes/данных |
 | 10 | Первый вход / break-glass | Сброс суперадмина - **Ops break-glass** через `dotnet Delegat.dll --reset-admin` в контейнере API (генерирует пароль, JSON в stdout, без рестарта API). Force change при первом входе в UI инстанса **не** делаем |
-| 11 | Репозиторий | Control plane - **отдельный monorepo** от `delegat-module` (платформа инстанса) |
-| 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: **Reference Catalog** (валюты, timezones, реестр плагинов…), 5xx, позже поддержка в UI инстанса |
+| 11 | Репозиторий | Control plane - отдельный monorepo **`delegat-module-platform`** (не `delegat-module`) |
+| 12 | Связь инстанс ↔ CP | **Platform Link**: m2m HMAC + user SSO. Reference Catalog, 5xx, heartbeat, support SSO |
+| 13 | Домены | CP: `module.delegat.pro`; instance: `{label}.module.delegat.pro`; docs: `docs.module.delegat.pro` |
+| 14 | Неоплата (уточнение) | Failed payment → **сразу stop** (без grace); purge volumes через 2 месяца |
+| 15 | Внешние сервисы | SMTP / Т-Банк / Telegram - **порты с дня 1**, live-подключение поэтапно |
+| 16 | Локализация CP | **Русский + English** на всём UI CP (vue-i18n); default `ru` |
+| 17 | Юридические документы | Оферта, Privacy (152-ФЗ), cookies; **футер** + **обязательные чекбоксы при регистрации**; текст можно draft, каркас обязателен |
 
 ---
 
@@ -118,12 +126,18 @@ Account (email, auth)
 ### 5.1 Must-have (MVP)
 
 1. **Лендинг** + регистрация / логин  
-2. **Тарифы:** выбор плана, оплата, автопродление, отмена  
-3. **Инстанс:** статус provision/active, URL, вход (credentials из welcome-письма)  
-4. **Смена / отмена тарифа** (plan change → обновление env квот на инстансе через Dokploy)  
-5. **Тикеты:** создать, переписка в треде, статусы  
-6. **Документация:** ссылка / embed на внешний docs-движок  
-7. **Feature request** (отдельный поток от смены тарифа)
+2. **i18n RU/EN** на всём Customer UI (переключатель языка)  
+3. **Юридические страницы** (оферта, privacy, cookies) + **футер** со ссылками; на регистрации - обязательные чекбоксы согласия  
+4. **Тарифы:** выбор плана, оплата, автопродление, отмена  
+5. **Инстанс:** статус provision/active, URL, вход (credentials из welcome-письма)  
+6. **Смена / отмена тарифа** (plan change → обновление env квот на инстансе через Dokploy)  
+7. **Тикеты:** создать, переписка в треде, статусы  
+8. **Документация:** ссылка / embed на внешний docs-движок (GitBook)  
+9. **Feature request** (отдельный поток от смены тарифа)
+
+### 5.1.1 Локализация и документы
+
+См. [mvp-brief §3.1–3.2](../plans/2026-07-21-control-plane-mvp-brief.md). Кратко: vue-i18n `ru`/`en`; default `ru`; документы bilocalized; без согласия оферты+privacy регистрация невозможна.
 
 ### 5.2 Should-have / later
 
@@ -454,23 +468,38 @@ SSO в GitBook - опционально later (§13). Platform Link SSO (§9) о
 
 Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., break-glass `--reset-admin` (без force password change в UI), GitBook, Telegram DM (MVP), отдельный monorepo control plane, **Platform Link** (m2m + user SSO).
 
-Ещё открыто:
+**Закрыто опросом 2026-07-21** (канон: [../plans/2026-07-21-control-plane-mvp-brief.md](../plans/2026-07-21-control-plane-mvp-brief.md)):
 
-1. **Trial + карта:** нужна ли привязка карты / холд на старте 7-дневного trial (ограничения Т-Банк + антифрод).  
-2. **Grace до stop:** сколько дней `past_due` с баннером до остановки контейнеров; совпадает ли отмена в конце периода с тем же stop→purge.  
-3. **DNS / TLS multi-node:** один edge (Host-header) vs per-node wildcards ([saas-architecture.md](saas-architecture.md) §2).  
-4. **Email:** transactional-провайдер для РФ (welcome, счета, suspend, purge warning).  
-5. **GitBook SSO** позже или достаточно публичных docs.  
-6. **Telegram:** команды бота (`/reply`, смена статуса) vs ответ только из Ops UI; позже - группа вместо лички.  
-7. **Feature request:** внутренний board vs публичный roadmap.  
-8. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
-9. **Юридика:** оферта, 152-ФЗ, политика данных; предупреждения клиенту за N дней до purge.  
-10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).  
-11. **Platform Link crypto:** ✅ HMAC-SHA256 (см. [platform-link.md](../platform/platform-link.md)); mutual TLS / ротация - later.  
-12. **SSO identity:** только admin email = Account, или сразу все пользователи инстанса с match по email?  
-13. **Catalog cache TTL:** ✅ persist в MySQL + TTL refresh; ETag/push - later.  
-14. **Plugin artifacts:** где хранить пакеты (GHCR private vs blob на CP); кто подписывает артефакт.  
-15. **Кто редактирует справочники на CP:** только Ops, или контент-роль без полного Ops доступа?
+| # | Решение |
+|---|---------|
+| Repo | `delegat-module-platform` |
+| Domains | CP `module.delegat.pro`; instance `{label}.module.delegat.pro`; docs `docs.module.delegat.pro` |
+| Provision | После **успешной оплаты** → авто-deploy через **Dokploy**; self-serve Customer Console в scope |
+| DNS | Один URL на инстанс (label); custom DNS клиентов - later |
+| Platform Link v0 | catalog + heartbeat + errors + SSO exchange |
+| Catalog edit | seed в репо; UI later |
+| Plugins | metadata + `artifactUrl`; CI публикует артефакт, CP хранит URL в версии |
+| Billing model | Subscription в БД сразу; live Т-Банк поэтапно |
+| Trial card | карта + холд (когда эквайринг) |
+| past_due | **сразу stop**, без grace |
+| Email | SMTP выбран; **live later**, в v0 - порт `IEmailSender` + log adapter |
+| SSO | только admin Account; org+invite заложить в модель |
+| Support | tickets + Telegram DM (**порт** notifier; live bot later) |
+| Ops | break-glass + backup/restore UI |
+| Stack | .NET 8 + PostgreSQL + Vue 3 / shadcn-vue; Provisioner → Dokploy, абстракция на будущее |
+| i18n | RU + EN на CP UI; default `ru` |
+| Legal | Оферта + Privacy + cookies; футер + чекбоксы на регистрации |
+| Acceptance | A B C D E G + i18n/legal каркас (без обязательной живой почты); фундамент под внешние сервисы |
+
+Ещё открыто / later:
+
+1. Точный продукт API Т-Банк (recurring, hold) при подключении эквайринга.  
+2. GitBook SSO vs публичные docs.  
+3. Telegram: только уведомления из Ops vs команды бота.  
+4. Feature request: внутренний board vs публичный roadmap.  
+5. License / anti-abuse образов.  
+6. Юридика: финальный текст оферты/152-ФЗ с юристом (каркас страниц и согласий - ✅ в MVP brief).  
+7. Когда менять Dokploy на другой оркестратор (порог по числу нод/инстансов).
 
 Закрыто по смыслу «сервер для заполнения»: это **Reference Catalog** (§9.1.1) - валюты, timezones, реестр плагинов и аналогичные глобальные списки.
 
@@ -480,17 +509,26 @@ SSO в GitBook - опционально later (§13). Platform Link SSO (§9) о
 
 Связано с [saas-architecture.md](saas-architecture.md) §8; здесь - продуктовый срез.
 
+| Этап | Содержание | MVP brief |
+|------|------------|-----------|
+| 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR, Platform Link client) | ✅ |
+| A–E (сжатый v0) | Registry + Dokploy provision + Customer/Ops + Platform Link API + releases + tickets ports + break-glass/backups | см. [mvp-brief](../plans/2026-07-21-control-plane-mvp-brief.md) |
+| B billing live | Т-Банк recurring / trial hold | поэтапно |
+| F | GitBook + feature requests + оферта | later |
+| G | Виджет поддержки в инстансе; canary; multi-instance; auto-scale нод | later |
+
+Классическая нарезка (ориентир):
+
 | Этап | Содержание |
 |------|------------|
-| 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR) - ✅ |
-| A | Registry DB + Provisioner + Ops: create instance вручную / semi-auto |
-| B | Billing РФ + self-serve Customer Console (оплата → авто-provision) |
-| B′ | **Platform Link:** credentials при provision; **Reference Catalog** (currencies, timezones, plugins); heartbeat; 5xx |
-| C | Release approve + fleet update + health poller |
+| A | Registry DB + Provisioner + Ops |
+| B | Billing РФ + self-serve (stub→live) |
+| B′ | Platform Link server + Reference Catalog |
+| C | Release approve + fleet update + health |
 | D | Ops backups/restore + break-glass |
-| E | Tickets + Telegram bridge + **SSO handoff из инстанса** |
-| F | Docs (GitBook) + feature requests + полировка lifecycle/оферты |
-| G | Виджет поддержки внутри инстанса; canary; multi-instance org; auto-scale нод |
+| E | Tickets + Telegram + SSO handoff |
+| F | Docs (GitBook) + lifecycle polish |
+| G | Support widget; canary; multi-instance org; scale nodes |
 
 ---
 
@@ -507,18 +545,27 @@ SSO в GitBook - опционально later (§13). Platform Link SSO (§9) о
 
 | Repo | Содержимое |
 |------|------------|
-| `delegat-module` (этот) | Платформа инстанса + design docs control plane (+ будущий `PlatformLinkClient`) |
-| **control-plane monorepo** (отдельный) | Customer Console, Ops Console, Provisioner, billing Т-Банк, tickets, Registry DB, **Platform Link API** |
+| `delegat-module` | Платформа **инстанса** (каталог, sync, AI). Platform Link **client** уже есть. CP design docs - временно здесь, затем stubs |
+| **`delegat-module-platform`** | Customer Console, Ops Console, Provisioner (Dokploy), Registry DB, billing ports, tickets, **Platform Link API** |
 
-В control-plane monorepo по мере роста имеет смысл разнести:
+Домены: `module.delegat.pro` · `{label}.module.delegat.pro` · `docs.module.delegat.pro`.  
+MVP: [../plans/2026-07-21-control-plane-mvp-brief.md](../plans/2026-07-21-control-plane-mvp-brief.md) (**§0 - перенос docs**).
+
+Структура docs в CP-репо после миграции:
 
 ```
-docs/control-plane.md          ← обзор (копия/канон)
-docs/platform-link.md          ← m2m + SSO + Reference Catalog контракт
-docs/billing.md
-docs/instance-lifecycle.md
-docs/support-tickets.md
+docs/
+  README.md
+  mvp-brief.md              ← из plans/2026-07-21-control-plane-mvp-brief.md
+  control-plane.md          ← этот файл
+  platform-link.md          ← m2m + catalogs + SSO contract
+  provisioning.md           ← Registry DDL + Dokploy + compose template
+  billing.md                ← later
+  instance-lifecycle.md     ← later
+  support-tickets.md        ← later
 ```
+
+В `delegat-module` после миграции оставить stubs со ссылкой на CP-репо (не два канона).
 
 ---
 

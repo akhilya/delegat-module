@@ -207,6 +207,9 @@ Trigger: successful payment
 
 ### Compose Template for Provisioning
 
+Instance public URL: `https://${SUBDOMAIN}.module.delegat.pro`  
+Control Plane: `https://module.delegat.pro`
+
 ```yaml
 services:
   delegat-api:
@@ -222,13 +225,16 @@ services:
       MINIO_BUCKET: delegat
       JWT_KEY: ${JWT_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      CORS_ORIGINS: https://${SUBDOMAIN}.your-domain.com
+      CORS_ORIGINS: https://${SUBDOMAIN}.module.delegat.pro
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       MAX_STORAGE_GB: ${MAX_STORAGE_GB}
       MAX_PRODUCTS: ${MAX_PRODUCTS}
       MAX_CONNECTIONS: ${MAX_CONNECTIONS}
+      CONTROL_PLANE_URL: https://module.delegat.pro
+      INSTANCE_ID: ${INSTANCE_ID}
+      INSTANCE_LINK_SECRET: ${INSTANCE_LINK_SECRET}
       ASPNETCORE_ENVIRONMENT: Production
   mysql:
     image: mysql:8.4
@@ -238,6 +244,7 @@ services:
       --max-connections=50
 ```
 
+> Registry DDL выше - черновик; канон v0 (Account/Org + Platform Link secret) живёт в CP monorepo после миграции docs - см. [control-plane-mvp-brief.md](../plans/2026-07-21-control-plane-mvp-brief.md).
 ### Plan Change Handler
 
 ```
