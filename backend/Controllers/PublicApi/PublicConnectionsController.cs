@@ -8,7 +8,7 @@ using Delegat.Services.Marketplace;
 namespace Delegat.Controllers.PublicApi;
 
 /// <summary>
-/// Public API v1 — marketplace connections (no secrets), product links, and operation polling.
+/// Public API v1 - marketplace connections (no secrets), product links, and operation polling.
 /// </summary>
 [ApiController]
 [PublicApiAuthorize]
@@ -91,7 +91,7 @@ public class PublicConnectionsController : ControllerBase
         });
     }
 
-    /// <summary>Lists product–marketplace links.</summary>
+    /// <summary>Lists product-marketplace links.</summary>
     [HttpGet("product-links")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListProductLinks(

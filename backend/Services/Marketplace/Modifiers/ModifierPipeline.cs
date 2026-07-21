@@ -127,7 +127,7 @@ public static class ModifierPipeline
         !string.IsNullOrEmpty(type) && _modifiers.ContainsKey(type);
 
     /// <summary>
-    /// All registered modifier type ids — for validation error messages and AI tool schemas.
+    /// All registered modifier type ids - for validation error messages and AI tool schemas.
     /// </summary>
     public static IReadOnlyCollection<string> KnownModifierTypes => _modifiers.Keys;
 

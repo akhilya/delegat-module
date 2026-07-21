@@ -24,11 +24,11 @@ public sealed class FieldSpec
 }
 
 /// <summary>
-/// Generates a mapping's node graph (graphJson) from a flat field schema — the permanent C# port of the
+/// Generates a mapping's node graph (graphJson) from a flat field schema - the permanent C# port of the
 /// frontend <c>autoMigrate</c>/<c>syncAdapterFields</c>. The graph is the single source of truth for a
 /// category mapping (schema + per-field config + import/export), so this runs on category import.
 /// Trivial 1:1 fields bind directly on the adapter (no node/wire); fields with modifiers get a source node
-/// + modifier chain. Node positions are omitted — the frontend lays out position-less graphs on load.
+/// + modifier chain. Node positions are omitted - the frontend lays out position-less graphs on load.
 /// </summary>
 public static class GraphGenerator
 {
@@ -52,7 +52,7 @@ public static class GraphGenerator
     /// <summary>
     /// Every mapping must expose a grouping field ("mapping as a translation layer"):
     /// field-based adapters (Ozon) already have a real one in their schema; endpoint-based
-    /// adapters (WB) get a synthetic spec. Default binding is groupName 1:1 — the user can
+    /// adapters (WB) get a synthetic spec. Default binding is groupName 1:1 - the user can
     /// rewire it with modifiers to merge different local groups into one marketplace card.
     /// </summary>
     public static void EnsureGroupingField(List<FieldSpec> specs, IMarketplaceAdapter adapter)
@@ -72,7 +72,7 @@ public static class GraphGenerator
             return;
         }
 
-        if (key != ProductSyncService.SyntheticGroupFieldKey) return; // real field absent from schema — nothing to add
+        if (key != ProductSyncService.SyntheticGroupFieldKey) return; // real field absent from schema - nothing to add
 
         specs.Add(new FieldSpec
         {

@@ -20,7 +20,7 @@ export default {
 
   actions: {
     async getAiModels(ctx, { onSuccess, onError }) {
-      // cache: false — the axios instance caches GETs, which made the list stale after create/edit
+      // cache: false - the axios instance caches GETs, which made the list stale after create/edit
       return await useAxios("/ai/models", { method: "GET", cache: false }, http, { immediate: true })
         .then((r) => { ctx.commit("setModels", r.data.value ?? []); onSuccess(r); })
         .catch((e) => onError(e));

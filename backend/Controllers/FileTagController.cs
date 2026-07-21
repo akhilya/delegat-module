@@ -59,6 +59,7 @@ public class FileTagController : ControllerBase
     /// <summary>Create a new tag definition in the store palette.</summary>
     [HttpPost]
     [Route("/tags")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateTag([FromBody] CreateTagInput input, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -91,9 +92,10 @@ public class FileTagController : ControllerBase
         return Ok(new { tag.Id, tag.name, tag.color });
     }
 
-    /// <summary>Update a tag definition — changes apply everywhere it's used.</summary>
+    /// <summary>Update a tag definition - changes apply everywhere it's used.</summary>
     [HttpPatch]
     [Route("/tags/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateTag(int id, [FromBody] UpdateTagInput input, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -132,6 +134,7 @@ public class FileTagController : ControllerBase
     /// <summary>Delete a tag definition + all file assignments.</summary>
     [HttpDelete]
     [Route("/tags/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteTag(int id, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -162,6 +165,7 @@ public class FileTagController : ControllerBase
     /// <summary>Assign a tag to a file.</summary>
     [HttpPost]
     [Route("/files/{fileId}/tags/{tagId}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> AssignTag(int fileId, int tagId, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -195,6 +199,7 @@ public class FileTagController : ControllerBase
     /// <summary>Remove a tag from a file.</summary>
     [HttpDelete]
     [Route("/files/{fileId}/tags/{tagId}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RemoveTag(int fileId, int tagId, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -211,6 +216,7 @@ public class FileTagController : ControllerBase
     /// <summary>Assign a tag to multiple files at once.</summary>
     [HttpPost]
     [Route("/files/bulk-tag")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkAssignTag([FromBody] BulkTagInput input, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);

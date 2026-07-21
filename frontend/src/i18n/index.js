@@ -66,7 +66,7 @@ export function t(...args) {
   return i18n.global.t(...args);
 }
 
-/** Raw message getter (arrays/objects) — use for non-string catalog values like inputLabels lists. */
+/** Raw message getter (arrays/objects) - use for non-string catalog values like inputLabels lists. */
 export function tm(...args) {
   return i18n.global.tm(...args);
 }

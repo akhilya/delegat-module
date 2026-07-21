@@ -11,7 +11,7 @@ const { t } = useI18n();
 
 const props = defineProps({
   label: { type: String, default: "" },
-  /** Raw payload — string or already-parsed object from the API */
+  /** Raw payload - string or already-parsed object from the API */
   text: { type: [String, Object, Number, Boolean], default: "" },
   /** When true, pretty-print and syntax-highlight as JSON */
   json: { type: Boolean, default: false },
@@ -105,7 +105,7 @@ async function copy() {
             : 'bg-muted/40',
         )
       "
-    >{{ displayText || "—" }}</pre>
+    >{{ displayText || "-" }}</pre>
   </div>
 </template>
 

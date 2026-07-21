@@ -81,7 +81,7 @@ feat: add Product soft delete query filter + migration
 ### Task 3: Rewrite DeleteProduct and BulkDeleteProducts to soft delete
 
 **Files:**
-- Modify: `backend/Controllers/ProductController.cs` — `DeleteProduct` (line 744) and `BulkDeleteProducts` (line 812)
+- Modify: `backend/Controllers/ProductController.cs` - `DeleteProduct` (line 744) and `BulkDeleteProducts` (line 812)
 
 **Step 1: Replace `DeleteProduct`**
 
@@ -148,7 +148,7 @@ feat: replace hard delete with soft delete for products
 ### Task 4: Add trash endpoints (list, restore, permanent delete)
 
 **Files:**
-- Modify: `backend/Controllers/ProductController.cs` — add new endpoints after BulkDeleteProducts
+- Modify: `backend/Controllers/ProductController.cs` - add new endpoints after BulkDeleteProducts
 
 **Step 1: Add GetTrash endpoint**
 
@@ -509,15 +509,15 @@ public async Task<IActionResult> GetTrashCount()
 **Step 7: Commit**
 
 ```
-feat: add trash endpoints — list, restore, permanent delete, bulk ops
+feat: add trash endpoints - list, restore, permanent delete, bulk ops
 ```
 
 ---
 
-### Task 5: Frontend — Vuex actions for trash
+### Task 5: Frontend - Vuex actions for trash
 
 **Files:**
-- Modify: `frontend/src/store/modules/productModule.js` — add new actions
+- Modify: `frontend/src/store/modules/productModule.js` - add new actions
 
 **Step 1: Add trash actions**
 
@@ -604,7 +604,7 @@ feat: add Vuex actions for product trash operations
 
 ---
 
-### Task 6: Frontend — Trash UI in productsPage.vue
+### Task 6: Frontend - Trash UI in productsPage.vue
 
 **Files:**
 - Modify: `frontend/src/pages/productsPage.vue`
@@ -904,7 +904,7 @@ onRowClick(product) {
 **Step 11: Commit**
 
 ```
-feat: add product trash UI — toggle, restore, permanent delete
+feat: add product trash UI - toggle, restore, permanent delete
 ```
 
 ---
@@ -946,8 +946,8 @@ chore: bump platform version to 1.6.4
 
 ## Verification
 
-1. `dotnet build` — backend compiles
-2. `npx vite build` — frontend compiles
+1. `dotnet build` - backend compiles
+2. `npx vite build` - frontend compiles
 3. Delete a product → disappears from list, appears in trash
 4. Restore from trash → returns to product list
 5. Permanent delete from trash → gone from DB with all related data

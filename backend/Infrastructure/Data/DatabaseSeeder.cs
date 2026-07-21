@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Models;
 using System.Security.Cryptography;
@@ -57,11 +58,11 @@ public static class DatabaseSeeder
             if (profileChanged)
                 await userManager.UpdateAsync(existingAdmin);
 
-            // Reset password — set ADMIN_FORCE_RESET=true to trigger this
+            // Reset password - set ADMIN_FORCE_RESET=true to trigger this
             var token = await userManager.GeneratePasswordResetTokenAsync(existingAdmin);
             var resetResult = await userManager.ResetPasswordAsync(existingAdmin, token, settings.Password);
             if (resetResult.Succeeded)
-                logger.LogInformation("Admin reset: username={Username}, email={Email} (ADMIN_FORCE_RESET=true — remove after use)", settings.Username, settings.Email);
+                logger.LogInformation("Admin reset: username={Username}, email={Email} (ADMIN_FORCE_RESET=true - remove after use)", settings.Username, settings.Email);
             else
                 logger.LogError("Failed to reset admin: {Errors}", string.Join(", ", resetResult.Errors.Select(e => e.Description)));
             return;
@@ -79,7 +80,11 @@ public static class DatabaseSeeder
         var result = await userManager.CreateAsync(admin, settings.Password);
 
         if (result.Succeeded)
+        {
             logger.LogInformation("Admin user created: {Email}", settings.Email);
+            var permissionService = services.GetRequiredService<IPermissionService>();
+            await permissionService.EnsureOwnerAccessAsync(admin);
+        }
         else
             logger.LogError("Failed to create admin user: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
     }
@@ -131,6 +136,9 @@ public static class DatabaseSeeder
                 existingAdmin.UserName,
                 existingAdmin.Email);
 
+            var permissionService = services.GetRequiredService<IPermissionService>();
+            await permissionService.EnsureOwnerAccessAsync(existingAdmin);
+
             return new AdminResetResult(existingAdmin.Email ?? email, existingAdmin.UserName ?? username, password);
         }
 
@@ -154,6 +162,8 @@ public static class DatabaseSeeder
         }
 
         logger.LogInformation("Break-glass admin user created: username={Username}, email={Email}", username, email);
+        var permissionServiceCreate = services.GetRequiredService<IPermissionService>();
+        await permissionServiceCreate.EnsureOwnerAccessAsync(admin);
         return new AdminResetResult(email, username, password);
     }
 

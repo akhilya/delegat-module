@@ -68,7 +68,6 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
-  DialogScrollContent,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -116,7 +115,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
-import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
+import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
@@ -176,7 +175,6 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    DialogScrollContent,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -223,7 +221,7 @@ export default {
     Settings2,
     ArrowRightLeft,
     Unlink,
-    FieldChangesTable,
+    FieldChangesPreviewDialog,
     PasswordInput,
     SettingsFormField,
     SettingsFormSection,
@@ -811,7 +809,7 @@ export default {
     formatQuotaResetTime(resetsAt) {
       if (!resetsAt) return null;
       const formatted = this.formatStoreDateTime(resetsAt);
-      return formatted === "—" ? null : formatted;
+      return formatted === "-" ? null : formatted;
     },
 
     async fetchMappings() {
@@ -912,7 +910,7 @@ export default {
     },
 
     parseCredentials() {
-      // Credentials are never returned by the API — leave fields empty;
+      // Credentials are never returned by the API - leave fields empty;
       // saving with empty fields keeps existing secrets on the server.
       this.credentialValues = {};
       if (this.connection?.hasCredentials && this.credentialFields?.length) {
@@ -1527,39 +1525,10 @@ export default {
       this.singleImportExcludedFields = new Set();
     },
 
-    isSingleImportFieldIncluded(field) {
-      return !this.singleImportExcludedFields.has(field);
-    },
-    toggleSingleImportField(field) {
-      const next = new Set(this.singleImportExcludedFields);
-      if (next.has(field)) {
-        next.delete(field);
-      } else {
-        next.add(field);
-      }
-      this.singleImportExcludedFields = next;
-    },
-    allSingleImportFieldsIncluded() {
-      if (!this.singleImportPreviewData?.updatedFields) return false;
-      return this.singleImportPreviewData.updatedFields.every(
-        (f) => !this.singleImportExcludedFields.has(f),
-      );
-    },
-    allSingleImportFieldsExcluded() {
-      if (!this.singleImportPreviewData?.updatedFields) return true;
-      return this.singleImportPreviewData.updatedFields.every((f) =>
-        this.singleImportExcludedFields.has(f),
-      );
-    },
-    toggleAllSingleImportFields() {
-      if (!this.singleImportPreviewData?.updatedFields) return;
-      if (this.allSingleImportFieldsIncluded()) {
-        this.singleImportExcludedFields = new Set(
-          this.singleImportPreviewData.updatedFields,
-        );
-      } else {
-        this.singleImportExcludedFields = new Set();
-      }
+    resetSingleImportPreview() {
+      this.singleImportPreviewData = null;
+      this.previewLinkId = null;
+      this.singleImportExcludedFields = new Set();
     },
 
     async handleExportSingle(product) {
@@ -1946,6 +1915,11 @@ export default {
 
     cancelBulkImport() {
       this.showBulkImportPreviewDialog = false;
+      this.bulkImportPreviewData = null;
+      this.bulkPreviewLinkIds = [];
+    },
+
+    resetBulkImportPreview() {
       this.bulkImportPreviewData = null;
       this.bulkPreviewLinkIds = [];
     },
@@ -2484,8 +2458,11 @@ export default {
 </script>
 
 <template>
-  <Page class="!min-h-0 flex flex-col">
-    <NavigationBar>
+  <Page
+    class="flex flex-col"
+    :class="activeTab === 'products' ? 'h-screen overflow-hidden' : ''"
+  >
+    <NavigationBar class="shrink-0">
       <template v-if="connection" #center>
         <Tabs v-model="activeTab">
           <TabsList>
@@ -2498,11 +2475,19 @@ export default {
         </Tabs>
       </template>
     </NavigationBar>
-    <Breadcrumbs :items="breadcrumbs" />
+    <Breadcrumbs class="shrink-0" :items="breadcrumbs" />
 
-    <PageSection :loading="isLoading" class="!min-h-0 flex flex-col">
-      <div v-if="connection" class="flex flex-col flex-1 min-h-0 gap-4">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <PageSection
+      :loading="isLoading"
+      class="!min-h-0 flex flex-col"
+      :class="activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden mb-4' : ''"
+    >
+      <div
+        v-if="connection"
+        class="flex flex-col gap-4"
+        :class="activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden' : ''"
+      >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between shrink-0">
           <div class="min-w-0 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <h1 class="text-lg font-semibold break-words">{{ connection.name }}</h1>
@@ -3124,7 +3109,7 @@ export default {
           </TabsContent>
 
           <!-- Products Tab -->
-          <TabsContent value="products" class="flex-1 flex flex-col mt-0 min-h-0 gap-3">
+          <TabsContent value="products" class="flex flex-1 flex-col mt-0 min-h-0 gap-3 overflow-hidden data-[state=inactive]:hidden">
             <div class="flex flex-wrap items-center gap-2 shrink-0">
                 <Button
                   size="sm"
@@ -3166,19 +3151,18 @@ export default {
             </div>
 
             <div
-              class="flex flex-col border rounded-xl overflow-hidden flex-1 min-h-0"
-              style="height: calc(100vh - 14rem)"
+              class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
             >
-              <div class="flex-1 min-h-0 flex flex-col">
+              <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
             <!-- ==================== EXTERNAL VIEW ==================== -->
             <template v-if="productsViewMode === 'external'">
               <!-- Loading state -->
-              <div v-if="isLoadingProducts" class="flex justify-center py-12">
+              <div v-if="isLoadingProducts" class="flex flex-1 items-center justify-center py-12">
                 <Loader2 class="size-8 animate-spin text-muted-foreground" />
               </div>
 
               <!-- Products table -->
-              <div v-else class="flex-1 min-h-0 overflow-auto">
+              <div v-else class="min-h-0 flex-1 overflow-auto">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
                     <TableRow class="hover:bg-transparent">
@@ -3259,7 +3243,7 @@ export default {
                             product.localProductSku
                           }}</code>
                         </div>
-                        <span v-else class="text-muted-foreground">—</span>
+                        <span v-else class="text-muted-foreground">-</span>
                       </TableCell>
                       <TableCell class="text-right">
                         <div v-if="product.isLinked" class="space-y-0.5">
@@ -3276,12 +3260,12 @@ export default {
                             {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ formatPrice(product.externalPrice) }}
                           </div>
                         </div>
-                        <span v-else class="text-muted-foreground">—</span>
+                        <span v-else class="text-muted-foreground">-</span>
                       </TableCell>
                       <TableCell class="text-right">
                         <div v-if="product.isLinked" class="space-y-0.5">
                           <div class="font-medium">
-                            {{ product.localStock ?? "—" }}
+                            {{ product.localStock ?? "-" }}
                           </div>
                           <div
                             v-if="
@@ -3293,7 +3277,7 @@ export default {
                             {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ product.externalStock }}
                           </div>
                         </div>
-                        <span v-else class="text-muted-foreground">—</span>
+                        <span v-else class="text-muted-foreground">-</span>
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -3360,7 +3344,7 @@ export default {
                             <Ban v-else class="size-4" />
                           </Button>
                         </div>
-                        <span v-else class="text-muted-foreground">—</span>
+                        <span v-else class="text-muted-foreground">-</span>
                       </TableCell>
                     </TableRow>
 
@@ -3399,7 +3383,7 @@ export default {
               <!-- Bulk actions bar -->
               <div
                 v-if="hasAnySelected"
-                class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
+                class="shrink-0 border-t p-3 flex flex-wrap items-center justify-between gap-2 bg-background"
               >
                 <div class="text-sm text-muted-foreground">
                   {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedItems.length }}
@@ -3497,13 +3481,13 @@ export default {
               <!-- Loading state -->
               <div
                 v-if="isLoadingLocalProducts && localProducts.length === 0"
-                class="flex justify-center py-12"
+                class="flex flex-1 items-center justify-center py-12"
               >
                 <Loader2 class="size-8 animate-spin text-muted-foreground" />
               </div>
 
               <!-- Local products table -->
-              <div v-else class="flex-1 min-h-0 overflow-auto">
+              <div v-else class="min-h-0 flex-1 overflow-auto">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
                     <TableRow class="hover:bg-transparent">
@@ -3553,11 +3537,11 @@ export default {
                         {{ formatPrice(product.price) }}
                       </TableCell>
                       <TableCell class="text-right">
-                        {{ product.storageQuantity ?? "—" }}
+                        {{ product.storageQuantity ?? "-" }}
                       </TableCell>
                       <TableCell>
                         <span class="text-sm text-muted-foreground">{{
-                          product.categoryName || "—"
+                          product.categoryName || "-"
                         }}</span>
                       </TableCell>
                     </TableRow>
@@ -3671,7 +3655,7 @@ export default {
               <!-- Bulk export bar -->
               <div
                 v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
-                class="shrink-0 p-4 flex items-center justify-between bg-muted/40"
+                class="shrink-0 border-t p-3 flex flex-wrap items-center justify-between gap-2 bg-background"
               >
                 <div class="text-sm text-muted-foreground">
                   {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedLocalIds.length }}
@@ -3697,98 +3681,62 @@ export default {
     </PageSection>
 
     <!-- Single Import Preview Dialog -->
-    <Dialog v-model:open="showSingleImportPreviewDialog">
-      <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{{ $t("productMarketplaceIntegrations.importDialogTitle") }}</DialogTitle>
-          <DialogDescription>
-            {{ $t("productMarketplaceIntegrations.importDialogDescription") }}
-          </DialogDescription>
-        </DialogHeader>
-        <div
-          v-if="singleImportPreviewData"
-          class="py-4 max-h-[60vh] overflow-y-auto"
-        >
-          <FieldChangesTable
-            :items="singleImportPreviewItems"
-            selectable
-            :excluded-fields="singleImportExcludedFields"
-            @update:excluded-fields="singleImportExcludedFields = $event"
-          />
-        </div>
-        <DialogFooter>
-          <DialogClose as-child>
-            <Button variant="outline" @click="cancelSingleImport"
-              >{{ $t("common.cancel") }}</Button
-            >
-          </DialogClose>
-          <Button
-            @click="confirmSingleImport"
-            :disabled="
-              isApplyingSingleImport || allSingleImportFieldsExcluded()
-            "
-          >
-            <Loader2
-              v-if="isApplyingSingleImport"
-              class="size-4 mr-2 animate-spin"
-            />
-            <Download v-else class="size-4 mr-2" />
-            {{ $t("productMarketplaceIntegrations.confirmAction") }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <FieldChangesPreviewDialog
+      v-if="showSingleImportPreviewDialog"
+      :open="showSingleImportPreviewDialog"
+      :title="$t('productMarketplaceIntegrations.importDialogTitle')"
+      :description="$t('productMarketplaceIntegrations.importDialogDescription')"
+      :items="singleImportPreviewItems"
+      selectable
+      :excluded-fields="singleImportExcludedFields"
+      :confirm-loading="isApplyingSingleImport"
+      @update:open="(v) => (showSingleImportPreviewDialog = v)"
+      @update:excluded-fields="singleImportExcludedFields = $event"
+      @confirm="confirmSingleImport"
+      @cancel="resetSingleImportPreview"
+    />
 
     <!-- Bulk Import Preview Dialog -->
-    <Dialog v-model:open="showBulkImportPreviewDialog">
-      <DialogScrollContent class="sm:max-w-4xl max-h-[85vh]">
-        <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.confirmBulkImportTitle") }}</DialogTitle>
-          <DialogDescription v-if="bulkImportPreviewData">
-            {{ $t("marketplace.connectionPage.dialogs.bulkImportWillUpdate", {
+    <FieldChangesPreviewDialog
+      v-if="showBulkImportPreviewDialog"
+      :open="showBulkImportPreviewDialog"
+      :title="$t('marketplace.connectionPage.dialogs.confirmBulkImportTitle')"
+      :description="
+        bulkImportPreviewData
+          ? $t('marketplace.connectionPage.dialogs.bulkImportWillUpdate', {
               count: bulkImportPreviewData.totalWithChanges,
-              total: bulkImportPreviewData.totalWithChanges + bulkImportPreviewData.totalWithoutChanges,
-            }) }}
-          </DialogDescription>
-        </DialogHeader>
-        <div
-          v-if="bulkImportPreviewData"
-          class="py-4 max-h-[60vh] overflow-y-auto"
-        >
-          <FieldChangesTable :items="bulkImportPreviewItems" />
-        </div>
-        <DialogFooter>
-          <DialogClose as-child>
-            <Button variant="outline" @click="cancelBulkImport">{{ $t("common.cancel") }}</Button>
-          </DialogClose>
-          <Button @click="confirmBulkImport" :disabled="isApplyingBulkImport">
-            <Loader2
-              v-if="isApplyingBulkImport"
-              class="size-4 mr-2 animate-spin"
-            />
-            <Download v-else class="size-4 mr-2" />
-            {{ $t("productMarketplaceIntegrations.confirmAction") }}
-          </Button>
-        </DialogFooter>
-      </DialogScrollContent>
-    </Dialog>
+              total:
+                bulkImportPreviewData.totalWithChanges +
+                bulkImportPreviewData.totalWithoutChanges,
+            })
+          : ''
+      "
+      :items="bulkImportPreviewItems"
+      :confirm-loading="isApplyingBulkImport"
+      @update:open="(v) => (showBulkImportPreviewDialog = v)"
+      @confirm="confirmBulkImport"
+      @cancel="resetBulkImportPreview"
+    />
 
-    <!-- Import Dialog -->
+    <!-- Import Dialog (create local products from unlinked) -->
     <Dialog v-model:open="showImportDialog">
-      <DialogContent size="2xl" class="max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.importProductsTitle") }}</DialogTitle>
+      <DialogContent size="2xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader class="shrink-0 space-y-1 border-b px-6 py-4 text-left">
+          <DialogTitle class="flex items-center gap-2">
+            <Download class="size-5 text-muted-foreground" />
+            {{ $t("marketplace.connectionPage.dialogs.importProductsTitle") }}
+          </DialogTitle>
           <DialogDescription>
             {{ $t("marketplace.connectionPage.dialogs.importProductsDescription") }}
           </DialogDescription>
         </DialogHeader>
 
-        <div v-if="isLoadingDialogData" class="flex justify-center py-8">
+        <div v-if="isLoadingDialogData" class="flex flex-1 items-center justify-center py-12">
           <Loader2 class="size-8 animate-spin text-muted-foreground" />
         </div>
 
-        <div v-else class="flex-1 overflow-auto space-y-4 py-4">
-          <div class="text-sm text-muted-foreground mb-4">
+        <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          <div class="text-sm text-muted-foreground">
             {{ $t("marketplace.connectionPage.dialogs.selectedProductsCount", { count: selectedUnlinkedItems.length }) }}
           </div>
 
@@ -3937,7 +3885,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter class="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>

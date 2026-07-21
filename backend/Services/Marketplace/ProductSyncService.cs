@@ -123,7 +123,7 @@ public class ProductSyncService
                 l.productId == productId &&
                 l.connectionId == connectionId, ct);
 
-        // If the product has a selected mapping — use it, otherwise fall back to the first one for the category
+        // If the product has a selected mapping - use it, otherwise fall back to the first one for the category
         CategoryMapping? categoryMapping;
         if (existingLink?.categoryMappingId != null)
         {
@@ -174,7 +174,7 @@ public class ProductSyncService
                 }
             }
 
-            // Endpoint grouping: the synthetic field's evaluated value drives grouping —
+            // Endpoint grouping: the synthetic field's evaluated value drives grouping -
             // strip it from the payload, remember for the post-export group sync
             string? endpointGroupValue = null;
             if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping) &&
@@ -185,7 +185,7 @@ public class ProductSyncService
                 if (endpointGroupValue is { Length: 0 }) endpointGroupValue = null;
             }
 
-            // Inject variants if product has them — join with links for this connection
+            // Inject variants if product has them - join with links for this connection
             var variants = await _context.productVariants
                 .Where(v => v.productId == product.Id)
                 .Include(v => v.marketplaceLinks.Where(l => l.connectionId == connectionId))
@@ -263,7 +263,7 @@ public class ProductSyncService
             await Log("info", "Sending to the marketplace");
 
             // Export via the adapter
-            // "pending:*" placeholders are not real marketplace IDs — treat as null (new product)
+            // "pending:*" placeholders are not real marketplace IDs - treat as null (new product)
             var realExternalId = existingLink?.externalProductId;
             if (realExternalId != null && realExternalId.StartsWith("pending:"))
                 realExternalId = null;
@@ -301,7 +301,7 @@ public class ProductSyncService
             if (successDetailsMessage != null)
                 await Log("info", successDetailsMessage);
 
-            // Validate ExternalProductId — the plugin may return Success=true but with an invalid ID
+            // Validate ExternalProductId - the plugin may return Success=true but with an invalid ID
             if (string.IsNullOrWhiteSpace(result.ExternalProductId) ||
                 result.ExternalProductId == "0")
             {
@@ -322,7 +322,7 @@ public class ProductSyncService
                 }
 
                 return ProductExportResult.Failure(
-                    $"Marketplace did not return a product ID. The product may still be processing — try again later.");
+                    $"Marketplace did not return a product ID. The product may still be processing - try again later.");
             }
 
             var isNewProduct = existingLink == null;
@@ -609,7 +609,7 @@ public class ProductSyncService
                         exportData[fieldGroupingConfig.GroupFieldKey] = groupId;
                 }
 
-                // Endpoint grouping: pull the synthetic field's value out — it's consumed by the
+                // Endpoint grouping: pull the synthetic field's value out - it's consumed by the
                 // post-export group sync, the adapter must not receive it as a product attribute
                 if (endpointGrouping && exportData.TryGetValue(SyntheticGroupFieldKey, out var rawGroupValue))
                 {
@@ -668,7 +668,7 @@ public class ProductSyncService
                 var existingExternalId = linkByProductId.TryGetValue(productId, out var link)
                     ? link.externalProductId
                     : null;
-                // "pending:*" placeholders are not real marketplace IDs — treat as null (new product)
+                // "pending:*" placeholders are not real marketplace IDs - treat as null (new product)
                 if (existingExternalId != null && existingExternalId.StartsWith("pending:"))
                     existingExternalId = null;
 
@@ -805,7 +805,7 @@ public class ProductSyncService
         }
 
         // Post-export: sync groups for EndpointBasedGrouping (e.g., WB merge groups)
-        // by the EVALUATED grouping value — not by local group membership
+        // by the EVALUATED grouping value - not by local group membership
         if (endpointGrouping && groupValueByProductId.Count > 0)
         {
             await SyncEndpointGroupsByValueAsync(adapter, connection, connectionId, groupValueByProductId, itemResults, ct);
@@ -835,7 +835,7 @@ public class ProductSyncService
     /// <summary>
     /// After export, sync endpoint-based groups (e.g., WB merge groups) by the EVALUATED grouping
     /// value: products whose mapping produced the same value join one marketplace card. The mapping
-    /// acts as a translation layer — local groups are not consulted directly (their names flow in
+    /// acts as a translation layer - local groups are not consulted directly (their names flow in
     /// via the default groupName binding, optionally transformed by modifiers).
     /// </summary>
     private async Task SyncEndpointGroupsByValueAsync(
@@ -892,7 +892,7 @@ public class ProductSyncService
 
                 if (link != null && !string.IsNullOrEmpty(link.externalGroupId))
                 {
-                    // Marketplace group already exists for this value — add the exported products
+                    // Marketplace group already exists for this value - add the exported products
                     _logger.LogInformation(
                         "[GroupSync] Adding {Count} products to group '{Value}' (externalGroupId={ExternalGroupId})",
                         externalIds.Count, groupValue, link.externalGroupId);
@@ -1028,7 +1028,7 @@ public class ProductSyncService
             }
 
             var productLabel = externalProduct.Name ?? externalProductId;
-            await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "—"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
+            await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "-"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
 
             _logger.LogInformation(
                 "Importing product {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Attributes={AttrCount}",
@@ -1048,7 +1048,7 @@ public class ProductSyncService
 
             if (existingLink != null)
             {
-                await Log("warning", $"{productLabel} — already imported (ID: {existingLink.productId})");
+                await Log("warning", $"{productLabel} - already imported (ID: {existingLink.productId})");
                 return ProductImportResult.AlreadyExists(
                     existingLink.productId,
                     existingLink.product?.name ?? "Unknown"
@@ -1281,7 +1281,7 @@ public class ProductSyncService
         if (categoryMapping == null)
         {
             _logger.LogWarning(
-                "No category mapping for connectionId={ConnectionId}, categoryId={CategoryId} — attributes will not be updated",
+                "No category mapping for connectionId={ConnectionId}, categoryId={CategoryId} - attributes will not be updated",
                 connectionId, categoryId);
             return changes;
         }
@@ -1292,7 +1292,7 @@ public class ProductSyncService
         if (enabledMappings.Count == 0)
         {
             _logger.LogWarning(
-                "No enabled field mappings for categoryMappingId={MappingId} — attributes will not be updated",
+                "No enabled field mappings for categoryMappingId={MappingId} - attributes will not be updated",
                 categoryMapping.Id);
         }
 
@@ -1414,7 +1414,7 @@ public class ProductSyncService
 
                 default:
                     _logger.LogDebug(
-                        "  Mapping '{FieldName}' (key={Key}): sourceType={SourceType} — skipped during attribute import",
+                        "  Mapping '{FieldName}' (key={Key}): sourceType={SourceType} - skipped during attribute import",
                         fieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
                     break;
             }

@@ -9,7 +9,7 @@ using Delegat.Models;
 
 namespace Delegat.Controllers.PublicApi;
 
-/// <summary>Public API v1 — store-level (global) attributes.</summary>
+/// <summary>Public API v1 - store-level (global) attributes.</summary>
 [ApiController]
 [PublicApiAuthorize]
 [EnableRateLimiting("public-api")]

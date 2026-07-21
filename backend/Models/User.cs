@@ -32,9 +32,6 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
     [InverseProperty(nameof(Store.members))]
     public virtual ICollection<Store> memberships { get; set; } = new List<Store>();
 
-    [InverseProperty(nameof(Store.storeAdmins))]
-    public virtual ICollection<Store> storeAdminMemberships { get; set; } = new List<Store>();
-
     /// <summary>
     /// Username for display and authentication.
     /// </summary>
@@ -42,7 +39,8 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
     public override string? UserName { get => base.UserName; set => base.UserName = value; }
 
     /// <summary>
-    /// Whether the user has administrator privileges.
+    /// Whether the user is the instance owner marker (break-glass / can assign isAdmin).
+    /// API authorization uses permission claims, not this flag alone.
     /// </summary>
     public bool isAdmin { get; set; }
 
@@ -66,7 +64,9 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
             selectedStoreId = selectedStoreId,
             isAdmin = isAdmin,
             isActive = isActive,
-            aiEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAiEnabled()
+            aiEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAiEnabled(),
+            roles = Array.Empty<string>(),
+            permissions = Array.Empty<string>(),
         };
     }
 
@@ -78,7 +78,7 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
     /// <summary>
     /// User data transfer object for API responses.
     /// </summary>
-    public struct UserDTO
+    public class UserDTO
     {
         /// <summary>
         /// Unique user identifier.
@@ -96,7 +96,7 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         public int? selectedStoreId { get; set; }
 
         /// <summary>
-        /// Whether the user has administrator privileges.
+        /// Instance owner marker (not used alone for API authorization).
         /// </summary>
         public bool isAdmin { get; set; }
 
@@ -109,6 +109,12 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// Whether the AI assistant is enabled for this instance (from AI_ENABLED env).
         /// </summary>
         public bool aiEnabled { get; set; }
+
+        /// <summary>Assigned Identity role names.</summary>
+        public IReadOnlyList<string> roles { get; set; } = Array.Empty<string>();
+
+        /// <summary>Effective permission claims.</summary>
+        public IReadOnlyList<string> permissions { get; set; } = Array.Empty<string>();
     }
 
     /// <summary>

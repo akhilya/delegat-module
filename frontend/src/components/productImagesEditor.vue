@@ -112,7 +112,7 @@ export default {
           {{ $t('components.productImagesEditor.productImagesTitle') }}
         </p>
         <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
-        <span v-if="!isSaving" class="text-xs text-muted-foreground">— {{ $t('components.productImagesEditor.dragToReorderHint') }}</span>
+        <span v-if="!isSaving" class="text-xs text-muted-foreground">- {{ $t('components.productImagesEditor.dragToReorderHint') }}</span>
       </div>
       <draggableComponent
         :list="usedImages"

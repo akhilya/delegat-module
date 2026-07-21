@@ -137,6 +137,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/mappings")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateMapping(
         int connectionId,
         [FromBody] CreateMappingInput input,
@@ -190,6 +191,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/create-external-category")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateExternalCategory(
         int connectionId,
         [FromBody] CreateExternalCategoryInput input,
@@ -280,6 +282,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPatch]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateMapping(
         int connectionId,
         int mappingId,
@@ -310,6 +313,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/sync-fields")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> SyncMappingFields(
         int connectionId,
         int mappingId,
@@ -403,6 +407,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPut]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> SaveMappingGraph(
         int connectionId,
         int mappingId,
@@ -423,7 +428,7 @@ public class CategoryMappingController : ControllerBase
 
         await repo.UpdateAsync(mapping);
 
-        // The graph is the single source of truth — no per-field projection needed (input.fields ignored).
+        // The graph is the single source of truth - no per-field projection needed (input.fields ignored).
         return Ok(new { success = true, hasGraph = mapping.graphJson != null });
     }
 
@@ -433,6 +438,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph/preview")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> PreviewMappingGraph(
         int connectionId,
         int mappingId,
@@ -500,6 +506,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/duplicate")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> DuplicateMapping(
         int connectionId,
         int mappingId,
@@ -530,7 +537,7 @@ public class CategoryMappingController : ControllerBase
 
         await mappingRepo.AddAsync(duplicate);
 
-        // The graph (single source of truth) carries all field config — clone it directly. Keys/attributeIds
+        // The graph (single source of truth) carries all field config - clone it directly. Keys/attributeIds
         // are identical for the duplicate since it shares the same local category.
         duplicate.graphJson = original.graphJson;
         await mappingRepo.UpdateAsync(duplicate);
@@ -544,6 +551,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteMapping(
         int connectionId,
         int mappingId,
@@ -568,7 +576,7 @@ public class CategoryMappingController : ControllerBase
 
         if (linkedProducts.Count > 0 && force)
         {
-            // Forced delete: detach links — products stay linked to the marketplace
+            // Forced delete: detach links - products stay linked to the marketplace
             // but lose their mapping until the user assigns a new one
             foreach (var link in linkedProducts)
                 link.categoryMappingId = null;
@@ -638,6 +646,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/import-category")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportCategory(
         int connectionId,
         [FromBody] ImportCategoryInput input,
@@ -745,7 +754,7 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
-        // Project directly in SQL — avoids loading LONGTEXT attribute options into memory just to count them
+        // Project directly in SQL - avoids loading LONGTEXT attribute options into memory just to count them
         var result = await _context.categories
             .AsNoTracking()
             .Where(c => c.storeId == connection.storeId)
@@ -841,6 +850,7 @@ public class CategoryMappingController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/save-mapping-selections")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> SaveMappingSelections(
         int connectionId,
         [FromBody] SaveMappingSelectionsInput input,
@@ -870,7 +880,7 @@ public class CategoryMappingController : ControllerBase
             {
                 // Create a new link with NotSynced status.
                 // Use a unique placeholder for externalProductId to satisfy the
-                // (externalProductId, connectionId) unique index — will be replaced
+                // (externalProductId, connectionId) unique index - will be replaced
                 // with the real marketplace ID on first sync/export.
                 var newLink = new ProductMarketplaceLink();
                 newLink.AddFill(new ProductMarketplaceLink.AddForm
@@ -974,7 +984,7 @@ public class CategoryMappingController : ControllerBase
             }
         }
 
-        // The graph is the single source of truth — generate it onto the (tracked) mapping entity.
+        // The graph is the single source of truth - generate it onto the (tracked) mapping entity.
         mapping.graphJson = GraphGenerator.BuildGraphJson(specs, priceSpecs);
         await _unitOfWork.Repository<CategoryMapping>().UpdateAsync(mapping);
 

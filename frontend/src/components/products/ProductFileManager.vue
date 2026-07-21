@@ -252,7 +252,7 @@ async function toggleFileTag(fileId, tagId) {
   const tag = storeTags.value.find(t => t.id === tagId);
   const hadTag = fileHasTag(fileId, tagId);
 
-  // Optimistic UI — update instantly
+  // Optimistic UI - update instantly
   if (hadTag) {
     if (file?.tags) file.tags = file.tags.filter(t => t.id !== tagId);
   } else if (file && tag) {
@@ -310,7 +310,7 @@ async function bulkToggleTag(tagId) {
   // Snapshot for rollback: Map<fileId, tag[] copy>
   const snapshot = new Map(files.map(f => [f.id, f.item?.tags ? [...f.item.tags] : []]));
 
-  // Optimistic UI — update instantly
+  // Optimistic UI - update instantly
   if (allHaveTag) {
     for (const f of files) {
       if (f.item?.tags) f.item.tags = f.item.tags.filter(t => t.id !== tagId);
@@ -671,13 +671,13 @@ async function uploadFiles(fileList) {
     return entry;
   });
 
-  // Master abort controller — when triggered, cancels ALL in-flight uploads for this batch.
+  // Master abort controller - when triggered, cancels ALL in-flight uploads for this batch.
   const batchAbort = new AbortController();
   const totalFiles = entries.length;
 
   // Register operation in Vuex FIRST (before backend call) so the local version
   // with silent+onCancel wins the race against SignalR OperationStarted event.
-  // ADD_OPERATION deduplicates by ID — whoever adds first keeps the entry.
+  // ADD_OPERATION deduplicates by ID - whoever adds first keeps the entry.
   const opId = crypto.randomUUID().replace(/-/g, "");
   const uploadTitle = totalFiles === 1
     ? t("products.productFileManager.uploadingFileTitle", { subject: subjectLabel.value })
@@ -700,7 +700,7 @@ async function uploadFiles(fileList) {
     },
   });
 
-  // Then persist to backend (fire-and-forget — Vuex state is already set).
+  // Then persist to backend (fire-and-forget - Vuex state is already set).
   // This creates the Operation DB record with author info for history.
   http.post("/operations/start", {
     operationId: opId,
@@ -764,7 +764,7 @@ async function uploadFiles(fileList) {
       pendingUploads.value = pendingUploads.value.filter(u => u.id !== entry.id);
       updateOpProgress();
       store.dispatch("operations/addLog", { id: opId, level: "success", message: entry.name });
-      // Refresh file list incrementally — each completed file appears immediately.
+      // Refresh file list incrementally - each completed file appears immediately.
       debouncedFilesChanged();
     } catch (error) {
       if (error?.code === 'ERR_CANCELED' || entry.abortController.signal.aborted || batchAbort.signal.aborted) {
@@ -798,7 +798,7 @@ async function uploadFiles(fileList) {
     next();
   });
 
-  // Finish operation — but only if it wasn't already cancelled by stopOperation.
+  // Finish operation - but only if it wasn't already cancelled by stopOperation.
   // stopOperation calls FINISH_OPERATION(cancelled) before the loop ends;
   // we must not overwrite it.
   if (!batchAbort.signal.aborted) {
@@ -813,7 +813,7 @@ async function uploadFiles(fileList) {
       await http.post(`/operations/${opId}/finish`, { status: finalStatus, summary: finalSummary }, { cache: false });
     } catch { /* ignore */ }
   } else {
-    // Batch was cancelled — persist cancelled status to backend
+    // Batch was cancelled - persist cancelled status to backend
     const summary = t("products.productFileManager.uploadCancelledSummary", { completed: completedFiles, cancelled: cancelledFiles });
     try {
       await http.post(`/operations/${opId}/finish`, { status: "cancelled", summary }, { cache: false });
@@ -1566,7 +1566,7 @@ watch(() => props.productId, () => {
                   <div class="p-1 max-h-48 overflow-y-auto">
                     <div v-for="tag in storeTags" :key="tag.id">
                       <div class="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm text-sm hover:bg-accent transition-colors">
-                        <!-- Color dot — click to edit color -->
+                        <!-- Color dot - click to edit color -->
                         <Button
                           type="button"
                           variant="ghost"
@@ -1575,7 +1575,7 @@ watch(() => props.productId, () => {
                           :title="t('products.productFileManager.changeColorTitle')"
                           @click.stop="editingTagId = editingTagId === tag.id ? null : tag.id"
                         />
-                        <!-- Tag name — click to toggle, dblclick to rename -->
+                        <!-- Tag name - click to toggle, dblclick to rename -->
                         <template v-if="renamingTagId === tag.id">
                           <input
                             v-model="renamingTagName"

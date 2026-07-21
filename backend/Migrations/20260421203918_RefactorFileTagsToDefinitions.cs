@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -12,7 +12,7 @@ namespace Delegat.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Clear old FileTag rows — they have inline tag+color that are incompatible
+            // Clear old FileTag rows - they have inline tag+color that are incompatible
             // with the new tagDefinitionId FK. No data loss: the old tag feature had
             // no frontend UI, so any existing rows are test/leftover data.
             migrationBuilder.Sql("DELETE FROM `tags`;");

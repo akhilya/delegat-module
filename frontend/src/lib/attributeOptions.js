@@ -27,7 +27,7 @@ export function parseAttributeOptions(optionsJson) {
       return parsed.map(normalizeOptionEntry);
     }
   } catch {
-    // Not JSON — fall through to comma-separated parsing.
+    // Not JSON - fall through to comma-separated parsing.
   }
 
   return String(optionsJson)

@@ -100,6 +100,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/productgroups")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateGroup([FromBody] ProductGroup.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -168,6 +169,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPatch]
     [Route("/productgroups/{groupId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateGroup(int groupId, [FromBody] ProductGroup.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -202,6 +204,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/productgroups/{groupId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteGroup(int groupId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -244,6 +247,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/productgroups/{groupId}/products")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> AddProductsToGroup(int groupId, [FromBody] AddProductsRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -301,6 +305,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/productgroups/{groupId}/products/{productId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> RemoveProductFromGroup(int groupId, int productId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -332,6 +337,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPatch]
     [Route("/productgroups/{groupId}/products/{productId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateGroupMember(
         int groupId, int productId, [FromBody] ProductGroupMember.UpdateForm input)
     {
@@ -369,6 +375,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/productgroups/{groupId}/export/{connectionId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportGroup(int groupId, int connectionId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -403,6 +410,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/productgroups/import/{connectionId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportGroups(int connectionId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -466,6 +474,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/productgroups/{groupId}/marketplace/{connectionId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteMarketplaceGroup(int groupId, int connectionId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -493,6 +502,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/productgroups/{groupId}/marketplace/{connectionId}/products")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> AddProductsToMarketplaceGroup(
         int groupId, int connectionId, [FromBody] AddProductsRequest request)
     {
@@ -528,6 +538,7 @@ public class ProductGroupController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/productgroups/{groupId}/marketplace/{connectionId}/products")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> RemoveProductsFromMarketplaceGroup(
         int groupId, int connectionId, [FromBody] AddProductsRequest request)
     {

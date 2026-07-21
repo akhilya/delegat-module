@@ -85,7 +85,7 @@ public record ExternalField(
     int SortOrder = 0,
 
     /// <summary>
-    /// Whether this is an aspect attribute (size, color) — e.g. Ozon is_aspect.
+    /// Whether this is an aspect attribute (size, color) - e.g. Ozon is_aspect.
     /// Aspect attributes define product variations.
     /// </summary>
     bool IsAspect = false

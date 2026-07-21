@@ -7,7 +7,7 @@ Separate from the SPA session (`/api/*` + JWT cookie + CSRF).
 
 ## Auth
 
-1. **Settings → User → Public API** — create a key.
+1. **Settings → API** - create a key (requires permission `api.access`).
 2. Copy the plaintext once (`dk_…`). It is shown only at creation.
 3. Every request:
 
@@ -17,9 +17,11 @@ Authorization: Bearer dk_your_key_here
 
 | Rule | Detail |
 |------|--------|
+| Permission | Key owner must have `api.access` (otherwise auth fails) |
 | Key scope | Bound to the **user**; access = stores where the user is an active member |
 | CSRF | Not required for `/api/v1` |
-| Revoke | Immediate via UI or `DELETE /api/api-keys/{id}` (SPA JWT) |
+| Revoke | Immediate via Settings → API or `DELETE /api-keys/{id}` (SPA JWT) |
+| Logging | Inbound `/api/v1` calls are logged for the key owner (Settings → API → Request logs) |
 | Rate limit | ~120 req/min per API key (or IP if key unknown) |
 
 ### Swagger / OpenAPI
@@ -29,11 +31,11 @@ Authorization: Bearer dk_your_key_here
 | Any instance (incl. production) | `https://{your-instance}/swagger` | `https://{your-instance}/swagger/v1-public/swagger.json` |
 | Local API (direct) | `http://localhost:5000/swagger` | `http://localhost:5000/swagger/v1-public/swagger.json` |
 
-In the app: **Settings → User → Public API** → link "Open Swagger".
+In the app: **Settings → API** → "Open Swagger".
 
 1. Open Swagger → **Authorize**
 2. Paste only `dk_…` (do **not** type `Bearer`)
-3. Try it out — request must include `Authorization: Bearer dk_…`
+3. Try it out - request must include `Authorization: Bearer dk_…`
 
 On production only **Public API v1** is listed (SPA/internal API docs are hidden).
 

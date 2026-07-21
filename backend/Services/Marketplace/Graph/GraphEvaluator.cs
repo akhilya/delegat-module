@@ -8,8 +8,8 @@ namespace Delegat.Services.Marketplace.Graph;
 /// Evaluates a <see cref="MappingGraph"/> for one product, producing the same
 /// field-key → value map shape as the legacy per-field pipeline.
 ///
-/// Design: every modifier node reuses <see cref="ModifierPipeline.ApplySingle"/> — the exact
-/// same implementations as the linear chain — so an auto-migrated single-line graph yields
+/// Design: every modifier node reuses <see cref="ModifierPipeline.ApplySingle"/> - the exact
+/// same implementations as the linear chain - so an auto-migrated single-line graph yields
 /// identical output to the legacy path. The only genuinely new behaviour is fan-in
 /// (formatString / join), which the linear chain cannot express.
 /// </summary>
@@ -91,7 +91,7 @@ public static class GraphEvaluator
                             ApplySourceType(ctx.ResolveProductField(data.field ?? ""), data.valueType));
                         break;
                     case "static":
-                        // Backs the typed literal nodes too — coerce the stored string by valueType.
+                        // Backs the typed literal nodes too - coerce the stored string by valueType.
                         pins[nodeId] = new PinValue(
                             ctx.Coerce(ApplySourceType(data.staticValue, data.valueType), data.valueType));
                         break;
@@ -114,7 +114,7 @@ public static class GraphEvaluator
                         pins[nodeId] = new PinValue(ctx.ResolveProductFilesByExtension(data.fileExtension));
                         break;
                     case "reroute":
-                        // Transparent pass-through (a wire bend) — forward the input pin unchanged.
+                        // Transparent pass-through (a wire bend) - forward the input pin unchanged.
                         pins[nodeId] = SingleInput(incoming, pins, nodeId);
                         break;
 

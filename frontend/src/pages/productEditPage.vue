@@ -628,7 +628,7 @@ export default {
           // Mark initial load as complete after a short delay,
           // and auto-resize description once value is rendered
           setTimeout(() => {
-            // If productId changed within these 100ms, keep isInitialLoad=true —
+            // If productId changed within these 100ms, keep isInitialLoad=true -
             // the next fetchProduct will reset it at the right moment.
             if (targetProductId !== productId.value) return;
             autoResizeDescription();
@@ -1004,7 +1004,7 @@ export default {
             onError: (error) => { displaySonnerError(error); },
           });
         } else {
-          // Context has changed — attach at least the new files to their original product.
+          // Context has changed - attach at least the new files to their original product.
           // Without this, uploaded files would remain "orphaned" in the gallery.
           // Load the up-to-date image list of the original product and append the new ones.
           try {
@@ -1024,7 +1024,7 @@ export default {
           }
         }
 
-        // Refresh product to sync everything — but only if the context hasn't changed,
+        // Refresh product to sync everything - but only if the context hasn't changed,
         // otherwise we would overwrite the UI of a different product.
         if (targetProductId === productId.value) {
           await fetchProduct();
@@ -1456,7 +1456,7 @@ export default {
                                   type="text"
                                   readonly
                                   class="bg-muted"
-                                  :model-value="value != null ? String(value) : '—'"
+                                  :model-value="value != null ? String(value) : '-'"
                                 />
                               </FormControl>
                             </SettingsFormField>

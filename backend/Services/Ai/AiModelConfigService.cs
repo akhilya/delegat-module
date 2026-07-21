@@ -129,7 +129,7 @@ public class AiModelConfigService
     public AiModelConfig DecryptForUse(AiModelConfig model)
     {
         // Return a copy with decrypted key for actual API calls.
-        // Some older rows stored the API key in plaintext — accept those until migration re-encrypts.
+        // Some older rows stored the API key in plaintext - accept those until migration re-encrypts.
         string plainKey;
         try
         {

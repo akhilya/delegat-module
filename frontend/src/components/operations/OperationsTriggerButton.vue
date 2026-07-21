@@ -26,7 +26,7 @@ function showFabs() {
 
 <template>
   <Teleport to="body">
-    <!-- Restore pill — visible only when FABs are hidden -->
+    <!-- Restore pill - visible only when FABs are hidden -->
     <Button
       v-if="fabsHidden"
       type="button"

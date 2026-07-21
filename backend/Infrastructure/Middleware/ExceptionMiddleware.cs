@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Delegat.Services;
+using Delegat.Services.PlatformLink;
 
 namespace Delegat.Infrastructure.Middleware;
 
@@ -51,8 +52,11 @@ public class ExceptionMiddleware
     private static async Task PersistErrorLogAsync(HttpContext context, Exception exception, int statusCode)
     {
         var errorLogService = context.RequestServices.GetService<IErrorLogService>();
-        if (errorLogService == null) return;
-        await errorLogService.LogAsync(context, exception, statusCode);
+        if (errorLogService != null)
+            await errorLogService.LogAsync(context, exception, statusCode);
+
+        var reporter = context.RequestServices.GetService<IPlatformErrorReporter>();
+        reporter?.ReportFireAndForget(context, exception, statusCode);
     }
 
     private Task HandleApiExceptionAsync(HttpContext context, ApiException exception)

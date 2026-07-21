@@ -12,7 +12,7 @@ using Delegat.Services;
 namespace Delegat.Controllers.PublicApi;
 
 /// <summary>
-/// Public API v1 — product catalog CRUD for a store.
+/// Public API v1 - product catalog CRUD for a store.
 /// </summary>
 [ApiController]
 [PublicApiAuthorize]

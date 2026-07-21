@@ -5,7 +5,7 @@ import { t } from "@/i18n";
 let connection = null;
 
 // Cancel callbacks for client-side operations (e.g. file uploads).
-// Keyed by operation ID. Not in Vuex state — functions aren't serializable.
+// Keyed by operation ID. Not in Vuex state - functions aren't serializable.
 const cancelCallbacks = new Map();
 
 const state = {
@@ -187,7 +187,7 @@ const actions = {
         isLocalClientOperation: false,
       };
       commit("ADD_OPERATION", op);
-      // Don't auto-open panel for client-side operations (file-upload, file-delete) —
+      // Don't auto-open panel for client-side operations (file-upload, file-delete) -
       // they register silently via addOperation; the SignalR echo shouldn't override that.
       const silentTypes = ["file-upload", "file-delete"];
       if (!silentTypes.includes(op.type)) {
@@ -258,7 +258,7 @@ const actions = {
     // destroySignalR commits RESET_STATE which clears operations + flips
     // historyLoaded back to false. After reconnecting we explicitly reload
     // history so the panel reflects the newly-selected store without a
-    // page refresh. Fire-and-forget — UI shows empty state during fetch.
+    // page refresh. Fire-and-forget - UI shows empty state during fetch.
     await dispatch("destroySignalR");
     await dispatch("initSignalR");
     dispatch("loadHistory");
@@ -317,7 +317,7 @@ const actions = {
     if (typeof operation.onCancel === "function") {
       cancelCallbacks.set(op.id, operation.onCancel);
     }
-    // Don't auto-open panel for silent operations (e.g. file uploads —
+    // Don't auto-open panel for silent operations (e.g. file uploads -
     // user sees progress in the trigger button badge, opens panel manually if needed).
     if (!operation.silent) {
       commit("SET_PANEL_OPEN", true);
@@ -350,7 +350,7 @@ const actions = {
     if (_state.historyLoaded) return;
     const page = 1;
     try {
-      // cache:false is critical — axios-cache-interceptor would otherwise
+      // cache:false is critical - axios-cache-interceptor would otherwise
       // return the previous store's history when the user switches stores.
       const response = await http.get("/operations", {
         params: { page, pageSize: 20 },
@@ -389,7 +389,7 @@ const actions = {
     try {
       const response = await http.get(`/operations/${operationId}/logs`, {
         cache: false,
-        timeout: 10000, // 10s safety — don't hang the spinner forever
+        timeout: 10000, // 10s safety - don't hang the spinner forever
       });
       const logs = (response.data.logs || []).map((l) => ({
         timestamp: l.timestamp,
@@ -400,7 +400,7 @@ const actions = {
     } catch (err) {
       console.error("[Operations] Failed to load logs:", err);
       // Mark as loaded even on failure so we don't retry infinitely on expand/collapse.
-      // User will see empty log timeline — better than infinite spinner.
+      // User will see empty log timeline - better than infinite spinner.
       commit("SET_OPERATION_LOGS", { id: operationId, logs: [] });
     }
   },

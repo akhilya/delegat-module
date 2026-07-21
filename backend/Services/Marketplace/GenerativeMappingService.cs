@@ -196,7 +196,7 @@ public class GenerativeMappingService
         {
             max_tokens = Math.Min(decrypted.maxTokens, 4096),
             system = systemPrompt
-                   ?? "You generate concise marketplace field values. Respond with plain text only — no markdown, no quotes, no preamble.",
+                   ?? "You generate concise marketplace field values. Respond with plain text only - no markdown, no quotes, no preamble.",
             messages =
             [
                 new AiMessage { role = "user", content = prompt }

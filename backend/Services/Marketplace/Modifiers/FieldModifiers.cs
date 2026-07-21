@@ -286,7 +286,7 @@ public class ValueMapModifier : IFieldModifier
             if (string.Equals(mapping.to, str, StringComparison.OrdinalIgnoreCase))
                 return mapping.from;
         }
-        return str; // no reverse match — pass through
+        return str; // no reverse match - pass through
     }
 
     private static List<(string from, string to)> GetMappingsList(Dictionary<string, object> parameters)
@@ -591,7 +591,7 @@ public class ToTextModifier : IContextAwareModifier
             return LookupLabel(str, options) ?? str;
         }
 
-        // No label lookup — just convert to string
+        // No label lookup - just convert to string
         var list = TryParseList(value);
         if (list != null)
             return list.Select(el => el).ToList();

@@ -60,7 +60,7 @@ export default {
     const draggedColumnId = ref(null);
     const dragOverColumnId = ref(null);
 
-    // Scroll shadow — show inset shadow on actions column when content is scrollable
+    // Scroll shadow - show inset shadow on actions column when content is scrollable
     const scrollContainerEl = ref(null);
     const canScrollRight = ref(false);
 
@@ -72,58 +72,68 @@ export default {
 
     let scrollResizeObserver = null;
 
-    // Row height sync — query DOM directly for reliable height measurement
+    // Row height sync - query DOM directly for reliable height measurement
     const tableEl = ref(null);
     const rowHeights = ref([]);
     let resizeObserver = null;
+    let syncRaf = null;
 
     function syncHeights() {
       if (!tableEl.value) return;
-      const rows = tableEl.value.querySelectorAll('tbody > tr');
-      const newHeights = Array.from(rows).map(tr => tr.getBoundingClientRect().height);
-      // Only update ref if heights actually changed — prevents onUpdated infinite loop
+      const rows = tableEl.value.querySelectorAll("tbody > tr");
+      const newHeights = Array.from(rows).map((tr) => tr.getBoundingClientRect().height);
+      // Only update ref if heights actually changed - prevents onUpdated infinite loop
       const old = rowHeights.value;
       if (newHeights.length !== old.length || newHeights.some((h, i) => h !== old[i])) {
         rowHeights.value = newHeights;
       }
     }
 
+    function scheduleSyncHeights() {
+      if (syncRaf != null) return;
+      syncRaf = requestAnimationFrame(() => {
+        syncRaf = null;
+        syncHeights();
+      });
+    }
+
     function setupObserver() {
       if (resizeObserver) resizeObserver.disconnect();
       if (!tableEl.value) return;
-      const rows = tableEl.value.querySelectorAll('tbody > tr');
-      resizeObserver = new ResizeObserver(syncHeights);
-      rows.forEach(tr => resizeObserver.observe(tr));
+      // Observe the table once - per-row observers reflow the main thread on every panel resize.
+      resizeObserver = new ResizeObserver(scheduleSyncHeights);
+      resizeObserver.observe(tableEl.value);
     }
 
-    // Scroll shadow — attach/detach listeners when the scroll container appears/disappears (v-if/v-else)
+    // Scroll shadow - attach/detach listeners when the scroll container appears/disappears (v-if/v-else)
     watch(scrollContainerEl, (el, oldEl) => {
-      if (oldEl) oldEl.removeEventListener('scroll', checkScroll);
+      if (oldEl) oldEl.removeEventListener("scroll", checkScroll);
       scrollResizeObserver?.disconnect();
       if (el) {
-        el.addEventListener('scroll', checkScroll);
+        el.addEventListener("scroll", checkScroll);
         scrollResizeObserver = new ResizeObserver(checkScroll);
         scrollResizeObserver.observe(el);
         checkScroll();
       } else {
         canScrollRight.value = false;
       }
-    }, { flush: 'post' });
+    }, { flush: "post" });
 
     onMounted(() => {
       syncHeights();
       setupObserver();
     });
 
-    // After each DOM update — recalculate heights (observer re-setup only when data changes)
+    // After each DOM update - recalculate heights (observer re-setup only when data changes)
     onUpdated(() => {
-      syncHeights();
+      scheduleSyncHeights();
     });
 
     // Re-setup observer when rows change (new/removed rows)
     watch(() => props.data, () => {
       setupObserver();
-    }, { flush: 'post' });
+      scheduleSyncHeights();
+    }, { flush: "post" });
 
     // Sync external props to local state
     watch(
@@ -210,8 +220,9 @@ export default {
     });
 
     onBeforeUnmount(() => {
+      if (syncRaf != null) cancelAnimationFrame(syncRaf);
       resizeObserver?.disconnect();
-      scrollContainerEl.value?.removeEventListener('scroll', checkScroll);
+      scrollContainerEl.value?.removeEventListener("scroll", checkScroll);
       scrollResizeObserver?.disconnect();
     });
 

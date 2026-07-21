@@ -25,7 +25,7 @@ public class MappingGraph
 /// "attribute" | "storeAttribute" | "productField" | "static" | "groupName"
 /// | "modifier" | "formatString" | "join" | "output" | "adapterFields" | "adapterPriceFields".
 /// </summary>
-/// <summary>Vue Flow node coordinates — persisted by the editor, ignored by the evaluator.</summary>
+/// <summary>Vue Flow node coordinates - persisted by the editor, ignored by the evaluator.</summary>
 public class GraphPosition
 {
     public double x { get; set; }
@@ -58,7 +58,7 @@ public class GraphNodeData
     public string? staticValue { get; set; }
     /// <summary>Frontend-only display label for source nodes (ignored by the evaluator).</summary>
     public string? label { get; set; }
-    /// <summary>Marks a static node as a "Static value" block — its value is one of the
+    /// <summary>Marks a static node as a "Static value" block - its value is one of the
     /// adapter field's predefined options (frontend renders a select instead of free text).</summary>
     public bool? isAdapterValue { get; set; }
     /// <summary>Predefined options for "isAdapterValue" static nodes (copied from the adapter field).</summary>
@@ -119,7 +119,7 @@ public class GraphNodeData
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
-/// <summary>Option entry for "isAdapterValue" static nodes — same shape the frontend editor uses.</summary>
+/// <summary>Option entry for "isAdapterValue" static nodes - same shape the frontend editor uses.</summary>
 public class GraphNodeOption
 {
     public string? value { get; set; }
@@ -143,7 +143,7 @@ public class AdapterField
     public string? label { get; set; }
     public string? outputType { get; set; }
     public bool isRequired { get; set; }
-    /// <summary>Optional direct source binding (set via the adapter dropdown) — when present the field
+    /// <summary>Optional direct source binding (set via the adapter dropdown) - when present the field
     /// has no input pin and its value is resolved straight from this source instead of an edge.</summary>
     public AdapterFieldSource? source { get; set; }
     /// <summary>Merged-duplicate marker: this field is an alias of another field (by fieldKey).
@@ -222,7 +222,7 @@ public class GraphEvalResult
     public Dictionary<string, object?> Outputs { get; } = new();
     public Dictionary<string, string> FieldTypes { get; } = new();
 
-    /// <summary>Value produced at each node (by node id) — for per-node preview in the editor.</summary>
+    /// <summary>Value produced at each node (by node id) - for per-node preview in the editor.</summary>
     public Dictionary<string, object?> NodeValues { get; } = new();
 
     /// <summary>Status per llmGenerate node (ready / pending / failed).</summary>

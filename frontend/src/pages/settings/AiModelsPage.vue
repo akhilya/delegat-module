@@ -169,7 +169,7 @@ export default {
     }
 
     // Backend serializes the enum as a string ("Anthropic"/"OpenAiCompatible"),
-    // older records may come as numbers — normalize to the select values "0"/"1"
+    // older records may come as numbers - normalize to the select values "0"/"1"
     const providerToSelect = (p) => (p === 0 || p === "0" || p === "Anthropic" ? "0" : "1");
     const isAnthropic = (p) => providerToSelect(p) === "0";
 

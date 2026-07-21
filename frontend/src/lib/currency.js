@@ -1,15 +1,5 @@
 import { getLocale, toBcp47 } from "@/i18n";
 
-export const ADDABLE_CURRENCIES = [
-  { code: "USD", label: "USD — US Dollar" },
-  { code: "EUR", label: "EUR — Euro" },
-  { code: "KZT", label: "KZT — Tenge" },
-  { code: "BYN", label: "BYN — Belarusian ruble" },
-  { code: "CNY", label: "CNY — Yuan" },
-  { code: "GBP", label: "GBP — Pound" },
-  { code: "TRY", label: "TRY — Lira" },
-];
-
 export function getBaseCurrency(store) {
   if (!store) return null;
   if (store.baseCurrency) return store.baseCurrency.toUpperCase();
@@ -43,7 +33,7 @@ export function convertFromBase(baseAmount, currencyCode, currencies = [], baseC
 }
 
 export function formatMoney(amount, currency) {
-  if (amount == null || Number.isNaN(amount)) return "—";
+  if (amount == null || Number.isNaN(amount)) return "-";
   const code = currency?.toUpperCase() || "";
   return `${Number(amount).toLocaleString(toBcp47(getLocale()), { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${code}`.trim();
 }

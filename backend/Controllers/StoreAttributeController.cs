@@ -71,6 +71,7 @@ public class StoreAttributeController : ControllerBase
 
     [HttpPost]
     [Route("/store-attributes")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateStoreAttribute([FromBody] StoreAttribute.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -113,6 +114,7 @@ public class StoreAttributeController : ControllerBase
 
     [HttpPatch]
     [Route("/store-attributes/{attributeId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateStoreAttribute(int attributeId, [FromBody] StoreAttribute.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -144,6 +146,7 @@ public class StoreAttributeController : ControllerBase
 
     [HttpDelete]
     [Route("/store-attributes/{attributeId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteStoreAttribute(int attributeId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -173,6 +176,7 @@ public class StoreAttributeController : ControllerBase
 
     [HttpPost]
     [Route("/store-attributes/reorder")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ReorderStoreAttributes([FromBody] List<int> attributeIds)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

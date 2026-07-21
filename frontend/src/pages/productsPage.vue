@@ -49,6 +49,7 @@ import {
   FileSpreadsheet,
   Undo2,
   RefreshCw,
+  Loader2,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -69,6 +70,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -121,9 +123,11 @@ export default {
     FileSpreadsheet,
     Undo2,
     RefreshCw,
+    Loader2,
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
     Input,
@@ -188,9 +192,9 @@ export default {
     },
 
     onTransferred(payload) {
-      // Transfer is queued, not done — actual completion happens in background.
+      // Transfer is queued, not done - actual completion happens in background.
       // Side panel shows progress; row will only disappear (for move) once the
-      // background worker soft-deletes the original. We don't refresh now —
+      // background worker soft-deletes the original. We don't refresh now -
       // SignalR-driven panel updates will reflect state. User can refresh manually.
       // (No-op kept as a hook for any future "show toast with link to operation".)
     },
@@ -1023,25 +1027,66 @@ export default {
 
     <!-- Excel Actions Dialog -->
     <Dialog v-model:open="isExcelDialogOpen">
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle>{{ $t("pages.productsPage.excelDialog.title") }}</DialogTitle>
+      <DialogContent size="md" class="gap-0 overflow-hidden p-0">
+        <DialogHeader class="space-y-1 border-b px-6 py-4 text-left">
+          <DialogTitle class="flex items-center gap-2">
+            <FileSpreadsheet class="size-5 text-muted-foreground" />
+            {{ $t("pages.productsPage.excelDialog.title") }}
+          </DialogTitle>
           <DialogDescription>
             {{ $t("pages.productsPage.excelDialog.description", { count: selectedProductIds.length }) }}
           </DialogDescription>
         </DialogHeader>
-        <div class="space-y-2">
-          <Button variant="outline" class="w-full justify-start" :disabled="isExporting"
-                  @click="handleExportExcel">
-            <Download class="h-4 w-4 mr-2" />
-            {{ isExporting ? $t("pages.productsPage.excelDialog.exporting") : $t("pages.productsPage.excelDialog.downloadTemplate") }}
-          </Button>
-          <Button variant="outline" class="w-full justify-start"
-                  @click="openImportFromExcelDialog">
-            <Upload class="h-4 w-4 mr-2" />
-            {{ $t("pages.productsPage.excelDialog.uploadChanges") }}
-          </Button>
+
+        <div class="space-y-2 px-6 py-5">
+          <button
+            type="button"
+            class="flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-60"
+            :disabled="isExporting"
+            @click="handleExportExcel"
+          >
+            <div class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+              <Loader2 v-if="isExporting" class="size-4 animate-spin text-muted-foreground" />
+              <Download v-else class="size-4 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium">
+                {{
+                  isExporting
+                    ? $t("pages.productsPage.excelDialog.exporting")
+                    : $t("pages.productsPage.excelDialog.downloadTemplate")
+                }}
+              </div>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                {{ $t("pages.productsPage.excelDialog.exportHint") }}
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            @click="openImportFromExcelDialog"
+          >
+            <div class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+              <Upload class="size-4 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium">
+                {{ $t("pages.productsPage.excelDialog.uploadChanges") }}
+              </div>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                {{ $t("pages.productsPage.excelDialog.importHint") }}
+              </p>
+            </div>
+          </button>
         </div>
+
+        <DialogFooter class="border-t px-6 py-4 sm:justify-start">
+          <Button variant="outline" @click="isExcelDialogOpen = false">
+            {{ $t("common.cancel") }}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
 

@@ -12,7 +12,7 @@ const props = defineProps({
     :class="
       cn(
         // Refined surface: no drop-shadow (generic AI tell), softer border tint, radius
-        // matched to dialogs (8px instead of 12px). Tighter internal rhythm — gap-5/py-5
+        // matched to dialogs (8px instead of 12px). Tighter internal rhythm - gap-5/py-5
         // for dashboard density; px-6 in CardHeader/Content/Footer keeps form alignment.
         'bg-card text-card-foreground flex w-full min-w-0 flex-col gap-5 rounded-lg border border-border/70 py-5',
         props.class,

@@ -188,7 +188,7 @@ public class MinIOStorageService : IStorageService
 
     /// <summary>
     /// Server-side copy from one object key to another in the same bucket.
-    /// Uses MinIO CopyObject API — payload doesn't transit our backend.
+    /// Uses MinIO CopyObject API - payload doesn't transit our backend.
     /// </summary>
     public async Task<bool> CopyAsync(string sourcePath, string destinationPath, CancellationToken ct = default)
     {
@@ -295,7 +295,7 @@ public class MinIOStorageService : IStorageService
     {
         await EnsureBucketExistsAsync(ct);
 
-        // Bypass SDK GetObjectAsync — use presigned URL + HttpClient to avoid XML parse issues
+        // Bypass SDK GetObjectAsync - use presigned URL + HttpClient to avoid XML parse issues
         var presignedUrl = await GetPresignedUrlAsync(path, 60);
         var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
         using var response = await httpClient.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead, ct);

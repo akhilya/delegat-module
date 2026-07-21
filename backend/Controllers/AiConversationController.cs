@@ -23,7 +23,7 @@ public class AiConversationController : ControllerBase
         _chatService = chatService;
     }
 
-    // GET /api/ai/conversations — list recent conversations
+    // GET /api/ai/conversations - list recent conversations
     [HttpGet("conversations")]
     public async Task<IActionResult> ListConversations(CancellationToken ct)
     {
@@ -41,7 +41,7 @@ public class AiConversationController : ControllerBase
         return Ok(convs);
     }
 
-    // GET /api/ai/conversations/{sessionId} — load specific conversation
+    // GET /api/ai/conversations/{sessionId} - load specific conversation
     [HttpGet("conversations/{sessionId}")]
     public async Task<IActionResult> GetConversation(string sessionId, CancellationToken ct)
     {
@@ -71,8 +71,9 @@ public class AiConversationController : ControllerBase
         });
     }
 
-    // PATCH /api/ai/conversations/{sessionId} — rename conversation
+    // PATCH /api/ai/conversations/{sessionId} - rename conversation
     [HttpPatch("conversations/{sessionId}")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> RenameConversation(string sessionId, [FromBody] RenameRequest req, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -89,7 +90,7 @@ public class AiConversationController : ControllerBase
         return Ok(new { title = conv.title });
     }
 
-    // GET /api/ai/conversations/latest — load latest conversation for this user/store
+    // GET /api/ai/conversations/latest - load latest conversation for this user/store
     [HttpGet("conversations/latest")]
     public async Task<IActionResult> GetLatestConversation(CancellationToken ct)
     {
@@ -122,6 +123,7 @@ public class AiConversationController : ControllerBase
 
     // POST /api/ai/conversations/{sessionId}/generate-title
     [HttpPost("conversations/{sessionId}/generate-title")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> GenerateTitle(string sessionId, [FromBody] GenerateTitleRequest req, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -140,8 +142,9 @@ public class AiConversationController : ControllerBase
         return Ok(new { title });
     }
 
-    // POST /api/ai/conversations/messages — append a conversation turn to DB
+    // POST /api/ai/conversations/messages - append a conversation turn to DB
     [HttpPost("conversations/messages")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> SaveMessages(
         [FromBody] SaveMessagesRequest req, CancellationToken ct)
     {
@@ -151,7 +154,7 @@ public class AiConversationController : ControllerBase
 
         if (string.IsNullOrEmpty(req.SessionId)) return BadRequest("sessionId required");
 
-        // Upsert conversation row — always scope to current store+user to prevent cross-store bleed
+        // Upsert conversation row - always scope to current store+user to prevent cross-store bleed
         var conv = await _context.aiConversations
             .FirstOrDefaultAsync(c => c.sessionId == req.SessionId
                 && c.storeId == storeId.Value && c.userId == userId.Value, ct);
@@ -199,8 +202,9 @@ public class AiConversationController : ControllerBase
         return Ok(new { saved });
     }
 
-    // DELETE /api/ai/conversations/{sessionId} — delete a conversation and its messages
+    // DELETE /api/ai/conversations/{sessionId} - delete a conversation and its messages
     [HttpDelete("conversations/{sessionId}")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteConversation(string sessionId, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -217,8 +221,9 @@ public class AiConversationController : ControllerBase
         return Ok(new { deleted = true });
     }
 
-    // POST /api/ai/messages/{id}/feedback — set 👍/👎 on an assistant message
+    // POST /api/ai/messages/{id}/feedback - set 👍/👎 on an assistant message
     [HttpPost("messages/{id:int}/feedback")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> SetFeedback(int id, [FromBody] FeedbackRequest req, CancellationToken ct)
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);

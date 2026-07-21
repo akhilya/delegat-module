@@ -88,11 +88,11 @@ public static class OptionAlignmentHelper
             targetOptions.Select(o => o.Value),
             StringComparer.OrdinalIgnoreCase);
 
-        // Direct value overlap — no map needed
+        // Direct value overlap - no map needed
         if (localOptions.Any(l => targetValues.Contains(l.Value)))
             return false;
 
-        // Label overlap with different keys — map required
+        // Label overlap with different keys - map required
         return BuildValueMapEntries(localOptions, targetOptions).Count > 0;
     }
 

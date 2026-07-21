@@ -41,7 +41,7 @@ const META = computed(() => ({
   productFilesByExtension: { icon: Files, kind: t("marketplace.graph.nodeKinds.productFilesByExtension") },
 }));
 
-// Typed literal nodes are backed by `static` + valueType — label/icon them by their type.
+// Typed literal nodes are backed by `static` + valueType - label/icon them by their type.
 const LITERAL = computed(() => ({
   number: { icon: Hash, kind: t("marketplace.graph.literalKinds.number") },
   boolean: { icon: ToggleLeft, kind: t("marketplace.graph.literalKinds.boolean") },
@@ -85,7 +85,7 @@ const collapsed = computed(() => !!props.data.collapsed);
     </div>
     <template v-if="!collapsed">
       <div class="vf-card__title" :title="data.label">
-        {{ data.label || "—" }}
+        {{ data.label || "-" }}
       </div>
       <div class="vf-card__pin vf-card__pin--right">
         <span class="vf-pin-label">{{ pinTypeLabel(outType) }}</span>

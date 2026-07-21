@@ -67,7 +67,7 @@ public class AiChatService
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    // Maps tool names to UI refresh effects. Frontend reacts generically — no tool lists in JS.
+    // Maps tool names to UI refresh effects. Frontend reacts generically - no tool lists in JS.
     private static readonly Dictionary<string, string[]> _toolEffects = new()
     {
         ["connect_field"]                = ["mapping"],
@@ -266,7 +266,7 @@ public class AiChatService
             // Safety net: stream ended without content_block_stop for an open tool block
             if (isCollectingTool && currentToolName.Length > 0)
             {
-                _logger.LogWarning("Stream ended with unclosed tool block '{Tool}' — finalizing", currentToolName);
+                _logger.LogWarning("Stream ended with unclosed tool block '{Tool}' - finalizing", currentToolName);
                 toolUses.Add((currentToolId, currentToolName, currentToolInput.ToString()));
             }
 
@@ -278,13 +278,13 @@ public class AiChatService
                 if (!autoContinued && EndsWithUnfulfilledIntent(finalText))
                 {
                     autoContinued = true;
-                    _logger.LogWarning("Model ended turn announcing an action without a tool call — auto-continuing (text tail: \"{Tail}\")",
+                    _logger.LogWarning("Model ended turn announcing an action without a tool call - auto-continuing (text tail: \"{Tail}\")",
                         finalText.Length > 120 ? finalText[^120..] : finalText);
                     messages.Add(new AiMessage { role = "assistant", content = finalText });
                     messages.Add(new AiMessage
                     {
                         role = "user",
-                        content = "Continue — perform the action you announced by calling the corresponding tool. Do not reply with text without a tool call."
+                        content = "Continue - perform the action you announced by calling the corresponding tool. Do not reply with text without a tool call."
                     });
                     continue;
                 }
@@ -487,7 +487,7 @@ public class AiChatService
     // ---- Tool Dispatcher ----
 
     // Deterministic execution of a user-confirmed plan: steps carry exact tool arguments,
-    // so no model round-trip is needed — local models kept re-proposing plans or inventing
+    // so no model round-trip is needed - local models kept re-proposing plans or inventing
     // field keys when asked to execute after confirmation.
     public async IAsyncEnumerable<string> ExecutePlanStreamAsync(
         List<PlanStepInput> steps, int storeId, int userId,
@@ -526,7 +526,7 @@ public class AiChatService
                 resultJson = JsonSerializer.Serialize(result, _jsonOpts);
             }
 
-            if (failed) errors.Add($"{tool} — {summary}");
+            if (failed) errors.Add($"{tool} - {summary}");
             else ok++;
 
             _toolEffects.TryGetValue(tool, out var effects);
@@ -709,7 +709,7 @@ public class AiChatService
             .Select(x => new { x.Id, x.name, x.sku, x.price, x.barcode, x.storageQuantity, x.categoryId })
             .ToListAsync(ct);
 
-        // Zero hits on a text search: nudge the model to retry with spelling variants —
+        // Zero hits on a text search: nudge the model to retry with spelling variants -
         // catalogs often mix local script and Latin (e.g. Cyrillic vs Latin for Russian-market stores)
         if (products.Count == 0 && !string.IsNullOrEmpty(p.Search))
         {
@@ -719,7 +719,7 @@ public class AiChatService
                 count = 0,
                 hint = $"0 products found for '{p.Search}'. Try other spellings: " +
                        "Latin instead of local script (and vice versa), the brand's English name, a shorter stem without word endings.",
-            }, $"0 products for '{p.Search}' — try a different spelling");
+            }, $"0 products for '{p.Search}' - try a different spelling");
         }
 
         return (new { items = products, count = products.Count }, $"Found {products.Count} products");
@@ -741,7 +741,7 @@ public class AiChatService
                 count = 0,
                 hint = $"0 products for query '{p.Search}'. Try alternative spellings: " +
                        "Latin instead of Cyrillic (and vice versa), the English brand name, a word stem without endings.",
-            }, $"0 products for '{p.Search}' — try a different spelling");
+            }, $"0 products for '{p.Search}' - try a different spelling");
         }
         return (new { count }, $"{count} products");
     }
@@ -1029,7 +1029,7 @@ public class AiChatService
         }, cat.name);
     }
 
-    // Select/MultiSelect options are stored as a JSON string — parse so the model sees real values
+    // Select/MultiSelect options are stored as a JSON string - parse so the model sees real values
     private static object? ParseAttributeOptions(string? optionsJson)
     {
         if (string.IsNullOrWhiteSpace(optionsJson)) return null;
@@ -1065,11 +1065,11 @@ public class AiChatService
 
         var activeCount = await _context.products.CountAsync(x => x.categoryId == p.Id, ct);
         if (activeCount > 0)
-            return (new { error = $"The category has {activeCount} products — move or delete them first" },
+            return (new { error = $"The category has {activeCount} products - move or delete them first" },
                 $"Cannot delete: category has {activeCount} products");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
-        // block the DELETE — detach them from the category (they stay in the trash)
+        // block the DELETE - detach them from the category (they stay in the trash)
         await _context.products.IgnoreQueryFilters()
             .Where(x => x.categoryId == p.Id && x.deletedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.categoryId, (int?)null), ct);
@@ -1270,7 +1270,7 @@ public class AiChatService
         var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, null, ct);
         if (error != null) return (new { error }, error);
 
-        // Only single-bit flags — skip composite convenience values like FullProducts
+        // Only single-bit flags - skip composite convenience values like FullProducts
         var capabilities = System.Enum.GetValues<MarketplaceCapabilities>()
             .Where(v => v != 0 && ((long)v & ((long)v - 1)) == 0 && adapter!.Capabilities.HasFlag(v))
             .Select(v => v.ToString())
@@ -1468,7 +1468,7 @@ public class AiChatService
         {
             mapping.Id, mapping.name, mapping.localCategoryId, mapping.externalCategoryId,
             mapping.externalCategoryName,
-            // Counters only — the full per-field state (incl. isRequired/connected/source)
+            // Counters only - the full per-field state (incl. isRequired/connected/source)
             // lives in `fields`; a separate unmapped-required list would duplicate it
             coverage = new
             {
@@ -1564,7 +1564,7 @@ public class AiChatService
         string externalCategoryId;
         if (p.MappingId.HasValue)
         {
-            // Resolve connection + external category from the mapping — the AI on a mapping
+            // Resolve connection + external category from the mapping - the AI on a mapping
             // page knows mappingId but not the marketplace category id
             var mapping = await _context.categoryMappings.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
@@ -1588,7 +1588,7 @@ public class AiChatService
 
         var groupingKey = ProductSyncService.ResolveGroupingFieldKey(adapter);
 
-        // Endpoint-based adapters group via API — the mapping's grouping field is synthetic
+        // Endpoint-based adapters group via API - the mapping's grouping field is synthetic
         // and doesn't exist in the live schema, so append it for the model
         if (groupingKey == ProductSyncService.SyntheticGroupFieldKey && fields.All(f => f.Key != groupingKey))
         {
@@ -1605,12 +1605,12 @@ public class AiChatService
             f.Key, f.Name, f.Type, f.IsRequired, f.Description,
             f.Unit, f.MaxLength, f.IsAspect,
             // Large dictionaries (WB colors/brands: thousands of values) would blow up
-            // the context — show a sample and point the model at search_field_options
+            // the context - show a sample and point the model at search_field_options
             options = f.Options == null ? null
                 : f.Options.Take(15).Select(o => new { o.Value, o.Label }).ToList(),
             optionsTotal = f.Options?.Count,
             optionsNote = f.Options?.Count > 15
-                ? "shown 15 of " + f.Options.Count + " — use search_field_options to find a specific value"
+                ? "shown 15 of " + f.Options.Count + " - use search_field_options to find a specific value"
                 : null,
             isGroupingField = groupingKey != null && f.Key == groupingKey ? (bool?)true : null,
         }).ToList();
@@ -1658,7 +1658,7 @@ public class AiChatService
             return (new { error = $"Field '{p.AdapterFieldKey}' not found on the adapter" }, "Field not found");
         if (field.Options is not { Count: > 0 })
             return (new { options = Array.Empty<object>(), totalOptions = 0 },
-                $"Field '{field.Name}' has no predefined options — free-form value");
+                $"Field '{field.Name}' has no predefined options - free-form value");
 
         var query = p.Query ?? "";
         var matches = string.IsNullOrWhiteSpace(query)
@@ -1721,7 +1721,7 @@ public class AiChatService
     }
 
     // Fetches adapter field definitions for a mapping (mapping must have connection loaded).
-    // Returns empty on adapter failure — callers degrade gracefully.
+    // Returns empty on adapter failure - callers degrade gracefully.
     private async Task<List<ExternalField>> GetAdapterFieldDefsAsync(CategoryMapping mapping, CancellationToken ct)
     {
         try
@@ -1772,7 +1772,7 @@ public class AiChatService
         }
         catch (InvalidOperationException ex)
         {
-            // e.g. value not in the allowed options — return the option list so the model can retry
+            // e.g. value not in the allowed options - return the option list so the model can retry
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
@@ -1799,7 +1799,7 @@ public class AiChatService
         }
         catch (InvalidOperationException ex)
         {
-            // e.g. unknown modifier type — the message lists valid types so the model can retry
+            // e.g. unknown modifier type - the message lists valid types so the model can retry
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "add_modifier",
@@ -2376,7 +2376,7 @@ public class AiChatService
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
             if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Folder is not empty — pass recursive=true" }, "Not empty");
+                return (new { error = "Folder is not empty - pass recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -2415,7 +2415,7 @@ public class AiChatService
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
             if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Folder is not empty — pass recursive=true" }, "Not empty");
+                return (new { error = "Folder is not empty - pass recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -2709,7 +2709,7 @@ public class AiChatService
     // ---- Rollback ----
 
     // RecordAsync historically wrote rollback JSON in PascalCase (no naming policy) while this
-    // file deserialized expecting camelCase — every rollback silently no-op'ed. Case-insensitive
+    // file deserialized expecting camelCase - every rollback silently no-op'ed. Case-insensitive
     // matching reads both old and new rows.
     private static readonly JsonSerializerOptions _rollbackJson = new() { PropertyNameCaseInsensitive = true };
 
@@ -2726,7 +2726,7 @@ public class AiChatService
         if (!op.canRollback || op.status == AiOperationStatus.RolledBack)
             return (new { error = "This operation cannot be undone" }, "Cannot undo");
 
-        // Stale guard: without an explicit operationId, don't silently undo something old —
+        // Stale guard: without an explicit operationId, don't silently undo something old -
         // it may belong to a long-finished task the user no longer has in mind
         if (!p.Id.HasValue && op.createdAt < DateTime.UtcNow.AddMinutes(-30))
         {
@@ -2739,7 +2739,7 @@ public class AiChatService
                 description = op.description,
                 createdAt = op.createdAt,
             }, $"The last operation ran {ageText}: «{op.description}». " +
-               $"This is an old operation — confirm with the user that this is specifically what they want to undo, " +
+               $"This is an old operation - confirm with the user that this is specifically what they want to undo, " +
                $"then retry the call with operationId={op.Id}");
         }
 
@@ -2747,7 +2747,7 @@ public class AiChatService
         if (!applied)
         {
             _logger.LogWarning("Rollback of operation {OpId} ({Type}) did not change any data", op.Id, op.operationType);
-            return (new { error = "Rollback failed — no data was changed" },
+            return (new { error = "Rollback failed - no data was changed" },
                 $"Rollback of operation «{op.description}» failed: no data was changed");
         }
 
@@ -2923,7 +2923,7 @@ public class AiChatService
                     {
                         ["tool"] = new AiToolProperty { type = "string", description = "Tool name that will be called" },
                         ["description"] = new AiToolProperty { type = "string", description = "Human-readable description of this step in the current UI language (same language as assistant replies)" },
-                        ["args"] = new AiToolProperty { type = "object", description = "EXACT tool arguments as a JSON object — the same IDs/keys/values you already gathered. After user confirmation the system executes each step with these args automatically." }
+                        ["args"] = new AiToolProperty { type = "object", description = "EXACT tool arguments as a JSON object - the same IDs/keys/values you already gathered. After user confirmation the system executes each step with these args automatically." }
                     },
                     required = ["tool", "description", "args"]
                 }
@@ -2948,7 +2948,7 @@ public class AiChatService
             ("startIndex", Int("Pagination offset (default 0)")),
             ("pageSize", Int("Page size (default 50, max 200)")),
             ("quantityMin", Int("Min stock quantity filter")),
-            ("quantityMax", Int("Max stock quantity filter — use 0 to find out-of-stock products")),
+            ("quantityMax", Int("Max stock quantity filter - use 0 to find out-of-stock products")),
             ("sortBy", Enum("id", "price", "name", "quantity")),
             ("sortDir", Enum("asc", "desc"))
         ),
@@ -2959,10 +2959,10 @@ public class AiChatService
             ("id", Int("Product ID"))
         ),
         Prop("create_product", "Create a new product. DB requires: name, sku, description. Always provide all three.", Req(["name", "sku", "description", "categoryId"]),
-            ("name", Str("Product name — required")),
-            ("sku", Str("Unique stock-keeping unit, e.g. 'SHOE-RED-42' — required")),
-            ("description", Str("Product description — required, use empty string '' if none")),
-            ("categoryId", Int("Category ID — required")),
+            ("name", Str("Product name - required")),
+            ("sku", Str("Unique stock-keeping unit, e.g. 'SHOE-RED-42' - required")),
+            ("description", Str("Product description - required, use empty string '' if none")),
+            ("categoryId", Int("Category ID - required")),
             ("price", Num("Price in store currency (default 0)")),
             ("barcode", Str("Barcode / EAN / UPC (optional)")),
             ("quantity", Int("Stock quantity (default 0)"))
@@ -2978,10 +2978,10 @@ public class AiChatService
                     required = new List<string> { "name", "sku", "description", "categoryId" },
                     properties = new Dictionary<string, AiToolProperty>
                     {
-                        ["name"] = Str("Product name — required"),
-                        ["sku"] = Str("Unique stock-keeping unit — required"),
-                        ["description"] = Str("Product description — required, use '' if none"),
-                        ["categoryId"] = Int("Category ID — required"),
+                        ["name"] = Str("Product name - required"),
+                        ["sku"] = Str("Unique stock-keeping unit - required"),
+                        ["description"] = Str("Product description - required, use '' if none"),
+                        ["categoryId"] = Int("Category ID - required"),
                         ["price"] = Num("Price"),
                         ["barcode"] = Str("Barcode"),
                         ["quantity"] = Int("Stock quantity"),
@@ -2990,7 +2990,7 @@ public class AiChatService
             })
         ),
         Prop("update_product", "Update one or more fields of a product (only provided fields are changed)", Req(["id"]),
-            ("id", Int("Product ID — required")),
+            ("id", Int("Product ID - required")),
             ("name", Str("New name")), ("price", Num("New price")),
             ("description", Str("New description")), ("barcode", Str("New barcode")),
             ("quantity", Int("New stock quantity")), ("categoryId", Int("Move to category ID"))
@@ -3005,7 +3005,7 @@ public class AiChatService
             ("mode", Enum("add", "subtract", "set", "multiply"))
         ),
         Prop("update_product_attribute", "Set a category attribute value on products. attributeKey is the field's 'key' property (not name). Without productIds, updates all products in the attribute's category.", Req(["attributeKey", "value"]),
-            ("attributeKey", Str("Attribute 'key' field (e.g. 'color', 'size') — get it from list_category_fields")),
+            ("attributeKey", Str("Attribute 'key' field (e.g. 'color', 'size') - get it from list_category_fields")),
             ("value", Str("New value to set")),
             ("productIds", IntArray("Array of integer product IDs (omit to update all in attribute's category)"))
         ),
@@ -3073,7 +3073,7 @@ public class AiChatService
         Prop("get_connection", "Get connection details", Req(["id"]), ("id", Int("Connection ID"))),
         Prop("test_connection", "Test if marketplace connection is working", Req(["id"]), ("id", Int("Connection ID"))),
         Prop("get_connection_limits", "Get API rate limits and quotas for a connection", Req(["id"]), ("id", Int("Connection ID"))),
-        Prop("get_adapter_info", "Get marketplace adapter info: display name, description, supported capabilities (import/export/archive/groups etc.). NOTE: Response includes 'grouping' field — every mapping has ONE grouping field (isGroupingField=true). Products whose mapping evaluates it to the same value are merged into one marketplace card. Default source: groupName (local group name). The mapping only computes the grouping value; it never creates/modifies local groups.", Req(["connectionId"]),
+        Prop("get_adapter_info", "Get marketplace adapter info: display name, description, supported capabilities (import/export/archive/groups etc.). NOTE: Response includes 'grouping' field - every mapping has ONE grouping field (isGroupingField=true). Products whose mapping evaluates it to the same value are merged into one marketplace card. Default source: groupName (local group name). The mapping only computes the grouping value; it never creates/modifies local groups.", Req(["connectionId"]),
             ("connectionId", Int("Connection ID"))
         ),
         Prop("preview_marketplace_products", "List products that exist ON the marketplace (paginated), marks which are already imported locally", Req(["connectionId"]),
@@ -3085,7 +3085,7 @@ public class AiChatService
         Prop("import_products", "Queue import of marketplace products into the local catalog. Returns batchId for get_batch_status.", Req(["connectionId", "externalProductIds"]),
             ("connectionId", Int("Connection ID")),
             ("externalProductIds", StrArray("External product IDs from preview_marketplace_products")),
-            ("targetCategoryId", Int("Local category for imported products (optional — resolved from mapping if omitted)"))
+            ("targetCategoryId", Int("Local category for imported products (optional - resolved from mapping if omitted)"))
         ),
         Prop("import_prices", "Import current prices FROM the marketplace into local products (updates local prices)", Req(["connectionId"]),
             ("connectionId", Int("Connection ID"))
@@ -3093,9 +3093,9 @@ public class AiChatService
         Prop("import_stocks", "Import stock quantities FROM the marketplace into local products (sums across warehouses)", Req(["connectionId"]),
             ("connectionId", Int("Connection ID"))
         ),
-        Prop("archive_product_on_marketplace", "Archive (hide) a product on the marketplace. Use list_product_links(connectionId) first to confirm the product has a sync link — then pass the local productId. Local product is not affected.", Req(["connectionId", "productId"]),
+        Prop("archive_product_on_marketplace", "Archive (hide) a product on the marketplace. Use list_product_links(connectionId) first to confirm the product has a sync link - then pass the local productId. Local product is not affected.", Req(["connectionId", "productId"]),
             ("connectionId", Int("Connection ID")),
-            ("productId", Int("Local product ID (must be linked to this connection — verify with list_product_links first)"))
+            ("productId", Int("Local product ID (must be linked to this connection - verify with list_product_links first)"))
         ),
 
         // Mappings
@@ -3104,7 +3104,7 @@ public class AiChatService
         ),
         Prop("get_mapping", "Get mapping details, coverage, schemaContext, productSample and optionAlignmentHints.", Req(["id"]),
             ("id", Int("Mapping ID")),
-            ("productId", Int("Preview product ID — validates optionMap against real attribute values"))),
+            ("productId", Int("Preview product ID - validates optionMap against real attribute values"))),
         Prop("get_option_alignment_hints", "Precomputed optionMap hints: local attribute option values (from import source) → target adapter allowedValues. Essential when mapping Ozon-imported category to WB/Ozon/other.", Req(["id"]),
             ("id", Int("Mapping ID")),
             ("productId", Int("Optional preview product ID"))),
@@ -3126,7 +3126,7 @@ public class AiChatService
             ("search", Str("Search query to filter categories"))
         ),
         Prop("get_external_fields", "Get CARD adapter fields (sinkType=card): keys, labels, constraints and Select options. Pass mappingId (preferred) OR connectionId+externalCategoryId.", Req([]),
-            ("mappingId", Int("Mapping ID — resolves connection and category automatically (preferred)")),
+            ("mappingId", Int("Mapping ID - resolves connection and category automatically (preferred)")),
             ("connectionId", Int("Connection ID (only if mappingId not known)")),
             ("externalCategoryId", Str("External category ID from list_external_categories (only if mappingId not known)"))
         ),
@@ -3137,7 +3137,7 @@ public class AiChatService
         ),
         Prop("search_field_options", "Search the allowed option values of a Select/MultiSelect adapter field (server-side, works for dictionaries with thousands of values). Use before set_field_static_value on option-backed fields.", Req(["adapterFieldKey"]),
             ("adapterFieldKey", Str("Adapter field key")),
-            ("query", Str("Search text — matched against option labels and values (empty = first options)")),
+            ("query", Str("Search text - matched against option labels and values (empty = first options)")),
             ("mappingId", Int("Mapping ID (preferred)")),
             ("connectionId", Int("Connection ID (only if mappingId not known)")),
             ("externalCategoryId", Str("External category ID (only if mappingId not known)")),
@@ -3241,23 +3241,23 @@ public class AiChatService
         ),
         Prop("assign_product_mappings", "Assign a category mapping to products for export/sync. Creates marketplace link if missing. Use find_products_without_mapping first, then list_mappings to pick mappingId.", Req(["mappingId"]),
             ("mappingId", Int("Mapping ID from list_mappings")),
-            ("connectionId", Int("Connection ID (optional — inferred from mapping)")),
+            ("connectionId", Int("Connection ID (optional - inferred from mapping)")),
             ("connectionName", Str("Connection name if resolving by name")),
             ("productIds", IntArray("Specific product IDs to update")),
             ("applyToAllWithoutMapping", Bool("Apply to ALL products in the mapping's category that have no mapping on this connection"))
         ),
 
         // Export/Import
-        Prop("export_products_batch", "Queue products for export. Returns batchId — use get_batch_status(batchId) to track progress. Without productIds or categoryId — exports ALL store products.", Req(["connectionId"]),
-            ("connectionId", Int("Connection ID — required")),
+        Prop("export_products_batch", "Queue products for export. Returns batchId - use get_batch_status(batchId) to track progress. Without productIds or categoryId - exports ALL store products.", Req(["connectionId"]),
+            ("connectionId", Int("Connection ID - required")),
             ("productIds", IntArray("Array of integer product IDs (omit to use categoryId or export all)")),
             ("categoryId", Int("Export all products in this category (ignored if productIds provided)"))
         ),
         Prop("export_prices", "Export product prices to marketplace", Req(["connectionId"]),
-            ("connectionId", Int("Connection ID — required"))
+            ("connectionId", Int("Connection ID - required"))
         ),
         Prop("export_stocks", "Export stock quantities to marketplace", Req(["connectionId"]),
-            ("connectionId", Int("Connection ID — required"))
+            ("connectionId", Int("Connection ID - required"))
         ),
         Prop("get_batch_status", "Check export batch progress (done/failed/pending counts)", Req(["batchId"]),
             ("batchId", Str("Batch ID returned by export_products_batch"))
@@ -3361,9 +3361,9 @@ public class AiChatService
         Prop("get_image_download_status", "Check image download queue status", Req([])),
 
         // Navigation
-        Prop("navigate_to", "Show a clickable navigation button in the chat that takes the user to a specific page. The button appears in the chat UI — the user clicks it to navigate. Do NOT say you 'redirected' the user; instead say something like 'Here's a button to go to the product page'. The panel stays open during navigation.",
+        Prop("navigate_to", "Show a clickable navigation button in the chat that takes the user to a specific page. The button appears in the chat UI - the user clicks it to navigate. Do NOT say you 'redirected' the user; instead say something like 'Here's a button to go to the product page'. The panel stays open during navigation.",
             Req(["url", "label"]),
-            ("url", Str("App-relative path using the REAL numeric ID from the tool result, e.g. /products/1762/edit — NEVER invent or guess an ID")),
+            ("url", Str("App-relative path using the REAL numeric ID from the tool result, e.g. /products/1762/edit - NEVER invent or guess an ID")),
             ("label", Str("Short destination description shown on the button, e.g. 'Wool socks (150 RUB)'"))
         ),
     ];

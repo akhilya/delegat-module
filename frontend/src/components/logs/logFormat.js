@@ -1,13 +1,12 @@
 import { formatDateTimeCombined } from "@/utils/dateTime";
-import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 /**
  * Format a log timestamp in the store timezone.
  * @param {*} value server UTC timestamp
  * @param {string} [timezone] IANA timezone from store settings
  */
-export function formatLogDate(value, timezone = DEFAULT_TIMEZONE) {
-  return formatDateTimeCombined(value, timezone || DEFAULT_TIMEZONE, {
+export function formatLogDate(value, timezone = "UTC") {
+  return formatDateTimeCombined(value, timezone || "UTC", {
     withSeconds: true,
   });
 }

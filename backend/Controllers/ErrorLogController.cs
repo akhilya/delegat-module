@@ -11,25 +11,21 @@ namespace Delegat.Controllers;
 public class ErrorLogController : ControllerBase
 {
     private readonly DataContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly IServiceProvider _serviceProvider;
 
     public ErrorLogController(
         DataContext context,
-        ICurrentUserService currentUserService,
         IServiceProvider serviceProvider)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _serviceProvider = serviceProvider;
     }
 
     [HttpGet]
     [Route("/error-logs")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> GetErrorLogs([FromQuery] int limit = 100)
     {
-        await EnsureAdminAsync();
-
         limit = Math.Clamp(limit, 1, 500);
         var logs = await _context.errorLogs
             .AsNoTracking()
@@ -42,10 +38,9 @@ public class ErrorLogController : ControllerBase
 
     [HttpDelete]
     [Route("/error-logs/{id}")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> DeleteErrorLog(int id)
     {
-        await EnsureAdminAsync();
-
         var log = await _context.errorLogs.FindAsync(id);
         if (log == null)
             throw ApiException.NotFound("Error log entry not found");
@@ -54,12 +49,5 @@ public class ErrorLogController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok();
-    }
-
-    private async Task EnsureAdminAsync()
-    {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can view error logs");
     }
 }

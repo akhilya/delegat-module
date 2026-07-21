@@ -29,9 +29,9 @@ public class AiSettingsController : ControllerBase
 
     // GET /api/ai/models
     [HttpGet("models")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var models = await _modelService.GetAllAsync(ct);
         return Ok(models.Select(m => new
         {
@@ -50,7 +50,7 @@ public class AiSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Enabled models for UI pickers (mapping llmGenerate, etc.) — any authenticated user.
+    /// Enabled models for UI pickers (mapping llmGenerate, etc.) - any authenticated user.
     /// </summary>
     [HttpGet("models/picker")]
     public async Task<IActionResult> GetPicker(CancellationToken ct)
@@ -75,9 +75,9 @@ public class AiSettingsController : ControllerBase
 
     // POST /api/ai/models
     [HttpPost("models")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> Create([FromBody] CreateAiModelRequest req, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.ApiUrl)
             || string.IsNullOrWhiteSpace(req.ApiKey) || string.IsNullOrWhiteSpace(req.ModelId))
             return BadRequest("name, apiUrl, apiKey, modelId are required");
@@ -96,9 +96,9 @@ public class AiSettingsController : ControllerBase
 
     // PUT /api/ai/models/{id}
     [HttpPut("models/{id:int}")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateAiModelRequest req, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
 
@@ -113,9 +113,9 @@ public class AiSettingsController : ControllerBase
 
     // DELETE /api/ai/models/{id}
     [HttpDelete("models/{id:int}")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
         await _modelService.DeleteAsync(model, ct);
@@ -124,9 +124,9 @@ public class AiSettingsController : ControllerBase
 
     // POST /api/ai/models/{id}/set-default
     [HttpPost("models/{id:int}/set-default")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> SetDefault(int id, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
         await _modelService.SetDefaultAsync(id, ct);
@@ -135,9 +135,9 @@ public class AiSettingsController : ControllerBase
 
     // POST /api/ai/models/{id}/toggle-enabled
     [HttpPost("models/{id:int}/toggle-enabled")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> ToggleEnabled(int id, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
         await _modelService.ToggleEnabledAsync(id, ct);
@@ -146,20 +146,20 @@ public class AiSettingsController : ControllerBase
 
     // POST /api/ai/models/{id}/test
     [HttpPost("models/{id:int}/test")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> Test(int id, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         var model = await _modelService.GetByIdAsync(id, ct);
         if (model == null) return NotFound();
         var (ok, error) = await _modelService.TestConnectionAsync(model, ct);
         return Ok(new { success = ok, message = ok ? "Connection is working" : $"Connection error: {error}" });
     }
 
-    // POST /api/ai/models/discover — fetch available model IDs from a provider API
+    // POST /api/ai/models/discover - fetch available model IDs from a provider API
     [HttpPost("models/discover")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> Discover([FromBody] DiscoverModelsRequest req, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
         if (string.IsNullOrWhiteSpace(req.ApiUrl))
             return BadRequest("apiUrl is required");
 
@@ -234,13 +234,6 @@ public class AiSettingsController : ControllerBase
         return Ok();
     }
 
-    private async Task EnsureAdminAsync(CancellationToken ct)
-    {
-        var user = await _currentUserService.GetUserAsync(ct);
-        if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only administrators can manage AI models");
-    }
-
     private static string MaskKey(string encrypted)
     {
         if (string.IsNullOrEmpty(encrypted)) return "";
@@ -283,7 +276,7 @@ public class DiscoverModelsRequest
     public string? ProxyUrl { get; set; }
     /// <summary>Accepts number (0/1), string ("0"/"1"/"Anthropic"/"OpenAiCompatible") or null.</summary>
     public System.Text.Json.JsonElement? Provider { get; set; }
-    /// <summary>When editing an existing model without re-entering the key — reuse its stored key.</summary>
+    /// <summary>When editing an existing model without re-entering the key - reuse its stored key.</summary>
     public int? ModelConfigId { get; set; }
 
     public AiModelProvider ResolveProvider()

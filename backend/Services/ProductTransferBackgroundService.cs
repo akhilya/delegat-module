@@ -27,7 +27,7 @@ public class ProductTransferBackgroundService : BackgroundService
 
     private const int POLL_INTERVAL_MS = 1500;
     private const int ERROR_DELAY_MS = 10_000;
-    private const int BATCH_SIZE = 3; // transfers are heavy — process few at a time
+    private const int BATCH_SIZE = 3; // transfers are heavy - process few at a time
     private static readonly TimeSpan InProgressTimeout = TimeSpan.FromHours(6);
 
     public ProductTransferBackgroundService(
@@ -208,7 +208,7 @@ public class ProductTransferBackgroundService : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Host shutdown — leave record InProgress so it picks up next launch.
+            // Host shutdown - leave record InProgress so it picks up next launch.
             // Don't touch status. Don't call FinishAsync.
             try { await stopWatcher; } catch { /* ignored */ }
             throw;

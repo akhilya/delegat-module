@@ -26,7 +26,7 @@ watch(
 function formatTime(timestamp) {
   if (!timestamp) return "";
   const formatted = formatStoreTime(timestamp);
-  return formatted === "—" ? "" : formatted;
+  return formatted === "-" ? "" : formatted;
 }
 
 function dotClass(level) {

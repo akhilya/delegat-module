@@ -10,7 +10,7 @@ namespace Delegat.Controllers;
 
 /// <summary>
 /// Endpoints for cloning or moving a product (with all related data) into another store.
-/// Transfers are async — the request enqueues a job, ProductTransferBackgroundService
+/// Transfers are async - the request enqueues a job, ProductTransferBackgroundService
 /// picks it up. Progress is surfaced through the operations side panel via SignalR.
 /// </summary>
 [ApiController]
@@ -64,12 +64,13 @@ public class ProductTransferController : ControllerBase
     }
 
     /// <summary>
-    /// Enqueue a clone or move operation. Returns immediately with an operationId —
+    /// Enqueue a clone or move operation. Returns immediately with an operationId -
     /// progress is reported through the OperationHub (side panel updates live).
     /// Background service ProductTransferBackgroundService picks up the job within ~1.5s.
     /// </summary>
     [HttpPost]
     [Route("/products/{productId}/transfer")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> Transfer(int productId, [FromBody] TransferRequest request, CancellationToken ct)
     {
         var sourceStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
@@ -147,7 +148,7 @@ public class ProductTransferController : ControllerBase
         await _context.SaveChangesAsync(ct);
 
         // Start the operation entry up-front so the side panel sees it before the worker picks it up.
-        // Logging against the *source* store — that's where the user is sitting when they hit
+        // Logging against the *source* store - that's where the user is sitting when they hit
         // submit, and SignalR broadcasts go to `store-{currentStore}`. Logging against the
         // target store would silently route updates away from the user's current view.
         // The new product still lands in the target store; only operation visibility is anchored

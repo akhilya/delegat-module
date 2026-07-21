@@ -1,6 +1,6 @@
 <script setup>
 /**
- * FieldChangesTable — unified before/after comparison table for import previews.
+ * FieldChangesTable - unified before/after comparison table for import previews.
  *
  * Handles:
  * - Single-item with checkboxes (marketplace single import)
@@ -9,10 +9,10 @@
  *
  * Props:
  *  items: [{ label?, fields: [{ key, label, oldValue, newValue }] }]
- *  selectable: boolean — show per-field checkboxes
- *  excludedFields: Set<string> — v-model for checkbox state
- *  irreversibleFields: string[] — fields that get a warning icon
- *  warning: string — optional warning banner text
+ *  selectable: boolean - show per-field checkboxes
+ *  excludedFields: Set<string> - v-model for checkbox state
+ *  irreversibleFields: string[] - fields that get a warning icon
+ *  warning: string - optional warning banner text
  */
 import { computed } from "vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";

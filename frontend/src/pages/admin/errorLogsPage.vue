@@ -1,7 +1,5 @@
 <script>
-import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -14,12 +12,15 @@ import {
 } from "@/components/ui/table";
 import {
   LogToolbar,
-  LogTableFrame,
+  LogListPanel,
+  LogRefreshButton,
+  LogDateCell,
+  LogMethodCell,
+  LogStatusBadge,
   LogCodeBlock,
   LogMetaGrid,
   LogDetailSheet,
   formatLogDate as formatLogDateRaw,
-  httpStatusVariant,
 } from "@/components/logs";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -30,15 +31,12 @@ import {
   Check,
   Copy,
   Loader2,
-  RefreshCw,
   Trash2,
 } from "lucide-vue-next";
 
 export default {
   components: {
-    PageSection,
     Button,
-    Badge,
     PageHeader,
     Input,
     Table,
@@ -48,7 +46,11 @@ export default {
     TableHeader,
     TableRow,
     LogToolbar,
-    LogTableFrame,
+    LogListPanel,
+    LogRefreshButton,
+    LogDateCell,
+    LogMethodCell,
+    LogStatusBadge,
     LogCodeBlock,
     LogMetaGrid,
     LogDetailSheet,
@@ -56,7 +58,6 @@ export default {
     Check,
     Copy,
     Loader2,
-    RefreshCw,
     Trash2,
   },
   setup() {
@@ -114,18 +115,22 @@ export default {
         { label: this.$t("pages.errorLogsPage.metaMethod"), value: this.selected.method },
         {
           label: this.$t("pages.errorLogsPage.metaUser"),
-          value: this.selected.userName || this.selected.userId || "—",
+          value: this.selected.userName || this.selected.userId || "-",
         },
         {
           label: this.$t("pages.errorLogsPage.metaType"),
-          value: this.selected.exceptionType || "—",
+          value: this.selected.exceptionType || "-",
         },
       ];
+    },
+    footerLabel() {
+      const n = this.filteredLogs.length;
+      if (!this.query.trim()) return String(n);
+      return `${n}${this.$t("pages.errorLogsPage.ofTotal", { total: this.logs.length })}`;
     },
   },
   methods: {
     ...mapActions(["getErrorLogs", "deleteErrorLog"]),
-    httpStatusVariant,
     formatLogDate(value) {
       return formatLogDateRaw(value, this.storeTimezone);
     },
@@ -159,13 +164,13 @@ export default {
         `${this.$t("pages.errorLogsPage.clipboardStatus")}: ${log.statusCode}`,
         `${this.$t("pages.errorLogsPage.metaMethod")}: ${log.method}`,
         `${this.$t("pages.errorLogsPage.clipboardPath")}: ${this.formatPath(log)}`,
-        `${this.$t("pages.errorLogsPage.messageLabel")}: ${log.message || "—"}`,
-        `${this.$t("pages.errorLogsPage.clipboardErrorType")}: ${log.exceptionType || "—"}`,
-        `${this.$t("pages.errorLogsPage.metaUser")}: ${log.userName || log.userId || "—"}`,
-        `Trace ID: ${log.traceIdentifier || "—"}`,
+        `${this.$t("pages.errorLogsPage.messageLabel")}: ${log.message || "-"}`,
+        `${this.$t("pages.errorLogsPage.clipboardErrorType")}: ${log.exceptionType || "-"}`,
+        `${this.$t("pages.errorLogsPage.metaUser")}: ${log.userName || log.userId || "-"}`,
+        `Trace ID: ${log.traceIdentifier || "-"}`,
         "",
         "Stack trace:",
-        log.stackTrace || "—",
+        log.stackTrace || "-",
       ].join("\n");
     },
 
@@ -219,11 +224,7 @@ export default {
       :title="$t('routes.errorLogs')"
       :description="$t('pages.errorLogsPage.description')"
     >
-      <Button variant="outline" :disabled="isLoading" @click="fetchLogs">
-        <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
-        <RefreshCw v-else class="mr-2 size-4" />
-        {{ $t("common.refresh") }}
-      </Button>
+      <LogRefreshButton :loading="isLoading" @click="fetchLogs" />
     </PageHeader>
 
     <LogToolbar :summary="summaryLabel" :summary-alert="logs.length > 0">
@@ -234,7 +235,7 @@ export default {
       />
     </LogToolbar>
 
-    <PageSection
+    <LogListPanel
       :loading="isLoading"
       :empty="!isLoading && filteredLogs.length === 0"
       :empty-icon="AlertTriangle"
@@ -248,66 +249,55 @@ export default {
           ? $t('pages.errorLogsPage.emptyNotFoundDescription')
           : $t('pages.errorLogsPage.emptyNoErrorsDescription')
       "
+      :show-footer="filteredLogs.length > 0"
+      :footer-label="footerLabel"
     >
-      <LogTableFrame>
-        <Table class="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-40">{{ $t("pages.errorLogsPage.columnDate") }}</TableHead>
-              <TableHead class="w-20">{{ $t("pages.errorLogsPage.columnMethod") }}</TableHead>
-              <TableHead class="min-w-0">{{ $t("pages.errorLogsPage.columnError") }}</TableHead>
-              <TableHead class="w-36">{{ $t("pages.errorLogsPage.columnUser") }}</TableHead>
-              <TableHead class="w-20 text-right">{{ $t("pages.errorLogsPage.columnCode") }}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="log in filteredLogs"
-              :key="log.id"
-              class="cursor-pointer hover:bg-muted/40"
-              @click="openDetail(log)"
-            >
-              <TableCell class="text-sm text-muted-foreground tabular-nums">
-                {{ formatLogDate(log.createdAt) }}
-              </TableCell>
-              <TableCell>
-                <code class="text-xs font-medium">{{ log.method }}</code>
-              </TableCell>
-              <TableCell class="max-w-0">
-                <div class="min-w-0 overflow-hidden">
-                  <div class="truncate font-medium" :title="log.message">
-                    {{ log.message }}
-                  </div>
-                  <div
-                    class="truncate font-mono text-xs text-muted-foreground"
-                    :title="formatPath(log)"
-                  >
-                    {{ log.exceptionType || formatPath(log) }}
-                  </div>
+      <Table class="table-fixed">
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-40">{{ $t("pages.errorLogsPage.columnDate") }}</TableHead>
+            <TableHead class="w-20">{{ $t("pages.errorLogsPage.columnMethod") }}</TableHead>
+            <TableHead class="min-w-0">{{ $t("pages.errorLogsPage.columnError") }}</TableHead>
+            <TableHead class="w-36">{{ $t("pages.errorLogsPage.columnUser") }}</TableHead>
+            <TableHead class="w-20 text-right">{{ $t("pages.errorLogsPage.columnCode") }}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="log in filteredLogs"
+            :key="log.id"
+            class="cursor-pointer hover:bg-muted/40"
+            @click="openDetail(log)"
+          >
+            <TableCell>
+              <LogDateCell :value="log.createdAt" :timezone="storeTimezone" />
+            </TableCell>
+            <TableCell>
+              <LogMethodCell :method="log.method" />
+            </TableCell>
+            <TableCell class="max-w-0">
+              <div class="min-w-0 overflow-hidden">
+                <div class="truncate font-medium" :title="log.message">
+                  {{ log.message }}
                 </div>
-              </TableCell>
-              <TableCell class="truncate text-sm">
-                {{ log.userName || log.userId || "—" }}
-              </TableCell>
-              <TableCell class="text-right">
-                <Badge :variant="httpStatusVariant(log.statusCode)">
-                  {{ log.statusCode }}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-
-        <template v-if="filteredLogs.length" #footer>
-          <span class="tabular-nums">
-            {{ filteredLogs.length
-            }}<template v-if="query.trim()">
-              {{ $t("pages.errorLogsPage.ofTotal", { total: logs.length }) }}</template
-            >
-          </span>
-        </template>
-      </LogTableFrame>
-    </PageSection>
+                <div
+                  class="truncate font-mono text-xs text-muted-foreground"
+                  :title="formatPath(log)"
+                >
+                  {{ log.exceptionType || formatPath(log) }}
+                </div>
+              </div>
+            </TableCell>
+            <TableCell class="truncate text-sm">
+              {{ log.userName || log.userId || "-" }}
+            </TableCell>
+            <TableCell class="text-right">
+              <LogStatusBadge :status-code="log.statusCode" />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </LogListPanel>
 
     <LogDetailSheet
       v-model:open="detailOpen"
@@ -352,13 +342,11 @@ export default {
         <LogMetaGrid :items="detailMeta" />
         <div class="flex items-center justify-between gap-2 text-sm">
           <span class="text-muted-foreground">{{ $t("pages.errorLogsPage.codeLabel") }}</span>
-          <Badge :variant="httpStatusVariant(selected.statusCode)">
-            {{ selected.statusCode }}
-          </Badge>
+          <LogStatusBadge :status-code="selected.statusCode" />
         </div>
         <LogCodeBlock
           :label="$t('pages.errorLogsPage.messageLabel')"
-          :text="selected.message || '—'"
+          :text="selected.message || '-'"
           tone="destructive"
           max-height-class="max-h-28"
         />
@@ -369,12 +357,12 @@ export default {
         />
         <LogCodeBlock
           label="Trace ID"
-          :text="selected.traceIdentifier || '—'"
+          :text="selected.traceIdentifier || '-'"
           max-height-class="max-h-20"
         />
         <LogCodeBlock
           label="Stack trace"
-          :text="selected.stackTrace || '—'"
+          :text="selected.stackTrace || '-'"
           max-height-class="max-h-96"
         />
       </div>

@@ -1018,7 +1018,7 @@ export default {
                                       type="text"
                                       readonly
                                       class="bg-muted"
-                                      :model-value="value != null ? String(value) : '—'"
+                                      :model-value="value != null ? String(value) : '-'"
                                     />
                                   </FormControl>
                                 </SettingsFormField>

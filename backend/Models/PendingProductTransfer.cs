@@ -59,7 +59,7 @@ public class PendingProductTransfer
     /// <summary>User who initiated the transfer.</summary>
     public int authorUserId { get; set; }
 
-    /// <summary>Operation/batch identifier — same value used by OperationLogger so the panel surfaces this transfer.</summary>
+    /// <summary>Operation/batch identifier - same value used by OperationLogger so the panel surfaces this transfer.</summary>
     public string batchId { get; set; } = string.Empty;
 
     /// <summary>Current execution status.</summary>
@@ -68,7 +68,7 @@ public class PendingProductTransfer
     /// <summary>Last error message if status is Failed/Partial.</summary>
     public string? lastError { get; set; }
 
-    /// <summary>Set on success — the newly created product's id.</summary>
+    /// <summary>Set on success - the newly created product's id.</summary>
     public int? newProductId { get; set; }
 
     /// <summary>Navigation to created product (if any).</summary>

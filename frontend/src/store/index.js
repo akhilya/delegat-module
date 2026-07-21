@@ -14,6 +14,7 @@ import storeModule from "./modules/storeModule";
 import storeAttributeModule from "./modules/storeAttributeModule";
 import tokenModule from "./modules/tokenModule";
 import marketplaceModule from "./modules/marketplaceModule";
+import referenceModule from "./modules/referenceModule";
 import errorLogModule from "./modules/errorLogModule";
 import adapterHttpLogModule from "./modules/adapterHttpLogModule";
 import operations from "./modules/operationsModule";
@@ -49,6 +50,7 @@ export function createStore() {
       storeAttributeModule,
       tokenModule,
       marketplaceModule,
+      referenceModule,
       errorLogModule,
       adapterHttpLogModule,
       operations,

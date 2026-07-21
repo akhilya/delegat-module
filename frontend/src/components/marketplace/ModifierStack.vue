@@ -434,7 +434,7 @@ export default {
             </div>
           </template>
 
-          <!-- Text param (skip 'default' when inside valueMap/optionMap — handled by editor) -->
+          <!-- Text param (skip 'default' when inside valueMap/optionMap - handled by editor) -->
           <template v-else-if="param.type === 'text' && !((mod.type === 'valueMap' || mod.type === 'optionMap') && param.key === 'default')">
             <div class="space-y-1">
               <Label class="text-xs">{{ param.label }}</Label>

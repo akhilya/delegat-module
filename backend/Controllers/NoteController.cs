@@ -43,6 +43,7 @@ public class NoteController : ControllerBase
     /// <returns>The created note DTO.</returns>
     [HttpPost]
     [Route("/products/{productId}/notes")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> PostNote(int productId, [FromBody] UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -73,6 +74,7 @@ public class NoteController : ControllerBase
     /// <returns>200 OK on success.</returns>
     [HttpPatch]
     [Route("/products/{productId}/notes/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> PatchNote(int productId, int id, [FromBody] UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -106,6 +108,7 @@ public class NoteController : ControllerBase
     /// <returns>200 OK on success.</returns>
     [HttpDelete]
     [Route("/products/{productId}/notes/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteNote(int productId, int id)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

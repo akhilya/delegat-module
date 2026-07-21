@@ -94,7 +94,7 @@ public static class DataMigrationRunner
             catch (Exception ex)
             {
                 logger.LogError(ex, "Data migration {Version} failed. Stopping further migrations.", migration.Version);
-                break; // Stop — subsequent migrations may depend on this one
+                break; // Stop - subsequent migrations may depend on this one
             }
         }
 

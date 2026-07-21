@@ -76,6 +76,42 @@ export default {
         onError(error);
       }
     },
+
+    async getRolesCatalog(ctx, { onSuccess, onError }) {
+      try {
+        const response = await http.get(`/roles`, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
+    async getPermissionsCatalog(ctx, { onSuccess, onError }) {
+      try {
+        const response = await http.get(`/permissions`, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
+    async getUserAccess(ctx, { userId, onSuccess, onError }) {
+      try {
+        const response = await http.get(`/users/${userId}/access`, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
+    async putUserAccess(ctx, { userId, data, onSuccess, onError }) {
+      try {
+        const response = await http.put(`/users/${userId}/access`, data, { cache: false });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
   },
   mutations: {},
   state: {},

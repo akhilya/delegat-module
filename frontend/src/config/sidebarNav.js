@@ -3,6 +3,7 @@ import {
   PAGE_PRODUCT_CREATION,
   PAGE_PRODUCT_GROUPS,
   PAGE_CATEGORIES,
+  PAGE_BARCODES,
   PAGE_STORE_STORAGE,
   PAGE_MARKETPLACE,
   PAGE_STORE_ATTRIBUTES,
@@ -14,6 +15,7 @@ import {
   Layers,
   Trash2,
   FolderOpen,
+  Barcode,
   HardDrive,
   ShoppingBag,
   Plug,
@@ -25,12 +27,13 @@ import {
 } from "lucide-vue-next";
 import { getSettingsSidebarSubItems } from "./settingsNav";
 import { getLocale, t, toBcp47 } from "@/i18n";
+import { hasPermission, PERMS } from "@/lib/permissions";
 
 /**
  * @typedef {'link'|'action'} NavItemType
  * @typedef {{ id: string, label: string, type: NavItemType, to?: string, icon?: import('vue').Component, action?: string, visible?: (ctx: SidebarContext) => boolean, children?: NavItem[] }} NavItem
  * @typedef {{ id: string, label: string, icon: import('vue').Component, defaultOpen?: boolean, items: NavItem[]|((ctx: SidebarContext) => NavItem[]), visible?: (ctx: SidebarContext) => boolean }} NavGroup
- * @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean, connections: object[], adapters: object[] }} SidebarContext
+ * @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean, hasStore?: boolean, hasPermission?: (p: string) => boolean, connections: object[], adapters: object[] }} SidebarContext
  */
 
 function getAdapterDisplayName(adapterKey, adapters) {
@@ -63,10 +66,25 @@ const SIDEBAR_GROUPS = [
     labelKey: "nav.products",
     icon: Boxes,
     defaultOpen: true,
+    visible: (ctx) => Boolean(ctx.hasStore),
     items: [
       { id: "products", labelKey: "nav.products", type: "link", to: PAGE_PRODUCTS, icon: Boxes },
-      { id: "new-product", labelKey: "nav.newProduct", type: "link", to: PAGE_PRODUCT_CREATION, icon: PackagePlus },
-      { id: "groups", labelKey: "nav.groups", type: "link", to: PAGE_PRODUCT_GROUPS, icon: Layers },
+      {
+        id: "new-product",
+        labelKey: "nav.newProduct",
+        type: "link",
+        to: PAGE_PRODUCT_CREATION,
+        icon: PackagePlus,
+        visible: (ctx) => can(ctx, PERMS.CatalogManage),
+      },
+      {
+        id: "groups",
+        labelKey: "nav.groups",
+        type: "link",
+        to: PAGE_PRODUCT_GROUPS,
+        icon: Layers,
+        visible: (ctx) => can(ctx, PERMS.CatalogManage),
+      },
       { id: "trash", labelKey: "nav.trash", type: "link", to: `${PAGE_PRODUCTS}?trash=1`, icon: Trash2 },
       {
         id: "categories",
@@ -74,7 +92,15 @@ const SIDEBAR_GROUPS = [
         type: "link",
         to: PAGE_CATEGORIES,
         icon: FolderOpen,
-        visible: (ctx) => ctx.canManageStore,
+        visible: (ctx) => can(ctx, PERMS.CatalogManage),
+      },
+      {
+        id: "barcodes",
+        labelKey: "nav.barcodes",
+        type: "link",
+        to: PAGE_BARCODES,
+        icon: Barcode,
+        visible: (ctx) => can(ctx, PERMS.CatalogManage),
       },
     ],
   },
@@ -83,6 +109,7 @@ const SIDEBAR_GROUPS = [
     labelKey: "nav.storage",
     icon: HardDrive,
     defaultOpen: false,
+    visible: (ctx) => Boolean(ctx.hasStore),
     items: [
       { id: "storage", labelKey: "nav.storage", type: "link", to: PAGE_STORE_STORAGE, icon: HardDrive },
     ],
@@ -92,6 +119,7 @@ const SIDEBAR_GROUPS = [
     labelKey: "nav.integrations",
     icon: ShoppingBag,
     defaultOpen: true,
+    visible: (ctx) => Boolean(ctx.hasStore) && can(ctx, PERMS.MarketplaceManage),
     items: (ctx) => {
       const activeConnections = (ctx.connections || [])
         .filter(isConnectionActive)
@@ -138,11 +166,40 @@ const SIDEBAR_GROUPS = [
     labelKey: "nav.utilities",
     icon: Wand2,
     defaultOpen: false,
+    visible: (ctx) => Boolean(ctx.hasStore),
     items: [
-      { id: "ai", labelKey: "nav.aiAssistant", type: "action", action: "toggleAi", icon: Sparkles },
-      { id: "ops", labelKey: "nav.backgroundJobs", type: "action", action: "toggleOps", icon: Activity },
-      { id: "tools", labelKey: "nav.tools", type: "link", to: PAGE_TOOLS, icon: Wand2 },
-      { id: "attributes", labelKey: "nav.globalAttributes", type: "link", to: PAGE_STORE_ATTRIBUTES, icon: Globe },
+      {
+        id: "ai",
+        labelKey: "nav.aiAssistant",
+        type: "action",
+        action: "toggleAi",
+        icon: Sparkles,
+        visible: (ctx) => can(ctx, PERMS.AiUse) && ctx.me?.aiEnabled !== false,
+      },
+      {
+        id: "ops",
+        labelKey: "nav.backgroundJobs",
+        type: "action",
+        action: "toggleOps",
+        icon: Activity,
+        visible: (ctx) => can(ctx, PERMS.OperationsManage),
+      },
+      {
+        id: "tools",
+        labelKey: "nav.tools",
+        type: "link",
+        to: PAGE_TOOLS,
+        icon: Wand2,
+        visible: (ctx) => can(ctx, PERMS.OperationsManage) || can(ctx, PERMS.CatalogManage),
+      },
+      {
+        id: "attributes",
+        labelKey: "nav.globalAttributes",
+        type: "link",
+        to: PAGE_STORE_ATTRIBUTES,
+        icon: Globe,
+        visible: (ctx) => can(ctx, PERMS.CatalogManage),
+      },
     ],
   },
   {
@@ -162,6 +219,10 @@ const SIDEBAR_GROUPS = [
   },
 ];
 
+function can(ctx, permission) {
+  if (typeof ctx.hasPermission === "function") return ctx.hasPermission(permission);
+  return hasPermission(ctx.me, permission);
+}
 function resolveLabel(item) {
   if (item.labelKey) return t(item.labelKey);
   return item.label ?? "";
@@ -182,5 +243,8 @@ export function buildSidebarGroups(ctx) {
       label: resolveLabel(group),
       resolvedItems,
     };
-  }).filter((group) => !group.visible || group.visible(ctx));
+  }).filter((group) => {
+    if (group.visible && !group.visible(ctx)) return false;
+    return group.resolvedItems.length > 0;
+  });
 }

@@ -15,7 +15,7 @@ import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
 import { BRAND_NAME } from "@/brand";
-import { http } from "@/main";
+import { loadMe } from "@/main";
 
 export default {
   components: {
@@ -73,9 +73,8 @@ export default {
     this.$store.dispatch("operations/initSignalR");
     window.addEventListener("beforeunload", this._onBeforeUnload);
     if (!this.isPublicPage) {
-      http.get("/auth/me", { cache: false }).then((res) => {
-        const me = res.data?.value ?? res.data;
-        this.aiEnabled = me?.aiEnabled !== false;
+      loadMe().then((me) => {
+        if (me) this.aiEnabled = me.aiEnabled !== false;
       }).catch(() => {});
     }
   },

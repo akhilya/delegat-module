@@ -14,20 +14,17 @@ public class PluginController : ControllerBase
     private readonly PluginManager _pluginManager;
     private readonly PluginAdapterRegistry _registry;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<PluginController> _logger;
 
     public PluginController(
         PluginManager pluginManager,
         PluginAdapterRegistry registry,
         IServiceScopeFactory scopeFactory,
-        ICurrentUserService currentUserService,
         ILogger<PluginController> logger)
     {
         _pluginManager = pluginManager;
         _registry = registry;
         _scopeFactory = scopeFactory;
-        _currentUserService = currentUserService;
         _logger = logger;
     }
 
@@ -87,10 +84,9 @@ public class PluginController : ControllerBase
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequiresPermission(Permissions.PluginsManage)]
     public async Task<IActionResult> UploadPlugin(IFormFile file)
     {
-        await EnsureAdminAsync();
-
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest("No file provided", code: "required_fields_missing");
 
@@ -167,10 +163,9 @@ public class PluginController : ControllerBase
     /// Delete a plugin
     /// </summary>
     [HttpDelete("{key}")]
+    [RequiresPermission(Permissions.PluginsManage)]
     public async Task<IActionResult> DeletePlugin(string key)
     {
-        await EnsureAdminAsync();
-
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
             throw ApiException.NotFound($"Plugin '{key}' not found");
@@ -213,10 +208,9 @@ public class PluginController : ControllerBase
     /// Reload a plugin (useful after updating the DLL file)
     /// </summary>
     [HttpPost("{key}/reload")]
+    [RequiresPermission(Permissions.PluginsManage)]
     public async Task<IActionResult> ReloadPlugin(string key)
     {
-        await EnsureAdminAsync();
-
         try
         {
             var reloaded = _pluginManager.ReloadPlugin(key);
@@ -258,12 +252,5 @@ public class PluginController : ControllerBase
             _logger.LogError(ex, "Failed to reload plugin {Key}", key);
             throw ApiException.BadRequest($"Failed to reload plugin: {ex.Message}");
         }
-    }
-
-    private async Task EnsureAdminAsync()
-    {
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only administrators can manage plugins");
     }
 }

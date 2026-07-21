@@ -9,7 +9,7 @@ using Delegat.Models;
 
 namespace Delegat.Controllers.PublicApi;
 
-/// <summary>Public API v1 — categories CRUD.</summary>
+/// <summary>Public API v1 - categories CRUD.</summary>
 [ApiController]
 [PublicApiAuthorize]
 [EnableRateLimiting("public-api")]

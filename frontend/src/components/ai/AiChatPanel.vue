@@ -319,7 +319,7 @@ function cancelEditTitle() {
 function formatRelativeDate(iso) {
   const tz = storeTimezone.value;
   const key = calendarDayKey(iso, tz);
-  if (!key) return "—";
+  if (!key) return "-";
   const today = todayKey();
   const yesterday = addCalendarDays(today, -1);
   if (key === today) return t("ai.today");
@@ -333,7 +333,7 @@ function formatRelativeDate(iso) {
   return relativeDayLabel(iso);
 }
 
-/** Template refs on shadcn wrappers are component instances — resolve to the real DOM node. */
+/** Template refs on shadcn wrappers are component instances - resolve to the real DOM node. */
 function inputDom() {
   return unrefElement(inputEl) ?? null;
 }
@@ -418,10 +418,10 @@ function renderMarkdown(text) {
 </script>
 
 <template>
-  <!-- Resizable right panel — part of the flex layout, no teleport, no backdrop -->
+  <!-- Resizable right panel - part of the flex layout (second window).
+       No width transition: animating width runs on the main thread and reflows the page. -->
   <div
     class="flex-none sticky top-0 h-screen bg-background border-l flex flex-col overflow-hidden"
-    :class="{ 'transition-[width] duration-200 ease-in-out': !isResizing }"
     :style="{ width: isOpen ? panelWidth + 'px' : '0px' }"
   >
     <!-- Resize handle -->
@@ -840,7 +840,7 @@ function renderMarkdown(text) {
         </template>
       </div>
 
-      <!-- ── Input area — only in chat view ── -->
+      <!-- ── Input area - only in chat view ── -->
       <div v-if="activeView === 'chat'" class="px-3 pb-3 pt-1.5 shrink-0">
         <div class="rounded-2xl border border-border/60 bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring/40 transition-shadow overflow-hidden">
           <Textarea

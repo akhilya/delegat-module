@@ -8,12 +8,25 @@ namespace Delegat.Tests;
 
 public class ApiKeysControllerTests
 {
+    private sealed class FakeApiRequestLogQueryService : IApiRequestLogQueryService
+    {
+        public Task<(List<ApiRequestLogSummaryDto> Items, int Total, int ErrorCount)> QueryAsync(
+            int userId, ApiRequestLogQuery query, CancellationToken ct = default)
+            => Task.FromResult((new List<ApiRequestLogSummaryDto>(), 0, 0));
+
+        public Task<ApiRequestLogDetailDto?> GetDetailAsync(int userId, int id, CancellationToken ct = default)
+            => Task.FromResult<ApiRequestLogDetailDto?>(null);
+    }
+
+    private static ApiKeysController CreateController(FakeCurrentUserService current, UserApiKeyService keys)
+        => new(current, keys, new FakeApiRequestLogQueryService());
+
     [Fact]
     public async Task List_Unauthorized_WhenNoUser()
     {
         await using var db = TestDbFactory.CreateDb();
         var current = new FakeCurrentUserService { UserId = null };
-        var controller = new ApiKeysController(current, new UserApiKeyService(db));
+        var controller = CreateController(current, new UserApiKeyService(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => controller.List(CancellationToken.None));
         Assert.Equal(401, ex.StatusCode);
@@ -28,7 +41,7 @@ public class ApiKeysControllerTests
         await data.SaveAsync();
 
         var current = new FakeCurrentUserService { UserId = user.Id };
-        var controller = new ApiKeysController(current, new UserApiKeyService(db));
+        var controller = CreateController(current, new UserApiKeyService(db));
 
         var result = await controller.Create(new ApiKeysController.CreateApiKeyRequest { name = "ERP" }, CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(result);
@@ -50,7 +63,7 @@ public class ApiKeysControllerTests
         await svc.CreateAsync(a.Id, "a-key");
         await svc.CreateAsync(b.Id, "b-key");
 
-        var controller = new ApiKeysController(new FakeCurrentUserService { UserId = a.Id }, svc);
+        var controller = CreateController(new FakeCurrentUserService { UserId = a.Id }, svc);
         var result = await controller.List(CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(result);
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
@@ -70,7 +83,7 @@ public class ApiKeysControllerTests
         await svc.CreateAsync(user.Id, "tmp");
         var keyId = db.userApiKeys.Single().Id;
 
-        var controller = new ApiKeysController(new FakeCurrentUserService { UserId = user.Id }, svc);
+        var controller = CreateController(new FakeCurrentUserService { UserId = user.Id }, svc);
         var result = await controller.Revoke(keyId, CancellationToken.None);
         Assert.IsType<OkObjectResult>(result);
     }
@@ -88,7 +101,7 @@ public class ApiKeysControllerTests
         await svc.CreateAsync(a.Id, "secret");
         var keyId = db.userApiKeys.Single().Id;
 
-        var controller = new ApiKeysController(new FakeCurrentUserService { UserId = b.Id }, svc);
+        var controller = CreateController(new FakeCurrentUserService { UserId = b.Id }, svc);
         await Assert.ThrowsAsync<ApiException>(() => controller.Revoke(keyId, CancellationToken.None));
     }
 }

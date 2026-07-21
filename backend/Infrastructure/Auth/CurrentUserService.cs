@@ -73,7 +73,7 @@ public class CurrentUserService : ICurrentUserService
     }
 
     /// <summary>
-    /// Cookie value only — do not use for authorization. Prefer <see cref="GetSelectedStoreIdAsync"/>.
+    /// Cookie value only - do not use for authorization. Prefer <see cref="GetSelectedStoreIdAsync"/>.
     /// </summary>
     public int? GetSelectedStoreId()
     {

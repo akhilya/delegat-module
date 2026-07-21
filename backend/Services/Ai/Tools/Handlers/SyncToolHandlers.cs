@@ -91,7 +91,7 @@ public class SyncToolHandlers : ToolHandlerBase
         var (conn, adapter, error) = await ResolveAdapterAsync(p.ConnectionId, storeId, null, ct);
         if (error != null) return (new { error }, error);
 
-        // Only single-bit flags — skip composite convenience values like FullProducts
+        // Only single-bit flags - skip composite convenience values like FullProducts
         var capabilities = System.Enum.GetValues<MarketplaceCapabilities>()
             .Where(v => v != 0 && ((long)v & ((long)v - 1)) == 0 && adapter!.Capabilities.HasFlag(v))
             .Select(v => v.ToString())

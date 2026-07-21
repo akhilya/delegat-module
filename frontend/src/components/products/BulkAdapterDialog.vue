@@ -21,7 +21,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["update:modelValue"]);
 
-// All possible actions — filtered by adapter capabilities at runtime
+// All possible actions - filtered by adapter capabilities at runtime
 const ALL_ACTIONS = [
   {
     key: "export",

@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Delegat.Models.Products;
 
 /// <summary>
-/// Represents a product variant (size) — a product-level concept.
+/// Represents a product variant (size) - a product-level concept.
 /// Marketplace-specific IDs are stored in ProductVariantLink.
 /// </summary>
 public class ProductVariant : IEntity, IAddable<ProductVariant.AddForm>, IUpdateable<ProductVariant.UpdateForm>

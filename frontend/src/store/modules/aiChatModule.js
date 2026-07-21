@@ -1,10 +1,10 @@
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { t } from "@/i18n";
 
-/** Model-facing control messages — always English (system prompts are English). */
+/** Model-facing control messages - always English (system prompts are English). */
 const AI_CONFIRM_PLAN = "Confirmed, proceed";
 const AI_CANCEL_PLAN =
-  "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation.";
+  "Cancelling the proposed plan - do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation.";
 
 function newSessionId() { return crypto.randomUUID(); }
 
@@ -66,7 +66,7 @@ function buildHistory(messages) {
         const input = (tc.input || "").length > 200 ? tc.input.slice(0, 200) + "..." : (tc.input || "");
         return `${tc.name}(${input})${tc.summary ? ` -> ${tc.summary}` : ""}`;
       }).join("\n");
-      content = `[ALREADY EXECUTED IN PREVIOUS TURN — DO NOT REPEAT OR IMITATE:\n${toolLines}]\n${content}`;
+      content = `[ALREADY EXECUTED IN PREVIOUS TURN - DO NOT REPEAT OR IMITATE:\n${toolLines}]\n${content}`;
     }
 
     if (m.plan) {

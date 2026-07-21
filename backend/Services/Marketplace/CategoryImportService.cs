@@ -268,7 +268,7 @@ public class CategoryImportService
             }
             catch
             {
-                // Non-critical — card mapping still works without price block
+                // Non-critical - card mapping still works without price block
             }
         }
 
@@ -332,13 +332,13 @@ public class CategoryImportService
         if (attributeMap.TryGetValue(field.Key, out var attributeId))
             return (FieldMappingSourceType.CategoryAttribute, null, attributeId);
 
-        // If nothing matched — a static empty value
+        // If nothing matched - a static empty value
         return (FieldMappingSourceType.Static, null, null);
     }
 
     /// <summary>
     /// Check whether a field is a base product field (SKU, name, description, price, stock, images, grouping).
-    /// These fields don't need attribute creation — they are handled by product fields or special mappings.
+    /// These fields don't need attribute creation - they are handled by product fields or special mappings.
     /// </summary>
     internal static bool IsBaseOrSpecialField(ExternalField field)
     {
@@ -368,7 +368,7 @@ public class CategoryImportService
         // Ozon attribute 4180 = Product name
         if (key == "4180") return true;
 
-        // Use Contains for Russian patterns, but only exact ones — "product name", not just "name"
+        // Use Contains for Russian patterns, but only exact ones - "product name", not just "name"
         // (otherwise "Color name" 10097, "Group name" 22390, etc. would also match)
         var exactPatterns = new[] { "name", "title" };
         var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435\u0020\u0442\u043e\u0432\u0430\u0440\u0430", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
@@ -425,7 +425,7 @@ public class CategoryImportService
             .ToList();
     }
 
-    /// <summary>Price-API keys with a fixed semantic target — AI must not guess substitutes.</summary>
+    /// <summary>Price-API keys with a fixed semantic target - AI must not guess substitutes.</summary>
     internal static bool IsStrictPriceSemanticKey(string key)
     {
         return key.Equals("price", StringComparison.OrdinalIgnoreCase)
@@ -544,7 +544,7 @@ public class CategoryImportService
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
 
-        // Exact match — these words clearly mean stock quantity
+        // Exact match - these words clearly mean stock quantity
         var exactPatterns = new[] { "stock", "\u043e\u0441\u0442\u0430\u0442\u043e\u043a", "\u043e\u0441\u0442\u0430\u0442\u043a\u0438", "quantity", "count" };
         if (exactPatterns.Any(p => keyLower == p || nameLower == p))
             return true;
@@ -553,7 +553,7 @@ public class CategoryImportService
         if (keyLower.StartsWith("stock_") || keyLower.EndsWith("_stock"))
             return true;
 
-        // Do NOT use Contains for the generic word "quantity" — otherwise fields like "Figurine quantity" would match
+        // Do NOT use Contains for the generic word "quantity" - otherwise fields like "Figurine quantity" would match
         // Only match if it's explicitly a stock field
         return false;
     }
@@ -688,7 +688,7 @@ public class CategoryImportService
         if (countryPatterns.Any(p => nameLower.Contains(p)))
             return "Country";
 
-        // Could not determine the group — return null (displayed as "Other" in the UI)
+        // Could not determine the group - return null (displayed as "Other" in the UI)
         return null;
     }
 
@@ -704,7 +704,7 @@ public class CategoryImportService
         if (sanitized.Length > CategoryAttribute.ATTRIBUTE_KEY_MAX_LENGTH)
             sanitized = sanitized.Substring(0, CategoryAttribute.ATTRIBUTE_KEY_MAX_LENGTH);
 
-        // If empty — generate a random one
+        // If empty - generate a random one
         if (string.IsNullOrEmpty(sanitized))
             sanitized = $"attr_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 

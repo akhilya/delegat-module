@@ -1,7 +1,4 @@
 <script>
-import PageSection from "@/components/pageSection.vue";
-import { Button } from "@/components/ui/button";
-import Badge from "@/components/ui/badge/Badge.vue";
 import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -13,21 +10,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
   LogToolbar,
-  LogTableFrame,
+  LogListPanel,
+  LogRefreshButton,
+  LogDateCell,
+  LogMethodCell,
+  LogPathCell,
+  LogStatusBadge,
+  LogFilterSelect,
+  LogHttpMethodFilter,
+  LogHttpStatusFilter,
+  LogExchangeDetail,
   LogCodeBlock,
   LogMetaGrid,
-  LogDetailSheet,
+  LOG_FILTER_ALL,
   formatLogDate as formatLogDateRaw,
-  httpStatusVariant,
 } from "@/components/logs";
 import { mapActions } from "vuex";
 import {
@@ -35,15 +32,10 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import { Loader2, RefreshCw, ScrollText } from "lucide-vue-next";
-
-const NONE = "__all__";
+import { ScrollText } from "lucide-vue-next";
 
 export default {
   components: {
-    PageSection,
-    Button,
-    Badge,
     PageHeader,
     Input,
     Table,
@@ -52,28 +44,25 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
     LogToolbar,
-    LogTableFrame,
+    LogListPanel,
+    LogRefreshButton,
+    LogDateCell,
+    LogMethodCell,
+    LogPathCell,
+    LogStatusBadge,
+    LogFilterSelect,
+    LogHttpMethodFilter,
+    LogHttpStatusFilter,
+    LogExchangeDetail,
     LogCodeBlock,
     LogMetaGrid,
-    LogDetailSheet,
-    Loader2,
-    RefreshCw,
     ScrollText,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
     loadMemberships();
-    return { storeTimezone: timezone };
+    return { storeTimezone: timezone, LOG_FILTER_ALL };
   },
   data() {
     return {
@@ -86,10 +75,10 @@ export default {
       detail: null,
       connections: [],
       filters: {
-        connectionId: NONE,
-        adapterKey: NONE,
-        method: NONE,
-        statusClass: NONE,
+        connectionId: LOG_FILTER_ALL,
+        adapterKey: LOG_FILTER_ALL,
+        method: LOG_FILTER_ALL,
+        statusClass: LOG_FILTER_ALL,
         q: "",
         limit: 50,
         offset: 0,
@@ -101,11 +90,17 @@ export default {
       if (this.errorCount === 0) return this.$t("marketplace.adapterLogsPage.noErrors");
       return this.$t("marketplace.adapterLogsPage.errorCount", { count: this.errorCount });
     },
-    adapterOptions() {
+    connectionOptions() {
+      return (this.connections || []).map((c) => ({
+        value: String(c.id),
+        label: `${c.name || c.adapterKey} · #${c.id}`,
+      }));
+    },
+    adapterKeyOptions() {
       const keys = new Set(
         (this.connections || []).map((c) => c.adapterKey).filter(Boolean),
       );
-      return [...keys].sort();
+      return [...keys].sort().map((k) => ({ value: k, label: k }));
     },
     hasMore() {
       return this.filters.offset + this.items.length < this.total;
@@ -114,7 +109,10 @@ export default {
       if (!this.detail) return [];
       return [
         { label: this.$t("marketplace.adapterLogsPage.dateTime"), value: this.formatLogDate(this.detail.createdAt) },
-        { label: this.$t("marketplace.adapterLogsPage.duration"), value: this.$t("marketplace.adapterLogsPage.durationMs", { ms: this.detail.durationMs }) },
+        {
+          label: this.$t("marketplace.adapterLogsPage.duration"),
+          value: this.$t("components.logs.durationMs", { ms: this.detail.durationMs }),
+        },
         { label: this.$t("marketplace.adapterLogsPage.adapter"), value: this.detail.adapterKey },
         {
           label: this.$t("marketplace.adapterLogsPage.connection"),
@@ -129,7 +127,6 @@ export default {
       "getAdapterHttpLogDetail",
       "getConnections",
     ]),
-    httpStatusVariant,
     formatLogDate(value) {
       return formatLogDateRaw(value, this.storeTimezone);
     },
@@ -148,10 +145,10 @@ export default {
     buildParams() {
       const f = this.filters;
       return {
-        connectionId: f.connectionId === NONE ? undefined : f.connectionId,
-        adapterKey: f.adapterKey === NONE ? undefined : f.adapterKey,
-        method: f.method === NONE ? undefined : f.method,
-        statusClass: f.statusClass === NONE ? undefined : f.statusClass,
+        connectionId: f.connectionId === LOG_FILTER_ALL ? undefined : f.connectionId,
+        adapterKey: f.adapterKey === LOG_FILTER_ALL ? undefined : f.adapterKey,
+        method: f.method === LOG_FILTER_ALL ? undefined : f.method,
+        statusClass: f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
         q: f.q || undefined,
         limit: f.limit,
         offset: f.offset,
@@ -229,79 +226,41 @@ export default {
       :title="$t('marketplace.adapterLogsPage.title')"
       :description="$t('marketplace.adapterLogsPage.description')"
     >
-      <Button variant="outline" :disabled="isLoading" @click="refresh">
-        <Loader2 v-if="isLoading" class="mr-2 size-4 animate-spin" />
-        <RefreshCw v-else class="mr-2 size-4" />
-        {{ $t("common.refresh") }}
-      </Button>
+      <LogRefreshButton :loading="isLoading" @click="refresh" />
     </PageHeader>
 
     <LogToolbar :summary="summaryLabel" :summary-alert="errorCount > 0">
-      <Select
+      <LogFilterSelect
         :model-value="filters.connectionId"
+        :all-value="LOG_FILTER_ALL"
+        :all-label="$t('marketplace.adapterLogsPage.allConnections')"
+        :placeholder="$t('marketplace.adapterLogsPage.connection')"
+        :options="connectionOptions"
+        trigger-class="h-9 w-full sm:w-52"
         @update:model-value="(v) => setFilter('connectionId', v)"
-      >
-        <SelectTrigger class="h-9 w-full sm:w-52">
-          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.connection')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.allConnections") }}</SelectItem>
-          <SelectItem
-            v-for="c in connections"
-            :key="c.id"
-            :value="String(c.id)"
-          >
-            {{ c.name || c.adapterKey }} · #{{ c.id }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
+      />
 
-      <Select
+      <LogFilterSelect
         :model-value="filters.adapterKey"
+        :all-value="LOG_FILTER_ALL"
+        :all-label="$t('marketplace.adapterLogsPage.allAdapters')"
+        :placeholder="$t('marketplace.adapterLogsPage.adapter')"
+        :options="adapterKeyOptions"
+        trigger-class="h-9 w-full sm:w-40"
         @update:model-value="(v) => setFilter('adapterKey', v)"
-      >
-        <SelectTrigger class="h-9 w-full sm:w-40">
-          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.adapter')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.allAdapters") }}</SelectItem>
-          <SelectItem v-for="k in adapterOptions" :key="k" :value="k">
-            {{ k }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
+      />
 
-      <Select
+      <LogHttpMethodFilter
         :model-value="filters.method"
+        :all-value="LOG_FILTER_ALL"
         @update:model-value="(v) => setFilter('method', v)"
-      >
-        <SelectTrigger class="h-9 w-full sm:w-32">
-          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.method')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.anyMethod") }}</SelectItem>
-          <SelectItem value="GET">GET</SelectItem>
-          <SelectItem value="POST">POST</SelectItem>
-          <SelectItem value="PUT">PUT</SelectItem>
-          <SelectItem value="DELETE">DELETE</SelectItem>
-        </SelectContent>
-      </Select>
+      />
 
-      <Select
+      <LogHttpStatusFilter
         :model-value="filters.statusClass"
+        :all-value="LOG_FILTER_ALL"
         @update:model-value="(v) => setFilter('statusClass', v)"
-      >
-        <SelectTrigger class="h-9 w-full sm:w-36">
-          <SelectValue :placeholder="$t('marketplace.adapterLogsPage.code')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="NONE">{{ $t("marketplace.adapterLogsPage.anyCode") }}</SelectItem>
-          <SelectItem value="2xx">2xx</SelectItem>
-          <SelectItem value="4xx">4xx</SelectItem>
-          <SelectItem value="5xx">5xx</SelectItem>
-          <SelectItem value="error">{{ $t("marketplace.adapterLogsPage.errors") }}</SelectItem>
-        </SelectContent>
-      </Select>
+      />
 
       <Input
         v-model="filters.q"
@@ -311,161 +270,92 @@ export default {
       />
     </LogToolbar>
 
-    <PageSection
+    <LogListPanel
       :loading="isLoading && items.length === 0"
       :empty="!isLoading && items.length === 0"
       :empty-icon="ScrollText"
       :empty-title="$t('marketplace.adapterLogsPage.emptyTitle')"
       :empty-description="$t('marketplace.adapterLogsPage.emptyDescription')"
+      :show-footer="items.length > 0"
+      :footer-count="items.length"
+      :footer-total="total"
+      :has-more="hasMore"
+      :more-loading="isLoading"
+      @load-more="loadMore"
     >
-      <LogTableFrame>
-        <Table class="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-40">{{ $t("marketplace.adapterLogsPage.dateTime") }}</TableHead>
-              <TableHead class="w-20">{{ $t("marketplace.adapterLogsPage.method") }}</TableHead>
-              <TableHead class="min-w-0">{{ $t("marketplace.adapterLogsPage.resource") }}</TableHead>
-              <TableHead class="w-36">{{ $t("marketplace.adapterLogsPage.adapter") }}</TableHead>
-              <TableHead class="w-24 text-right">{{ $t("marketplace.adapterLogsPage.response") }}</TableHead>
-              <TableHead class="w-20 text-right">{{ $t("marketplace.adapterLogsPage.code") }}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="row in items"
-              :key="row.id"
-              class="cursor-pointer hover:bg-muted/40"
-              @click="openDetail(row)"
-            >
-              <TableCell class="text-sm text-muted-foreground tabular-nums">
-                {{ formatLogDate(row.createdAt) }}
-              </TableCell>
-              <TableCell>
-                <code class="text-xs font-medium">{{ row.method }}</code>
-              </TableCell>
-              <TableCell class="max-w-0">
-                <div
-                  class="truncate font-mono text-xs"
-                  :title="row.path || row.url"
-                >
-                  {{ row.path || row.url }}
-                </div>
-              </TableCell>
-              <TableCell class="text-sm">
-                <div
-                  class="truncate"
-                  :title="connectionLabel(row.connectionId)"
-                >
-                  {{ row.adapterKey }}
-                </div>
-              </TableCell>
-              <TableCell
-                class="text-right text-sm text-muted-foreground tabular-nums"
-              >
-                {{ $t("marketplace.adapterLogsPage.durationMs", { ms: row.durationMs }) }}
-              </TableCell>
-              <TableCell class="text-right">
-                <Badge :variant="httpStatusVariant(row.statusCode)">
-                  {{ row.statusCode || "—" }}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-
-        <template v-if="items.length" #footer>
-          <span class="tabular-nums">{{ $t("marketplace.adapterLogsPage.itemsOfTotal", { count: items.length, total }) }}</span>
-          <Button
-            v-if="hasMore"
-            variant="outline"
-            size="sm"
-            :disabled="isLoading"
-            @click="loadMore"
+      <Table class="table-fixed">
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-40">{{ $t("marketplace.adapterLogsPage.dateTime") }}</TableHead>
+            <TableHead class="w-20">{{ $t("marketplace.adapterLogsPage.method") }}</TableHead>
+            <TableHead class="min-w-0">{{ $t("marketplace.adapterLogsPage.resource") }}</TableHead>
+            <TableHead class="w-36">{{ $t("marketplace.adapterLogsPage.adapter") }}</TableHead>
+            <TableHead class="w-24 text-right">{{ $t("marketplace.adapterLogsPage.response") }}</TableHead>
+            <TableHead class="w-20 text-right">{{ $t("marketplace.adapterLogsPage.code") }}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="row in items"
+            :key="row.id"
+            class="cursor-pointer hover:bg-muted/40"
+            @click="openDetail(row)"
           >
-            {{ $t("marketplace.adapterLogsPage.loadMore") }}
-          </Button>
-        </template>
-      </LogTableFrame>
-    </PageSection>
+            <TableCell>
+              <LogDateCell :value="row.createdAt" :timezone="storeTimezone" />
+            </TableCell>
+            <TableCell>
+              <LogMethodCell :method="row.method" />
+            </TableCell>
+            <TableCell class="max-w-0">
+              <LogPathCell :path="row.path || row.url" />
+            </TableCell>
+            <TableCell class="text-sm">
+              <div class="truncate" :title="connectionLabel(row.connectionId)">
+                {{ row.adapterKey }}
+              </div>
+            </TableCell>
+            <TableCell class="text-right text-sm text-muted-foreground tabular-nums">
+              {{ $t("components.logs.durationMs", { ms: row.durationMs }) }}
+            </TableCell>
+            <TableCell class="text-right">
+              <LogStatusBadge :status-code="row.statusCode" />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </LogListPanel>
 
-    <LogDetailSheet
+    <LogExchangeDetail
       v-model:open="detailOpen"
       :loading="isDetailLoading"
+      :detail="detail"
+      :meta-items="detailMeta"
       :title="
-        detail ? `${detail.method} · ${detail.statusCode}` : $t('marketplace.adapterLogsPage.request')
+        detail
+          ? `${detail.method} · ${detail.statusCode}`
+          : $t('marketplace.adapterLogsPage.request')
       "
       :description="detail?.path || '…'"
+      show-headers
+      json-bodies
     >
-      <Tabs
-        v-if="detail"
-        default-value="overview"
-        class="flex min-h-0 flex-1 flex-col"
-      >
-        <TabsList class="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">{{ $t("marketplace.adapterLogsPage.overview") }}</TabsTrigger>
-          <TabsTrigger value="request">{{ $t("marketplace.adapterLogsPage.request") }}</TabsTrigger>
-          <TabsTrigger value="response">{{ $t("marketplace.adapterLogsPage.response") }}</TabsTrigger>
-        </TabsList>
+      <template #meta>
+        <LogMetaGrid :items="detailMeta">
+          <template #item-3="{ item }">
+            <span class="truncate">{{ item.value }}</span>
+          </template>
+        </LogMetaGrid>
+      </template>
 
-        <div class="mt-4 min-h-0 flex-1 overflow-y-auto pb-2">
-          <TabsContent value="overview" class="mt-0 space-y-4">
-            <LogMetaGrid :items="detailMeta">
-              <template #item-3="{ item }">
-                <span class="truncate">{{ item.value }}</span>
-              </template>
-            </LogMetaGrid>
-            <div class="flex items-center justify-between gap-2 text-sm">
-              <span class="text-muted-foreground">{{ $t("marketplace.adapterLogsPage.code") }}</span>
-              <Badge :variant="httpStatusVariant(detail.statusCode)">
-                {{ detail.statusCode }}
-              </Badge>
-            </div>
-            <LogCodeBlock label="URL" :text="detail.url" max-height-class="max-h-28" />
-            <LogCodeBlock
-              v-if="detail.errorMessage"
-              :label="$t('marketplace.adapterLogsPage.error')"
-              :text="detail.errorMessage"
-              tone="destructive"
-              max-height-class="max-h-40"
-            />
-            <div class="space-y-1 text-xs text-muted-foreground">
-              <div>storeId: {{ detail.storeId }}</div>
-              <div>connectionId: {{ detail.connectionId }}</div>
-              <div v-if="detail.operationId">
-                operationId: {{ detail.operationId }}
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="request" class="mt-0 space-y-3">
-            <LogCodeBlock
-              :label="$t('marketplace.adapterLogsPage.headers')"
-              :text="detail.requestHeadersJson"
-              json
-              max-height-class="max-h-40"
-            />
-            <LogCodeBlock
-              :label="$t('marketplace.adapterLogsPage.body')"
-              :text="detail.requestBody"
-              json
-            />
-          </TabsContent>
-
-          <TabsContent value="response" class="mt-0 space-y-3">
-            <LogCodeBlock
-              :label="$t('marketplace.adapterLogsPage.headers')"
-              :text="detail.responseHeadersJson"
-              json
-              max-height-class="max-h-40"
-            />
-            <LogCodeBlock
-              :label="$t('marketplace.adapterLogsPage.body')"
-              :text="detail.responseBody"
-              json
-            />
-          </TabsContent>
+      <template #overview-extra="{ detail: d }">
+        <LogCodeBlock label="URL" :text="d.url" max-height-class="max-h-28" />
+        <div class="space-y-1 text-xs text-muted-foreground">
+          <div>storeId: {{ d.storeId }}</div>
+          <div>connectionId: {{ d.connectionId }}</div>
+          <div v-if="d.operationId">operationId: {{ d.operationId }}</div>
         </div>
-      </Tabs>
-    </LogDetailSheet>
+      </template>
+    </LogExchangeDetail>
   </div>
 </template>

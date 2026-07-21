@@ -135,6 +135,7 @@ public class CategoryController : ControllerBase
     /// <returns>The new category ID and a redirect path to its edit page.</returns>
     [HttpPost]
     [Route("/categories")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateCategory([FromBody] Category.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -170,6 +171,7 @@ public class CategoryController : ControllerBase
     /// <returns>A success indicator.</returns>
     [HttpPatch]
     [Route("/categories/{categoryId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateCategory(int categoryId, [FromBody] Category.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -206,6 +208,7 @@ public class CategoryController : ControllerBase
     /// <returns>A redirect path to the categories list.</returns>
     [HttpDelete]
     [Route("/categories/{categoryId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteCategory(int categoryId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -226,7 +229,7 @@ public class CategoryController : ControllerBase
             throw ApiException.BadRequest($"Cannot delete a category with {activeCount} products. Move or delete the products first.");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
-        // block the DELETE — detach them from the category (they stay in the trash)
+        // block the DELETE - detach them from the category (they stay in the trash)
         await _context.products.IgnoreQueryFilters()
             .Where(p => p.categoryId == categoryId && p.deletedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.categoryId, (int?)null));
@@ -280,6 +283,7 @@ public class CategoryController : ControllerBase
     /// <returns>The new attribute ID.</returns>
     [HttpPost]
     [Route("/categories/{categoryId}/attributes")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateAttribute(int categoryId, [FromBody] CategoryAttribute.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -342,6 +346,7 @@ public class CategoryController : ControllerBase
     /// <returns>A success indicator.</returns>
     [HttpPatch]
     [Route("/categories/{categoryId}/attributes/{attributeId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateAttribute(int categoryId, int attributeId, [FromBody] CategoryAttribute.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -387,6 +392,7 @@ public class CategoryController : ControllerBase
     /// <returns>A success indicator.</returns>
     [HttpDelete]
     [Route("/categories/{categoryId}/attributes/{attributeId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteAttribute(int categoryId, int attributeId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -427,6 +433,7 @@ public class CategoryController : ControllerBase
     /// <returns>A success indicator.</returns>
     [HttpPost]
     [Route("/categories/{categoryId}/attributes/reorder")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ReorderAttributes(int categoryId, [FromBody] List<int> attributeIds)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

@@ -234,7 +234,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                     if (pending.batchId != null)
                         await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                            $"Error: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
+                            $"Error: {pending.productName ?? pending.productId.ToString()} - {pending.lastError}");
                 }
             }
         }
@@ -378,7 +378,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Error: {pending.productName ?? pending.productId.ToString()} — {pending.lastError}");
+                        $"Error: {pending.productName ?? pending.productId.ToString()} - {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);

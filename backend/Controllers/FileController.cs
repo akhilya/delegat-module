@@ -53,6 +53,7 @@ public class FileController : ControllerBase
 
     [HttpPost]
     [Route("/products/{productId}/bulk-move")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkMove(int productId, [FromBody] BulkMoveRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -111,7 +112,7 @@ public class FileController : ControllerBase
                 if (request.targetFolderId == folder.Id)
                     throw ApiException.BadRequest("Cannot move a folder into itself");
 
-                // Cycle detection: walk up from target, if we hit any folder being moved — cycle
+                // Cycle detection: walk up from target, if we hit any folder being moved - cycle
                 if (request.targetFolderId.HasValue)
                 {
                     var currentId = request.targetFolderId;
@@ -182,6 +183,7 @@ public class FileController : ControllerBase
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPut]
     [Route("/products/{productId}/files")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)] // 10GB
     public async Task<IActionResult> PutProductFiles(int productId, IFormFile[] files, [FromQuery] int? folderId = null)
@@ -248,6 +250,7 @@ public class FileController : ControllerBase
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPost]
     [Route("/products/{productId}/files/stream")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
     public async Task<IActionResult> StreamUploadFiles(int productId, [FromQuery] int? folderId = null)
     {
@@ -365,6 +368,7 @@ public class FileController : ControllerBase
 
     [HttpPatch]
     [Route("/products/{productId}/files/{id}/move")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> MoveFile(int productId, int id, [FromBody] MoveFileRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -404,6 +408,7 @@ public class FileController : ControllerBase
 
     [HttpPatch]
     [Route("/products/{productId}/files/{id}/rename")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RenameFile(int productId, int id, [FromBody] RenameFileRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.name))
@@ -437,6 +442,7 @@ public class FileController : ControllerBase
 
     [HttpDelete]
     [Route("/products/{productId}/files/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteProductFile(int productId, int id)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -476,6 +482,7 @@ public class FileController : ControllerBase
 
     [HttpPost]
     [Route("/products/{productId}/files/bulk-delete")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkDeleteProductFiles(int productId, [FromBody] BulkDeleteFilesRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -522,6 +529,7 @@ public class FileController : ControllerBase
 
     [HttpPost]
     [Route("/files/{id}/share")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> ShareFile(int id, [FromBody] ShareFileRequest request)
     {
         var allowedTtl = new[] { 1, 24, 168, 720 };
@@ -575,6 +583,7 @@ public class FileController : ControllerBase
 
     [HttpDelete]
     [Route("/files/shares/{token}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RevokeShare(string token)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -603,6 +612,7 @@ public class FileController : ControllerBase
 
     [HttpPatch]
     [Route("/products/{productId}/files/{id}/public")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> SetFilePublic(int productId, int id, [FromBody] SetPublicRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -680,9 +690,9 @@ public class SharedFileController : ControllerBase
 }
 
 /// <summary>
-/// Serves permanently public product files — no authentication required.
+/// Serves permanently public product files - no authentication required.
 /// Files must have isPublic = true to be accessible here.
-/// URL format: /api/pub/files/{token}/{filename} — filename segment is decorative;
+/// URL format: /api/pub/files/{token}/{filename} - filename segment is decorative;
 /// the server always serves the actual file from the DB record.
 /// </summary>
 [ApiController]

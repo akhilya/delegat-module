@@ -34,7 +34,7 @@ const pathD  = computed(() => bezier.value[0]);
 const labelX = computed(() => bezier.value[1]);
 const labelY = computed(() => bezier.value[2]);
 
-// Reversed bezier: same curve, opposite direction — used for leftward arrows so
+// Reversed bezier: same curve, opposite direction - used for leftward arrows so
 // rotate="auto" with forward keyPoints correctly points the arrowhead left.
 const revPathD = computed(() => {
   const nums = (pathD.value.match(/-?[\d.]+(?:e[+-]?\d+)?/g) || []).map(Number);

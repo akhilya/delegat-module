@@ -81,11 +81,11 @@ public class CategoryToolHandlers : ToolHandlerBase
 
         var activeCount = await _context.products.CountAsync(x => x.categoryId == p.Id, ct);
         if (activeCount > 0)
-            return (new { error = $"The category has {activeCount} products — move or delete them first" },
+            return (new { error = $"The category has {activeCount} products - move or delete them first" },
                 $"Cannot delete: category has {activeCount} products");
 
         // Trashed products are hidden by the global query filter, but their FK rows still
-        // block the DELETE — detach them from the category (they stay in the trash)
+        // block the DELETE - detach them from the category (they stay in the trash)
         await _context.products.IgnoreQueryFilters()
             .Where(x => x.categoryId == p.Id && x.deletedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.categoryId, (int?)null), ct);
@@ -183,7 +183,7 @@ public class CategoryToolHandlers : ToolHandlerBase
         return (new { categories = cats, count = cats.Count }, $"Found {cats.Count} categories with field '{p.Search}'");
     }
 
-    // Select/MultiSelect options are stored as a JSON string — parse so the model sees real values
+    // Select/MultiSelect options are stored as a JSON string - parse so the model sees real values
     private static object? ParseAttributeOptions(string? optionsJson)
     {
         if (string.IsNullOrWhiteSpace(optionsJson)) return null;

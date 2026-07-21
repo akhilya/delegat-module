@@ -2,7 +2,7 @@
 
 ## Users
 
-E-commerce managers and small business owners who manage product listings across Russian marketplaces (Ozon, Wildberries). Their context is operational — they work through product lists, edit attribute details, map attributes, and monitor sync/integration status. Speed and clarity are paramount; they are in the interface for sustained, repetitive catalog work, not casual visits.
+E-commerce managers and small business owners who manage product listings across Russian marketplaces (Ozon, Wildberries). Their context is operational - they work through product lists, edit attribute details, map attributes, and monitor sync/integration status. Speed and clarity are paramount; they are in the interface for sustained, repetitive catalog work, not casual visits.
 
 ## Product Purpose
 
@@ -10,7 +10,7 @@ A catalog-management dashboard for multi-marketplace sellers. It centralizes pro
 
 ## Brand Personality
 
-Professional, Organized, Trustworthy — in the spirit of Notion or Linear. Competent and reliable, never flashy or playful. The voice is plain and operational (all UI text is Russian). Users should feel their data is correct and their actions are unambiguous.
+Professional, Organized, Trustworthy - in the spirit of Notion or Linear. Competent and reliable, never flashy or playful. The voice is plain and operational (all UI text is Russian). Users should feel their data is correct and their actions are unambiguous.
 
 ## Anti-references
 
@@ -20,11 +20,11 @@ Professional, Organized, Trustworthy — in the spirit of Notion or Linear. Comp
 
 ## Design Principles
 
-1. **Clarity over decoration** — every element serves a purpose; no ornamental UI. Structure is carried by whitespace, type weight, and layout hierarchy.
-2. **Data density with breathing room** — show enough to be efficient across tables and forms, but keep comfortable spacing so the interface never feels cramped.
-3. **Consistent patterns** — reuse the established component library (Card, Table, Form, Dialog) uniformly: same spacing, same interaction patterns, same visual weight across pages.
-4. **Semantic color only** — neutral palette by default; reserve color for status and actions (destructive / warning / success) so attention stays on content, not chrome.
-5. **Accessible by default** — WCAG AA: sufficient contrast, visible focus states, proper ARIA, full keyboard navigation.
+1. **Clarity over decoration** - every element serves a purpose; no ornamental UI. Structure is carried by whitespace, type weight, and layout hierarchy.
+2. **Data density with breathing room** - show enough to be efficient across tables and forms, but keep comfortable spacing so the interface never feels cramped.
+3. **Consistent patterns** - reuse the established component library (Card, Table, Form, Dialog) uniformly: same spacing, same interaction patterns, same visual weight across pages.
+4. **Semantic color only** - neutral palette by default; reserve color for status and actions (destructive / warning / success) so attention stays on content, not chrome.
+5. **Accessible by default** - WCAG AA: sufficient contrast, visible focus states, proper ARIA, full keyboard navigation.
 
 ## Accessibility & Inclusion
 

@@ -14,7 +14,7 @@ namespace Delegat.Services.Ai;
 ///
 /// The public surface is provider-agnostic: requests come in as Anthropic-shaped
 /// <see cref="AiRequest"/> DTOs and stream events go out as Anthropic-shaped
-/// <see cref="AiStreamEvent"/>s — the agentic loop in AiChatService is unaware of the provider.
+/// <see cref="AiStreamEvent"/>s - the agentic loop in AiChatService is unaware of the provider.
 /// </summary>
 public class AiApiClient
 {
@@ -35,7 +35,7 @@ public class AiApiClient
 
     /// <summary>
     /// Creates an HttpClient routed through a proxy URI (http://... or socks5://user:pass@host:port).
-    /// WebProxy does NOT parse credentials from the URI automatically — they must be set explicitly.
+    /// WebProxy does NOT parse credentials from the URI automatically - they must be set explicitly.
     /// SocketsHttpHandler supports SOCKS5 in .NET 6+; credentials are passed via WebProxy.Credentials.
     /// Returns null when proxyUrl is absent so callers can skip the proxy branch.
     /// </summary>
@@ -45,7 +45,7 @@ public class AiApiClient
 
         var uri = new Uri(proxyUrl);
 
-        // Strip credentials from the address — WebProxy ignores them in the URI and needs them set separately
+        // Strip credentials from the address - WebProxy ignores them in the URI and needs them set separately
         var proxyAddress = new Uri($"{uri.Scheme}://{uri.Host}:{uri.Port}");
         var proxy = new System.Net.WebProxy(proxyAddress);
 
@@ -82,7 +82,7 @@ public class AiApiClient
             ? StreamAnthropicAsync(model, request, ct)
             : StreamOpenAiAsync(model, request, ct);
 
-        // yield is not allowed inside try/catch bodies — drive the enumerator manually so a
+        // yield is not allowed inside try/catch bodies - drive the enumerator manually so a
         // provider exception becomes an "error" event instead of tearing down the SSE response
         var enumerator = inner.GetAsyncEnumerator(ct);
         try
@@ -148,7 +148,7 @@ public class AiApiClient
     {
         var options = new ChatCompletionOptions
         {
-            // Serialized as max_completion_tokens — required by newer OpenAI models,
+            // Serialized as max_completion_tokens - required by newer OpenAI models,
             // accepted by modern OpenAI-compatible servers
             MaxOutputTokenCount = request.max_tokens,
         };
@@ -358,7 +358,7 @@ public class AiApiClient
             }
         }
 
-        // Stream ended without a finish_reason chunk — still close what we have
+        // Stream ended without a finish_reason chunk - still close what we have
         if (openIndex.HasValue)
         {
             foreach (var evt in CloseToolBlock(openIndex.Value, toolArgs))
@@ -388,7 +388,7 @@ public class AiApiClient
 
     private Anthropic.AnthropicClient BuildAnthropicClient(AiModelConfig model)
     {
-        // Custom endpoint (proxy) — only override when it's not the default API host
+        // Custom endpoint (proxy) - only override when it's not the default API host
         string? baseUrl = null;
         if (!model.apiUrl.Contains("api.anthropic.com", StringComparison.OrdinalIgnoreCase))
             baseUrl = new Uri(model.apiUrl).GetLeftPart(UriPartial.Authority);
@@ -551,7 +551,7 @@ public class AiApiClient
 
         await foreach (var streamEvent in client.Messages.CreateStreaming(createParams, cancellationToken: ct))
         {
-            // The SDK yields Anthropic-native events as a union — TryPick each variant
+            // The SDK yields Anthropic-native events as a union - TryPick each variant
             if (streamEvent.TryPickContentBlockStart(out var start))
             {
                 var block = start.ContentBlock.TryPickToolUse(out var toolUse)

@@ -7,7 +7,7 @@ using Delegat.Infrastructure.Middleware;
 namespace Delegat.Controllers.PublicApi;
 
 /// <summary>
-/// Public API v1 — current user and accessible stores.
+/// Public API v1 - current user and accessible stores.
 /// </summary>
 [ApiController]
 [PublicApiAuthorize]

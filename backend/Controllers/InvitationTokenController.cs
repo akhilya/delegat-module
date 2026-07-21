@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
-using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 
 namespace Delegat.Controllers;
@@ -11,28 +10,22 @@ namespace Delegat.Controllers;
 [JwtAuthorize]
 public class InvitationTokenController : ControllerBase
 {
-    private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
 
     public InvitationTokenController(
-        ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider)
     {
-        _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
     }
 
     [HttpGet]
     [Route("/tokens/")]
+    [RequiresPermission(Permissions.UsersManage)]
     public async Task<IActionResult> GetInvitationTokens()
     {
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only administrators can view invitation tokens");
-
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
         var tokens = await tokenRepo.FindAllAsync(
             t => true,
@@ -44,12 +37,9 @@ public class InvitationTokenController : ControllerBase
 
     [HttpPost]
     [Route("/tokens/")]
+    [RequiresPermission(Permissions.UsersManage)]
     public async Task<IActionResult> PostInvitationToken()
     {
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null || !user.isAdmin)
-            throw ApiException.Forbidden("Only administrators can create invitation tokens");
-
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
         var newToken = new InvitationToken();
         newToken.AddFill(new InvitationToken.AddForm());

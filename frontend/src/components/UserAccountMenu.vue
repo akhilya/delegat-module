@@ -41,7 +41,7 @@ const props = defineProps({
     default: "navbar",
     validator: (value) => ["navbar", "sidebar"].includes(value),
   },
-  /** DropdownContent side — sidebar footer usually opens upward */
+  /** DropdownContent side - sidebar footer usually opens upward */
   side: { type: String, default: undefined },
   align: { type: String, default: undefined },
 });

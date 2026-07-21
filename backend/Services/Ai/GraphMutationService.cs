@@ -40,7 +40,7 @@ public class GraphMutationService
         {
             if (!string.IsNullOrEmpty(field.aliasOf))
                 throw new InvalidOperationException(
-                    $"Field '{adapterFieldKey}' is merged with '{field.aliasOf}' — connect '{field.aliasOf}' or call unmerge_adapter_fields first");
+                    $"Field '{adapterFieldKey}' is merged with '{field.aliasOf}' - connect '{field.aliasOf}' or call unmerge_adapter_fields first");
             return field;
         }
 
@@ -48,7 +48,7 @@ public class GraphMutationService
         {
             var hint = sinkKind == "price" ? "get_price_fields" : "get_external_fields";
             throw new InvalidOperationException(
-                $"Field '{adapterFieldKey}' not found — check the key via {hint}");
+                $"Field '{adapterFieldKey}' not found - check the key via {hint}");
         }
 
         field = new AdapterField
@@ -62,8 +62,8 @@ public class GraphMutationService
         return field;
     }
 
-    // Connect a field directly (AdapterFieldSource — no intermediate nodes).
-    // sink: "card" (default) | "price" — price-API block (Ozon/WB dedicated price fields).
+    // Connect a field directly (AdapterFieldSource - no intermediate nodes).
+    // sink: "card" (default) | "price" - price-API block (Ozon/WB dedicated price fields).
     public async Task ConnectFieldAsync(int mappingId, string adapterFieldKey,
         string sourceType, string? sourceField, int? sourceAttributeId,
         string? sink = null, ExternalField? fieldDef = null, CancellationToken ct = default)
@@ -213,7 +213,7 @@ public class GraphMutationService
         await _context.SaveChangesAsync(ct);
     }
 
-    // Analyze coverage of card fields (legacy — card sink only)
+    // Analyze coverage of card fields (legacy - card sink only)
     public async Task<MappingCoverage> GetCoverageAsync(int mappingId, CancellationToken ct = default)
     {
         var report = await GetCoverageReportAsync(mappingId, ct);
@@ -282,7 +282,7 @@ public class GraphMutationService
         if (!byKey.TryGetValue(primaryFieldKey, out var primary))
             throw new InvalidOperationException($"Field '{primaryFieldKey}' not found in the mapping");
         if (!string.IsNullOrEmpty(primary.aliasOf))
-            throw new InvalidOperationException($"Field '{primaryFieldKey}' is itself an alias of '{primary.aliasOf}' — unmerge it first");
+            throw new InvalidOperationException($"Field '{primaryFieldKey}' is itself an alias of '{primary.aliasOf}' - unmerge it first");
 
         foreach (var key in aliasFieldKeys)
         {
@@ -291,10 +291,10 @@ public class GraphMutationService
             if (!byKey.TryGetValue(key, out var alias))
                 throw new InvalidOperationException($"Field '{key}' not found in the mapping");
             if (byKey.Values.Any(f => f.aliasOf == key))
-                throw new InvalidOperationException($"Field '{key}' is the primary for other aliases — unmerge them first");
+                throw new InvalidOperationException($"Field '{key}' is the primary for other aliases - unmerge them first");
 
             alias.aliasOf = primaryFieldKey;
-            // Remove the alias's own connections — its value now comes from the primary
+            // Remove the alias's own connections - its value now comes from the primary
             alias.source = null;
             graph.edges.RemoveAll(e =>
                 e.target == sinkNode.id && e.targetHandle == $"f:{key}");
@@ -431,7 +431,7 @@ public class GraphMutationService
             var field = sinkNode.data.fields.FirstOrDefault(f => f.fieldKey == suggestion.AdapterFieldKey);
             if (field == null)
             {
-                // Field missing from the graph — append it when the adapter actually defines it
+                // Field missing from the graph - append it when the adapter actually defines it
                 var def = adapterFieldDefs?.FirstOrDefault(d => d.Key == suggestion.AdapterFieldKey);
                 if (def == null)
                 {
@@ -440,7 +440,7 @@ public class GraphMutationService
                 }
                 field = ResolveField(sinkNode, suggestion.AdapterFieldKey!, def, sinkKind);
             }
-            // Alias fields take the primary's value — connecting them separately would undo the merge
+            // Alias fields take the primary's value - connecting them separately would undo the merge
             if (!string.IsNullOrEmpty(field.aliasOf)) { result.AlreadyConnected++; continue; }
             if (IsFieldConnected(field, graph, sinkNode)) { result.AlreadyConnected++; continue; }
 
@@ -465,7 +465,7 @@ public class GraphMutationService
                 }
             }
 
-            // Drop invented modifier types (e.g. REGEXEXTRACT) — keep the connection itself
+            // Drop invented modifier types (e.g. REGEXEXTRACT) - keep the connection itself
             List<AiModifierSpec>? modifiers = null;
             if (suggestion.Modifiers is { Count: > 0 })
             {
@@ -483,7 +483,7 @@ public class GraphMutationService
                 try { data = BuildStaticNodeData(suggestion.StaticValue, fieldDef); }
                 catch (InvalidOperationException)
                 {
-                    // Suggested value doesn't match any allowed option — skip just this field
+                    // Suggested value doesn't match any allowed option - skip just this field
                     result.NoSource++;
                     continue;
                 }
@@ -1057,8 +1057,8 @@ public class GraphMutationService
         });
     }
 
-    // Builds a source node with the display metadata the editor expects (label + valueType) —
-    // bare { attributeId } renders as "—" with pin type "any" in the frontend.
+    // Builds a source node with the display metadata the editor expects (label + valueType) -
+    // bare { attributeId } renders as "-" with pin type "any" in the frontend.
     private async Task<GraphNode> BuildSourceNodeAsync(
         string nodeId, string sourceType, string? sourceField, int? attributeId, CancellationToken ct)
     {
@@ -1130,7 +1130,7 @@ public class GraphMutationService
         Delegat.Enums.AttributeType.MultiSelect => "multiselect",
         Delegat.Enums.AttributeType.Select => "select",
         null => "any",
-        _ => "string", // Text, Barcode — single string value
+        _ => "string", // Text, Barcode - single string value
     };
 }
 

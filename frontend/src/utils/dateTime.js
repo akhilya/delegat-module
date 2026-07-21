@@ -1,12 +1,14 @@
-import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { getLocale, toBcp47 } from "@/i18n";
+
+/** Technical fallback when store timezone is unknown (not a product catalog default). */
+const FALLBACK_TZ = "UTC";
 
 function intlLocale() {
   return toBcp47(getLocale());
 }
 
 export function getStoreTimezone(store) {
-  return store?.timezone || DEFAULT_TIMEZONE;
+  return store?.timezone || FALLBACK_TZ;
 }
 
 /**
@@ -27,11 +29,11 @@ export function parseServerUtc(value) {
  * Format a server timestamp in the given IANA timezone (store setting).
  * @returns {{ date: string, time: string, combined: string }}
  */
-export function formatDateTime(iso, timezone = DEFAULT_TIMEZONE, options = {}) {
-  if (!iso) return { date: "—", time: "—", combined: "—" };
+export function formatDateTime(iso, timezone = FALLBACK_TZ, options = {}) {
+  if (!iso) return { date: "-", time: "-", combined: "-" };
   const d = parseServerUtc(iso);
-  if (!d) return { date: "—", time: "—", combined: "—" };
-  const tz = timezone || DEFAULT_TIMEZONE;
+  if (!d) return { date: "-", time: "-", combined: "-" };
+  const tz = timezone || FALLBACK_TZ;
   const loc = intlLocale();
   const date = d.toLocaleDateString(loc, {
     timeZone: tz,
@@ -50,13 +52,13 @@ export function formatDateTime(iso, timezone = DEFAULT_TIMEZONE, options = {}) {
   return { date, time, combined: `${date} ${time}` };
 }
 
-export function formatDateTimeCell(iso, timezone = DEFAULT_TIMEZONE) {
+export function formatDateTimeCell(iso, timezone = FALLBACK_TZ) {
   const { date, time } = formatDateTime(iso, timezone);
   return { date, time };
 }
 
 /** Single-line datetime; pass `{ withSeconds: true }` for logs. */
-export function formatDateTimeCombined(iso, timezone = DEFAULT_TIMEZONE, options = {}) {
+export function formatDateTimeCombined(iso, timezone = FALLBACK_TZ, options = {}) {
   const timeOpts = options.withSeconds
     ? { second: "2-digit", ...(options.time || {}) }
     : options.time;
@@ -64,18 +66,18 @@ export function formatDateTimeCombined(iso, timezone = DEFAULT_TIMEZONE, options
 }
 
 /** Time only (HH:MM or with seconds). */
-export function formatTimeOnly(iso, timezone = DEFAULT_TIMEZONE, options = {}) {
+export function formatTimeOnly(iso, timezone = FALLBACK_TZ, options = {}) {
   return formatDateTime(iso, timezone, {
     time: { hour12: false, ...options },
   }).time;
 }
 
 /** Date only (pass Intl date options as the third argument). */
-export function formatDateOnly(iso, timezone = DEFAULT_TIMEZONE, dateOptions = {}) {
+export function formatDateOnly(iso, timezone = FALLBACK_TZ, dateOptions = {}) {
   const d = parseServerUtc(iso);
-  if (!d) return "—";
+  if (!d) return "-";
   const opts = {
-    timeZone: timezone || DEFAULT_TIMEZONE,
+    timeZone: timezone || FALLBACK_TZ,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -90,11 +92,11 @@ export function formatDateOnly(iso, timezone = DEFAULT_TIMEZONE, dateOptions = {
 /**
  * Calendar day key in a timezone: "YYYY-MM-DD" for bucketing (AI history, etc.).
  */
-export function calendarDayKey(iso, timezone = DEFAULT_TIMEZONE) {
+export function calendarDayKey(iso, timezone = FALLBACK_TZ) {
   const d = parseServerUtc(iso) || (iso instanceof Date ? iso : null);
   if (!d || Number.isNaN(d.getTime())) return null;
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone || DEFAULT_TIMEZONE,
+    timeZone: timezone || FALLBACK_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -107,7 +109,7 @@ export function calendarDayKey(iso, timezone = DEFAULT_TIMEZONE) {
 }
 
 /** Today / yesterday / N days ago keys relative to `now` in the store timezone. */
-export function calendarDayKeyNow(timezone = DEFAULT_TIMEZONE) {
+export function calendarDayKeyNow(timezone = FALLBACK_TZ) {
   return calendarDayKey(new Date(), timezone);
 }
 

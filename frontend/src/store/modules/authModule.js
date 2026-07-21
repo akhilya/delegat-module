@@ -1,5 +1,5 @@
 import { useAxios } from "@vueuse/integrations/useAxios";
-import { http, router, resetAuthCache } from "@/main";
+import { http, router, resetAuthCache, loadMe } from "@/main";
 import { PAGE_SIGN_IN } from "@/router";
 
 export default {
@@ -66,12 +66,16 @@ export default {
      * @returns {Promise<void>}
      */
     async getMe(ctx, { onSuccess, onError }) {
-      return await useAxios(`/auth/me`, { method: "GET", cache: false }, http, {
-        immediate: true,
-        abortPrevious: true,
-      })
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
+      try {
+        const me = await loadMe();
+        if (!me) {
+          onError(new Error("Failed to load current user"));
+          return;
+        }
+        onSuccess({ data: { value: me } });
+      } catch (error) {
+        onError(error);
+      }
     },
 
     /**

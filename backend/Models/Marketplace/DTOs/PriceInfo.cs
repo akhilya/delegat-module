@@ -45,12 +45,12 @@ public record PriceInfo(
     decimal? MinPrice = null,
 
     /// <summary>
-    /// Seller's article / offer_id — used as identifier fallback when ExternalProductId is unavailable.
+    /// Seller's article / offer_id - used as identifier fallback when ExternalProductId is unavailable.
     /// </summary>
     string? ExternalSku = null,
 
     /// <summary>
-    /// Discount percent (0–99) for marketplaces that use base price + discount (e.g. Wildberries)
+    /// Discount percent (0-99) for marketplaces that use base price + discount (e.g. Wildberries)
     /// </summary>
     int? Discount = null,
 

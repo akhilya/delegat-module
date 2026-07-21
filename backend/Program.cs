@@ -1,7 +1,12 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Delegat;
 using Delegat.Infrastructure.Auth;
@@ -18,6 +23,7 @@ using Delegat.Services.Ai.Tools;
 using Delegat.Services.Ai.Tools.Handlers;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Plugins;
+using Delegat.Services.PlatformLink;
 using Delegat.Marketplace.SDK;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -46,7 +52,7 @@ var mysqlSettings = builder.Configuration.GetMySqlSettings();
 var minioSettings = builder.Configuration.GetMinIOSettings();
 var jwtSettings = builder.Configuration.GetJwtSettings();
 
-// Encryption — required; fail fast if missing or invalid
+// Encryption - required; fail fast if missing or invalid
 var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
 if (string.IsNullOrWhiteSpace(encryptionKey))
     throw new InvalidOperationException(
@@ -129,18 +135,48 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            var db = context.HttpContext.RequestServices.GetRequiredService<DataContext>();
-            var isActive = await db.Users
-                .AsNoTracking()
-                .AnyAsync(u => u.Id == userId && u.isActive);
+            var cache = context.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
+            var activeCacheKey = $"perm:user-active:{userId}";
+            if (!cache.TryGetValue(activeCacheKey, out bool isActive))
+            {
+                var db = context.HttpContext.RequestServices.GetRequiredService<DataContext>();
+                isActive = await db.Users
+                    .AsNoTracking()
+                    .AnyAsync(u => u.Id == userId && u.isActive);
+                if (isActive)
+                    cache.Set(activeCacheKey, isActive, TimeSpan.FromMinutes(2));
+            }
 
             if (!isActive)
+            {
                 context.Fail("User is inactive");
+                return;
+            }
+
+            if (context.Principal?.Identity is ClaimsIdentity identity)
+            {
+                var permissionService = context.HttpContext.RequestServices.GetRequiredService<IPermissionService>();
+                // Remove any stale permission/role claims then hydrate from DB
+                foreach (var claim in identity.FindAll(Permissions.ClaimType).ToList())
+                    identity.RemoveClaim(claim);
+                foreach (var claim in identity.FindAll(ClaimTypes.Role).ToList())
+                    identity.RemoveClaim(claim);
+                foreach (var claim in identity.FindAll("is_admin").ToList())
+                    identity.RemoveClaim(claim);
+                await permissionService.HydrateClaimsAsync(identity, userId);
+            }
         }
     };
 })
 .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
     PublicApiAuthorizeAttribute.Scheme, _ => { });
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddAuthorization();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 
 // Infrastructure Services
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -148,6 +184,10 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<Delegat.Controllers.PublicApi.PublicApiStoreContext>();
 builder.Services.AddScoped<UserApiKeyService>();
+builder.Services.AddSingleton<ApiRequestLogService>();
+builder.Services.AddSingleton<IApiRequestLogger>(sp => sp.GetRequiredService<ApiRequestLogService>());
+builder.Services.AddSingleton<IApiRequestLogQueryService>(sp => sp.GetRequiredService<ApiRequestLogService>());
+builder.Services.AddHostedService<ApiRequestLogCleanupService>();
 builder.Services.AddHttpClient("MinIOStorage", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(10);
@@ -166,6 +206,21 @@ builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton(minioSettings);
 builder.Services.AddSingleton(mysqlSettings);
 builder.Services.AddSingleton<IDatabaseDumpService, DatabaseDumpService>();
+
+// Platform Link (Control Plane m2m) + Reference Catalog
+var platformLinkOptions = PlatformLinkOptions.FromEnvironment();
+builder.Services.AddSingleton(platformLinkOptions);
+builder.Services.AddHttpClient<IPlatformLinkClient, PlatformLinkClient>((sp, client) =>
+{
+    var opts = sp.GetRequiredService<PlatformLinkOptions>();
+    if (!string.IsNullOrWhiteSpace(opts.ControlPlaneUrl))
+        client.BaseAddress = new Uri(opts.ControlPlaneUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IReferenceCatalogService, ReferenceCatalogService>();
+builder.Services.AddSingleton<IPlatformErrorReporter, PlatformErrorReporter>();
+builder.Services.AddHostedService<ReferenceCatalogSyncHostedService>();
+builder.Services.AddHostedService<PlatformHeartbeatHostedService>();
 
 // Marketplace Integration Services - Plugin System
 
@@ -276,7 +331,7 @@ builder.Services.AddSwaggerGen(options =>
     });
     options.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Description = "Paste the full API key only (starts with dk_). Do not type the word Bearer — Swagger adds it.",
+        Description = "Paste the full API key only (starts with dk_). Do not type the word Bearer - Swagger adds it.",
         Name = "Authorization",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
         Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
@@ -388,77 +443,30 @@ builder.Services.AddControllers(options =>
 
 var app = builder.Build();
 
-// Apply migrations automatically (with retry for slow MySQL startup)
+const string RolesAndPermissionsMigration = "20260721134512_RolesAndPermissions";
+const string DropStoreAdministratorsMigration = "20260721134624_DropStoreAdministrators";
+
+// Apply migrations automatically (with retry for slow MySQL startup).
+// Two-phase: stop before DropStoreAdministrators so PermissionService can migrate legacy store-admins via EF.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
+    var migrator = db.GetService<IMigrator>()
+        ?? throw new InvalidOperationException("EF IMigrator is not available.");
 
-    // Log what EF thinks still needs to be applied. This helps diagnose drift
-    // (e.g. aiModelConfigs table exists but "20260704100000_AddAiTables" row is missing from history).
     var pendingMigrations = db.Database.GetPendingMigrations().ToList();
     if (pendingMigrations.Any())
     {
         logger.LogInformation("Pending migrations to apply ({Count}): {Migrations}", pendingMigrations.Count, string.Join(", ", pendingMigrations));
     }
 
-    const int maxRetries = 30;
-    bool applied = false;
-
-    for (int i = 0; i < maxRetries; i++)
-    {
-        try
-        {
-            logger.LogInformation("Applying database migrations (attempt {Attempt}/{Max})...", i + 1, maxRetries);
-            await db.Database.MigrateAsync();
-            logger.LogInformation("Database migrations applied successfully.");
-            applied = true;
-            break;
-        }
-        catch (Exception ex)
-        {
-            string message = ex.InnerException?.Message ?? ex.Message;
-
-            // Detect common symptoms of history vs. actual schema drift (the situation
-            // that produces "Table 'aiModelConfigs' already exists" even when history "looks up to date").
-            bool isSchemaDrift = message.Contains("already exists", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("Duplicate column", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("1050") || message.Contains("1060"); // MySQL error codes
-
-            if (isSchemaDrift)
-            {
-                logger.LogError(
-                    "Schema drift detected while applying migrations. " +
-                    "An object (table/column/index) already exists but the migration that should have created it " +
-                    "is not recorded in __EFMigrationsHistory (common with the AI tables after using recovery guards). " +
-                    "Message: {Message}", message);
-            }
-            else
-            {
-                logger.LogWarning("Database not ready (attempt {Attempt}/{Max}): {Message}", i + 1, maxRetries, message);
-            }
-
-            if (i == maxRetries - 1)
-            {
-                // Surface a clear, actionable error instead of swallowing the last failure.
-                throw new InvalidOperationException(
-                    "Failed to apply EF Core database migrations after all retries. " +
-                    "If the logs mention 'already exists' for aiModelConfigs/aiOperations (or duplicate column), " +
-                    "your __EFMigrationsHistory is out of sync with the actual tables in the DB. " +
-                    "Common recovery: connect to the dev MySQL and INSERT the missing MigrationId row(s), " +
-                    "or remove the mysql docker volume and let migrations run on a fresh DB. " +
-                    $"Last error: {message}", ex);
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(3));
-        }
-    }
-
-    if (!applied)
-    {
-        // Shouldn't normally reach here because the last iteration throws, but belt-and-suspenders.
-        throw new InvalidOperationException("Database migrations could not be applied.");
-    }
+    var applied = db.Database.GetAppliedMigrations().ToHashSet();
+    // Do not target an older migration if Drop already applied - that would roll back.
+    string? phase1Target = applied.Contains(DropStoreAdministratorsMigration)
+        ? null
+        : RolesAndPermissionsMigration;
+    await ApplyMigrationsWithRetryAsync(migrator, logger, phase1Target);
 }
 
 // Run platform data migrations
@@ -467,11 +475,23 @@ using (var scope = app.Services.CreateScope())
     await DataMigrationRunner.RunAsync(scope.ServiceProvider);
 }
 
-// Seed admin user if configured
+// Seed admin user if configured; migrate legacy access while StoreAdministrators still exists
 var adminSettings = builder.Configuration.GetAdminSeedSettings();
 using (var scope = app.Services.CreateScope())
 {
     await DatabaseSeeder.SeedAsync(scope.ServiceProvider, adminSettings);
+    var permissionService = scope.ServiceProvider.GetRequiredService<IPermissionService>();
+    await permissionService.MigrateLegacyAccessAsync();
+}
+
+// Apply remaining migrations (DropStoreAdministrators)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
+    var migrator = db.GetService<IMigrator>()
+        ?? throw new InvalidOperationException("EF IMigrator is not available.");
+    await ApplyMigrationsWithRetryAsync(migrator, logger, targetMigration: null);
 }
 
 // --reset-admin mode: generate a new admin password, print JSON to stdout, exit.
@@ -486,6 +506,12 @@ if (args.Contains("--reset-admin"))
             resetScope.ServiceProvider,
             adminSettings.Email,
             adminSettings.Username);
+        var permissionService = resetScope.ServiceProvider.GetRequiredService<IPermissionService>();
+        var userManager = resetScope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var adminUser = await userManager.FindByNameAsync(result.username)
+            ?? await userManager.FindByEmailAsync(result.email);
+        if (adminUser != null)
+            await permissionService.EnsureOwnerAccessAsync(adminUser);
         Console.WriteLine(result.ToJson());
         return 0;
     }
@@ -527,7 +553,7 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1-public/swagger.json", "Public API v1");
-    // SPA/internal API docs stay off production — partners only need Public API v1.
+    // SPA/internal API docs stay off production - partners only need Public API v1.
     if (!app.Environment.IsProduction())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SPA API");
     c.DocumentTitle = "Delegat API";
@@ -536,6 +562,7 @@ app.UseSwaggerUI(c =>
 
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<PublicApiRequestLoggingMiddleware>();
 app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -563,3 +590,57 @@ app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthCh
 
 await app.RunAsync("http://0.0.0.0:5000");
 return 0;
+
+static async Task ApplyMigrationsWithRetryAsync(
+    IMigrator migrator,
+    ILogger logger,
+    string? targetMigration)
+{
+    const int maxRetries = 30;
+    for (int i = 0; i < maxRetries; i++)
+    {
+        try
+        {
+            var label = targetMigration ?? "latest";
+            logger.LogInformation(
+                "Applying database migrations to {Target} (attempt {Attempt}/{Max})...",
+                label, i + 1, maxRetries);
+            await migrator.MigrateAsync(targetMigration);
+            logger.LogInformation("Database migrations applied successfully (target={Target}).", label);
+            return;
+        }
+        catch (Exception ex)
+        {
+            string message = ex.InnerException?.Message ?? ex.Message;
+
+            bool isSchemaDrift = message.Contains("already exists", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Duplicate column", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("1050") || message.Contains("1060");
+
+            if (isSchemaDrift)
+            {
+                logger.LogError(
+                    "Schema drift detected while applying migrations. " +
+                    "An object (table/column/index) already exists but the migration that should have created it " +
+                    "is not recorded in __EFMigrationsHistory. Message: {Message}", message);
+            }
+            else
+            {
+                logger.LogWarning("Database not ready (attempt {Attempt}/{Max}): {Message}", i + 1, maxRetries, message);
+            }
+
+            if (i == maxRetries - 1)
+            {
+                throw new InvalidOperationException(
+                    "Failed to apply EF Core database migrations after all retries. " +
+                    "If the logs mention 'already exists', __EFMigrationsHistory may be out of sync. " +
+                    $"Last error: {message}", ex);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    throw new InvalidOperationException("Database migrations could not be applied.");
+}
+

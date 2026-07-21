@@ -48,7 +48,7 @@ public class ThumbnailController : ControllerBase
         if (file == null)
             throw ApiException.NotFound("File not found", code: "file_not_found");
 
-        // Include soft-deleted products — files remain accessible in trash views
+        // Include soft-deleted products - files remain accessible in trash views
         var product = await _context.products
             .IgnoreQueryFilters()
             .AsNoTracking()

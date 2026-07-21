@@ -4,9 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Single typographic source of truth — Onest is loaded from Google Fonts in index.html.
+  /* Single typographic source of truth - Onest is loaded from Google Fonts in index.html.
      Fallback chain: cross-platform Cyrillic-safe stack. We deliberately AVOID `system-ui`
-     here — it resolves to different fonts on different OSes (SF Pro / Segoe UI / various)
+     here - it resolves to different fonts on different OSes (SF Pro / Segoe UI / various)
      and was the root cause of "different browsers, different fonts". */
   font-family:
     "Onest", "Helvetica Neue", "Arial", "Liberation Sans", sans-serif;
@@ -16,7 +16,7 @@
 
   color-scheme: light;
 
-  /* Tabular numerals — digits align in tables and prices. */
+  /* Tabular numerals - digits align in tables and prices. */
   font-feature-settings: "tnum";
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -64,17 +64,17 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* Z-index scale — single source of truth.
+  /* Z-index scale - single source of truth.
      Portaled overlays (SelectContent, DropdownMenu, Popover etc.) are teleported to <body>
      and must exceed the dialog z-index (--z-modal) so they render above dialogs and sheets.
-     The operations slide-over is persistent chrome on a high band (9996–9998);
+     The operations slide-over is persistent chrome on a high band (9996-9998);
      a blocking confirmation must sit above everything, so --z-alert is the ceiling. */
   --z-sticky: 20;    /* sticky table headers / sub-nav */
-  --z-overlay: 9997; /* dialog & sheet backdrops — above FABs (9996) */
+  --z-overlay: 9997; /* dialog & sheet backdrops - above FABs (9996) */
   --z-modal: 9998;   /* dialog & sheet content */
-  --z-popover: 9999; /* selects, dropdowns, popovers, comboboxes, tooltips — must exceed --z-modal */
+  --z-popover: 9999; /* selects, dropdowns, popovers, comboboxes, tooltips - must exceed --z-modal */
   --z-toast: 10000;  /* sonner toasts */
-  --z-alert: 10001;  /* blocking confirmations — ceiling */
+  --z-alert: 10001;  /* blocking confirmations - ceiling */
 }
 
 button {
@@ -229,7 +229,7 @@ button {
   h5,
   h6 {
     font-family: var(--font-display);
-    /* Tighter optical letter-spacing on headings — at larger sizes default tracking
+    /* Tighter optical letter-spacing on headings - at larger sizes default tracking
        reads loose. Slight negative tracking is the standard editorial polish. */
     letter-spacing: -0.018em;
     line-height: 1.2;
@@ -257,7 +257,7 @@ textarea {
   color-scheme: dark;
 }
 
-/* Tabular numerals for number inputs — digits align vertically */
+/* Tabular numerals for number inputs - digits align vertically */
 input[type="number"] {
   font-variant-numeric: tabular-nums;
 }

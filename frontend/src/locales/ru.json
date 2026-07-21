@@ -34,7 +34,7 @@
     "settings": "Настройки",
     "more": "Ещё",
     "or": "или",
-    "emDash": "—",
+    "emDash": "-",
     "confirmAction": "Подтвердите действие",
     "brandDescription": "панель управления товарами и адаптерами",
     "copied": "Скопировано",
@@ -63,7 +63,28 @@
     },
     "appSidebarStoreSwitcher": {
       "storePlaceholder": "Магазин",
-      "storesLabel": "Магазины"
+      "storesLabel": "Магазины",
+      "noMembershipTitle": "Нет доступа к магазинам",
+      "noMembershipBody": "Вы не являетесь участником ни одного магазина. Обратитесь к администратору, чтобы вас добавили.",
+      "noStoresTitle": "Магазинов пока нет",
+      "noStoresBody": "На платформе ещё не создано ни одного магазина. Создайте первый магазин, чтобы начать работу.",
+      "noStoresLink": "Перейти к магазинам"
+    },
+    "logs": {
+      "method": "Метод",
+      "anyMethod": "Любой метод",
+      "code": "Статус",
+      "anyStatus": "Любой статус",
+      "errors": "Ошибки",
+      "loadMore": "Загрузить ещё",
+      "itemsOfTotal": "{count} из {total}",
+      "overview": "Обзор",
+      "request": "Запрос",
+      "response": "Ответ",
+      "body": "Тело",
+      "headers": "Заголовки",
+      "error": "Ошибка",
+      "durationMs": "{ms} мс"
     },
     "barcodeInput": {
       "onlyDigitsError": "Только цифры",
@@ -137,7 +158,7 @@
     },
     "productImagesEditor": {
       "productImagesTitle": "Изображения товара",
-      "dragToReorderHint": "— перетащите для сортировки",
+      "dragToReorderHint": "- перетащите для сортировки",
       "otherImagesTitle": "Остальные изображения"
     },
     "rightActionStrip": {
@@ -165,30 +186,13 @@
     "productAttributeValidation": {
       "requiredField": "Обязательное поле",
       "enterNumber": "Введите число"
-    },
-    "timezones": {
-      "moscow": "Москва (UTC+3)",
-      "kaliningrad": "Калининград (UTC+2)",
-      "samara": "Самара (UTC+4)",
-      "yekaterinburg": "Екатеринбург (UTC+5)",
-      "omsk": "Омск (UTC+6)",
-      "krasnoyarsk": "Красноярск (UTC+7)",
-      "irkutsk": "Иркутск (UTC+8)",
-      "yakutsk": "Якутск (UTC+9)",
-      "vladivostok": "Владивосток (UTC+10)",
-      "magadan": "Магадан (UTC+11)",
-      "kamchatka": "Камчатка (UTC+12)",
-      "almaty": "Алматы (UTC+5)",
-      "tashkent": "Ташкент (UTC+5)",
-      "minsk": "Минск (UTC+3)",
-      "kyiv": "Киев (UTC+2)"
     }
   },
   "store": {
     "aiChatModule": {
       "connectionError": "Ошибка соединения: {message}",
       "confirmAndExecute": "Confirmed, proceed",
-      "cancelPlanMessage": "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
+      "cancelPlanMessage": "Cancelling the proposed plan - do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
     },
     "operationsModule": {
       "defaultTitle": "Операция",
@@ -206,6 +210,7 @@
     "groups": "Группы",
     "trash": "Корзина",
     "categories": "Категории",
+    "barcodes": "Штрихкоды",
     "storage": "Хранилище",
     "marketplace": "Маркетплейс",
     "connections": "Подключения",
@@ -232,7 +237,7 @@
     "plugins": "Плагины",
     "errorLogs": "Логи ошибок",
     "adapterLogs": "Логи адаптеров",
-    "tokens": "Токены"
+    "api": "API"
   },
   "theme": {
     "light": "Светлая тема",
@@ -240,7 +245,7 @@
   },
   "app": {
     "mobileWarningTitle": "Лучше с компьютера",
-    "mobileWarningBody": "{brand} — панель управления товарами, оптимизированная для работы на компьютере. На мобильных устройствах часть функций может работать некорректно.",
+    "mobileWarningBody": "{brand} - панель управления товарами, оптимизированная для работы на компьютере. На мобильных устройствах часть функций может работать некорректно.",
     "continue": "Продолжить",
     "switchingStore": "Переключение магазина..."
   },
@@ -308,6 +313,7 @@
     "operations": "Операции",
     "storage": "Хранилище",
     "categories": "Категории",
+    "barcodes": "Штрихкоды",
     "groups": "Группы товаров",
     "tools": "Инструменты",
     "attributes": "Глобальные атрибуты",
@@ -324,7 +330,7 @@
     "stores": "Магазины",
     "store": "Магазин",
     "users": "Пользователи",
-    "tokens": "Токены",
+    "api": "API",
     "errorLogs": "Логи ошибок",
     "plugins": "Плагины",
     "aiModels": "AI Модели",
@@ -368,7 +374,7 @@
     "stopGeneration": "Остановить генерацию",
     "send": "Отправить",
     "deleteConversationTitle": "Удалить диалог?",
-    "deleteConversationDescription": "Это действие необратимо — история сообщений будет удалена.",
+    "deleteConversationDescription": "Это действие необратимо - история сообщений будет удалена.",
     "today": "Сегодня",
     "yesterday": "Вчера",
     "thisWeek": "Эта неделя",
@@ -728,7 +734,7 @@
         "mappingToTransferPlaceholder": "Маппинг для переноса",
         "mappingFallback": "Маппинг #{id}",
         "deleteWithoutMoving": "Удалить без переноса",
-        "deleteWithoutMovingHint": "Товары останутся связанными с маркетплейсом, но потеряют маппинг — экспорт будет недоступен, пока не назначите новый.",
+        "deleteWithoutMovingHint": "Товары останутся связанными с маркетплейсом, но потеряют маппинг - экспорт будет недоступен, пока не назначите новый.",
         "noReplacementMappingHint": "Перенести некуда: другого маппинга для этой категории нет. Чтобы перенести, сначала создайте или продублируйте маппинг.",
         "linkedProducts": "Связанные товары",
         "productFallback": "Товар #{id}",
@@ -804,19 +810,19 @@
       "categoryIdPlaceholder": "Выберите категорию выше или введите ID",
       "categoryIdDescription": "Можно указать ID вручную, если категории нет в списке.",
       "selectCategoryTitle": "Выберите категорию",
-      "selectCategoryDescription": "Сначала укажите категорию адаптера слева — здесь появятся настройки импорта.",
+      "selectCategoryDescription": "Сначала укажите категорию адаптера слева - здесь появятся настройки импорта.",
       "loadingCategoryFields": "Загрузка полей категории...",
       "whereToImportTitle": "Куда импортировать",
       "whereToImportDescription": "Создайте новую локальную категорию или дополните существующую.",
       "createNewCategory": "Создать новую категорию",
       "categoryNameLabel": "Название категории",
-      "categoryNamePlaceholder": "Оставьте пустым — возьмём название из адаптера",
+      "categoryNamePlaceholder": "Оставьте пустым - возьмём название из адаптера",
       "intoExistingCategory": "В существующую категорию",
       "localCategoryLabel": "Локальная категория",
       "selectCategoryPlaceholder": "Выберите категорию...",
       "searchCategoryPlaceholder": "Поиск категории...",
       "baseFieldsCount": "{count} базовых полей",
-      "baseFieldsHint": "— SKU, название, описание, цена, остатки и изображения — будут автоматически связаны с полями товара.",
+      "baseFieldsHint": "- SKU, название, описание, цена, остатки и изображения - будут автоматически связаны с полями товара.",
       "attributesForImportTitle": "Атрибуты для импорта ({selected} / {total})",
       "attributesForImportDescription": "Выберите дополнительные поля категории, которые нужно перенести.",
       "deselectAll": "Снять все",
@@ -858,13 +864,13 @@
       "export": "Экспорт",
       "import": "Импорт",
       "rearrangeBlocksTitle": "Переставить блоки?",
-      "rearrangeBlocksDescription": "Все блоки будут автоматически перестроены — текущее расположение будет потеряно.",
+      "rearrangeBlocksDescription": "Все блоки будут автоматически перестроены - текущее расположение будет потеряно.",
       "rearrange": "Переставить",
       "previewTitle": "Предпросмотр",
       "previewSheetDescription": "Сводка всех полей. Изменённые значения выделены цветом.",
       "visualTab": "Просмотр",
       "rawDataTab": "Данные",
-      "imagesCountHint": "{count} изображений. Если не отображаются — URL может быть недоступен из браузера.",
+      "imagesCountHint": "{count} изображений. Если не отображаются - URL может быть недоступен из браузера.",
       "sourceAbbr": "Исх:",
       "resultAbbr": "Рез:",
       "noActiveFieldsTitle": "Нет активных полей",
@@ -935,7 +941,9 @@
       "userType": "Пользовательский",
       "reload": "Перезагрузить",
       "deletePluginTitle": "Удалить плагин?",
-      "deletePluginDescription": "Вы уверены что хотите удалить плагин «{name}»? Подключения, использующие этот плагин, перестанут работать."
+      "deletePluginDescription": "Вы уверены что хотите удалить плагин «{name}»? Подключения, использующие этот плагин, перестанут работать.",
+      "registryTitle": "Доступно из реестра",
+      "registryDescription": "Адаптеры, опубликованные на Control Plane. Пока установка - загрузкой DLL (скачивание из реестра позже)."
     },
     "graph": {
       "pinTypes": {
@@ -958,16 +966,16 @@
       "priceHeader": "Поля цен",
       "aliasMergedTitle": "Объединено с «{primary}»: при экспорте получает его значение, при импорте игнорируется",
       "aliasMergedShortTitle": "Объединено с «{primary}»",
-      "fanOutSourceUsed": "Этот источник уже используется другим полем — возможен конфликт данных. Если поля дублируют друг друга — объедините их в настройках поля.",
-      "fanOutImportDisabled": "Импорт отключён: этот источник уже используется несколькими полями адаптера. Если поля дублируют друг друга — объедините их в настройках поля.",
+      "fanOutSourceUsed": "Этот источник уже используется другим полем - возможен конфликт данных. Если поля дублируют друг друга - объедините их в настройках поля.",
+      "fanOutImportDisabled": "Импорт отключён: этот источник уже используется несколькими полями адаптера. Если поля дублируют друг друга - объедините их в настройках поля.",
       "fanOutPriceUsed": "Источник уже используется другим полем цен.",
-      "sourceClickTitle": "{label} — нажмите для настройки",
+      "sourceClickTitle": "{label} - нажмите для настройки",
       "unitLabel": "Ед. изм.: {unit}",
       "rangeFrom": "от {value}",
       "rangeTo": "до {value}",
       "keyLabel": "Ключ: {key}",
       "modifierFallback": "Модификатор",
-      "irreversibleWarning": "Необратимо при импорте: исходное значение не восстановить — поле будет записано как есть.",
+      "irreversibleWarning": "Необратимо при импорте: исходное значение не восстановить - поле будет записано как есть.",
       "valueRowLabel": "значение",
       "previewMore": "ещё",
       "previewLess": "свернуть",
@@ -1110,7 +1118,7 @@
         "fieldNotConnectedPrice": "Поле цен «{label}» не подключено",
         "nodeWithoutInput": "Узел без входа",
         "unknownModifier": "Неизвестный модификатор: {type}",
-        "graphHasCycle": "Граф содержит цикл — он не будет выполнен"
+        "graphHasCycle": "Граф содержит цикл - он не будет выполнен"
       },
       "contextMenu": {
         "searchPlaceholder": "Поиск узлов…",
@@ -1173,7 +1181,7 @@
         "sourceLabel": "Источник",
         "sourceChangeHint": "Чтобы изменить источник, добавьте другой узел из меню (ПКМ/Tab) и переподключите.",
         "importableLabel": "Импортируемый",
-        "importableHint": "Снятие флажка — только экспорт: при импорте с маркетплейса значение не записывается в этот источник.",
+        "importableHint": "Снятие флажка - только экспорт: при импорте с маркетплейса значение не записывается в этот источник.",
         "valueLabel": "Значение",
         "choosePlaceholder": "Выберите значение...",
         "enterValuePlaceholder": "Введите значение...",
@@ -1201,7 +1209,7 @@
         "pinNamePlaceholder": "Название пина",
         "pinDefaultLabel": "Пин",
         "addPin": "Добавить пин",
-        "pinOverrideHint": "Значение ниже — по умолчанию; его можно переопределить, подав провод в пин слева.",
+        "pinOverrideHint": "Значение ниже - по умолчанию; его можно переопределить, подав провод в пин слева.",
         "pinOverrideBadge": "пин-переопределение",
         "chooseModelPlaceholder": "Выберите модель",
         "noAiModelsHint": "Нет подключённых или включённых моделей. Администратор может добавить и включить их в Настройки → ИИ.",
@@ -1224,21 +1232,21 @@
       "fieldsAnalysis": "Анализ полей",
       "noFields": "нет полей",
       "edges": "Рёбра",
-      "hideDebug": "Shift+Tab — скрыть",
+      "hideDebug": "Shift+Tab - скрыть",
       "fieldsAddedCount": "Добавлено полей: {count}",
-      "schemaUpToDate": "Схема актуальна — новых полей нет",
+      "schemaUpToDate": "Схема актуальна - новых полей нет",
       "graphSaved": "Граф сохранён",
       "invalidFileFormat": "Неверный формат: ожидается объект с nodes и edges",
       "mappingExported": "Маппинг экспортирован",
-      "mappingImported": "Маппинг импортирован — нажмите «Сохранить»",
+      "mappingImported": "Маппинг импортирован - нажмите «Сохранить»",
       "sourceValueLabel": "Исходное значение",
       "aiModelFallback": "Модель #{id}"
     },
     "optionMapEditor": {
       "title": "Соответствия: вариант → вариант адаптера",
-      "sourceOptionsHint": "Слева — варианты источника. Подключите блок к атрибуту категории с вариантами.",
+      "sourceOptionsHint": "Слева - варианты источника. Подключите блок к атрибуту категории с вариантами.",
       "loadFromFieldPlaceholder": "Загрузить варианты из поля адаптера...",
-      "loadFromFieldHint": "Или подключите блок к полю адаптера — варианты подтянутся автоматически.",
+      "loadFromFieldHint": "Или подключите блок к полю адаптера - варианты подтянутся автоматически.",
       "sourceOptionPlaceholder": "Вариант источника",
       "adapterOptionPlaceholder": "Вариант адаптера",
       "addMapping": "Добавить соответствие",
@@ -1249,8 +1257,8 @@
     },
     "valueMapEditor": {
       "title": "Соответствия: вариант → valueId",
-      "sourceOptionsHint": "Слева — варианты источника (атрибут категории). Подключите блок к атрибуту с вариантами.",
-      "valueIdHint": "Справа — valueId поля адаптера (вводится вручную). Подпись показывается, если valueId совпадает с известной опцией.",
+      "sourceOptionsHint": "Слева - варианты источника (атрибут категории). Подключите блок к атрибуту с вариантами.",
+      "valueIdHint": "Справа - valueId поля адаптера (вводится вручную). Подпись показывается, если valueId совпадает с известной опцией.",
       "sourceOptionPlaceholder": "Вариант источника",
       "addMapping": "Добавить соответствие",
       "unmappedWarning": "Не указаны соответствия для {mapped} из {total} значений источника",
@@ -1584,13 +1592,13 @@
       "selectPlaceholder": "Выберите...",
       "unknownTypePlaceholder": "Неизвестный тип: {type}",
       "emptyTitle": "Нет глобальных атрибутов",
-      "emptyDescription": "Добавьте глобальные атрибуты в настройках магазина — они появятся здесь."
+      "emptyDescription": "Добавьте глобальные атрибуты в настройках магазина - они появятся здесь."
     },
     "productAttributeForm": {
       "selectPlaceholder": "Выберите...",
       "unknownTypePlaceholder": "Неизвестный тип: {type}",
       "emptyTitle": "Нет атрибутов для заполнения",
-      "emptyDescription": "Добавьте атрибуты в категорию товара — они появятся здесь."
+      "emptyDescription": "Добавьте атрибуты в категорию товара - они появятся здесь."
     },
     "bulkAdapterDialog": {
       "title": "Действие на адаптере ({count} товаров)",
@@ -1723,8 +1731,8 @@
       "linksWillBreakAfterMovePrefix": "После переноса будут разорваны",
       "withAdaptersSuffix": "с адаптерами",
       "originalHasLinksPrefix": "У оригинала есть",
-      "moveLinksExplanation": "Связи с адаптерами не переносятся — их нужно будет настроить заново в целевом магазине.",
-      "cloneLinksExplanation": "Новый товар будет создан без связей с адаптерами — оригинал сохранит свои связи.",
+      "moveLinksExplanation": "Связи с адаптерами не переносятся - их нужно будет настроить заново в целевом магазине.",
+      "cloneLinksExplanation": "Новый товар будет создан без связей с адаптерами - оригинал сохранит свои связи.",
       "confirmBreakLinksLabel": "Я понимаю, что связи с адаптерами будут разорваны",
       "alsoMovesLabel": "Также будет перемещено:",
       "alsoCopiesLabel": "Также будет скопировано:",
@@ -1843,16 +1851,21 @@
     },
     "importExcelDialog": {
       "title": "Импорт из Excel",
+      "stepUpload": "Загрузка",
+      "stepPreview": "Проверка",
+      "stepDone": "Готово",
       "stepUploadDescription": "Загрузите файл .xlsx с изменениями товаров",
       "stepPreviewDescription": "Проверьте изменения перед применением",
-      "stepApplyingDescription": "Применение изменений...",
+      "stepApplyingDescription": "Применение изменений…",
       "stepResultDescription": "Результат импорта",
+      "processingFile": "Читаем файл…",
       "dropzoneTitle": "Перетащите файл сюда или нажмите для выбора",
       "dropzoneHint": "Поддерживается формат .xlsx",
-      "totalRows": "Всего строк:",
-      "changedCount": "Изменено:",
-      "unchangedCount": "Без изменений:",
-      "errorCount": "Ошибок:",
+      "browseFile": "Выбрать файл",
+      "totalRows": "Всего строк",
+      "changedCount": "Изменено",
+      "unchangedCount": "Без изменений",
+      "errorCount": "Ошибок",
       "errorsTitle": "Ошибки",
       "rowLabel": "Строка {row}",
       "productIdSuffix": "(товар #{id})",
@@ -1985,7 +1998,7 @@
       "sections": {
         "mainData": {
           "title": "Основные данные",
-          "description": "Артикул, штрихкод, название и цена. Количество и цена по размерам — на вкладке «Размеры»."
+          "description": "Артикул, штрихкод, название и цена. Количество и цена по размерам - на вкладке «Размеры»."
         },
         "stock": {
           "title": "Остатки",
@@ -2073,7 +2086,7 @@
         "error": "Ошибка"
       },
       "newGroupTitle": "Новая группа",
-      "newGroupHint": "Задайте название и описание — затем добавьте товары для объединения на маркетплейсе",
+      "newGroupHint": "Задайте название и описание - затем добавьте товары для объединения на маркетплейсе",
       "editGroupHint": "Название и описание группы в каталоге. Описание видно только внутри системы.",
       "actions": {
         "createGroup": "Создать группу",
@@ -2090,11 +2103,11 @@
       "sections": {
         "groupProducts": {
           "title": "Товары в группе",
-          "description": "{count} {unit}. Порядок строк определяет порядок вариантов в объединённой карточке — перетащите строки, чтобы изменить порядок."
+          "description": "{count} {unit}. Порядок строк определяет порядок вариантов в объединённой карточке - перетащите строки, чтобы изменить порядок."
         },
         "marketplaceMerge": {
           "title": "Объединение на маркетплейсах",
-          "description": "Ozon объединяет через поле в карточке — после привязки переэкспортируйте товары. Wildberries — через API слияния, если товары уже экспортированы.",
+          "description": "Ozon объединяет через поле в карточке - после привязки переэкспортируйте товары. Wildberries - через API слияния, если товары уже экспортированы.",
           "refreshStatuses": "Обновить статусы",
           "noConnections": "Нет подключённых адаптеров. Подключите маркетплейс в разделе «Адаптеры».",
           "checkingCapabilities": "Проверка возможностей адаптеров…",
@@ -2155,6 +2168,23 @@
       "attributesHeader": "Атрибуты",
       "deleteTitle": "Удалить категорию?",
       "deleteDescription": "Вы уверены что хотите удалить категорию «{name}»? Это действие нельзя отменить."
+    },
+    "barcodesPage": {
+      "breadcrumb": "Штрихкоды",
+      "title": "Штрихкоды",
+      "description": "Товаров со штрихкодом: {count}",
+      "searchPlaceholder": "Поиск по названию или SKU",
+      "columnBarcode": "Штрихкод",
+      "downloadSelected": "Скачать выбранные ({count})",
+      "downloadAll": "Скачать все",
+      "downloadOne": "Скачать PNG",
+      "clearSelection": "Сбросить выбор",
+      "noneSelected": "Выберите товары для скачивания",
+      "downloadEmpty": "Нет штрихкодов для скачивания",
+      "downloadedCount": "Скачано штрихкодов: {count}",
+      "pageRange": "{from}-{to} из {total}",
+      "emptyTitle": "Нет штрихкодов",
+      "emptyDescription": "Здесь появятся товары с EAN-штрихкодами"
     },
     "notFoundPage": {
       "errorCode": "Ошибка 404",
@@ -2243,7 +2273,7 @@
       "sections": {
         "mainData": {
           "title": "Основные данные",
-          "description": "Категория, артикул, штрихкод, название и цена. Количество и цена по размерам — если у категории включены размеры."
+          "description": "Категория, артикул, штрихкод, название и цена. Количество и цена по размерам - если у категории включены размеры."
         },
         "stock": {
           "title": "Остатки",
@@ -2336,9 +2366,9 @@
       "sizeGridLabel": "Размерная сетка",
       "hasSizesLabel": "Товары имеют размеры",
       "attributesCardTitle": "Атрибуты категории",
-      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара — перетащите строки, чтобы изменить порядок.",
+      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара - перетащите строки, чтобы изменить порядок.",
       "noAttributesTitle": "Нет атрибутов",
-      "noAttributesDescription": "Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики",
+      "noAttributesDescription": "Атрибуты определяют свойства товаров - размер, цвет, материал и другие характеристики",
       "addAttribute": "Добавить атрибут",
       "keyLabel": "Ключ",
       "groupLabel": "Группа",
@@ -2358,10 +2388,10 @@
       "export": "Экспорт",
       "import": "Импорт",
       "optionsWord": "вариантов",
-      "largeOptionsHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+      "largeOptionsHint": "Список хранится в JSON - редактируйте через импорт и экспорт",
       "clearOptions": "Очистить",
-      "optionsPlaceholderExample": "Красный, Синий, Зелёный — или value:подпись",
-      "optionsFormatHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+      "optionsPlaceholderExample": "Красный, Синий, Зелёный - или value:подпись",
+      "optionsFormatHint": "JSON, CSV или текст - по одному варианту на строку или через запятую",
       "additionalSection": "Дополнительно",
       "defaultValueLabel": "Значение по умолчанию",
       "notSelectedPlaceholder": "Не выбрано",
@@ -2417,7 +2447,7 @@
       },
       "empty": {
         "title": "Нет глобальных атрибутов",
-        "description": "Глобальные атрибуты доступны во всех категориях — удобно для общих свойств вроде бренда или страны"
+        "description": "Глобальные атрибуты доступны во всех категориях - удобно для общих свойств вроде бренда или страны"
       },
       "table": {
         "name": "Название",
@@ -2445,10 +2475,10 @@
         "exportButton": "Экспорт",
         "importButton": "Импорт",
         "optionsCountSuffix": "вариантов",
-        "optionsStoredHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+        "optionsStoredHint": "Список хранится в JSON - редактируйте через импорт и экспорт",
         "clearButton": "Очистить",
-        "optionsPlaceholder": "Красный, Синий, Зелёный — или value:подпись",
-        "optionsTextareaHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+        "optionsPlaceholder": "Красный, Синий, Зелёный - или value:подпись",
+        "optionsTextareaHint": "JSON, CSV или текст - по одному варианту на строку или через запятую",
         "sectionAdditional": "Дополнительно",
         "defaultValueLabel": "Значение по умолчанию",
         "notSelectedPlaceholder": "Не выбрано",
@@ -2509,9 +2539,11 @@
       "excelDialog": {
         "title": "Редактирование из таблицы",
         "description": "Действие для выбранных {count} товаров",
-        "exporting": "Экспорт...",
+        "exporting": "Экспорт…",
         "downloadTemplate": "Скачать шаблон редактирования",
-        "uploadChanges": "Загрузить изменения из файла"
+        "uploadChanges": "Загрузить изменения из файла",
+        "exportHint": "Получите .xlsx с выбранными товарами для правки офлайн",
+        "importHint": "Примените изменения из заполненного шаблона - с предпросмотром"
       },
       "bulkTrashConfirm": {
         "description": "Выбранные товары будут перемещены в корзину. Их можно будет восстановить.",
@@ -2524,7 +2556,7 @@
     },
     "aiModelsPage": {
       "apiUrlRequiredError": "Сначала укажите API URL",
-      "modelsNotFoundError": "Модели не найдены — проверьте URL и ключ",
+      "modelsNotFoundError": "Модели не найдены - проверьте URL и ключ",
       "settingsSaved": "Настройки сохранены",
       "fillRequiredFieldsError": "Заполните название, API URL и Model ID",
       "apiKeyRequiredError": "API ключ обязателен при создании",
@@ -2573,11 +2605,11 @@
       "addModelDescription": "Укажите параметры подключения к AI API",
       "modelAdded": "Модель добавлена",
       "optionalSuffix": "(опционально)",
-      "baseUrlOnlyPrefix": "Можно указать только базовый URL — путь",
+      "baseUrlOnlyPrefix": "Можно указать только базовый URL - путь",
       "baseUrlOnlySuffix": "добавится автоматически",
       "proxyLabel": "Прокси",
       "proxyPlaceholder": "http://user:pass{'@'}host:8080 или socks5://host:1080",
-      "proxyHint": "Если API модели недоступен напрямую — укажите HTTP или SOCKS5-прокси. Формат URI поддерживает логин/пароль.",
+      "proxyHint": "Если API модели недоступен напрямую - укажите HTTP или SOCKS5-прокси. Формат URI поддерживает логин/пароль.",
       "apiKeyLabel": "API ключ",
       "fetchListButton": "Получить список",
       "enterManuallyButton": "Ввести вручную"
@@ -2611,23 +2643,27 @@
       "dumpDownloaded": "Дамп базы данных скачан"
     },
     "settingsUserPage": {
+      "title": "Настройки пользователя",
+      "description": "Персональные параметры текущей учётной записи",
+      "profileTitle": "Профиль",
+      "passwordTitle": "Пароль",
+      "userNameLabel": "Имя пользователя",
       "userNameEmptyError": "Имя пользователя не может быть пустым",
       "profileUpdated": "Профиль обновлён",
       "passwordUpdated": "Пароль обновлён",
-      "keyNameRequiredError": "Укажите название ключа",
-      "apiKeyCreated": "API-ключ создан — скопируйте его сейчас",
-      "revokeKeyConfirm": "Отозвать этот API-ключ? Интеграции перестанут работать.",
-      "keyRevoked": "Ключ отозван",
-      "keyCopied": "Ключ скопирован",
-      "description": "Персональные параметры текущей учётной записи",
       "saveProfileButton": "Сохранить профиль",
       "currentPasswordLabel": "Текущий пароль",
       "newPasswordLabel": "Новый пароль",
       "changePasswordButton": "Сменить пароль",
+      "keyNameRequiredError": "Укажите название ключа",
+      "apiKeyCreated": "API-ключ создан - скопируйте его сейчас",
+      "revokeKeyConfirm": "Отозвать этот API-ключ? Интеграции перестанут работать.",
+      "keyRevoked": "Ключ отозван",
+      "keyCopied": "Ключ скопирован",
       "apiKeysIntroPrefix": "Ключи для внешних интеграций (ERP, 1С, n8n). Авторизация:",
       "apiKeysIntroSuffix": "Полный ключ показывается только при создании.",
       "openSwaggerLink": "Открыть Swagger (Public API v1)",
-      "copyKeyWarning": "Скопируйте ключ — повторно он не отобразится",
+      "copyKeyWarning": "Скопируйте ключ - повторно он не отобразится",
       "keyNameLabel": "Название ключа",
       "keyNamePlaceholder": "Например: 1С",
       "createKeyButton": "Создать ключ",
@@ -2636,41 +2672,166 @@
       "revokedSuffix": "отозван",
       "usedSuffix": "использован {date}"
     },
-    "tokensPage": {
-      "tokenCreated": "Токен создан",
-      "tokenCopied": "Токен скопирован",
-      "title": "Токены приглашения",
-      "description": "Управление токенами для регистрации пользователей",
-      "createToken": "Создать токен",
-      "newTokenCreated": "Новый токен создан:",
-      "emptyTitle": "Нет токенов",
-      "emptyDescription": "Токены позволяют другим пользователям зарегистрироваться и присоединиться к магазину",
-      "columnToken": "Токен",
-      "columnStatus": "Статус",
-      "columnCreated": "Создан",
-      "columnUsed": "Использован",
-      "columnUsedBy": "Кем",
-      "statusUsed": "Использован",
-      "statusActive": "Активный"
-    },
     "usersPage": {
       "userUpdated": "Пользователь обновлён",
       "userNameEmptyError": "Имя пользователя не может быть пустым",
       "activeUsersDescription": "Активных пользователей: {count}",
       "emptyTitle": "Нет пользователей",
       "emptyDescription": "Пользователи появятся здесь после регистрации по приглашению",
-      "columnRole": "Роль",
+      "columnRole": "Роли",
       "roleAdmin": "Админ",
+      "roleOwner": "Владелец",
       "statusActive": "Активен",
       "statusDisabled": "Отключён",
       "editUser": "Редактировать пользователя",
-      "editUserDescription": "Измените имя пользователя или задайте новый пароль.",
+      "editUserDescription": "Измените профиль, флаг владельца, роли и права.",
       "newPasswordLabel": "Новый пароль",
       "newPasswordPlaceholder": "Оставьте пустым, если менять не нужно",
       "globalAdminLabel": "Глобальный администратор",
       "globalAdminHint": "Доступ ко всем общим настройкам платформы",
-      "cannotChangeSelfAdmin": "Нельзя менять собственный статус глобального администратора.",
-      "disabledUserHint": "Отключённый пользователь не может войти"
+      "ownerLabel": "Владелец инстанса",
+      "ownerHint": "Маркер для break-glass и выдачи прав владельца. Доступ к API определяется правами.",
+      "activeAccountLabel": "Активный аккаунт",
+      "activeAccountHint": "Отключённый пользователь не может войти",
+      "rolesTitle": "Роли",
+      "permissionsTitle": "Права",
+      "permissionsHint": "Права из роли нельзя снять без снятия роли. Дополнительные права можно включать отдельно.",
+      "fromRole": "из роли",
+      "cannotChangeSelfAdmin": "Нельзя менять собственный статус владельца.",
+      "disabledUserHint": "Отключённый пользователь не может войти",
+      "invite": {
+        "button": "Пригласить пользователя",
+        "title": "Пригласить пользователя",
+        "description": "Создайте токен приглашения и передайте его, чтобы новый пользователь мог зарегистрироваться.",
+        "hint": "Активные токены можно скопировать и отправить. Использованные остаются в списке для истории.",
+        "createToken": "Создать токен",
+        "tokenCreated": "Токен приглашения создан",
+        "tokenCopied": "Токен скопирован",
+        "newTokenCreated": "Новый токен - скопируйте сейчас:",
+        "emptyTitle": "Пока нет токенов приглашения",
+        "emptyDescription": "Создайте токен, чтобы пригласить первого пользователя.",
+        "columnToken": "Токен",
+        "columnStatus": "Статус",
+        "columnCreated": "Создан",
+        "columnUsed": "Использован",
+        "columnUsedBy": "Кем",
+        "statusUsed": "Использован",
+        "statusActive": "Активный"
+      },
+      "roleNames": {
+        "Owner": "Владелец",
+        "Operator": "Оператор",
+        "StoreManager": "Менеджер магазина",
+        "Viewer": "Наблюдатель"
+      },
+      "permissionLabels": {
+        "users": {
+          "manage": "Управление пользователями и приглашениями"
+        },
+        "roles": {
+          "manage": "Назначение ролей и прав"
+        },
+        "plugins": {
+          "manage": "Управление плагинами"
+        },
+        "settings": {
+          "platform": "Настройки платформы и админ-инструменты"
+        },
+        "stores": {
+          "create": "Создание магазинов"
+        },
+        "reference": {
+          "read": "Чтение справочников"
+        },
+        "store": {
+          "members": {
+            "manage": "Управление участниками магазина"
+          },
+          "settings": {
+            "manage": "Настройки магазина"
+          }
+        },
+        "catalog": {
+          "manage": "Управление каталогом"
+        },
+        "marketplace": {
+          "manage": "Управление подключениями маркетплейсов"
+        },
+        "files": {
+          "manage": "Управление файлами и хранилищем"
+        },
+        "operations": {
+          "manage": "Управление фоновыми операциями"
+        },
+        "ai": {
+          "use": "Использование AI-ассистента"
+        },
+        "api": {
+          "access": "Доступ к ключам и логам Public API"
+        }
+      }
+    },
+    "apiPage": {
+      "description": "Создавайте API-ключи для внешних интеграций и просматривайте активность запросов Public API.",
+      "openSwagger": "Открыть Swagger",
+      "tabKeys": "Ключи",
+      "tabLogs": "Логи запросов",
+      "keys": {
+        "introPrefix": "Ключи для внешних интеграций (ERP, 1С, n8n). Авторизация:",
+        "introSuffix": "Полный ключ показывается только при создании.",
+        "copyWarning": "Скопируйте ключ - он больше не будет показан",
+        "nameLabel": "Название ключа",
+        "namePlaceholder": "Например: 1С",
+        "create": "Создать ключ",
+        "loading": "Загрузка ключей…",
+        "emptyTitle": "Ключей пока нет",
+        "emptyDescription": "Создайте ключ, чтобы вызывать Public API v1 из ваших систем.",
+        "columnName": "Название",
+        "columnHint": "Ключ",
+        "columnCreated": "Создан",
+        "columnUsed": "Последнее использование",
+        "columnStatus": "Статус",
+        "statusActive": "Активен",
+        "statusRevoked": "Отозван",
+        "created": "API-ключ создан",
+        "copied": "Ключ скопирован",
+        "copyError": "Не удалось скопировать ключ",
+        "revokeTitle": "Отозвать API-ключ?",
+        "revokeDescription": "Ключ сразу перестанет работать. Это действие нельзя отменить.",
+        "revoked": "API-ключ отозван"
+      },
+      "logs": {
+        "noErrors": "Ошибочных запросов нет",
+        "errorCount": "С ошибками: {count}",
+        "filterKey": "API-ключ",
+        "allKeys": "Все ключи",
+        "method": "Метод",
+        "anyMethod": "Любой метод",
+        "code": "Статус",
+        "anyCode": "Любой статус",
+        "errors": "Ошибки",
+        "searchPlaceholder": "Поиск по пути…",
+        "emptyTitle": "Запросов к API пока нет",
+        "emptyDescription": "Вызовы /api/v1 с вашими ключами появятся здесь.",
+        "columnDate": "Дата",
+        "columnMethod": "Метод",
+        "columnPath": "Путь",
+        "columnKey": "Ключ",
+        "columnDuration": "Длительность",
+        "columnCode": "Код",
+        "durationMs": "{ms} мс",
+        "itemsOfTotal": "{count} из {total}",
+        "loadMore": "Загрузить ещё",
+        "overview": "Обзор",
+        "request": "Запрос",
+        "response": "Ответ",
+        "metaTime": "Время",
+        "metaDuration": "Длительность",
+        "metaKey": "API-ключ",
+        "metaIp": "IP",
+        "userAgent": "User-Agent",
+        "error": "Ошибка"
+      }
     },
     "storeDetailPage": {
       "selectUserError": "Выберите пользователя",
@@ -2706,14 +2867,20 @@
       "addAllUsersLabel": "Добавить всех текущих пользователей",
       "addAllUsersHint": "Если выключить, участником нового магазина станет только текущий администратор.",
       "emptyTitle": "Нет магазинов",
-      "emptyDescription": "Магазин — это рабочее пространство для управления товарами и синхронизации с адаптерами",
+      "emptyDescription": "Магазин - это рабочее пространство для управления товарами и синхронизации с адаптерами",
       "columnStore": "Магазин",
       "columnMembers": "Участники",
       "columnStoreAdmins": "Админы магазина",
       "editStoreSr": "Редактировать магазин",
       "editDialogTitle": "Настройки магазина",
-      "editDialogDescription": "Измените название, участников и администраторов магазина.",
+      "editDialogDescription": "Название, регион, валюты и доступ участников к магазину.",
+      "tabGeneral": "Основное",
+      "tabCurrencies": "Валюты",
+      "tabMembers": "Участники",
+      "identityTitle": "Идентичность магазина",
+      "identityHint": "Отображается в сайдбаре и на страницах магазина.",
       "regionalSettingsTitle": "Региональные настройки",
+      "regionalHint": "Влияет на метки времени и локальное форматирование в этом магазине.",
       "timezoneLabel": "Часовой пояс",
       "pricesTitle": "Цены",
       "extendedPriceParamsLabel": "Расширенные параметры цены",
@@ -2727,9 +2894,18 @@
       "baseTag": "базовая",
       "baseFallback": "базе",
       "addCurrencyPlaceholder": "Добавить валюту",
+      "addCurrencyTitle": "Добавить валюту",
       "rateToPlaceholder": "Курс к {base}",
+      "noExtraCurrencies": "Дополнительных валют пока нет.",
+      "membersTitle": "Участники магазина",
+      "membersHint": "Только участники могут открыть этот магазин и работать с его каталогом.",
+      "membersSelected": "Выбрано: {count}",
+      "memberSearchPlaceholder": "Поиск по имени или ID…",
+      "membersEmptySearch": "Никого не найдено по этому запросу.",
+      "saveHint": "Изменения валют применяются сразу. Название, регион и участники - при сохранении.",
       "columnMemberSingular": "Участник",
-      "columnStoreAdminSingular": "Админ магазина"
+      "columnStoreAdminSingular": "Админ магазина",
+      "catalogEmptyHint": "Справочники ещё не загружены (синхронизация с Control Plane). Списки часовых поясов и валют появятся после заполнения БД через Platform Link."
     },
     "errorLogsPage": {
       "summaryNone": "Ошибок нет",
@@ -2805,9 +2981,9 @@
       "sizeGridLabel": "Размерная сетка",
       "hasSizesLabel": "Товары имеют размеры",
       "attributesCardTitle": "Атрибуты категории",
-      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара — перетащите строки, чтобы изменить порядок.",
+      "attributesOrderHint": "Порядок строк определяет порядок полей на странице товара - перетащите строки, чтобы изменить порядок.",
       "noAttributesTitle": "Нет атрибутов",
-      "noAttributesDescription": "Атрибуты определяют свойства товаров — размер, цвет, материал и другие характеристики",
+      "noAttributesDescription": "Атрибуты определяют свойства товаров - размер, цвет, материал и другие характеристики",
       "addAttribute": "Добавить атрибут",
       "keyLabel": "Ключ",
       "groupLabel": "Группа",
@@ -2827,10 +3003,10 @@
       "export": "Экспорт",
       "import": "Импорт",
       "optionsWord": "вариантов",
-      "largeOptionsHint": "Список хранится в JSON — редактируйте через импорт и экспорт",
+      "largeOptionsHint": "Список хранится в JSON - редактируйте через импорт и экспорт",
       "clearOptions": "Очистить",
-      "optionsPlaceholderExample": "Красный, Синий, Зелёный — или value:подпись",
-      "optionsFormatHint": "JSON, CSV или текст — по одному варианту на строку или через запятую",
+      "optionsPlaceholderExample": "Красный, Синий, Зелёный - или value:подпись",
+      "optionsFormatHint": "JSON, CSV или текст - по одному варианту на строку или через запятую",
       "additionalSection": "Дополнительно",
       "defaultValueLabel": "Значение по умолчанию",
       "notSelectedPlaceholder": "Не выбрано",

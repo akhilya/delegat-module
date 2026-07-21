@@ -9,7 +9,6 @@ import {
   formatDateTimeCombined,
   formatTimeOnly,
 } from "@/utils/dateTime";
-import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 /**
  * Date/time formatting bound to the selected store's timezone from the DB.
@@ -18,7 +17,7 @@ export function useStoreDateTime() {
   const { storeTimezone, loadMemberships, selectedStore } = useSelectedStore();
 
   const timezone = computed(
-    () => storeTimezone.value || selectedStore.value?.timezone || DEFAULT_TIMEZONE,
+    () => storeTimezone.value || selectedStore.value?.timezone || "UTC",
   );
 
   function formatDateTime(iso, options = {}) {
@@ -43,7 +42,7 @@ export function useStoreDateTime() {
 
   function relativeDayLabel(iso) {
     const key = dayKey(iso);
-    if (!key) return "—";
+    if (!key) return "-";
     const today = todayKey();
     const yesterday = addCalendarDays(today, -1);
     if (key === today) return t("composables.useStoreDateTime.today");

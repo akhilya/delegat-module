@@ -51,9 +51,6 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     [InverseProperty(nameof(User.memberships))]
     public virtual ICollection<User> members { get; set; } = new List<User>();
 
-    [InverseProperty(nameof(User.storeAdminMemberships))]
-    public virtual ICollection<User> storeAdmins { get; set; } = new List<User>();
-
     /// <summary>
     /// Collection of products belonging to this store.
     /// </summary>
@@ -106,7 +103,6 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
             baseCurrency = baseCurrency,
             currencies = MapCurrencyDtos(),
             membersCount = members?.Count(m => m.isActive) ?? 0,
-            storeAdminsCount = storeAdmins?.Count(m => m.isActive) ?? 0,
         };
     }
 
@@ -124,7 +120,6 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
             {
                 id = m.Id,
                 userName = m.UserName ?? "",
-                isStoreAdmin = storeAdmins?.Any(a => a.Id == m.Id) == true
             }).ToList() ?? new List<MemberDTO>()
         };
     }
@@ -212,10 +207,6 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Number of members in the store.
         /// </summary>
         public int membersCount { get; set; }
-
-        public int storeAdminsCount { get; set; }
-
-        public bool isStoreAdmin { get; set; }
     }
 
     /// <summary>
@@ -270,7 +261,5 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Username of the member.
         /// </summary>
         public string userName { get; set; }
-
-        public bool isStoreAdmin { get; set; }
     }
 }

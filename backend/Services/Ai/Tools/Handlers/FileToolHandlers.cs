@@ -277,7 +277,7 @@ public class FileToolHandlers : ToolHandlerBase
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.product.storeId == storeId, ct);
             if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Folder is not empty — specify recursive=true" }, "Not empty");
+                return (new { error = "Folder is not empty - specify recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)
@@ -316,7 +316,7 @@ public class FileToolHandlers : ToolHandlerBase
                 .FirstOrDefaultAsync(f => f.Id == p.FolderId && f.storeId == storeId, ct);
             if (folder == null) return (new { error = "Folder not found" }, "Not found");
             if (!recursive && (folder.files.Count > 0 || folder.childFolders.Count > 0))
-                return (new { error = "Folder is not empty — specify recursive=true" }, "Not empty");
+                return (new { error = "Folder is not empty - specify recursive=true" }, "Not empty");
 
             var folderIds = new List<int> { folder.Id };
             if (recursive)

@@ -877,7 +877,7 @@ export default {
           method: "POST",
           data: operationId ? { operationId } : undefined,
           cache: false,
-          timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
+          timeout: 3 * 60 * 1000, // 3 min - backend polls Ozon API for up to 2 min
         },
         http,
         {
@@ -939,7 +939,7 @@ export default {
           method: "POST",
           cache: false,
           data: { productIds },
-          timeout: 5 * 60 * 1000, // 5 min — each chunk can take a while via Ozon API
+          timeout: 5 * 60 * 1000, // 5 min - each chunk can take a while via Ozon API
         },
         http,
         {
@@ -1420,7 +1420,7 @@ export default {
           method: "POST",
           data: operationId ? { operationId } : undefined,
           cache: false,
-          timeout: 3 * 60 * 1000, // 3 min — backend polls Ozon API for up to 2 min
+          timeout: 3 * 60 * 1000, // 3 min - backend polls Ozon API for up to 2 min
         },
         http,
         {

@@ -8,7 +8,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Download } from "lucide-vue-next";
-import { downloadBarcodePng } from "@/lib/barcodeDownload.js";
 
 function getLineColor() {
   const raw = getComputedStyle(document.documentElement)
@@ -57,8 +56,9 @@ export default {
       } catch {}
     }
 
-    function downloadBarcode() {
-      downloadBarcodePng(props.barcode, format);
+    async function downloadBarcode() {
+      const { downloadBarcodePng } = await import("@/lib/barcodeDownload.js");
+      await downloadBarcodePng(props.barcode, format);
     }
 
     onMounted(() => {

@@ -1,4 +1,4 @@
-# Public API v1 — Design
+# Public API v1 - Design
 
 **Goal:** Partner REST API for ERP/1C/n8n with API keys: catalog CRUD + marketplace sync.
 

@@ -62,7 +62,7 @@ public class ProductToolHandlers : ToolHandlerBase
             .Select(x => new { x.Id, x.name, x.sku, x.price, x.barcode, x.storageQuantity, x.categoryId })
             .ToListAsync(ct);
 
-        // Zero hits on a text search: nudge the model to retry with spelling variants —
+        // Zero hits on a text search: nudge the model to retry with spelling variants -
         // catalogs often mix Cyrillic and Latin transliterations of the same brand name
         if (products.Count == 0 && !string.IsNullOrEmpty(p.Search))
         {
@@ -72,7 +72,7 @@ public class ProductToolHandlers : ToolHandlerBase
                 count = 0,
                 hint = $"0 products for query '{p.Search}'. Try other spelling variants: " +
                        "Latin instead of Cyrillic (or vice versa), the English brand name, or a word stem without endings.",
-            }, $"0 products for '{p.Search}' — try a different spelling (Latin/Cyrillic)");
+            }, $"0 products for '{p.Search}' - try a different spelling (Latin/Cyrillic)");
         }
 
         return (new { items = products, count = products.Count }, $"Found {products.Count} products");
@@ -94,7 +94,7 @@ public class ProductToolHandlers : ToolHandlerBase
                 count = 0,
                 hint = $"0 products for query '{p.Search}'. Try other spelling variants: " +
                        "Latin instead of Cyrillic (or vice versa), the English brand name, or a word stem without endings.",
-            }, $"0 products for '{p.Search}' — try a different spelling");
+            }, $"0 products for '{p.Search}' - try a different spelling");
         }
         return (new { count }, $"{count} products");
     }

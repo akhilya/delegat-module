@@ -337,7 +337,7 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
         public string adapterKey { get; set; }
 
         /// <summary>
-        /// JSON-serialized credentials. Always null in API responses — never expose secrets.
+        /// JSON-serialized credentials. Always null in API responses - never expose secrets.
         /// </summary>
         public string? credentialsJson { get; set; }
 

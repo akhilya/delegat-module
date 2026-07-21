@@ -129,7 +129,7 @@ public class MarketplaceConnectionController : ControllerBase
             id = connection.Id,
             name = connection.name,
             adapterKey = connection.adapterKey,
-            // Never return decrypted credentials — client must re-enter to rotate
+            // Never return decrypted credentials - client must re-enter to rotate
             credentialsJson = null,
             hasCredentials = hasCredentials,
             settingsJson = connection.settingsJson,
@@ -144,6 +144,7 @@ public class MarketplaceConnectionController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateConnection([FromBody] MarketplaceConnection.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -185,6 +186,7 @@ public class MarketplaceConnectionController : ControllerBase
     /// </summary>
     [HttpPatch]
     [Route("/marketplace/connections/{connectionId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateConnection(int connectionId, [FromBody] MarketplaceConnection.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -199,7 +201,7 @@ public class MarketplaceConnectionController : ControllerBase
         if (connection == null)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
-        // Empty/null credentialsJson means "keep existing" — do not overwrite with blanks
+        // Empty/null credentialsJson means "keep existing" - do not overwrite with blanks
         if (string.IsNullOrWhiteSpace(input.credentialsJson) || IsBlankCredentialsObject(input.credentialsJson))
         {
             input.credentialsJson = null;
@@ -248,6 +250,7 @@ public class MarketplaceConnectionController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/marketplace/connections/{connectionId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteConnection(int connectionId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -289,6 +292,7 @@ public class MarketplaceConnectionController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/test")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> TestConnection(int connectionId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

@@ -41,7 +41,7 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public Products.Product product { get; set; } = null!;
 
     /// <summary>
-    /// Relative storage path in object storage (the actual MinIO object key — never changes after upload).
+    /// Relative storage path in object storage (the actual MinIO object key - never changes after upload).
     /// </summary>
     public string filePath { get; set; } = null!;
 

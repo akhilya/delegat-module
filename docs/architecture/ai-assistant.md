@@ -1,4 +1,4 @@
-# AI Assistant — Architecture & Maintenance
+# AI Assistant - Architecture & Maintenance
 
 > **Maintenance rule:** Any time you add, remove, or rename tools in `AiChatService.cs`,
 > you MUST also update:
@@ -17,7 +17,7 @@ Key files:
 
 | File | Purpose |
 |------|---------|
-| `backend/Services/Ai/Prompts/AiPrompts.cs` | **All prompts** — edit here to tune behavior |
+| `backend/Services/Ai/Prompts/AiPrompts.cs` | **All prompts** - edit here to tune behavior |
 | `backend/Services/Ai/AiChatService.cs` | Main agentic loop + all tool implementations |
 | `backend/Services/Ai/AiMappingService.cs` | AI auto-mapping logic (non-chat) |
 | `backend/Services/Ai/GraphMutationService.cs` | Programmatic graphJson mutations |
@@ -55,9 +55,9 @@ Edit that file to change AI behavior without touching service logic.
 
 - Models stored in `aiModelConfigs` table (encrypted API key via AES-256)
 - Admin-only CRUD: `GET/POST/PUT/DELETE /api/ai/models`
-- `POST /api/ai/models/{id}/set-default` — sets default model
-- `POST /api/ai/models/{id}/test` — sends a minimal request to verify connection (success = no exception, not content check)
-- `POST /api/ai/models/discover` — queries `/v1/models` to list available model IDs from a provider
+- `POST /api/ai/models/{id}/set-default` - sets default model
+- `POST /api/ai/models/{id}/test` - sends a minimal request to verify connection (success = no exception, not content check)
+- `POST /api/ai/models/discover` - queries `/v1/models` to list available model IDs from a provider
 - Supports **Anthropic** (Messages API) and **OpenAI-compatible** (Chat Completions) providers
 - Active model selected per-request; falls back to first available if no default set
 
@@ -106,13 +106,13 @@ data: {"type": "error", "data": {"message": "..."}}
 data: {"type": "done",  "data": {}}
 ```
 
-**Plan confirmation (deterministic execution):** plan steps carry `args` — the exact tool
+**Plan confirmation (deterministic execution):** plan steps carry `args` - the exact tool
 arguments. On confirm, when every step has `tool` + `args`, the frontend calls
 `POST /api/ai/execute-plan` and the backend executes the steps directly via
-`AiChatService.ExecutePlanStreamAsync` (same SSE tool events, final summary text) — **no model
+`AiChatService.ExecutePlanStreamAsync` (same SSE tool events, final summary text) - **no model
 round-trip**, which eliminates re-proposed plans and invented keys on weak local models.
 `propose_plan`/`rollback_last_operation` are forbidden inside a plan. Fallback: steps without
-`args` go through the legacy path — client sends `"Подтверждаю, выполняй"` and the agentic loop resumes.
+`args` go through the legacy path - client sends `"Подтверждаю, выполняй"` and the agentic loop resumes.
 
 ---
 
@@ -176,7 +176,7 @@ round-trip**, which eliminates re-proposed plans and invented keys on weak local
 | `delete_mapping` | Delete a mapping |
 | `duplicate_mapping` | Copy a mapping with its graphJson |
 | `list_external_categories` | Get marketplace categories from adapter |
-| `get_external_fields` | Get adapter fields (keys, labels, constraints, first 15 Select options) — by mappingId or connectionId+externalCategoryId |
+| `get_external_fields` | Get adapter fields (keys, labels, constraints, first 15 Select options) - by mappingId or connectionId+externalCategoryId |
 | `search_field_options` | Server-side search in a Select field's option dictionary (handles thousands of values) |
 | `get_available_sources` | Get product fields + category/store attributes for a mapping |
 | `get_mapping_coverage` | Analyze mapped vs. unmapped fields |
@@ -226,7 +226,7 @@ round-trip**, which eliminates re-proposed plans and invented keys on weak local
 | `move_files` | Bulk move files/folders into another folder |
 | `delete_files` | Permanently delete files (storage objects removed) |
 | `delete_folder` | Delete folder (recursive option) |
-| `share_file` | Create public share link for file/folder (TTL 1h–30d) |
+| `share_file` | Create public share link for file/folder (TTL 1h-30d) |
 
 ### Analytics
 | Tool | Description |
@@ -255,7 +255,7 @@ round-trip**, which eliminates re-proposed plans and invented keys on weak local
 ## Page-Aware Tool Filtering
 
 `AiChatService.BuildToolDefinitions(pageContext)` filters the tool list based on `pageContext.Page`
-to reduce token usage (~35–40% fewer tokens on focused pages). The frontend sends page context on
+to reduce token usage (~35-40% fewer tokens on focused pages). The frontend sends page context on
 each request.
 
 | `pageContext.Page` | Tools sent | Excluded |
@@ -263,10 +263,10 @@ each request.
 | `"product"` | Products, Categories (read), Store, Files, Groups, Export, Analytics, `list_mappings`, `list_connections` (nav helpers) | All write-only mapping/connection tools |
 | `"fieldMapping"` | Mappings (full), Products (read), Categories (read), Connections (read+adapter_info) | Export/import, file, group, analytics-only tools |
 | `"connection"` | Connections, Mappings (full), Export/Import, Products (read), Categories (read) | File, group, product-analytics tools |
-| `null` (other pages) | All tools | — |
+| `null` (other pages) | All tools | - |
 
 **Plan execution is not affected by filtering.** `ExecutePlanStreamAsync` dispatches tool steps
-directly via `ToolDispatcher` with no page filter — confirmed plans always have access to all tools.
+directly via `ToolDispatcher` with no page filter - confirmed plans always have access to all tools.
 
 ---
 
@@ -300,11 +300,11 @@ Triggered on mapping creation (the «Использовать AI» checkbox), vi
 2. Load local category attributes + 2 example mappings for the same adapter (shared context)
 3. Per batch: build prompt (batch fields only), call the model, parse element-by-element,
    filter `confidence ≥ 0.4`, apply immediately via `GraphMutationService.ApplySuggestionsAsync`
-4. A failed batch is logged as a warning and skipped — earlier batches stay applied
+4. A failed batch is logged as a warning and skipped - earlier batches stay applied
 5. Return aggregated `AiMappingResult { connected, skipped, alreadyConnected, proposed, ... }`
 
 **Progress tracking:** with `{ operationId }` in the request body the endpoint returns **202**
-immediately and runs in a detached DI scope (`Task.Run` + `IServiceScopeFactory`) — a page reload
+immediately and runs in a detached DI scope (`Task.Run` + `IServiceScopeFactory`) - a page reload
 does not cancel it. The controller owns the operation lifecycle (`StartAsync` type `ai-mapping`,
 title `AI-маппинг: <категория> → <подключение> (#mappingId)`, `FinishAsync` with a summary);
 `AiMappingService` streams per-batch `LogAsync`/`ProgressAsync` into the operations panel via
@@ -328,7 +328,7 @@ synchronous (used by the chat tool).
 | operationType | Rollback data |
 |--------------|--------------|
 | `update_prices` | `{ products: [{id, oldPrice}] }` |
-| `add_category_field` | `{ fieldId }` — deletes the field |
+| `add_category_field` | `{ fieldId }` - deletes the field |
 | `connect_field`, `set_static_value`, `add_modifier`, `disconnect_field`, `generate_mapping` | `{ mappingId, previousGraphJson }` |
 | `update_attribute` | `{ products: [{productId, attributeId, oldValue}] }` |
 | `create_product`, `export_*` | `canRollback: false` |
@@ -384,7 +384,7 @@ All confirmed plans and successful tool call sequences are stored implicitly in 
 - Mask PII before export (store/product names → generic placeholders)
 
 **Best candidates for fine-tuning:**
-- Mapping suggestions: adapters have consistent field semantics — a model trained on past mappings would skip the general mapping prompt and propose accurate connections directly
+- Mapping suggestions: adapters have consistent field semantics - a model trained on past mappings would skip the general mapping prompt and propose accurate connections directly
 - Plan structuring: teach a smaller model to always emit `propose_plan` with correct `args`
 
 **Recommended path:**
@@ -392,7 +392,7 @@ All confirmed plans and successful tool call sequences are stored implicitly in 
 2. Add admin export endpoint for JSONL download
 3. Fine-tune on Anthropic or open-weight model (Qwen, Llama) for cost reduction on repetitive tasks
 
-See also: `docs/architecture/ai-system.md` — comprehensive reference including all tables, APIs, fine-tuning strategy, and RAG-ready descriptions.
+See also: `docs/architecture/ai-system.md` - comprehensive reference including all tables, APIs, fine-tuning strategy, and RAG-ready descriptions.
 
 ---
 
@@ -404,4 +404,4 @@ See also: `docs/architecture/ai-system.md` — comprehensive reference including
 | `fieldMappingPage.vue` | "✦ AI: улучшить маппинг" button → `POST /api/ai/mapping-suggest/{id}` |
 | `connectionPage.vue` | "✦ Объяснить ошибку" inline on test connection failure |
 | `settingsOverviewPage.vue` | "AI Модели" link → `/settings/admin/ai` |
-| `/settings/admin/ai` | `AiModelsPage.vue` — admin model CRUD with proxy field |
+| `/settings/admin/ai` | `AiModelsPage.vue` - admin model CRUD with proxy field |

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Delegat.Infrastructure.Auth;
-using Delegat.Infrastructure.Middleware;
 using Delegat.Services;
 
 namespace Delegat.Controllers;
@@ -9,14 +8,10 @@ namespace Delegat.Controllers;
 [JwtAuthorize]
 public class SettingsController : ControllerBase
 {
-    private readonly ICurrentUserService _currentUserService;
     private readonly IDatabaseDumpService _databaseDumpService;
 
-    public SettingsController(
-        ICurrentUserService currentUserService,
-        IDatabaseDumpService databaseDumpService)
+    public SettingsController(IDatabaseDumpService databaseDumpService)
     {
-        _currentUserService = currentUserService;
         _databaseDumpService = databaseDumpService;
     }
 
@@ -25,19 +20,11 @@ public class SettingsController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/settings/database/dump")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> DownloadDatabaseDump(CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
-
         var handle = await _databaseDumpService.CreateDumpAsync(ct);
         HttpContext.Response.RegisterForDispose(handle);
         return PhysicalFile(handle.FilePath, "application/sql", handle.FileName);
-    }
-
-    private async Task EnsureAdminAsync(CancellationToken ct)
-    {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can change platform settings");
     }
 }

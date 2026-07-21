@@ -95,7 +95,7 @@ const modifierCatalog = computed(
   () => MODIFIER_CATALOG[data.value.modifierType],
 );
 const modifierParams = computed(() => modifierCatalog.value?.params || []);
-// valueMap/optionMap editors handle the "default" param themselves — don't render it twice.
+// valueMap/optionMap editors handle the "default" param themselves - don't render it twice.
 const visibleModifierParams = computed(() => {
   const isMap =
     data.value.modifierType === "valueMap" ||
@@ -190,7 +190,7 @@ const mergeCandidates = (f) =>
 const setAdapterSource = (fieldKey, value) =>
   data.value.setFieldSource?.(fieldKey, value === NONE ? "" : value);
 
-// Render at most one real <Select> at a time (a category can have dozens of fields — mounting a
+// Render at most one real <Select> at a time (a category can have dozens of fields - mounting a
 // Select per field freezes the UI). Resting rows are cheap buttons; clicking one opens its editor.
 const editingField = ref(null);
 const currentSourceLabel = (f) => {
@@ -432,7 +432,7 @@ function resolvePreview(fieldKey, raw) {
         <div class="space-y-1">
           <Label>{{ t("marketplace.graph.inspector.sourceLabel") }}</Label>
           <div class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
-            {{ data.label || "—" }}
+            {{ data.label || "-" }}
           </div>
           <p class="text-xs text-muted-foreground">
             {{ t("marketplace.graph.inspector.sourceChangeHint") }}
@@ -457,7 +457,7 @@ function resolvePreview(fieldKey, raw) {
         </div>
       </template>
 
-      <!-- "standard value" — static node with predefined options from adapter field -->
+      <!-- "standard value" - static node with predefined options from adapter field -->
       <template v-else-if="type === 'static' && data.isAdapterValue">
         <div class="space-y-1.5">
           <Label>{{ t("marketplace.graph.inspector.valueLabel") }}</Label>
@@ -472,7 +472,7 @@ function resolvePreview(fieldKey, raw) {
             />
           </template>
 
-          <!-- Options available: multi-select (array type) — checkbox list -->
+          <!-- Options available: multi-select (array type) - checkbox list -->
           <template v-else-if="data.options?.length && data.valueType === 'array'">
             <div class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5">
               <label

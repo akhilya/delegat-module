@@ -119,7 +119,7 @@ export default {
     const flaggedAttributeIds = ref([]);
 
     /**
-     * Full replace — never sticky. Red while the field still has a form error
+     * Full replace - never sticky. Red while the field still has a form error
      * or (after a save attempt) is still a required empty value.
      */
     function recomputeFlaggedIds() {

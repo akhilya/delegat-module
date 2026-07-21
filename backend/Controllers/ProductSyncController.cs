@@ -140,7 +140,7 @@ public class ProductSyncController : ControllerBase
             return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
 
         // Get product IDs already successfully linked to this connection
-        // (exclude NotSynced/SyncError — those need to be re-exported)
+        // (exclude NotSynced/SyncError - those need to be re-exported)
         var linkedProductIds = await _context.productMarketplaceLinks
             .AsNoTracking()
             .Where(l => l.connectionId == connectionId
@@ -198,6 +198,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/{productId}/export")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportProduct(
         int connectionId,
         int productId,
@@ -242,6 +243,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/{productId}/link")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> LinkProduct(
         int connectionId,
         int productId,
@@ -274,7 +276,7 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest(
                 $"External ID \"{input.externalProductId.Trim()}\" is already linked to another product on this connection");
 
-        // Resolve category mapping (optional — same logic as available-connections)
+        // Resolve category mapping (optional - same logic as available-connections)
         int? categoryMappingId = null;
         if (product.categoryId.HasValue)
         {
@@ -311,6 +313,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/marketplace/links/{linkId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> UnlinkProduct(int linkId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -343,6 +346,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/{linkId}/relink")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> RelinkProduct(
         int linkId,
         [FromBody] LinkProductInput input,
@@ -382,6 +386,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/export-bulk")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportProductsBulk(
         int connectionId,
         [FromBody] ExportBulkInput input,
@@ -416,6 +421,7 @@ public class ProductSyncController : ControllerBase
 
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/resolve-product-links")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ResolveProductLinks(
         int connectionId,
         [FromBody] ResolveProductLinksInput input,
@@ -444,6 +450,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/export-batch")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateExportBatch(
         int connectionId,
         [FromBody] ExportBulkInput input,
@@ -553,6 +560,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/export-batches/{batchId}/retry-failed")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> RetryFailedExports(string batchId, CancellationToken ct)
     {
         var failedItems = await _context.pendingProductExports
@@ -828,6 +836,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/import-selected")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportSelectedProducts(
         int connectionId,
         [FromBody] ImportSelectedInput input,
@@ -1029,6 +1038,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/import-batches/{batchId}/retry-failed")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> RetryFailedImports(string batchId, CancellationToken ct)
     {
         var failedItems = await _context.pendingProductImports
@@ -1055,6 +1065,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/import/{externalId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportProduct(
         int connectionId,
         string externalId,
@@ -1092,6 +1103,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/import-all")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportAllProducts(
         int connectionId,
         [FromBody] ImportAllInput? input,
@@ -1178,6 +1190,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/{productId}/update-sku")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateSku(
         int connectionId,
         int productId,
@@ -1249,6 +1262,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/prices/import")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportPrices(
         int connectionId,
         [FromBody] PriceSyncInput? input,
@@ -1290,6 +1304,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/prices/export")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportPrices(
         int connectionId,
         [FromBody] PriceSyncInput? input,
@@ -1333,6 +1348,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/stocks/export")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportStocks(
         int connectionId,
         [FromBody] PriceSyncInput? input,
@@ -1513,6 +1529,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/{productId}/image-downloads/retry")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> RetryFailedImageDownloads(int productId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1697,6 +1714,7 @@ public class ProductSyncController : ControllerBase
 
     [HttpPost]
     [Route("/marketplace/links/{linkId}/import")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportFromLink(int linkId, [FromBody] ImportFromLinkInput? input, CancellationToken ct)
     {
         var excludeFields = input?.ExcludeFields != null ? new HashSet<string>(input.ExcludeFields) : null;
@@ -1863,6 +1881,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/{linkId}/import-preview")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportFromLinkPreview(int linkId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1968,6 +1987,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/import-bulk-preview")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportLinksBulkPreview(
         [FromBody] LinksBulkInput input,
         CancellationToken ct)
@@ -2124,6 +2144,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/{linkId}/export")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportFromLink(int linkId, [FromBody] ExportFromLinkInput? input, CancellationToken ct)
     {
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -2185,6 +2206,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/{linkId}/recreate")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> RecreateProductOnMarketplace(int linkId, [FromBody] RecreateInput input, CancellationToken ct)
     {
         // 1. Validate
@@ -2265,7 +2287,7 @@ public class ProductSyncController : ControllerBase
                 await _context.SaveChangesAsync(ct);
             }
 
-            // 8. Archive old product (best effort — don't fail the operation)
+            // 8. Archive old product (best effort - don't fail the operation)
             string? archiveError = null;
             try
             {
@@ -2294,7 +2316,7 @@ public class ProductSyncController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Critical failure — try to restore
+            // Critical failure - try to restore
             _logger.LogError(ex, "Recreate product failed for link {LinkId}", linkId);
 
             try
@@ -2335,6 +2357,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/import-bulk")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportLinksBulk(
         [FromBody] LinksBulkInput input,
         CancellationToken ct)
@@ -2499,6 +2522,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/marketplace/links/export-bulk")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportLinksBulk(
         [FromBody] LinksBulkInput input,
         CancellationToken ct)
@@ -2655,6 +2679,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/{productId}/variants")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateProductVariant(
         int productId,
         [FromBody] CreateVariantInput input,
@@ -2697,6 +2722,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpPut]
     [Route("/products/{productId}/variants/{variantId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateProductVariant(
         int productId,
         int variantId,
@@ -2737,6 +2763,7 @@ public class ProductSyncController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/products/{productId}/variants/{variantId}")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteProductVariant(
         int productId,
         int variantId,

@@ -40,15 +40,43 @@ public class ApiKeyAuthenticationHandlerTests
         SecurityStamp = Guid.NewGuid().ToString()
     };
 
-    private static async Task<(ApiKeyAuthenticationHandler handler, DefaultHttpContext http, DataContext db)> CreateHandlerAsync(
-        DataContext db,
-        string? authorizationHeader = null)
+    private sealed class FakePermissionService : IPermissionService
     {
+        public HashSet<string> Effective { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+        {
+            Permissions.ApiAccess,
+        };
+
+        public Task EnsureRolesSeededAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task MigrateLegacyAccessAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task EnsureOwnerAccessAsync(User user, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<string>> GetEffectivePermissionsAsync(int userId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<string>>(Effective.ToList());
+        public Task<IReadOnlyList<string>> GetRoleNamesAsync(int userId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<UserAccessDto> GetUserAccessAsync(int userId, CancellationToken ct = default)
+            => Task.FromResult(new UserAccessDto
+            {
+                EffectivePermissions = Effective.ToList(),
+            });
+        public Task SetUserAccessAsync(int userId, IReadOnlyList<string> roleNames, IReadOnlyList<string> permissionGrants, CancellationToken ct = default)
+            => Task.CompletedTask;
+        public Task HydrateClaimsAsync(ClaimsIdentity identity, int userId, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
+    private static async Task<(ApiKeyAuthenticationHandler handler, DefaultHttpContext http, DataContext db, FakePermissionService perms)> CreateHandlerAsync(
+        DataContext db,
+        string? authorizationHeader = null,
+        FakePermissionService? permissions = null)
+    {
+        var perms = permissions ?? new FakePermissionService();
         var handler = new ApiKeyAuthenticationHandler(
             new StaticOptionsMonitor<AuthenticationSchemeOptions>(new AuthenticationSchemeOptions()),
             NullLoggerFactory.Instance,
             UrlEncoder.Default,
-            db);
+            db,
+            perms);
 
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
@@ -61,7 +89,7 @@ public class ApiKeyAuthenticationHandlerTests
             typeof(ApiKeyAuthenticationHandler));
 
         await handler.InitializeAsync(scheme, http);
-        return (handler, http, db);
+        return (handler, http, db, perms);
     }
 
     private static async Task<(string plaintext, UserApiKey entity)> SeedKeyAsync(
@@ -91,7 +119,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Authenticate_MissingHeader_ReturnsNoResult()
     {
         await using var db = CreateDb();
-        var (handler, _, _) = await CreateHandlerAsync(db);
+        var (handler, _, _, _) = await CreateHandlerAsync(db);
 
         var result = await handler.AuthenticateAsync();
 
@@ -106,7 +134,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Authenticate_NonBearer_ReturnsNoResult(string header)
     {
         await using var db = CreateDb();
-        var (handler, _, _) = await CreateHandlerAsync(db, header);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, header);
 
         var result = await handler.AuthenticateAsync();
 
@@ -122,7 +150,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Authenticate_InvalidKeyFormat_Fails(string header)
     {
         await using var db = CreateDb();
-        var (handler, _, _) = await CreateHandlerAsync(db, header);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, header);
 
         var result = await handler.AuthenticateAsync();
 
@@ -135,7 +163,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Authenticate_UnknownKey_Fails()
     {
         await using var db = CreateDb();
-        var (handler, _, _) = await CreateHandlerAsync(db, "Bearer dk_unknown_key_value");
+        var (handler, _, _, _) = await CreateHandlerAsync(db, "Bearer dk_unknown_key_value");
 
         var result = await handler.AuthenticateAsync();
 
@@ -148,7 +176,7 @@ public class ApiKeyAuthenticationHandlerTests
     {
         await using var db = CreateDb();
         var (plaintext, _) = await SeedKeyAsync(db, userId: 1, revoked: true);
-        var (handler, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
 
         var result = await handler.AuthenticateAsync();
 
@@ -161,7 +189,7 @@ public class ApiKeyAuthenticationHandlerTests
     {
         await using var db = CreateDb();
         var (plaintext, _) = await SeedKeyAsync(db, userId: 2, userActive: false);
-        var (handler, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
 
         var result = await handler.AuthenticateAsync();
 
@@ -174,7 +202,7 @@ public class ApiKeyAuthenticationHandlerTests
     {
         await using var db = CreateDb();
         var (plaintext, entity) = await SeedKeyAsync(db, userId: 7);
-        var (handler, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, "Bearer " + plaintext);
 
         var result = await handler.AuthenticateAsync();
 
@@ -191,7 +219,7 @@ public class ApiKeyAuthenticationHandlerTests
     {
         await using var db = CreateDb();
         var (plaintext, _) = await SeedKeyAsync(db, userId: 8);
-        var (handler, _, _) = await CreateHandlerAsync(db, "bearer " + plaintext);
+        var (handler, _, _, _) = await CreateHandlerAsync(db, "bearer " + plaintext);
 
         var result = await handler.AuthenticateAsync();
 
@@ -202,7 +230,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Challenge_WritesPublicApiUnauthorizedEnvelope()
     {
         await using var db = CreateDb();
-        var (handler, http, _) = await CreateHandlerAsync(db);
+        var (handler, http, _, _) = await CreateHandlerAsync(db);
 
         await handler.ChallengeAsync(new AuthenticationProperties());
 
@@ -220,7 +248,7 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task Forbid_WritesPublicApiForbiddenEnvelope()
     {
         await using var db = CreateDb();
-        var (handler, http, _) = await CreateHandlerAsync(db);
+        var (handler, http, _, _) = await CreateHandlerAsync(db);
 
         await handler.ForbidAsync(new AuthenticationProperties());
 

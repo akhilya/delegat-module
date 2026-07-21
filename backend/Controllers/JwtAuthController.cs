@@ -23,18 +23,22 @@ public class JwtAuthController : ControllerBase
     private const string ACCESS_COOKIE = "access_token";
     private const string REFRESH_COOKIE = "refresh_token";
 
+    private readonly IPermissionService _permissionService;
+
     public JwtAuthController(
         UserManager<User> userManager,
         SignInManager<User> signInManager,
         IJwtService jwtService,
         IUnitOfWork unitOfWork,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IPermissionService permissionService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _jwtService = jwtService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
+        _permissionService = permissionService;
     }
 
     [HttpPost]
@@ -60,7 +64,7 @@ public class JwtAuthController : ControllerBase
 
         return Ok(new
         {
-            user = user.MapToDTO(_serviceProvider),
+            user = await MapAuthUserDtoAsync(user),
             next = "/products"
         });
     }
@@ -101,11 +105,14 @@ public class JwtAuthController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync();
 
+        await _permissionService.EnsureRolesSeededAsync();
+        await _userManager.AddToRoleAsync(user, AppRoles.Viewer);
+
         await IssueTokens(user.Id, user.UserName ?? "", false);
 
         return Ok(new
         {
-            user = user.MapToDTO(_serviceProvider),
+            user = await MapAuthUserDtoAsync(user),
             next = "/signIn"
         });
     }
@@ -147,7 +154,16 @@ public class JwtAuthController : ControllerBase
         if (user.selectedStoreId != null)
             SetSelectedStoreCookie(user.selectedStoreId.Value);
 
-        return Ok(user.MapToDTO(_serviceProvider));
+        return Ok(await MapAuthUserDtoAsync(user));
+    }
+
+    private async Task<User.UserDTO> MapAuthUserDtoAsync(User user)
+    {
+        var dto = user.MapToDTO(_serviceProvider);
+        var access = await _permissionService.GetUserAccessAsync(user.Id);
+        dto.roles = access.Roles;
+        dto.permissions = access.EffectivePermissions;
+        return dto;
     }
 
     [HttpPost]
@@ -205,7 +221,7 @@ public class JwtAuthController : ControllerBase
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
             resultRememberMe = rememberMe;
 
-            // CASE 1: Token already revoked — find latest active token (multi-tab scenario)
+            // CASE 1: Token already revoked - find latest active token (multi-tab scenario)
             // Another tab already rotated this token; just hand the client the current active one.
             if (refreshToken.IsRevoked)
             {
@@ -222,7 +238,7 @@ public class JwtAuthController : ControllerBase
                 return;
             }
 
-            // CASE 2: Token is active — normal rotation
+            // CASE 2: Token is active - normal rotation
             refreshToken.revokedAt = DateTime.UtcNow;
             refreshRepo.UpdateWithoutSave(refreshToken);
 

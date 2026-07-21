@@ -450,7 +450,7 @@ export default {
     },
 
     getProductCategoryName(product) {
-      return product.category?.name || product.categoryName || "—";
+      return product.category?.name || product.categoryName || "-";
     },
 
     async handleAddSelectedProducts() {
@@ -718,7 +718,7 @@ export default {
                           {{ index + 1 }}
                         </TableCell>
                         <TableCell class="w-36 px-3 font-mono text-xs text-muted-foreground">
-                          {{ member.product.sku || "—" }}
+                          {{ member.product.sku || "-" }}
                         </TableCell>
                         <TableCell class="w-14 px-2">
                           <div class="size-10 rounded-md overflow-hidden bg-muted">
@@ -745,7 +745,7 @@ export default {
                           </router-link>
                         </TableCell>
                         <TableCell class="hidden md:table-cell px-3 text-muted-foreground">
-                          {{ member.product.category?.name || "—" }}
+                          {{ member.product.category?.name || "-" }}
                         </TableCell>
                         <TableCell class="w-12 px-2">
                           <div class="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1097,7 +1097,7 @@ export default {
                   />
                 </div>
                 <span class="truncate font-mono text-xs text-muted-foreground">
-                  {{ product.sku || "—" }}
+                  {{ product.sku || "-" }}
                 </span>
                 <div class="size-10 overflow-hidden rounded-md bg-muted">
                   <img

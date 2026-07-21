@@ -1,4 +1,4 @@
-# Delegat Control Plane — центральная платформа
+# Delegat Control Plane - центральная платформа
 
 > Продуктово-архитектурный документ **control plane**: продажа, контроль и развёртывание
 > изолированных инстансов Delegat.Module.
@@ -7,8 +7,8 @@
 > Возможности самого инстанса: [../platform/capabilities.md](../platform/capabilities.md)  
 > Продуктовый brief инстанса (UI каталога): [../platform/product.md](../platform/product.md)
 >
-> **Статус:** дизайн / pre-implementation. Код control plane **не** живёт в этом репозитории —
-> для него заведён **отдельный monorepo** (см. §2). Здесь — каноническое описание продукта
+> **Статус:** дизайн / pre-implementation. Код control plane **не** живёт в этом репозитории -
+> для него заведён **отдельный monorepo** (см. §2). Здесь - каноническое описание продукта
 > и решений, пока control-plane repo пуст или зеркалит этот документ.
 >
 > Инстанс уже готов быть управляемым снаружи (`/api/health`, квоты через env, admin seed, GHCR).
@@ -17,16 +17,16 @@
 
 ## 1. Зачем отдельная платформа
 
-**Delegat.Module** — продукт, которым пользуются селлеры (каталог, маппинги, sync).
+**Delegat.Module** - продукт, которым пользуются селлеры (каталог, маппинги, sync).
 
-**Control Plane** — отдельный продукт, которым пользуются:
+**Control Plane** - отдельный продукт, которым пользуются:
 
 | Аудитория | Задача |
 |-----------|--------|
 | Покупатель (владелец бизнеса) | Выбрать тариф, оплатить, получить инстанс, управлять подпиской, писать в поддержку |
 | Ops (вы) | Подтверждать релизы, обновлять флот, бэкапы/restore, break-glass, ноды, тикеты |
 
-Это **не** multi-tenant внутри одной БД. Модель дистрибуции — **per-instance**: каждый клиент получает изолированный Docker-стек (api + frontend + MySQL + MinIO) на своём subdomain. Физическая изоляция — ключевой selling point.
+Это **не** multi-tenant внутри одной БД. Модель дистрибуции - **per-instance**: каждый клиент получает изолированный Docker-стек (api + frontend + MySQL + MinIO) на своём subdomain. Физическая изоляция - ключевой selling point.
 
 ```
 [Marketing / Landing]
@@ -41,7 +41,7 @@
         │   Platform Link (m2m + user SSO)     │
         │◄──── catalog / 5xx / support SSO ────┘
         ▼
-[Ops Console] — releases, fleet, backups, tickets, nodes
+[Ops Console] - releases, fleet, backups, tickets, nodes
 ```
 
 Инстанс остаётся физически изолированным по данным каталога, но имеет **доверенный канал** к control plane (не «совсем оффлайн appliance»).
@@ -56,15 +56,15 @@
 |---|------|---------|
 | 1 | Онбординг | **Full self-serve:** оплата → автоматический provision инстанса с **approved release** |
 | 2 | Кардинальность | **Сейчас продуктово:** 1 аккаунт → 1 активный инстанс. **Архитектурно сразу:** `Account` / `Organization` не привязаны жёстко к одному instance (связь 1:N, лимит «1 active» на тарифе) |
-| 3 | Бэкапы | В control plane бэкап/restore — **только Ops**. Пользовательский dump/restore — отдельная фича **внутри инстанса** (не путать) |
-| 4 | Документация | UX «часть продукта»; движок — **GitBook** (см. §11). Самописный docs CMS не делать |
-| 5 | Поддержка | **Свой ticket-модуль** + Telegram как **ops-канал**. MVP: уведомления/reply в **личку** одному ops (группу/shared — позже при необходимости) |
-| 6 | Рынок / платежи | Старт — **Россия**. Эквайринг: **Т-Банк** |
+| 3 | Бэкапы | В control plane бэкап/restore - **только Ops**. Пользовательский dump/restore - отдельная фича **внутри инстанса** (не путать) |
+| 4 | Документация | UX «часть продукта»; движок - **GitBook** (см. §11). Самописный docs CMS не делать |
+| 5 | Поддержка | **Свой ticket-модуль** + Telegram как **ops-канал**. MVP: уведомления/reply в **личку** одному ops (группу/shared - позже при необходимости) |
+| 6 | Рынок / платежи | Старт - **Россия**. Эквайринг: **Т-Банк** |
 | 7 | Релизы | Новые инстансы и обновления флота идут с **последней подтверждённой в Ops ревизии**, не с «сырого» `latest` из CI |
 | 8 | Trial | **7 дней** пробного периода |
-| 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** — **purge** volumes/данных |
-| 10 | Первый вход / break-glass | Сброс суперадмина — **Ops break-glass** через `dotnet Delegat.dll --reset-admin` в контейнере API (генерирует пароль, JSON в stdout, без рестарта API). Force change при первом входе в UI инстанса **не** делаем |
-| 11 | Репозиторий | Control plane — **отдельный monorepo** от `delegat-module` (платформа инстанса) |
+| 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** - **purge** volumes/данных |
+| 10 | Первый вход / break-glass | Сброс суперадмина - **Ops break-glass** через `dotnet Delegat.dll --reset-admin` в контейнере API (генерирует пароль, JSON в stdout, без рестарта API). Force change при первом входе в UI инстанса **не** делаем |
+| 11 | Репозиторий | Control plane - **отдельный monorepo** от `delegat-module` (платформа инстанса) |
 | 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: **Reference Catalog** (валюты, timezones, реестр плагинов…), 5xx, позже поддержка в UI инстанса |
 
 ---
@@ -78,7 +78,7 @@
 | **Ops Console** | Вы | Approve release, fleet update, nodes, health, break-glass, backups/restore, тикеты |
 | **Knowledge + Support** | Все | Внешний docs-движок + ticket-модуль (+ Telegram bridge) |
 
-Клиентский кабинет и Ops — **два UI**, один backend control plane в **отдельном monorepo** от `delegat-module`.
+Клиентский кабинет и Ops - **два UI**, один backend control plane в **отдельном monorepo** от `delegat-module`.
 
 ---
 
@@ -113,7 +113,7 @@ Account (email, auth)
 
 ---
 
-## 5. Customer Console — возможности
+## 5. Customer Console - возможности
 
 ### 5.1 Must-have (MVP)
 
@@ -135,7 +135,7 @@ Account (email, auth)
 
 ---
 
-## 6. Ops Console — возможности
+## 6. Ops Console - возможности
 
 ### 6.1 Must-have (MVP)
 
@@ -144,7 +144,7 @@ Account (email, auth)
 3. **Fleet update:** обновить все или выбранные инстансы до approved release; rollback image при failed health  
 4. **Health / activity:** poll `/api/health`, `last_seen_at`, degraded  
 5. **Break-glass:** сброс пароля суперадмина инстанса (аудит, одноразовость)  
-6. **Backups:** расписание дампа MySQL + MinIO; restore (in-place или в новый стек) — только ops  
+6. **Backups:** расписание дампа MySQL + MinIO; restore (in-place или в новый стек) - только ops  
 7. **Nodes:** реестр, capacity, least-loaded  
 8. **Тикеты:** очередь, ответ (в UI и/или reply из Telegram → в тикет)
 
@@ -162,14 +162,14 @@ Account (email, auth)
 ### 7.1 Принципы
 
 - Рынок старта: **Россия**.  
-- Платёжный провайдер: **Т-Банк** (T-Bank Acquiring / API — конкретный продукт API уточнить при интеграции).  
+- Платёжный провайдер: **Т-Банк** (T-Bank Acquiring / API - конкретный продукт API уточнить при интеграции).  
 - Full automation: успешная оплата или старт trial (webhook / подтверждение) → Provisioner.  
-- Подписка с автопродлением; отмена прекращает продление — инстанс остаётся доступным до конца уже оплаченного периода (зафиксировать в оферте).
+- Подписка с автопродлением; отмена прекращает продление - инстанс остаётся доступным до конца уже оплаченного периода (зафиксировать в оферте).
 
 ### 7.2 Trial
 
 - Длительность: **7 дней**.  
-- Open: нужна ли привязка карты / оплата ₽1 на старте trial (зависит от возможностей Т-Банк и антифрода) — см. §12.
+- Open: нужна ли привязка карты / оплата ₽1 на старте trial (зависит от возможностей Т-Банк и антифрода) - см. §12.
 
 ### 7.3 Состояния подписки и поведение инстанса
 
@@ -184,7 +184,7 @@ trial → active → past_due → grace? → suspended → cancelled → purged
 | `suspended` / доступ прекращён | **Stop** контейнеров (стек остановлен, данные на диске сохраняются) |
 | + **2 месяца** после stop | **Purge**: удаление volumes (MySQL + MinIO) и запись instance как `terminated` / `purged` |
 
-Детали `past_due` / длина `grace` (баннер в консоли до stop) — уточнить в оферте и §12.
+Детали `past_due` / длина `grace` (баннер в консоли до stop) - уточнить в оферте и §12.
 
 ### 7.4 Тарифы ↔ квоты инстанса
 
@@ -246,21 +246,21 @@ Trigger: Ops «обновить все / выбранные» до Release X
 
 ## 9. Связь инстанса с Control Plane (Platform Link)
 
-Инстанс и control plane — разные системы и репозитории, но **продуктово инстанс не «глухой»**: он знает, куда стучаться, и умеет делать это **с автоматической авторизацией**.
+Инстанс и control plane - разные системы и репозитории, но **продуктово инстанс не «глухой»**: он знает, куда стучаться, и умеет делать это **с автоматической авторизацией**.
 
 ### 9.1 Зачем
 
 | Use case | Когда | Кто инициирует |
 |----------|-------|----------------|
-| **Reference Catalog («заполнение»)** | Списки валют, timezones, реестр плагинов и др. справочники — единый источник на CP вместо хардкода в инстансе | Backend/UI инстанса → CP (часто публичный или m2m read) |
+| **Reference Catalog («заполнение»)** | Списки валют, timezones, реестр плагинов и др. справочники - единый источник на CP вместо хардкода в инстансе | Backend/UI инстанса → CP (часто публичный или m2m read) |
 | **5xx / критические ошибки** | Необработанные исключения, health degradation | Backend инстанса → CP (telemetry / incident) |
 | **Диагностика** | Upload diagnostic pack по запросу ops/support | UI/API инстанса → CP API |
 | **Поддержка в UI инстанса** (later) | Тикет / чат без ухода на другой логин | Пользователь в инстансе → CP Support с **SSO** |
 | Heartbeat (опционально) | Дополнение к внешнему health poller | Инстанс → CP |
 
-Каталог товаров, MySQL и MinIO инстанса **не** становятся multi-tenant. Справочники с CP — **read-mostly metadata**, не данные продавца.
+Каталог товаров, MySQL и MinIO инстанса **не** становятся multi-tenant. Справочники с CP - **read-mostly metadata**, не данные продавца.
 
-### 9.1.1 Reference Catalog — что выносится на Control Plane
+### 9.1.1 Reference Catalog - что выносится на Control Plane
 
 Сейчас часть справочников зашита в инстанс (пример: `frontend/src/lib/timezones.js`, `frontend/src/lib/currency.js` → `ADDABLE_CURRENCIES`; плагины ставятся локально upload’ом DLL). Цель: **один раз править на CP**, все инстансы получают актуальный список.
 
@@ -269,7 +269,7 @@ Trigger: Ops «обновить все / выбранные» до Release X
 | **Валюты (каталог кодов)** | Хардкод `ADDABLE_CURRENCIES` | Список ISO-кодов + label/locale hints | Выбор магазина, `StoreCurrency`, курсы `rateToBase`, `baseCurrency` |
 | **Timezones** | Хардкод `STORE_TIMEZONES` | Список IANA + display labels | Поле `store.timezone` (выбранное значение) |
 | **Реестр плагинов** | Локальный upload / DLL на диске инстанса | Каталог адаптеров: key, имя, версии, changelog, URL артефакта, min platform version | Установленные плагины, connections, credentials |
-| *(позже)* | — | Локали UI hints, feature flags, шаблоны онбординга… | Локальный кэш + fallback |
+| *(позже)* | - | Локали UI hints, feature flags, шаблоны онбординга… | Локальный кэш + fallback |
 
 **Принцип:** CP владеет **глобальным справочником**; инстанс владеет **выборами и бизнес-данными** магазина.
 
@@ -288,9 +288,10 @@ installed plugin DLLs      (local disk)
 **Доставка в инстанс:**
 
 1. При старте / по TTL инстанс тянет каталоги с CP (`GET /platform/v1/catalog/...`).  
-2. Кэш в памяти (и опционально на диск) — UI не зависит от сети на каждый клик.  
-3. Если CP недоступен → **fallback** на последний кэш или встроенный минимальный seed (self-host / offline).  
-4. Auth: для публичных справочников достаточно `INSTANCE_ID` + подпись **или** даже signed URL / read-only token; секрет нужен, чтобы не открывать произвольный scrape без контроля. Для self-host без CP — только локальный seed.
+2. **Persist в MySQL** (`referenceCurrencies`, `referenceTimezones`, `referencePlugins`) - UI читает только instance API из БД.  
+3. Если CP недоступен / Platform Link выключен → таблицы пустые; UI empty state (**без** frontend-хардкода и без встроенного seed как источника истины).  
+4. Auth: `INSTANCE_ID` + HMAC-подпись (см. [platform-link.md](../platform/platform-link.md)).  
+5. Позже: **initialization wizard** при первом заходе использует уже синхронизированные справочники (`GET /reference/status`).
 
 **Реестр плагинов (особо):**
 
@@ -302,7 +303,7 @@ installed plugin DLLs      (local disk)
 
 ### 9.2 Два уровня авторизации
 
-Нужны **оба** — путать нельзя.
+Нужны **оба** - путать нельзя.
 
 #### A. Machine-to-machine (инстанс как устройство)
 
@@ -316,17 +317,17 @@ INSTANCE_LINK_SECRET=…   # или пара id+secret; хранить как о
 
 Инстанс подписывает запросы к CP (HMAC или short-lived JWT, signed secret’ом):
 
-- `GET  /platform/v1/catalog/currencies` — справочник валют  
-- `GET  /platform/v1/catalog/timezones` — справочник timezones  
-- `GET  /platform/v1/catalog/plugins` — реестр плагинов (+ optional `GET …/plugins/{key}`)  
-- `POST /platform/v1/errors` — 5xx / batch ошибок  
-- `POST /platform/v1/heartbeat` — опционально  
-- `POST /platform/v1/diagnostics` — diagnostic upload  
-- `POST /platform/v1/sso/exchange` — user handoff  
+- `GET  /platform/v1/catalog/currencies` - справочник валют  
+- `GET  /platform/v1/catalog/timezones` - справочник timezones  
+- `GET  /platform/v1/catalog/plugins` - реестр плагинов (+ optional `GET …/plugins/{key}`)  
+- `POST /platform/v1/errors` - 5xx / batch ошибок  
+- `POST /platform/v1/heartbeat` - опционально  
+- `POST /platform/v1/diagnostics` - diagnostic upload  
+- `POST /platform/v1/sso/exchange` - user handoff  
 - будущие cloud endpoints  
 
 CP проверяет подпись, `INSTANCE_ID`, статус инстанса (`active` / не `purged`).  
-Ротация secret — из Ops (новый secret → Dokploy env → redeploy или hot-reload, если появится).
+Ротация secret - из Ops (новый secret → Dokploy env → redeploy или hot-reload, если появится).
 
 #### B. User SSO (человек в UI инстанса → CP без повторного логина)
 
@@ -340,10 +341,10 @@ CP проверяет подпись, `INSTANCE_ID`, статус инстанс
 3. Browser redirect или iframe:
      https://console…/sso/consume?code=…
 4. CP создаёт/привязывает сессию Account (по заранее связанному email / org membership)
-5. Пользователь сразу в тикетах / нужном сервисе CP — без формы логина
+5. Пользователь сразу в тикетах / нужном сервисе CP - без формы логина
 ```
 
-**Привязка идентичности:** при provision admin email инстанса = email Account в CP (или явный `platform_user_id` в Registry). Расширение на non-admin пользователей инстанса — later (invite sync / email match).
+**Привязка идентичности:** при provision admin email инстанса = email Account в CP (или явный `platform_user_id` в Registry). Расширение на non-admin пользователей инстанса - later (invite sync / email match).
 
 Требования к SSO:
 
@@ -361,17 +362,17 @@ CP проверяет подпись, `INSTANCE_ID`, статус инстанс
 | Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` | Конфиг канала |
 | `PlatformLinkClient` (backend) | Подпись и HTTP к CP |
 | `ReferenceCatalogService` | Fetch + cache currencies / timezones / plugin registry; fallback seed |
-| UI stores settings / plugins page | Читать справочники из API инстанса (который ходит в CP), не из hardcoded `lib/*` |
+| UI stores settings / plugins page | Читать справочники из API инстанса (БД), не из hardcoded `lib/*` |
 | Middleware / exception hook | Отправка 5xx (с сэмплингом / dedup) |
 | UI: «Поддержка» / «Документация» | Deep-link или SSO handoff |
-| Kill-switch | Если URL/secret пусты — инстанс работает offline на встроенном seed |
+| Kill-switch | Если URL/secret пусты - инстанс работает; справочники пустые до link / wizard |
 
 Self-host / dev без control plane остаётся валидным: Platform Link **опционален**.
 
 ### 9.4 Безопасность
 
 - Secret только на backend инстанса, не в frontend bundle  
-- CP API для m2m — отдельный префикс, rate limit per instance  
+- CP API для m2m - отдельный префикс, rate limit per instance  
 - Тело 5xx: stack/message + версия / request id; **не** слать PII каталога и credentials маркетплейсов по умолчанию  
 - SSO code не логировать в plaintext  
 - При `suspended` / `purged` CP отклоняет m2m и SSO  
@@ -380,7 +381,7 @@ Self-host / dev без control plane остаётся валидным: Platform
 
 | Этап | UX |
 |------|-----|
-| MVP | Тикеты в Customer Console; из инстанса — SSO deep-link «открыть поддержку» |
+| MVP | Тикеты в Customer Console; из инстанса - SSO deep-link «открыть поддержку» |
 | Next | Виджет/панель поддержки **внутри** инстанса (тот же ticket API CP, сессия через SSO) |
 | Later | Богатый контекст тикета: версия, последние 5xx, adapter errors (через Platform Link) |
 
@@ -403,10 +404,10 @@ Self-host / dev без control plane остаётся валидным: Platform
 
 ### 11.1 Рекомендованная модель (зафиксирована)
 
-**Источник истины — тикет в БД control plane.**  
-Telegram — канал для ops: уведомление о новом сообщении / тикете и возможность ответить так, чтобы ответ попал в тред тикета.
+**Источник истины - тикет в БД control plane.**  
+Telegram - канал для ops: уведомление о новом сообщении / тикете и возможность ответить так, чтобы ответ попал в тред тикета.
 
-**MVP delivery:** бот пишет в **личку** одному ops (простота). Shared-группа / несколько операторов — когда нагрузка вырастет.
+**MVP delivery:** бот пишет в **личку** одному ops (простота). Shared-группа / несколько операторов - когда нагрузка вырастет.
 
 ```
 Клиент (Customer Console)          Ops
@@ -439,13 +440,13 @@ Telegram — канал для ops: уведомление о новом соо�
 |---------|-------|--------|
 | **GitBook** ✅ | Визуальный редактор, вставка видео URL (YouTube и т.п.) в один клик, хостинг из коробки, поиск, версии | SaaS-подписка; видео лучше хостить снаружи (не грузить большие MP4 в GitBook) |
 | Mintlify | Красивый DX, docs-as-code (MDX), быстрый сайт | Больше «разработческий» workflow; видео через iframe/MDX |
-| VitePress (self-host) | Бесплатно, стек Vue | Сами деплой/поиск/версии/авторский UX — против цели «только наполнение» |
+| VitePress (self-host) | Бесплатно, стек Vue | Сами деплой/поиск/версии/авторский UX - против цели «только наполнение» |
 
-**Решение:** использовать **GitBook**. Видео-гайды — на Rutube/YouTube (или аналог) + embed в статью.  
-В Customer Console и UI инстанса — пункт «Документация» с deep-link на GitBook space.  
-Комментарии к статьям — **не MVP**; CTA «не помогло → тикет» с URL статьи.
+**Решение:** использовать **GitBook**. Видео-гайды - на Rutube/YouTube (или аналог) + embed в статью.  
+В Customer Console и UI инстанса - пункт «Документация» с deep-link на GitBook space.  
+Комментарии к статьям - **не MVP**; CTA «не помогло → тикет» с URL статьи.
 
-SSO в GitBook — опционально later (§13). Platform Link SSO (§9) относится к **Customer Console / поддержке**, не к GitBook.
+SSO в GitBook - опционально later (§13). Platform Link SSO (§9) относится к **Customer Console / поддержке**, не к GitBook.
 
 ---
 
@@ -460,28 +461,28 @@ SSO в GitBook — опционально later (§13). Platform Link SSO (§9) 
 3. **DNS / TLS multi-node:** один edge (Host-header) vs per-node wildcards ([saas-architecture.md](saas-architecture.md) §2).  
 4. **Email:** transactional-провайдер для РФ (welcome, счета, suspend, purge warning).  
 5. **GitBook SSO** позже или достаточно публичных docs.  
-6. **Telegram:** команды бота (`/reply`, смена статуса) vs ответ только из Ops UI; позже — группа вместо лички.  
+6. **Telegram:** команды бота (`/reply`, смена статуса) vs ответ только из Ops UI; позже - группа вместо лички.  
 7. **Feature request:** внутренний board vs публичный roadmap.  
 8. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
 9. **Юридика:** оферта, 152-ФЗ, политика данных; предупреждения клиенту за N дней до purge.  
 10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).  
-11. **Platform Link crypto:** HMAC vs instance JWT; нужен ли mutual TLS; политика ротации secret.  
+11. **Platform Link crypto:** ✅ HMAC-SHA256 (см. [platform-link.md](../platform/platform-link.md)); mutual TLS / ротация - later.  
 12. **SSO identity:** только admin email = Account, или сразу все пользователи инстанса с match по email?  
-13. **Catalog cache TTL** и стратегия инвалидации (ETag / `If-None-Match` / push от CP).  
+13. **Catalog cache TTL:** ✅ persist в MySQL + TTL refresh; ETag/push - later.  
 14. **Plugin artifacts:** где хранить пакеты (GHCR private vs blob на CP); кто подписывает артефакт.  
 15. **Кто редактирует справочники на CP:** только Ops, или контент-роль без полного Ops доступа?
 
-Закрыто по смыслу «сервер для заполнения»: это **Reference Catalog** (§9.1.1) — валюты, timezones, реестр плагинов и аналогичные глобальные списки.
+Закрыто по смыслу «сервер для заполнения»: это **Reference Catalog** (§9.1.1) - валюты, timezones, реестр плагинов и аналогичные глобальные списки.
 
 ---
 
 ## 14. Roadmap control plane (укрупнённо)
 
-Связано с [saas-architecture.md](saas-architecture.md) §8; здесь — продуктовый срез.
+Связано с [saas-architecture.md](saas-architecture.md) §8; здесь - продуктовый срез.
 
 | Этап | Содержание |
 |------|------------|
-| 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR) — ✅ |
+| 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR) - ✅ |
 | A | Registry DB + Provisioner + Ops: create instance вручную / semi-auto |
 | B | Billing РФ + self-serve Customer Console (оплата → авто-provision) |
 | B′ | **Platform Link:** credentials при provision; **Reference Catalog** (currencies, timezones, plugins); heartbeat; 5xx |
@@ -523,15 +524,15 @@ docs/support-tickets.md
 
 ## 16. Исходный backlog (из brainstorm)
 
-Сохранённый список идей основателя — покрыт доменами выше:
+Сохранённый список идей основателя - покрыт доменами выше:
 
 1. Лендинговая страница  
 2. Оплата / продление / отмена тарифа на развёртывание  
 3. Автодеплой последней **подтверждённой** ревизии  
 4. Обновление всех или выбранных инстансов  
 5. Статус развёртывания и активности + протокол сброса суперадмина  
-6. Дамп БД и S3 + откат (**ops**; пользовательский dump — в инстансе)  
+6. Дамп БД и S3 + откат (**ops**; пользовательский dump - в инстансе)  
 7. Документация и видео-гайды (готовый движок) + обратная связь через тикеты  
 8. Ticket-based поддержка (+ Telegram для ops)  
 9. Форма заказа доработок / смена тарифа (два потока: feature request и plan change)
-10. **Platform Link:** инстанс ↔ control plane — Reference Catalog (валюты, timezones, плагины), 5xx, SSO в поддержку
+10. **Platform Link:** инстанс ↔ control plane - Reference Catalog (валюты, timezones, плагины), 5xx, SSO в поддержку

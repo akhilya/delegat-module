@@ -66,7 +66,7 @@ export function toggleSortColumn(columns, columnId, shiftKey = false) {
     if (index >= 0) {
       list[index] = { ...list[index], desc: !list[index].desc };
     } else {
-      // Default to ASC — it more often produces a visible tiebreaker effect (DESC frequently matches Id order).
+      // Default to ASC - it more often produces a visible tiebreaker effect (DESC frequently matches Id order).
       list.push({ id: columnId, desc: false });
     }
     return list;

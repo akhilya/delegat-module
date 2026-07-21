@@ -14,7 +14,7 @@ public class RollbackToolHandlers : ToolHandlerBase
     private readonly ILogger<RollbackToolHandlers> _logger;
 
     // RecordAsync historically wrote rollback JSON in PascalCase (no naming policy) while this
-    // file deserialized expecting camelCase — every rollback silently no-op'ed. Case-insensitive
+    // file deserialized expecting camelCase - every rollback silently no-op'ed. Case-insensitive
     // matching reads both old and new rows.
     private static readonly JsonSerializerOptions _rollbackJson = new() { PropertyNameCaseInsensitive = true };
 
@@ -41,7 +41,7 @@ public class RollbackToolHandlers : ToolHandlerBase
         if (!op.canRollback || op.status == AiOperationStatus.RolledBack)
             return (new { error = "This operation cannot be undone" }, "Cannot undo");
 
-        // Stale guard: without an explicit operationId, don't silently undo something old —
+        // Stale guard: without an explicit operationId, don't silently undo something old -
         // it may belong to a long-finished task the user no longer has in mind
         if (!p.Id.HasValue && op.createdAt < DateTime.UtcNow.AddMinutes(-30))
         {
@@ -54,7 +54,7 @@ public class RollbackToolHandlers : ToolHandlerBase
                 description = op.description,
                 createdAt = op.createdAt,
             }, $"The last operation was performed {ageText}: \"{op.description}\". " +
-               $"This is an old operation — confirm with the user that this is the one to roll back, " +
+               $"This is an old operation - confirm with the user that this is the one to roll back, " +
                $"then retry the call with operationId={op.Id}");
         }
 
@@ -62,7 +62,7 @@ public class RollbackToolHandlers : ToolHandlerBase
         if (!applied)
         {
             _logger.LogWarning("Rollback of operation {OpId} ({Type}) did not change any data", op.Id, op.operationType);
-            return (new { error = "Rollback failed — no data was changed" },
+            return (new { error = "Rollback failed - no data was changed" },
                 $"Rollback of operation \"{op.description}\" failed: no data changed");
         }
 

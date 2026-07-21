@@ -236,7 +236,7 @@ public class MappingService
             return null;
 
         var oldPrice = GetDecimal("oldPrice") ?? GetDecimal("discountBase");
-        // Equal or empty strike-through is not a real discount — leave null so adapters omit it.
+        // Equal or empty strike-through is not a real discount - leave null so adapters omit it.
         if (oldPrice.HasValue && oldPrice.Value <= price.Value)
             oldPrice = null;
 
@@ -296,7 +296,7 @@ public class MappingService
 
     /// <summary>
     /// Project the graph to per-field import descriptors (the old FieldMapping shape) for the reverse
-    /// (import) path — a C# port of the frontend graphModel.analyzeFields projections. Only IMPORTABLE
+    /// (import) path - a C# port of the frontend graphModel.analyzeFields projections. Only IMPORTABLE
     /// lanes are returned: a direct attribute/storeAttribute binding, or a single-input modifier/reroute
     /// chain back to an attribute. Fan-in / ops / productField / static / groupName lanes are export-only
     /// and omitted (so the import path naturally skips them).
@@ -327,7 +327,7 @@ public class MappingService
             if (string.IsNullOrEmpty(field.fieldKey))
                 continue;
 
-            // Merged duplicates: only the primary field participates in import —
+            // Merged duplicates: only the primary field participates in import -
             // reversing both fields into the same local source would be last-write-wins
             if (!string.IsNullOrEmpty(field.aliasOf))
                 continue;
@@ -590,7 +590,7 @@ public class MappingService
         if (string.IsNullOrWhiteSpace(reference))
             return null;
 
-        // attr:ID — category attribute
+        // attr:ID - category attribute
         if (reference.StartsWith("attr:", StringComparison.OrdinalIgnoreCase))
         {
             if (int.TryParse(reference[5..], out var attrId))
@@ -598,7 +598,7 @@ public class MappingService
             return null;
         }
 
-        // storeAttr:ID — store attribute
+        // storeAttr:ID - store attribute
         if (reference.StartsWith("storeAttr:", StringComparison.OrdinalIgnoreCase))
         {
             if (int.TryParse(reference[10..], out var storeAttrId))
@@ -606,7 +606,7 @@ public class MappingService
             return null;
         }
 
-        // Plain field name — product field (case-insensitive)
+        // Plain field name - product field (case-insensitive)
         return GetProductFieldValue(product, reference);
     }
 
@@ -740,7 +740,7 @@ public class MappingService
             "number" => ToDecimalOrPassthrough(value),
             "integer" => ToLongOrPassthrough(value),
             "boolean" => ToBoolOrPassthrough(value),
-            _ => value // select, multiselect, array — no coercion
+            _ => value // select, multiselect, array - no coercion
         };
     }
 
@@ -777,7 +777,7 @@ public class MappingService
     }
 
     /// <summary>
-    /// Get the effective field type — checks for a forceType modifier override, falls back to defaultType.
+    /// Get the effective field type - checks for a forceType modifier override, falls back to defaultType.
     /// </summary>
     private static string? GetEffectiveFieldType(string? modifiersJson, string? defaultType)
     {

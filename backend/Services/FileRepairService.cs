@@ -7,7 +7,7 @@ namespace Delegat.Services;
 /// <summary>
 /// One-time startup service that repairs files broken by the old rename behavior.
 /// Before the displayName fix, renaming a file changed filePath in DB but not the
-/// actual MinIO object key — leaving the DB pointing to a non-existent key.
+/// actual MinIO object key - leaving the DB pointing to a non-existent key.
 /// This service detects those mismatches and restores the correct filePath,
 /// preserving the user's rename as displayName.
 /// </summary>
@@ -97,12 +97,12 @@ public class FileRepairService : IHostedService
             }
             else if (actualKeys.Count == 0)
             {
-                _logger.LogWarning("FileRepairService: file {Id} — no objects found at prefix '{Prefix}' (truly missing)", file.Id, prefix);
+                _logger.LogWarning("FileRepairService: file {Id} - no objects found at prefix '{Prefix}' (truly missing)", file.Id, prefix);
                 missing++;
             }
             else
             {
-                _logger.LogWarning("FileRepairService: file {Id} — {Count} objects at prefix '{Prefix}' (ambiguous, skipping)", file.Id, actualKeys.Count, prefix);
+                _logger.LogWarning("FileRepairService: file {Id} - {Count} objects at prefix '{Prefix}' (ambiguous, skipping)", file.Id, actualKeys.Count, prefix);
                 ambiguous++;
             }
 

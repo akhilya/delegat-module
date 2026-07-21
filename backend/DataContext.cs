@@ -44,6 +44,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
     public DbSet<UserApiKey> userApiKeys { get; set; }
+    /// <summary>
+    /// Legacy M2M - readable until DropStoreAdministrators applies. Excluded from further schema diffs.
+    /// </summary>
+    public DbSet<StoreAdministrator> storeAdministrators { get; set; }
 
     // File sharing
     public DbSet<FileShareToken> fileShareTokens { get; set; }
@@ -74,10 +78,18 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Outbound marketplace HTTP request logs
     public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }
 
+    // Inbound Public API request logs
+    public DbSet<ApiRequestLog> apiRequestLogs { get; set; }
+
     public DbSet<AiModelConfig> aiModelConfigs { get; set; }
     public DbSet<AiOperation> aiOperations { get; set; }
     public DbSet<AiStoreSettings> aiStoreSettings { get; set; }
     public DbSet<AiConversation> aiConversations { get; set; }
+
+    // Reference Catalog (synced from Control Plane)
+    public DbSet<ReferenceCurrency> referenceCurrencies { get; set; }
+    public DbSet<ReferenceTimezone> referenceTimezones { get; set; }
+    public DbSet<ReferencePlugin> referencePlugins { get; set; }
     public DbSet<AiConversationMessage> aiConversationMessages { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
@@ -88,25 +100,23 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     {
         builder.Ignore<IdentityUserLogin<int>>();
         builder.Ignore<IdentityUserToken<int>>();
-        builder.Entity<IdentityUserRole<int>>().HasKey(r => r.UserId);
+        builder.Entity<IdentityUserRole<int>>().HasKey(r => new { r.UserId, r.RoleId });
+
+        // Kept queryable for MigrateLegacyAccessAsync between RolesAndPermissions and DropStoreAdministrators.
+        // ExcludeFromMigrations: Drop is already scaffolded; do not recreate the table on future adds.
+        builder.Entity<StoreAdministrator>(e =>
+        {
+            e.ToTable("StoreAdministrators", t => t.ExcludeFromMigrations());
+            e.HasKey(x => new { x.StoreId, x.UserId });
+            e.HasIndex(x => x.UserId);
+            e.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         builder.Entity<User>()
             .HasOne(u => u.selectedStore)
             .WithMany()
             .HasForeignKey(u => u.selectedStoreId);
-
-        builder.Entity<Store>()
-            .HasMany(s => s.storeAdmins)
-            .WithMany(u => u.storeAdminMemberships)
-            .UsingEntity<Dictionary<string, object>>(
-                "StoreAdministrators",
-                right => right.HasOne<User>().WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade),
-                left => left.HasOne<Store>().WithMany().HasForeignKey("StoreId").OnDelete(DeleteBehavior.Cascade),
-                join =>
-                {
-                    join.HasKey("StoreId", "UserId");
-                    join.HasIndex("UserId");
-                });
 
         // Auth: refresh tokens already configured elsewhere; API keys
         builder.Entity<UserApiKey>()
@@ -147,7 +157,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasForeignKey(l => l.categoryMappingId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Index for COUNT(*) per categoryMappingId in GetMappings — without this EF does a full table scan per mapping
+        // Index for COUNT(*) per categoryMappingId in GetMappings - without this EF does a full table scan per mapping
         builder.Entity<ProductMarketplaceLink>()
             .HasIndex(l => l.categoryMappingId);
 
@@ -362,7 +372,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<TagDefinition>()
             .HasIndex(td => td.storeId);
 
-        // FileTag: unique (fileId, tagDefinitionId) — one tag per file
+        // FileTag: unique (fileId, tagDefinitionId) - one tag per file
         builder.Entity<FileTag>()
             .HasIndex(ft => new { ft.fileId, ft.tagDefinitionId })
             .IsUnique();
@@ -399,6 +409,13 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AdapterHttpLog>()
             .HasIndex(l => new { l.adapterKey, l.createdAt });
 
+        builder.Entity<ApiRequestLog>()
+            .HasIndex(l => new { l.userId, l.createdAt });
+        builder.Entity<ApiRequestLog>()
+            .HasIndex(l => new { l.apiKeyId, l.createdAt });
+        builder.Entity<ApiRequestLog>()
+            .HasIndex(l => new { l.statusCode, l.createdAt });
+
         // AiModelConfig indexes
         builder.Entity<AiModelConfig>()
             .HasIndex(m => m.isDefault);
@@ -407,7 +424,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiOperation>()
             .HasIndex(o => new { o.userId, o.storeId, o.createdAt });
 
-        // AiConversation — one session per sessionId
+        // AiConversation - one session per sessionId
         builder.Entity<AiConversation>()
             .HasIndex(c => c.sessionId)
             .IsUnique();
@@ -416,7 +433,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiConversationMessage>()
             .HasIndex(m => new { m.conversationId, m.createdAt });
 
-        // AiStoreSettings — one row per store
+        // AiStoreSettings - one row per store
         builder.Entity<AiStoreSettings>()
             .HasIndex(s => s.StoreId)
             .IsUnique();

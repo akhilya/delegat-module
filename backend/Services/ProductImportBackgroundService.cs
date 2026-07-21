@@ -208,7 +208,7 @@ public class ProductImportBackgroundService : BackgroundService
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Error: {pending.productName ?? pending.externalProductId} — {pending.lastError}");
+                        $"Error: {pending.productName ?? pending.externalProductId} - {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);

@@ -741,14 +741,14 @@ export default {
                       {{ getAttributeTypeLabel(attribute.type) }}
                     </TableCell>
                     <TableCell class="hidden md:table-cell px-3 text-right tabular-nums text-muted-foreground">
-                      {{ attribute.options ? getOptionsCount(attribute.options) : "—" }}
+                      {{ attribute.options ? getOptionsCount(attribute.options) : "-" }}
                     </TableCell>
                     <TableCell class="px-2 text-center text-muted-foreground">
                       <span v-if="attribute.isRequired" class="text-destructive">*</span>
-                      <span v-else>—</span>
+                      <span v-else>-</span>
                     </TableCell>
                     <TableCell class="hidden lg:table-cell px-3 text-muted-foreground max-w-xs truncate">
-                      {{ attribute.description || "—" }}
+                      {{ attribute.description || "-" }}
                     </TableCell>
                     <TableCell class="px-2">
                       <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">

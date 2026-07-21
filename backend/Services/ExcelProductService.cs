@@ -88,7 +88,7 @@ public class ExcelProductService
             ws.Cell(row, c++).Value = p.Id;
             ws.Cell(row, c++).Value = SafeExcelText(p.sku);
             ws.Cell(row, c++).Value = SafeExcelText(p.category?.name ?? "");
-            // Group(s) — comma-separated when product belongs to multiple groups.
+            // Group(s) - comma-separated when product belongs to multiple groups.
             // Read-only: edits in this column are ignored on import.
             ws.Cell(row, c++).Value = SafeExcelText(string.Join(", ",
                 p.groupMemberships?

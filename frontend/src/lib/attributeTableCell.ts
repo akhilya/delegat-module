@@ -46,7 +46,7 @@ function resolveSelectLabel(
 }
 
 function renderEmptyCell(): VNode {
-  return h("span", { class: "text-muted-foreground text-sm" }, "—");
+  return h("span", { class: "text-muted-foreground text-sm" }, "-");
 }
 
 /** Renders a table cell for a single attribute value based on its type definition. */

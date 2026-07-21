@@ -27,8 +27,9 @@ public class AiController : ControllerBase
         _currentUserService = currentUserService;
     }
 
-    // POST /api/ai/chat — SSE streaming chat
+    // POST /api/ai/chat - SSE streaming chat
     [HttpPost("chat")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> Chat([FromBody] AiChatRequest request, CancellationToken ct)
     {
         EnsureAiEnabled();
@@ -54,8 +55,9 @@ public class AiController : ControllerBase
         return new EmptyResult();
     }
 
-    // POST /api/ai/execute-plan — deterministic execution of a user-confirmed plan (SSE)
+    // POST /api/ai/execute-plan - deterministic execution of a user-confirmed plan (SSE)
     [HttpPost("execute-plan")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> ExecutePlan([FromBody] ExecutePlanRequest request, CancellationToken ct)
     {
         EnsureAiEnabled();
@@ -82,8 +84,9 @@ public class AiController : ControllerBase
         return new EmptyResult();
     }
 
-    // POST /api/ai/stop — cancel server-side generation for the given session
+    // POST /api/ai/stop - cancel server-side generation for the given session
     [HttpPost("stop")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public IActionResult Stop([FromBody] StopRequest req)
     {
         EnsureAiEnabled();
@@ -94,6 +97,7 @@ public class AiController : ControllerBase
 
     // POST /api/ai/explain-error
     [HttpPost("explain-error")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> ExplainError([FromBody] ExplainErrorRequest request, CancellationToken ct)
     {
         EnsureAiEnabled();
@@ -107,6 +111,7 @@ public class AiController : ControllerBase
     }
 
     [HttpPost("generate-product-description")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> GenerateProductDescription(
         [FromBody] GenerateProductDescriptionRequest request,
         CancellationToken ct)
@@ -139,7 +144,7 @@ public class AiController : ControllerBase
         }
     }
 
-    // GET /api/ai/operations — recent AI operations for undo history
+    // GET /api/ai/operations - recent AI operations for undo history
     [HttpGet("operations")]
     public async Task<IActionResult> GetOperations(CancellationToken ct)
     {

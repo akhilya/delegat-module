@@ -64,7 +64,7 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
 
     /// <summary>
     /// JSON-serialized node graph (nodes + edges) for the whole-category visual mapping editor.
-    /// The single source of truth for the mapping — schema, per-field config, and export/import.
+    /// The single source of truth for the mapping - schema, per-field config, and export/import.
     /// Stored as LONGTEXT.
     /// </summary>
     public string? graphJson { get; set; }

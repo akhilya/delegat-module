@@ -2,7 +2,6 @@ using Delegat.Controllers;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Services;
-using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,30 +11,7 @@ namespace Delegat.Tests;
 public class DatabaseDumpTests
 {
     [Fact]
-    public async Task DownloadDatabaseDump_Forbidden_WhenNotAdmin()
-    {
-        var user = new Models.User { Id = 1, UserName = "user", isActive = true, isAdmin = false };
-        var current = new FakeCurrentUserService { UserId = user.Id, User = user };
-        var controller = CreateController(current, new FakeDumpService());
-
-        var ex = await Assert.ThrowsAsync<ApiException>(
-            () => controller.DownloadDatabaseDump(CancellationToken.None));
-        Assert.Equal(403, ex.StatusCode);
-    }
-
-    [Fact]
-    public async Task DownloadDatabaseDump_Forbidden_WhenNoUser()
-    {
-        var current = new FakeCurrentUserService { UserId = null };
-        var controller = CreateController(current, new FakeDumpService());
-
-        var ex = await Assert.ThrowsAsync<ApiException>(
-            () => controller.DownloadDatabaseDump(CancellationToken.None));
-        Assert.Equal(403, ex.StatusCode);
-    }
-
-    [Fact]
-    public async Task DownloadDatabaseDump_ReturnsFile_WhenAdmin()
+    public async Task DownloadDatabaseDump_ReturnsFile()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"delegat-test-dump-{Guid.NewGuid():N}.sql");
         await File.WriteAllTextAsync(tempPath, "-- test dump\n");
@@ -44,8 +20,6 @@ public class DatabaseDumpTests
 
         try
         {
-            var user = new Models.User { Id = 1, UserName = "admin", isActive = true, isAdmin = true };
-            var current = new FakeCurrentUserService { UserId = user.Id, User = user };
             var dump = new FakeDumpService
             {
                 Impl = () => Task.FromResult(new DatabaseDumpHandle(
@@ -53,7 +27,7 @@ public class DatabaseDumpTests
                     "delegat-test.sql",
                     () => released = true)),
             };
-            var controller = CreateController(current, dump);
+            var controller = CreateController(dump);
 
             var result = await controller.DownloadDatabaseDump(CancellationToken.None);
             var file = Assert.IsType<PhysicalFileResult>(result);
@@ -96,11 +70,9 @@ public class DatabaseDumpTests
         Assert.Equal("mysqldump_unavailable", ex.Code);
     }
 
-    private static SettingsController CreateController(
-        FakeCurrentUserService current,
-        IDatabaseDumpService dump)
+    private static SettingsController CreateController(IDatabaseDumpService dump)
     {
-        var controller = new SettingsController(current, dump);
+        var controller = new SettingsController(dump);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),

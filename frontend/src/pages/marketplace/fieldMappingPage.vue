@@ -361,7 +361,7 @@ export default {
       try {
         this.storeFiles = (await this.getStoreFiles()) || [];
       } catch {
-        this.storeFiles = []; // shared storage is optional — don't block the editor
+        this.storeFiles = []; // shared storage is optional - don't block the editor
       }
     },
 
@@ -1140,7 +1140,7 @@ export default {
 
     <PageSection :loading="isLoading">
       <template v-if="!isLoading">
-        <!-- Visual node graph editor (whole-category Blueprint) — the sole mapping editor.
+        <!-- Visual node graph editor (whole-category Blueprint) - the sole mapping editor.
              The preview-product selector lives in the canvas toolbar. -->
         <div
           v-if="connectionId && mappingId"
@@ -1242,14 +1242,14 @@ export default {
                     <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
                     <span
                       class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
-                      >{{ item.sourceValue ?? "—" }}</span
+                      >{{ item.sourceValue ?? "-" }}</span
                     >
                   </div>
                   <div class="flex gap-2 min-w-0">
                     <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
                     <span
                       class="font-medium font-mono break-all whitespace-pre-wrap"
-                      >{{ item.resultValue ?? "—" }}</span
+                      >{{ item.resultValue ?? "-" }}</span
                     >
                   </div>
                 </TabsContent>
@@ -1264,14 +1264,14 @@ export default {
                   <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
                   <span
                     class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
-                    >{{ item.sourceValue ?? "—" }}</span
+                    >{{ item.sourceValue ?? "-" }}</span
                   >
                 </div>
                 <div class="flex gap-2 min-w-0">
                   <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
                   <span
                     class="font-medium font-mono break-all whitespace-pre-wrap"
-                    >{{ item.resultValue ?? "—" }}</span
+                    >{{ item.resultValue ?? "-" }}</span
                   >
                 </div>
               </div>

@@ -11,7 +11,7 @@ using Delegat.Services.Marketplace;
 namespace Delegat.Controllers.PublicApi;
 
 /// <summary>
-/// Public API v1 — marketplace sync starters. All mutations return 202 Accepted + operationId for polling.
+/// Public API v1 - marketplace sync starters. All mutations return 202 Accepted + operationId for polling.
 /// </summary>
 [ApiController]
 [PublicApiAuthorize]
@@ -48,7 +48,7 @@ public class PublicSyncController : ControllerBase
     public class ImportProductsRequest
     {
         public List<ImportProductItem>? products { get; set; }
-        /// <summary>When true and products empty — import all mappable external products is not supported; require products.</summary>
+        /// <summary>When true and products empty - import all mappable external products is not supported; require products.</summary>
         public bool forceImportWithoutMapping { get; set; }
     }
 

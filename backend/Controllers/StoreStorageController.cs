@@ -68,6 +68,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPut]
     [Route("/store-storage/files")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)]
     public async Task<IActionResult> UploadFiles(IFormFile[] files, [FromQuery] int? folderId = null, CancellationToken ct = default)
@@ -174,6 +175,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPatch]
     [Route("/store-storage/files/{id}/rename")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RenameFile(int id, [FromBody] RenameFileRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.name))
@@ -194,6 +196,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPatch]
     [Route("/store-storage/files/{id}/public")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> SetFilePublic(int id, [FromBody] SetPublicRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -215,6 +218,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPatch]
     [Route("/store-storage/files/{id}/move")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> MoveFile(int id, [FromBody] MoveFileRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -238,6 +242,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpDelete]
     [Route("/store-storage/files/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteFile(int id, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -260,6 +265,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/files/bulk-delete")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkDeleteFiles([FromBody] BulkDeleteFilesRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -316,6 +322,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/folders")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateFolder([FromBody] CreateFolderRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -357,6 +364,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPut]
     [Route("/store-storage/folders/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RenameFolder(int id, [FromBody] RenameFolderRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.name))
@@ -375,6 +383,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpDelete]
     [Route("/store-storage/folders/{id}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteFolder(int id, [FromQuery] bool recursive = false, CancellationToken ct = default)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -436,6 +445,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPatch]
     [Route("/store-storage/folders/{id}/move")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> MoveFolder(int id, [FromBody] MoveFolderRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -478,6 +488,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/bulk-move")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkMove([FromBody] BulkMoveRequest request, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -553,6 +564,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/files/{id}/share")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> ShareFile(int id, [FromBody] ShareRequest request, CancellationToken ct)
     {
         ValidateTtl(request.ttlHours);
@@ -583,6 +595,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/folders/{id}/share")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> ShareFolder(string id, [FromBody] ShareRequest request, CancellationToken ct)
     {
         ValidateTtl(request.ttlHours);
@@ -619,6 +632,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpDelete]
     [Route("/store-storage/shares/file/{token}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RevokeFileShare(string token, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -635,6 +649,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpDelete]
     [Route("/store-storage/shares/folder/{token}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RevokeFolderShare(string token, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -650,6 +665,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/files/{fileId}/tags/{tagId}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> AssignTag(int fileId, int tagId, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -674,6 +690,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpDelete]
     [Route("/store-storage/files/{fileId}/tags/{tagId}")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> RemoveTag(int fileId, int tagId, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
@@ -692,6 +709,7 @@ public class StoreStorageController : ControllerBase
 
     [HttpPost]
     [Route("/store-storage/files/bulk-tag")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkAssignTag([FromBody] BulkTagInput input, CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);

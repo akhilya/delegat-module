@@ -16,6 +16,7 @@ import { buildSidebarGroups } from "@/config/sidebarNav";
 import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { http } from "@/main";
+import { hasAnyPermission, PERMS } from "@/lib/permissions";
 
 export default {
   components: {
@@ -38,6 +39,7 @@ export default {
     return {
       me: null,
       memberships: [],
+      platformStoreCount: null,
       connections: [],
       adapters: [],
       platformVersion: null,
@@ -50,13 +52,34 @@ export default {
       return this.memberships.find((store) => store.id === this.me?.selectedStoreId);
     },
     canManageSelectedStore() {
-      return this.me?.isAdmin || this.selectedStoreMembership?.isStoreAdmin;
+      return hasAnyPermission(this.me, [
+        PERMS.StoreSettingsManage,
+        PERMS.StoreMembersManage,
+        PERMS.CatalogManage,
+      ]);
+    },
+    hasStore() {
+      return this.memberships.length > 0;
+    },
+    canCreateStores() {
+      return Boolean(this.me?.isAdmin) || hasAnyPermission(this.me, [PERMS.StoresCreate]);
+    },
+    storeSwitcherEmptyMode() {
+      if (this.hasStore) return null;
+      // Admins who can create stores: wait for platform count, then show create hint if empty.
+      if (this.canCreateStores) {
+        if (this.platformStoreCount === null) return null;
+        if (this.platformStoreCount === 0) return "no-stores";
+      }
+      return "no-membership";
     },
     sidebarContext() {
       return {
         me: this.me,
         canManageStore: this.canManageSelectedStore,
         isAdmin: Boolean(this.me?.isAdmin),
+        hasStore: this.hasStore,
+        hasPermission: (p) => hasAnyPermission(this.me, [p]),
         connections: this.connections,
         adapters: this.adapters,
       };
@@ -70,8 +93,7 @@ export default {
   },
   watch: {
     "$store.state.appKey"() {
-      this.fetchConnections();
-      this.fetchAdapters();
+      this.loadShellData(true);
     },
     "$route.path"(path) {
       if (path.startsWith("/adapter")) {
@@ -84,12 +106,28 @@ export default {
     ...mapActions([
       "getMe",
       "getMyMemberships",
+      "getAllStores",
       "getConnections",
       "getAvailableAdapters",
       "postSelectStore",
     ]),
     showConfirm(title, message) {
       return new Promise((r) => { this.confirmDialog = { open: true, title, message, resolve: r }; });
+    },
+    async refreshPlatformStoreCount() {
+      if (this.memberships.length > 0 || !this.canCreateStores) {
+        this.platformStoreCount = null;
+        return;
+      }
+      await this.getAllStores({
+        onSuccess: (response) => {
+          const payload = response.data?.value ?? response.data;
+          this.platformStoreCount = Number(payload?.total ?? payload?.items?.length ?? 0);
+        },
+        onError: () => {
+          this.platformStoreCount = null;
+        },
+      });
     },
     async fetchConnections() {
       if (!this.me?.selectedStoreId) {
@@ -132,6 +170,8 @@ export default {
         },
       });
 
+      await this.refreshPlatformStoreCount();
+
       http.get("/health").then((response) => {
         this.platformVersion = response.data?.version;
       }).catch(() => {});
@@ -141,6 +181,24 @@ export default {
         !this.memberships.some((store) => store.id === this.me.selectedStoreId)
       )) {
         await this.selectStore(this.memberships[0].id);
+        return;
+      }
+
+      if (this.memberships.length === 0) {
+        this.connections = [];
+        const path = this.$route.path;
+        const isStoreSurface =
+          path === "/" ||
+          path.startsWith("/products") ||
+          path.startsWith("/categories") ||
+          path.startsWith("/product-groups") ||
+          path.startsWith("/storage") ||
+          path.startsWith("/adapter") ||
+          path.startsWith("/tools") ||
+          path.startsWith("/store-attributes");
+        if (isStoreSurface) {
+          await this.$router.replace("/settings/user");
+        }
         return;
       }
 
@@ -190,6 +248,7 @@ export default {
       <AppSidebarStoreSwitcher
         :memberships="memberships"
         :selected-store-id="me?.selectedStoreId"
+        :empty-mode="storeSwitcherEmptyMode"
         @select-store="selectStore"
       />
     </SidebarHeader>

@@ -451,7 +451,7 @@ public class ProductFolderController : ControllerBase
                 }
                 catch
                 {
-                    // File was deleted/moved from storage during archive formation — skip it
+                    // File was deleted/moved from storage during archive formation - skip it
                 }
             }
         }

@@ -19,7 +19,6 @@ import {
 import { Dices, Download } from "lucide-vue-next";
 import JsBarcode from "jsbarcode";
 import { ref, computed, watch, nextTick } from "vue";
-import { downloadBarcodePng } from "@/lib/barcodeDownload.js";
 import { t } from "@/i18n";
 
 export default {
@@ -175,9 +174,10 @@ export default {
       doGenerate();
     }
 
-    function downloadBarcode() {
+    async function downloadBarcode() {
       if (!isValid.value || !barcodeFormat.value) return;
-      downloadBarcodePng(props.modelValue, barcodeFormat.value);
+      const { downloadBarcodePng } = await import("@/lib/barcodeDownload.js");
+      await downloadBarcodePng(props.modelValue, barcodeFormat.value);
     }
 
     return {
@@ -217,7 +217,7 @@ export default {
         <Dices class="size-4" />
       </Button>
 
-      <!-- Inline barcode preview — click to expand -->
+      <!-- Inline barcode preview - click to expand -->
       <Popover v-if="showPreview && modelValue && isValid && barcodeFormat" v-model:open="popoverOpen">
         <PopoverTrigger as-child>
           <button

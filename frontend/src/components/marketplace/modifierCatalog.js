@@ -1,10 +1,10 @@
 import { t } from "@/i18n";
 
 /**
- * Modifier catalog — defines all available modifiers, their display names,
+ * Modifier catalog - defines all available modifiers, their display names,
  * categories, applicable field types, and parameter schemas.
  *
- * `reversible` — whether the modifier can be inverted during import.
+ * `reversible` - whether the modifier can be inverted during import.
  * Irreversible modifiers pass values through unchanged on import.
  */
 export const MODIFIER_CATALOG = {
@@ -234,7 +234,7 @@ export const MODIFIER_CATALOG = {
         type: "template",
         required: false,
         default:
-          "You generate concise marketplace field values. Respond with plain text only — no markdown, no quotes, no preamble.",
+          "You generate concise marketplace field values. Respond with plain text only - no markdown, no quotes, no preamble.",
       },
       { key: "modelId", get label() { return t("marketplace.modifiers.llmGenerate.model"); }, type: "aiModel", required: true, default: null },
       { key: "seed", label: "Seed", type: "number", required: false, default: null },

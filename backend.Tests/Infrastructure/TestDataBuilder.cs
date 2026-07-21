@@ -72,8 +72,7 @@ public sealed class TestDataBuilder
     public void AddMember(Store store, User user, bool asAdmin = false)
     {
         store.members.Add(user);
-        if (asAdmin)
-            store.storeAdmins.Add(user);
+        _ = asAdmin; // store-admin concept removed; kept for call-site compatibility
     }
 
     public Category AddCategory(int storeId, string? name = null, string? description = null)

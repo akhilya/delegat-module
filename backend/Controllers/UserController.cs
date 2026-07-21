@@ -5,7 +5,6 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
-using static Delegat.Models.Store;
 
 namespace Delegat.Controllers;
 
@@ -17,42 +16,47 @@ public class UserController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
     private readonly UserManager<User> _userManager;
+    private readonly IPermissionService _permissionService;
 
     public UserController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
-        UserManager<User> userManager)
+        UserManager<User> userManager,
+        IPermissionService permissionService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _userManager = userManager;
+        _permissionService = permissionService;
     }
 
     [HttpGet]
     [Route("/users/")]
-    public async Task<IActionResult> GetUsers()
+    [RequiresPermission(Permissions.UsersManage)]
+    public async Task<IActionResult> GetUsers(CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can view users");
-
         var users = await _userManager.Users
             .OrderByDescending(u => u.isActive)
             .ThenBy(u => u.UserName)
-            .ToListAsync();
+            .ToListAsync(ct);
 
-        return Ok(users.Select(u => u.MapToDTO(_serviceProvider)).ToList());
+        var result = new List<object>();
+        foreach (var u in users)
+            result.Add(await MapUserDtoAsync(u, ct));
+
+        return Ok(result);
     }
 
     [HttpPatch]
     [Route("/users/{id}")]
-    public async Task<IActionResult> PatchUser(int id, [FromBody] UpdateUserForm input)
+    [RequiresPermission(Permissions.UsersManage)]
+    public async Task<IActionResult> PatchUser(int id, [FromBody] UpdateUserForm input, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can edit users");
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (currentUser == null)
+            throw ApiException.Unauthorized();
 
         var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
@@ -77,17 +81,22 @@ public class UserController : ControllerBase
 
         if (input.isAdmin.HasValue)
         {
+            if (!currentUser.isAdmin)
+                throw ApiException.Forbidden("Only the instance owner can change the owner flag");
+
             if (user.Id == currentUser.Id && !input.isAdmin.Value)
-                throw ApiException.BadRequest("Cannot remove administrator rights from yourself");
+                throw ApiException.BadRequest("Cannot remove owner rights from yourself");
 
             if (!input.isAdmin.Value)
             {
-                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
+                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin, ct);
                 if (user.isAdmin && activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Cannot remove rights from the last active administrator");
+                    throw ApiException.BadRequest("Cannot remove rights from the last active owner");
             }
 
             user.isAdmin = input.isAdmin.Value;
+            if (user.isAdmin)
+                await _permissionService.EnsureOwnerAccessAsync(user, ct);
         }
 
         if (input.isActive.HasValue)
@@ -97,9 +106,9 @@ public class UserController : ControllerBase
 
             if (!input.isActive.Value && user.isAdmin)
             {
-                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin);
+                var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin, ct);
                 if (activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Cannot deactivate the last active administrator");
+                    throw ApiException.BadRequest("Cannot deactivate the last active owner");
             }
 
             user.isActive = input.isActive.Value;
@@ -110,6 +119,8 @@ public class UserController : ControllerBase
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
             throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+
+        _permissionService.InvalidateUserAccess(user.Id);
 
         if (input.password != null)
         {
@@ -122,7 +133,48 @@ public class UserController : ControllerBase
                 throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
         }
 
-        return Ok(user.MapToDTO(_serviceProvider));
+        return Ok(await MapUserDtoAsync(user, ct));
+    }
+
+    [HttpGet]
+    [Route("/users/{id}/access")]
+    [RequiresPermission(Permissions.RolesManage)]
+    public async Task<IActionResult> GetUserAccess(int id, CancellationToken ct)
+    {
+        var user = await _userManager.FindByIdAsync(id.ToString());
+        if (user == null)
+            throw ApiException.NotFound("User not found", code: "user_not_found");
+
+        var access = await _permissionService.GetUserAccessAsync(id, ct);
+        return Ok(access);
+    }
+
+    [HttpPut]
+    [Route("/users/{id}/access")]
+    [RequiresPermission(Permissions.RolesManage)]
+    public async Task<IActionResult> PutUserAccess(int id, [FromBody] SetUserAccessForm input, CancellationToken ct)
+    {
+        var currentUser = await _currentUserService.GetUserAsync(ct);
+        if (currentUser == null)
+            throw ApiException.Unauthorized();
+
+        // roles.manage is never assignable - only User.isAdmin receives it at hydrate time.
+        var roles = input.roles ?? [];
+        var grants = (input.permissionGrants ?? [])
+            .Where(p => !Permissions.IsAdminOnly(p))
+            .ToList();
+        if (!currentUser.isAdmin)
+        {
+            if (roles.Contains(AppRoles.Owner, StringComparer.OrdinalIgnoreCase))
+                throw ApiException.Forbidden("Only the instance owner can assign the Owner role");
+        }
+
+        var user = await _userManager.FindByIdAsync(id.ToString());
+        if (user == null)
+            throw ApiException.NotFound("User not found", code: "user_not_found");
+
+        await _permissionService.SetUserAccessAsync(id, roles, grants, ct);
+        return Ok(await _permissionService.GetUserAccessAsync(id, ct));
     }
 
     [HttpGet]
@@ -136,22 +188,17 @@ public class UserController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
             s => s.members.Any(m => m.Id == user.Id && m.isActive),
-            query => query.Include(s => s.members).Include(s => s.storeAdmins).Include(s => s.currencies));
+            query => query.Include(s => s.members).Include(s => s.currencies));
 
-        var result = stores.Select(s =>
-        {
-            var dto = s.MapToDTO(_serviceProvider);
-            dto.isStoreAdmin = s.storeAdmins.Any(a => a.Id == user.Id && a.isActive);
-            return dto;
-        }).ToList();
+        var result = stores.Select(s => s.MapToDTO(_serviceProvider)).ToList();
         return Ok(result);
     }
 
     [HttpPatch]
     [Route("/users/me")]
-    public async Task<IActionResult> PatchMe([FromBody] UpdateMeForm input)
+    public async Task<IActionResult> PatchMe([FromBody] UpdateMeForm input, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
+        var currentUser = await _currentUserService.GetUserAsync(ct);
         if (currentUser == null)
             throw ApiException.Unauthorized();
 
@@ -199,32 +246,36 @@ public class UserController : ControllerBase
                 throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
         }
 
-        return Ok(user.MapToDTO(_serviceProvider));
+        return Ok(await MapUserDtoAsync(user, ct));
     }
 
     [HttpPost]
     [Route("/users/me/memberships/{id}/select")]
-    public async Task<IActionResult> PostSelectStore(int id)
+    public async Task<IActionResult> PostSelectStore(int id, CancellationToken ct)
     {
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null)
-            throw ApiException.Unauthorized();
+        var userId = _currentUserService.GetUserId()
+            ?? throw ApiException.Unauthorized();
 
-        var storeRepo = _unitOfWork.Repository<Store>();
-        var store = await storeRepo.GetByIdWithIncludesAsync(id, query => query.Include(s => s.members));
+        // Membership check without Include(members) - avoids attaching a second User instance
+        // when Identity already tracks the current user (e.g. after OnTokenValidated hydrate).
+        var isMember = await _unitOfWork.Repository<Store>().Query()
+            .Where(s => s.Id == id)
+            .SelectMany(s => s.members)
+            .AnyAsync(m => m.Id == userId && m.isActive, ct);
 
-        if (store == null)
-            throw ApiException.NotFound("Store not found");
-
-        if (!store.members.Any(m => m.Id == user.Id))
+        if (!isMember)
             throw ApiException.Forbidden("You are not a member of this store", code: "access_denied_store");
 
-        var userRepo = _unitOfWork.Repository<User>();
-        user.UpdateFill(new User.SelectStoreForm(id));
-        await userRepo.UpdateAsync(user);
-        await _unitOfWork.SaveChangesAsync();
+        // Update via UserManager so we mutate the already-tracked Identity user, if any.
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null || !user.isActive)
+            throw ApiException.Unauthorized();
 
-        // Set selected store in cookie
+        user.selectedStoreId = id;
+        var update = await _userManager.UpdateAsync(user);
+        if (!update.Succeeded)
+            throw ApiException.BadRequest(update.Errors.Select(e => e.Description).ToArray());
+
         var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
         Response.Cookies.Append("selected_store_id", id.ToString(), new CookieOptions
         {
@@ -235,6 +286,15 @@ public class UserController : ControllerBase
         });
 
         return Ok(new { next = "/products" });
+    }
+
+    private async Task<Delegat.Models.User.UserDTO> MapUserDtoAsync(Delegat.Models.User user, CancellationToken ct)
+    {
+        var dto = user.MapToDTO(_serviceProvider);
+        var access = await _permissionService.GetUserAccessAsync(user.Id, ct);
+        dto.roles = access.Roles;
+        dto.permissions = access.EffectivePermissions;
+        return dto;
     }
 
     public struct UpdateUserForm
@@ -250,5 +310,11 @@ public class UserController : ControllerBase
         public string? userName { get; set; }
         public string? currentPassword { get; set; }
         public string? password { get; set; }
+    }
+
+    public sealed class SetUserAccessForm
+    {
+        public List<string>? roles { get; set; }
+        public List<string>? permissionGrants { get; set; }
     }
 }

@@ -34,7 +34,7 @@
     "settings": "Settings",
     "more": "More",
     "or": "or",
-    "emDash": "—",
+    "emDash": "-",
     "confirmAction": "Confirm action",
     "brandDescription": "product and adapter management dashboard",
     "copied": "Copied",
@@ -63,7 +63,28 @@
     },
     "appSidebarStoreSwitcher": {
       "storePlaceholder": "Store",
-      "storesLabel": "Stores"
+      "storesLabel": "Stores",
+      "noMembershipTitle": "No store access",
+      "noMembershipBody": "You are not a member of any store. Contact an administrator to be added.",
+      "noStoresTitle": "No stores yet",
+      "noStoresBody": "There are no stores on this platform. Create the first store to get started.",
+      "noStoresLink": "Go to Stores"
+    },
+    "logs": {
+      "method": "Method",
+      "anyMethod": "Any method",
+      "code": "Status",
+      "anyStatus": "Any status",
+      "errors": "Errors",
+      "loadMore": "Load more",
+      "itemsOfTotal": "{count} of {total}",
+      "overview": "Overview",
+      "request": "Request",
+      "response": "Response",
+      "body": "Body",
+      "headers": "Headers",
+      "error": "Error",
+      "durationMs": "{ms} ms"
     },
     "barcodeInput": {
       "onlyDigitsError": "Digits only",
@@ -137,7 +158,7 @@
     },
     "productImagesEditor": {
       "productImagesTitle": "Product images",
-      "dragToReorderHint": "— drag to reorder",
+      "dragToReorderHint": "- drag to reorder",
       "otherImagesTitle": "Other images"
     },
     "rightActionStrip": {
@@ -165,30 +186,13 @@
     "productAttributeValidation": {
       "requiredField": "Required field",
       "enterNumber": "Enter a number"
-    },
-    "timezones": {
-      "moscow": "Moscow (UTC+3)",
-      "kaliningrad": "Kaliningrad (UTC+2)",
-      "samara": "Samara (UTC+4)",
-      "yekaterinburg": "Yekaterinburg (UTC+5)",
-      "omsk": "Omsk (UTC+6)",
-      "krasnoyarsk": "Krasnoyarsk (UTC+7)",
-      "irkutsk": "Irkutsk (UTC+8)",
-      "yakutsk": "Yakutsk (UTC+9)",
-      "vladivostok": "Vladivostok (UTC+10)",
-      "magadan": "Magadan (UTC+11)",
-      "kamchatka": "Kamchatka (UTC+12)",
-      "almaty": "Almaty (UTC+5)",
-      "tashkent": "Tashkent (UTC+5)",
-      "minsk": "Minsk (UTC+3)",
-      "kyiv": "Kyiv (UTC+2)"
     }
   },
   "store": {
     "aiChatModule": {
       "connectionError": "Connection error: {message}",
       "confirmAndExecute": "Confirmed, proceed",
-      "cancelPlanMessage": "Cancelling the proposed plan — do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
+      "cancelPlanMessage": "Cancelling the proposed plan - do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation."
     },
     "operationsModule": {
       "defaultTitle": "Operation",
@@ -206,6 +210,7 @@
     "groups": "Groups",
     "trash": "Trash",
     "categories": "Categories",
+    "barcodes": "Barcodes",
     "storage": "Storage",
     "marketplace": "Marketplace",
     "connections": "Connections",
@@ -232,7 +237,7 @@
     "plugins": "Plugins",
     "errorLogs": "Error logs",
     "adapterLogs": "Adapter logs",
-    "tokens": "Tokens"
+    "api": "API"
   },
   "theme": {
     "light": "Light theme",
@@ -308,6 +313,7 @@
     "operations": "Operations",
     "storage": "Storage",
     "categories": "Categories",
+    "barcodes": "Barcodes",
     "groups": "Product groups",
     "tools": "Tools",
     "attributes": "Global attributes",
@@ -324,7 +330,7 @@
     "stores": "Stores",
     "store": "Store",
     "users": "Users",
-    "tokens": "Tokens",
+    "api": "API",
     "errorLogs": "Error logs",
     "plugins": "Plugins",
     "aiModels": "AI Models",
@@ -368,7 +374,7 @@
     "stopGeneration": "Stop generation",
     "send": "Send",
     "deleteConversationTitle": "Delete conversation?",
-    "deleteConversationDescription": "This action cannot be undone — the message history will be deleted.",
+    "deleteConversationDescription": "This action cannot be undone - the message history will be deleted.",
     "today": "Today",
     "yesterday": "Yesterday",
     "thisWeek": "This week",
@@ -728,7 +734,7 @@
         "mappingToTransferPlaceholder": "Mapping to move to",
         "mappingFallback": "Mapping #{id}",
         "deleteWithoutMoving": "Delete without moving",
-        "deleteWithoutMovingHint": "Products will remain linked to the marketplace but will lose their mapping — export will be unavailable until you assign a new one.",
+        "deleteWithoutMovingHint": "Products will remain linked to the marketplace but will lose their mapping - export will be unavailable until you assign a new one.",
         "noReplacementMappingHint": "Nowhere to move to: there's no other mapping for this category. To move, first create or duplicate a mapping.",
         "linkedProducts": "Linked products",
         "productFallback": "Product #{id}",
@@ -804,7 +810,7 @@
       "categoryIdPlaceholder": "Choose a category above or enter an ID",
       "categoryIdDescription": "You can specify an ID manually if the category isn't in the list.",
       "selectCategoryTitle": "Select a category",
-      "selectCategoryDescription": "First choose an adapter category on the left — import settings will appear here.",
+      "selectCategoryDescription": "First choose an adapter category on the left - import settings will appear here.",
       "loadingCategoryFields": "Loading category fields...",
       "whereToImportTitle": "Where to import",
       "whereToImportDescription": "Create a new local category or add to an existing one.",
@@ -816,7 +822,7 @@
       "selectCategoryPlaceholder": "Select a category...",
       "searchCategoryPlaceholder": "Search category...",
       "baseFieldsCount": "{count} base fields",
-      "baseFieldsHint": "— SKU, name, description, price, stock and images — will be automatically linked to product fields.",
+      "baseFieldsHint": "- SKU, name, description, price, stock and images - will be automatically linked to product fields.",
       "attributesForImportTitle": "Attributes to import ({selected} / {total})",
       "attributesForImportDescription": "Select additional category fields to transfer.",
       "deselectAll": "Deselect all",
@@ -858,13 +864,13 @@
       "export": "Export",
       "import": "Import",
       "rearrangeBlocksTitle": "Rearrange blocks?",
-      "rearrangeBlocksDescription": "All blocks will be automatically rearranged — the current layout will be lost.",
+      "rearrangeBlocksDescription": "All blocks will be automatically rearranged - the current layout will be lost.",
       "rearrange": "Rearrange",
       "previewTitle": "Preview",
       "previewSheetDescription": "Summary of all fields. Changed values are highlighted.",
       "visualTab": "Preview",
       "rawDataTab": "Data",
-      "imagesCountHint": "{count} images. If they don't display — the URL may be inaccessible from the browser.",
+      "imagesCountHint": "{count} images. If they don't display - the URL may be inaccessible from the browser.",
       "sourceAbbr": "Src:",
       "resultAbbr": "Res:",
       "noActiveFieldsTitle": "No active fields",
@@ -935,7 +941,9 @@
       "userType": "User",
       "reload": "Reload",
       "deletePluginTitle": "Delete plugin?",
-      "deletePluginDescription": "Are you sure you want to delete the plugin \"{name}\"? Connections using this plugin will stop working."
+      "deletePluginDescription": "Are you sure you want to delete the plugin \"{name}\"? Connections using this plugin will stop working.",
+      "registryTitle": "Available from registry",
+      "registryDescription": "Adapters published on Control Plane. Install by uploading the DLL for now (download-from-registry comes later)."
     },
     "graph": {
       "pinTypes": {
@@ -958,16 +966,16 @@
       "priceHeader": "Price fields",
       "aliasMergedTitle": "Merged with «{primary}»: takes its value on export, ignored on import",
       "aliasMergedShortTitle": "Merged with «{primary}»",
-      "fanOutSourceUsed": "This source is already used by another field — a data conflict is possible. If the fields are duplicates, merge them in the field settings.",
+      "fanOutSourceUsed": "This source is already used by another field - a data conflict is possible. If the fields are duplicates, merge them in the field settings.",
       "fanOutImportDisabled": "Import disabled: this source is already used by several adapter fields. If the fields are duplicates, merge them in the field settings.",
       "fanOutPriceUsed": "This source is already used by another price field.",
-      "sourceClickTitle": "{label} — click to configure",
+      "sourceClickTitle": "{label} - click to configure",
       "unitLabel": "Unit: {unit}",
       "rangeFrom": "from {value}",
       "rangeTo": "to {value}",
       "keyLabel": "Key: {key}",
       "modifierFallback": "Modifier",
-      "irreversibleWarning": "Not reversible on import: the original value can't be restored — the field will be written as-is.",
+      "irreversibleWarning": "Not reversible on import: the original value can't be restored - the field will be written as-is.",
       "valueRowLabel": "value",
       "previewMore": "more",
       "previewLess": "collapse",
@@ -1110,7 +1118,7 @@
         "fieldNotConnectedPrice": "Price field «{label}» is not connected",
         "nodeWithoutInput": "Node has no input",
         "unknownModifier": "Unknown modifier: {type}",
-        "graphHasCycle": "The graph contains a cycle — it will not run"
+        "graphHasCycle": "The graph contains a cycle - it will not run"
       },
       "contextMenu": {
         "searchPlaceholder": "Search blocks…",
@@ -1224,21 +1232,21 @@
       "fieldsAnalysis": "Field analysis",
       "noFields": "no fields",
       "edges": "Edges",
-      "hideDebug": "Shift+Tab — hide",
+      "hideDebug": "Shift+Tab - hide",
       "fieldsAddedCount": "Fields added: {count}",
-      "schemaUpToDate": "Schema is up to date — no new fields",
+      "schemaUpToDate": "Schema is up to date - no new fields",
       "graphSaved": "Graph saved",
       "invalidFileFormat": "Invalid format: expected an object with nodes and edges",
       "mappingExported": "Mapping exported",
-      "mappingImported": "Mapping imported — click \"Save\"",
+      "mappingImported": "Mapping imported - click \"Save\"",
       "sourceValueLabel": "Source value",
       "aiModelFallback": "Model #{id}"
     },
     "optionMapEditor": {
       "title": "Mappings: variant → adapter option",
-      "sourceOptionsHint": "Left — source options. Connect a block to a category attribute with options.",
+      "sourceOptionsHint": "Left - source options. Connect a block to a category attribute with options.",
       "loadFromFieldPlaceholder": "Load options from adapter field...",
-      "loadFromFieldHint": "Or connect a block to the adapter field — options will be loaded automatically.",
+      "loadFromFieldHint": "Or connect a block to the adapter field - options will be loaded automatically.",
       "sourceOptionPlaceholder": "Source option",
       "adapterOptionPlaceholder": "Adapter option",
       "addMapping": "Add mapping",
@@ -1249,8 +1257,8 @@
     },
     "valueMapEditor": {
       "title": "Mappings: variant → valueId",
-      "sourceOptionsHint": "Left — source options (category attribute). Connect a block to an attribute with options.",
-      "valueIdHint": "Right — adapter field valueId (entered manually). The label is shown if the valueId matches a known option.",
+      "sourceOptionsHint": "Left - source options (category attribute). Connect a block to an attribute with options.",
+      "valueIdHint": "Right - adapter field valueId (entered manually). The label is shown if the valueId matches a known option.",
       "sourceOptionPlaceholder": "Source option",
       "addMapping": "Add mapping",
       "unmappedWarning": "No mapping for {mapped} of {total} source values",
@@ -1584,13 +1592,13 @@
       "selectPlaceholder": "Select...",
       "unknownTypePlaceholder": "Unknown type: {type}",
       "emptyTitle": "No global attributes",
-      "emptyDescription": "Add global attributes in store settings — they will appear here."
+      "emptyDescription": "Add global attributes in store settings - they will appear here."
     },
     "productAttributeForm": {
       "selectPlaceholder": "Select...",
       "unknownTypePlaceholder": "Unknown type: {type}",
       "emptyTitle": "No attributes to fill in",
-      "emptyDescription": "Add attributes to the product category — they will appear here."
+      "emptyDescription": "Add attributes to the product category - they will appear here."
     },
     "bulkAdapterDialog": {
       "title": "Adapter action ({count} products)",
@@ -1723,8 +1731,8 @@
       "linksWillBreakAfterMovePrefix": "After the move,",
       "withAdaptersSuffix": "with adapters will be broken",
       "originalHasLinksPrefix": "The original has",
-      "moveLinksExplanation": "Marketplace links are not transferred — they will need to be set up again in the target store.",
-      "cloneLinksExplanation": "The new product will be created without marketplace links — the original keeps its links.",
+      "moveLinksExplanation": "Marketplace links are not transferred - they will need to be set up again in the target store.",
+      "cloneLinksExplanation": "The new product will be created without marketplace links - the original keeps its links.",
       "confirmBreakLinksLabel": "I understand that marketplace links will be broken",
       "alsoMovesLabel": "Will also be moved:",
       "alsoCopiesLabel": "Will also be copied:",
@@ -1843,16 +1851,21 @@
     },
     "importExcelDialog": {
       "title": "Import from Excel",
+      "stepUpload": "Upload",
+      "stepPreview": "Review",
+      "stepDone": "Done",
       "stepUploadDescription": "Upload an .xlsx file with product changes",
       "stepPreviewDescription": "Review the changes before applying them",
-      "stepApplyingDescription": "Applying changes...",
+      "stepApplyingDescription": "Applying changes…",
       "stepResultDescription": "Import result",
+      "processingFile": "Reading the file…",
       "dropzoneTitle": "Drag a file here or click to choose",
       "dropzoneHint": "Only .xlsx format is supported",
-      "totalRows": "Total rows:",
-      "changedCount": "Changed:",
-      "unchangedCount": "Unchanged:",
-      "errorCount": "Errors:",
+      "browseFile": "Choose file",
+      "totalRows": "Total rows",
+      "changedCount": "Changed",
+      "unchangedCount": "Unchanged",
+      "errorCount": "Errors",
       "errorsTitle": "Errors",
       "rowLabel": "Row {row}",
       "productIdSuffix": "(product #{id})",
@@ -2073,7 +2086,7 @@
         "error": "Error"
       },
       "newGroupTitle": "New group",
-      "newGroupHint": "Set a name and description — then add products to merge on the marketplace",
+      "newGroupHint": "Set a name and description - then add products to merge on the marketplace",
       "editGroupHint": "Group name and description in the catalog. The description is only visible inside the system.",
       "actions": {
         "createGroup": "Create group",
@@ -2090,11 +2103,11 @@
       "sections": {
         "groupProducts": {
           "title": "Products in group",
-          "description": "{count} {unit}. Row order determines the order of variants in the merged card — drag rows to change the order."
+          "description": "{count} {unit}. Row order determines the order of variants in the merged card - drag rows to change the order."
         },
         "marketplaceMerge": {
           "title": "Marketplace merge",
-          "description": "Ozon merges via a card field — re-export products after linking. Wildberries — via merge API, if the products are already exported.",
+          "description": "Ozon merges via a card field - re-export products after linking. Wildberries - via merge API, if the products are already exported.",
           "refreshStatuses": "Refresh statuses",
           "noConnections": "No connected adapters. Connect a marketplace in the \"Adapters\" section.",
           "checkingCapabilities": "Checking adapter capabilities…",
@@ -2155,6 +2168,23 @@
       "attributesHeader": "Attributes",
       "deleteTitle": "Delete category?",
       "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This action cannot be undone."
+    },
+    "barcodesPage": {
+      "breadcrumb": "Barcodes",
+      "title": "Barcodes",
+      "description": "Products with barcodes: {count}",
+      "searchPlaceholder": "Search by name or SKU",
+      "columnBarcode": "Barcode",
+      "downloadSelected": "Download selected ({count})",
+      "downloadAll": "Download all",
+      "downloadOne": "Download PNG",
+      "clearSelection": "Clear selection",
+      "noneSelected": "Select products to download",
+      "downloadEmpty": "No barcodes to download",
+      "downloadedCount": "Downloaded {count} barcodes",
+      "pageRange": "{from}-{to} of {total}",
+      "emptyTitle": "No barcodes",
+      "emptyDescription": "Products with EAN barcodes will appear here"
     },
     "notFoundPage": {
       "errorCode": "Error 404",
@@ -2243,7 +2273,7 @@
       "sections": {
         "mainData": {
           "title": "Basic data",
-          "description": "Category, SKU, barcode, name, and price. Quantity and per-size pricing — if sizes are enabled for the category."
+          "description": "Category, SKU, barcode, name, and price. Quantity and per-size pricing - if sizes are enabled for the category."
         },
         "stock": {
           "title": "Stock",
@@ -2336,9 +2366,9 @@
       "sizeGridLabel": "Size grid",
       "hasSizesLabel": "Products have sizes",
       "attributesCardTitle": "Category attributes",
-      "attributesOrderHint": "Row order determines the order of fields on the product page — drag rows to change the order.",
+      "attributesOrderHint": "Row order determines the order of fields on the product page - drag rows to change the order.",
       "noAttributesTitle": "No attributes",
-      "noAttributesDescription": "Attributes define product properties — size, color, material and other characteristics",
+      "noAttributesDescription": "Attributes define product properties - size, color, material and other characteristics",
       "addAttribute": "Add attribute",
       "keyLabel": "Key",
       "groupLabel": "Group",
@@ -2358,10 +2388,10 @@
       "export": "Export",
       "import": "Import",
       "optionsWord": "options",
-      "largeOptionsHint": "The list is stored as JSON — edit it via import and export",
+      "largeOptionsHint": "The list is stored as JSON - edit it via import and export",
       "clearOptions": "Clear",
-      "optionsPlaceholderExample": "Red, Blue, Green — or value:label",
-      "optionsFormatHint": "JSON, CSV, or plain text — one option per line or comma-separated",
+      "optionsPlaceholderExample": "Red, Blue, Green - or value:label",
+      "optionsFormatHint": "JSON, CSV, or plain text - one option per line or comma-separated",
       "additionalSection": "Additional",
       "defaultValueLabel": "Default value",
       "notSelectedPlaceholder": "Not selected",
@@ -2417,7 +2447,7 @@
       },
       "empty": {
         "title": "No global attributes",
-        "description": "Global attributes are available in all categories — convenient for common properties like brand or country"
+        "description": "Global attributes are available in all categories - convenient for common properties like brand or country"
       },
       "table": {
         "name": "Name",
@@ -2445,10 +2475,10 @@
         "exportButton": "Export",
         "importButton": "Import",
         "optionsCountSuffix": "options",
-        "optionsStoredHint": "The list is stored as JSON — edit it via import and export",
+        "optionsStoredHint": "The list is stored as JSON - edit it via import and export",
         "clearButton": "Clear",
-        "optionsPlaceholder": "Red, Blue, Green — or value:label",
-        "optionsTextareaHint": "JSON, CSV, or plain text — one option per line or comma-separated",
+        "optionsPlaceholder": "Red, Blue, Green - or value:label",
+        "optionsTextareaHint": "JSON, CSV, or plain text - one option per line or comma-separated",
         "sectionAdditional": "Additional",
         "defaultValueLabel": "Default value",
         "notSelectedPlaceholder": "Not selected",
@@ -2509,9 +2539,11 @@
       "excelDialog": {
         "title": "Edit from table",
         "description": "Action for {count} selected products",
-        "exporting": "Exporting...",
+        "exporting": "Exporting…",
         "downloadTemplate": "Download edit template",
-        "uploadChanges": "Upload changes from file"
+        "uploadChanges": "Upload changes from file",
+        "exportHint": "Get an .xlsx with the selected products for offline editing",
+        "importHint": "Apply changes from a filled template - with preview before save"
       },
       "bulkTrashConfirm": {
         "description": "The selected products will be moved to trash. They can be restored.",
@@ -2524,7 +2556,7 @@
     },
     "aiModelsPage": {
       "apiUrlRequiredError": "Enter the API URL first",
-      "modelsNotFoundError": "No models found — check the URL and key",
+      "modelsNotFoundError": "No models found - check the URL and key",
       "settingsSaved": "Settings saved",
       "fillRequiredFieldsError": "Fill in the name, API URL, and Model ID",
       "apiKeyRequiredError": "API key is required when creating",
@@ -2573,11 +2605,11 @@
       "addModelDescription": "Specify the AI API connection parameters",
       "modelAdded": "Model added",
       "optionalSuffix": "(optional)",
-      "baseUrlOnlyPrefix": "You can specify just the base URL — the path",
+      "baseUrlOnlyPrefix": "You can specify just the base URL - the path",
       "baseUrlOnlySuffix": "will be added automatically",
       "proxyLabel": "Proxy",
       "proxyPlaceholder": "http://user:pass{'@'}host:8080 or socks5://host:1080",
-      "proxyHint": "If the model's API isn't directly accessible — specify an HTTP or SOCKS5 proxy. The URI format supports login/password.",
+      "proxyHint": "If the model's API isn't directly accessible - specify an HTTP or SOCKS5 proxy. The URI format supports login/password.",
       "apiKeyLabel": "API key",
       "fetchListButton": "Fetch list",
       "enterManuallyButton": "Enter manually"
@@ -2611,23 +2643,27 @@
       "dumpDownloaded": "Database dump downloaded"
     },
     "settingsUserPage": {
+      "title": "User settings",
+      "description": "Personal settings for the current account",
+      "profileTitle": "Profile",
+      "passwordTitle": "Password",
+      "userNameLabel": "Username",
       "userNameEmptyError": "User name cannot be empty",
       "profileUpdated": "Profile updated",
       "passwordUpdated": "Password updated",
-      "keyNameRequiredError": "Enter a key name",
-      "apiKeyCreated": "API key created — copy it now",
-      "revokeKeyConfirm": "Revoke this API key? Integrations will stop working.",
-      "keyRevoked": "Key revoked",
-      "keyCopied": "Key copied",
-      "description": "Personal settings for the current account",
       "saveProfileButton": "Save profile",
       "currentPasswordLabel": "Current password",
       "newPasswordLabel": "New password",
       "changePasswordButton": "Change password",
+      "keyNameRequiredError": "Enter a key name",
+      "apiKeyCreated": "API key created - copy it now",
+      "revokeKeyConfirm": "Revoke this API key? Integrations will stop working.",
+      "keyRevoked": "Key revoked",
+      "keyCopied": "Key copied",
       "apiKeysIntroPrefix": "Keys for external integrations (ERP, 1C, n8n). Authorization:",
       "apiKeysIntroSuffix": "The full key is only shown once, at creation.",
       "openSwaggerLink": "Open Swagger (Public API v1)",
-      "copyKeyWarning": "Copy the key — it won't be shown again",
+      "copyKeyWarning": "Copy the key - it won't be shown again",
       "keyNameLabel": "Key name",
       "keyNamePlaceholder": "E.g.: 1C",
       "createKeyButton": "Create key",
@@ -2636,41 +2672,166 @@
       "revokedSuffix": "revoked",
       "usedSuffix": "used {date}"
     },
-    "tokensPage": {
-      "tokenCreated": "Token created",
-      "tokenCopied": "Token copied",
-      "title": "Invitation tokens",
-      "description": "Manage tokens for user registration",
-      "createToken": "Create token",
-      "newTokenCreated": "New token created:",
-      "emptyTitle": "No tokens",
-      "emptyDescription": "Tokens let other users register and join the store",
-      "columnToken": "Token",
-      "columnStatus": "Status",
-      "columnCreated": "Created",
-      "columnUsed": "Used",
-      "columnUsedBy": "Used by",
-      "statusUsed": "Used",
-      "statusActive": "Active"
-    },
     "usersPage": {
       "userUpdated": "User updated",
       "userNameEmptyError": "User name cannot be empty",
       "activeUsersDescription": "Active users: {count}",
       "emptyTitle": "No users",
       "emptyDescription": "Users will appear here after registering via invitation",
-      "columnRole": "Role",
+      "columnRole": "Roles",
       "roleAdmin": "Admin",
+      "roleOwner": "Owner",
       "statusActive": "Active",
       "statusDisabled": "Disabled",
       "editUser": "Edit user",
-      "editUserDescription": "Change the user's name or set a new password.",
+      "editUserDescription": "Change profile, owner flag, roles, and permissions.",
       "newPasswordLabel": "New password",
       "newPasswordPlaceholder": "Leave empty to keep unchanged",
       "globalAdminLabel": "Global administrator",
       "globalAdminHint": "Access to all platform-wide settings",
-      "cannotChangeSelfAdmin": "You cannot change your own global administrator status.",
-      "disabledUserHint": "A disabled user cannot sign in"
+      "ownerLabel": "Instance owner",
+      "ownerHint": "Marker for break-glass and assigning owner rights. API access uses permissions.",
+      "activeAccountLabel": "Active account",
+      "activeAccountHint": "Disabled users cannot sign in",
+      "rolesTitle": "Roles",
+      "permissionsTitle": "Permissions",
+      "permissionsHint": "Checked permissions from a role cannot be removed without removing the role. Extra grants can be toggled.",
+      "fromRole": "from role",
+      "cannotChangeSelfAdmin": "You cannot change your own owner status.",
+      "disabledUserHint": "A disabled user cannot sign in",
+      "invite": {
+        "button": "Invite user",
+        "title": "Invite user",
+        "description": "Create an invitation token and share it so a new user can register.",
+        "hint": "Active tokens can be copied and sent. Used tokens stay in the list for history.",
+        "createToken": "Create token",
+        "tokenCreated": "Invitation token created",
+        "tokenCopied": "Token copied",
+        "newTokenCreated": "New token - copy it now:",
+        "emptyTitle": "No invitation tokens yet",
+        "emptyDescription": "Create a token to invite the first user.",
+        "columnToken": "Token",
+        "columnStatus": "Status",
+        "columnCreated": "Created",
+        "columnUsed": "Used",
+        "columnUsedBy": "Used by",
+        "statusUsed": "Used",
+        "statusActive": "Active"
+      },
+      "roleNames": {
+        "Owner": "Owner",
+        "Operator": "Operator",
+        "StoreManager": "Store manager",
+        "Viewer": "Viewer"
+      },
+      "permissionLabels": {
+        "users": {
+          "manage": "Manage users and invites"
+        },
+        "roles": {
+          "manage": "Assign roles and permissions"
+        },
+        "plugins": {
+          "manage": "Manage plugins"
+        },
+        "settings": {
+          "platform": "Platform settings and admin tools"
+        },
+        "stores": {
+          "create": "Create stores"
+        },
+        "reference": {
+          "read": "Read reference catalog"
+        },
+        "store": {
+          "members": {
+            "manage": "Manage store members"
+          },
+          "settings": {
+            "manage": "Manage store settings"
+          }
+        },
+        "catalog": {
+          "manage": "Manage catalog"
+        },
+        "marketplace": {
+          "manage": "Manage marketplace connections"
+        },
+        "files": {
+          "manage": "Manage files and storage"
+        },
+        "operations": {
+          "manage": "Manage background operations"
+        },
+        "ai": {
+          "use": "Use AI assistant"
+        },
+        "api": {
+          "access": "Access Public API keys and logs"
+        }
+      }
+    },
+    "apiPage": {
+      "description": "Create API keys for external integrations and review Public API request activity.",
+      "openSwagger": "Open Swagger",
+      "tabKeys": "Keys",
+      "tabLogs": "Request logs",
+      "keys": {
+        "introPrefix": "Keys for external integrations (ERP, 1C, n8n). Authorization:",
+        "introSuffix": "The full key is only shown once, at creation.",
+        "copyWarning": "Copy the key - it won't be shown again",
+        "nameLabel": "Key name",
+        "namePlaceholder": "E.g.: 1C",
+        "create": "Create key",
+        "loading": "Loading keys…",
+        "emptyTitle": "No keys yet",
+        "emptyDescription": "Create a key to call Public API v1 from your systems.",
+        "columnName": "Name",
+        "columnHint": "Key",
+        "columnCreated": "Created",
+        "columnUsed": "Last used",
+        "columnStatus": "Status",
+        "statusActive": "Active",
+        "statusRevoked": "Revoked",
+        "created": "API key created",
+        "copied": "Key copied",
+        "copyError": "Could not copy the key",
+        "revokeTitle": "Revoke API key?",
+        "revokeDescription": "The key will stop working immediately. This cannot be undone.",
+        "revoked": "API key revoked"
+      },
+      "logs": {
+        "noErrors": "No failed requests",
+        "errorCount": "{count} with errors",
+        "filterKey": "API key",
+        "allKeys": "All keys",
+        "method": "Method",
+        "anyMethod": "Any method",
+        "code": "Status",
+        "anyCode": "Any status",
+        "errors": "Errors",
+        "searchPlaceholder": "Search by path…",
+        "emptyTitle": "No API requests yet",
+        "emptyDescription": "Calls to /api/v1 with your keys will appear here.",
+        "columnDate": "Date",
+        "columnMethod": "Method",
+        "columnPath": "Path",
+        "columnKey": "Key",
+        "columnDuration": "Duration",
+        "columnCode": "Code",
+        "durationMs": "{ms} ms",
+        "itemsOfTotal": "{count} of {total}",
+        "loadMore": "Load more",
+        "overview": "Overview",
+        "request": "Request",
+        "response": "Response",
+        "metaTime": "Time",
+        "metaDuration": "Duration",
+        "metaKey": "API key",
+        "metaIp": "IP",
+        "userAgent": "User-Agent",
+        "error": "Error"
+      }
     },
     "storeDetailPage": {
       "selectUserError": "Select a user",
@@ -2712,8 +2873,14 @@
       "columnStoreAdmins": "Store admins",
       "editStoreSr": "Edit store",
       "editDialogTitle": "Store settings",
-      "editDialogDescription": "Change the store's name, members, and administrators.",
+      "editDialogDescription": "Name, region, currencies, and who can work in this store.",
+      "tabGeneral": "General",
+      "tabCurrencies": "Currencies",
+      "tabMembers": "Members",
+      "identityTitle": "Store identity",
+      "identityHint": "Shown in the sidebar and across store pages.",
       "regionalSettingsTitle": "Regional settings",
+      "regionalHint": "Affects timestamps and local formatting in this store.",
       "timezoneLabel": "Timezone",
       "pricesTitle": "Prices",
       "extendedPriceParamsLabel": "Extended price parameters",
@@ -2727,9 +2894,18 @@
       "baseTag": "base",
       "baseFallback": "base",
       "addCurrencyPlaceholder": "Add currency",
+      "addCurrencyTitle": "Add currency",
       "rateToPlaceholder": "Rate to {base}",
+      "noExtraCurrencies": "No additional currencies yet.",
+      "membersTitle": "Store members",
+      "membersHint": "Only members can open this store and work with its catalog.",
+      "membersSelected": "{count} selected",
+      "memberSearchPlaceholder": "Search by name or ID…",
+      "membersEmptySearch": "No users match this search.",
+      "saveHint": "Currency changes apply immediately. Name, region, and members save together.",
       "columnMemberSingular": "Member",
-      "columnStoreAdminSingular": "Store admin"
+      "columnStoreAdminSingular": "Store admin",
+      "catalogEmptyHint": "Reference catalogs are not loaded yet (Control Plane sync). Timezone and currency lists will appear after Platform Link fills the database."
     },
     "errorLogsPage": {
       "summaryNone": "No errors",
@@ -2805,9 +2981,9 @@
       "sizeGridLabel": "Size grid",
       "hasSizesLabel": "Products have sizes",
       "attributesCardTitle": "Category attributes",
-      "attributesOrderHint": "Row order determines the field order on the product page — drag rows to change the order.",
+      "attributesOrderHint": "Row order determines the field order on the product page - drag rows to change the order.",
       "noAttributesTitle": "No attributes",
-      "noAttributesDescription": "Attributes define product properties — size, color, material, and other characteristics",
+      "noAttributesDescription": "Attributes define product properties - size, color, material, and other characteristics",
       "addAttribute": "Add attribute",
       "keyLabel": "Key",
       "groupLabel": "Group",
@@ -2827,10 +3003,10 @@
       "export": "Export",
       "import": "Import",
       "optionsWord": "variants",
-      "largeOptionsHint": "The list is stored as JSON — edit via import and export",
+      "largeOptionsHint": "The list is stored as JSON - edit via import and export",
       "clearOptions": "Clear",
-      "optionsPlaceholderExample": "Red, Blue, Green — or value:label",
-      "optionsFormatHint": "JSON, CSV, or text — one variant per line or comma-separated",
+      "optionsPlaceholderExample": "Red, Blue, Green - or value:label",
+      "optionsFormatHint": "JSON, CSV, or text - one variant per line or comma-separated",
       "additionalSection": "Additional",
       "defaultValueLabel": "Default value",
       "notSelectedPlaceholder": "Not selected",

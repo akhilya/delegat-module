@@ -1,5 +1,5 @@
 /**
- * graphModel.js — the framework-agnostic brain of the visual node mapping editor.
+ * graphModel.js - the framework-agnostic brain of the visual node mapping editor.
  *
  * Responsibilities:
  *  - Pin type system + colors (the colored output circles).
@@ -107,7 +107,7 @@ export const SOURCE_NODE_TYPES = [
 /**
  * Operation nodes that aren't sources/modifiers/output. Each spec drives the generic OpNode
  * component and the inspector. Param keys map to TOP-LEVEL node.data fields (template, delimiter,
- * index) — matching the backend GraphNodeData, not the modifier `params` bag.
+ * index) - matching the backend GraphNodeData, not the modifier `params` bag.
  */
 export const OP_SPECS = {
   formatString: {
@@ -323,7 +323,7 @@ export const ADAPTER_NODE_ID = "adapter-fields";
 /** Fixed id of the dedicated price-API sink node. */
 export const ADAPTER_PRICE_NODE_ID = "adapter-price-fields";
 
-/** Vue Flow isNode() — used to filter payloads before setNodes (sparse arrays crash createGraphNodes). */
+/** Vue Flow isNode() - used to filter payloads before setNodes (sparse arrays crash createGraphNodes). */
 export function isVueFlowNode(element) {
   return (
     element &&
@@ -336,7 +336,7 @@ export function isVueFlowNode(element) {
 
 /**
  * Normalize nodes for Vue Flow setNodes/addNodes.
- * Drops invalid entries (edges in nodes[], missing id/position) — Vue Flow leaves
+ * Drops invalid entries (edges in nodes[], missing id/position) - Vue Flow leaves
  * holes in its internal array and then throws on parentNode when iterating.
  */
 export function sanitizeGraphNodes(rawNodes) {
@@ -439,7 +439,7 @@ export function autoMigrate(fieldMappings, sources = {}) {
     };
 
     const mods = activeModifiers(fm);
-    // Trivial 1:1 fields (a standard source, no transforms) bind directly on the adapter — no node/wire.
+    // Trivial 1:1 fields (a standard source, no transforms) bind directly on the adapter - no node/wire.
     const binding = mods.length === 0 ? directBinding(fm) : null;
     if (binding) {
       field.source = binding;
@@ -642,7 +642,7 @@ export function createSourceNode(kind, position, payload = {}) {
       // Also backs the typed literal nodes (Number / Text / Boolean / List) via valueType.
       // When payload.isAdapterValue is true, creates a "standard value" node with
       // options populated from the adapter field's parsedOptions. Stored as "static" for
-      // backend compatibility — backend evaluates staticValue as a plain constant.
+      // backend compatibility - backend evaluates staticValue as a plain constant.
       return node("static", position, {
         staticValue: payload.staticValue ?? "",
         label: payload.label || "",
@@ -717,7 +717,7 @@ export function createRerouteNode(position) {
 /**
  * Ensure the single "adapterFields" sink exposes a pin for every current marketplace field.
  * The platform's field sync (CategoryImportService) keeps the FieldMapping rows complete, but a saved
- * graph holds a snapshot — so fields added to the category later are missing. Append (never prune, so a
+ * graph holds a snapshot - so fields added to the category later are missing. Append (never prune, so a
  * wired field is never lost) the missing ones, matching autoMigrate's field shape. Returns `nodes`.
  */
 export function syncAdapterFields(nodes, fieldMappings) {
@@ -987,7 +987,7 @@ export function firstInputHandle(node) {
 
 /**
  * Operand params of a modifier that can be driven by an optional override pin (handle `p:<key>`).
- * Scalar operands only (number/text) — config params (select/checkbox) and complex editors
+ * Scalar operands only (number/text) - config params (select/checkbox) and complex editors
  * (valueMap/optionMap/template/tagInput) keep their in-block control.
  */
 export function overridableParams(modifierType) {
@@ -1199,7 +1199,7 @@ export function analyzeFields(nodes, edges) {
           });
           cur = byId.get(ins[0].source);
         } else if (cur.type === "reroute") {
-          // Reroute is a transparent pass-through — step through it without affecting the lane.
+          // Reroute is a transparent pass-through - step through it without affecting the lane.
           if (ins.length !== 1) {
             ok = false;
             break;
@@ -1231,14 +1231,14 @@ export function analyzeFields(nodes, edges) {
         } else if (SOURCE_NODE_TYPES.includes(cur.type) && cur.type !== "static") {
           // Non-attribute source (productField, groupName, file types): importable for
           // animation purposes when the modifier chain is fully reversible.
-          // Backend projection stays exportOnly — no actual write-back for these types.
+          // Backend projection stays exportOnly - no actual write-back for these types.
           // productField / attribute / storeAttribute: importable=false forces export-only;
           // importable=true can win fan-out resolution (attribute lanes also affect import projection).
           const forcedExport = cur.type === "productField" && cur.data?.importable === false;
           const forcedImport = cur.type === "productField" && cur.data?.importable === true;
           const modsReversible = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
           importable = !forcedExport && (forcedImport || modsReversible);
-          // Only mark as explicit winner when modifier chain is reversible — a path through an
+          // Only mark as explicit winner when modifier chain is reversible - a path through an
           // irreversible modifier (e.g. truncate) must never be explicitImport=true, otherwise
           // two paths to the same _sk both become explicit and neither wins fan-out resolution.
           if (importable && modsReversible) explicitImport = true;
@@ -1264,7 +1264,7 @@ export function analyzeFields(nodes, edges) {
   }
 
   // Detect fan-out: if 2+ fields share the same logical source (via wires or direct bindings),
-  // import is ambiguous — downgrade all of them to export-only and warn.
+  // import is ambiguous - downgrade all of them to export-only and warn.
   const skToRefs = new Map();
   for (const [sinkId, fields] of Object.entries(analysisBySink)) {
     for (const [key, v] of Object.entries(fields)) {
@@ -1308,7 +1308,7 @@ export function analyzeFields(nodes, edges) {
 }
 
 /**
- * For each adapter field, a short label of what feeds it — for display inside the adapter block.
+ * For each adapter field, a short label of what feeds it - for display inside the adapter block.
  * Walks back through single-input pass-throughs (modifier / single-input op / reroute) to the
  * originating source node's label; on fan-in (>1 input) returns the producing op's display label.
  * Returns { fieldKey: label } (unconnected fields omitted).
@@ -1346,7 +1346,7 @@ export function adapterSourceLabels(nodes, edges) {
       if (ins.length === 1) {
         cur = byId.get(ins[0].source); // transparent pass-through
       } else {
-        // fan-in / op — name the producing node
+        // fan-in / op - name the producing node
         label =
           (OP_SPECS[cur.type] ? opLabel(cur.type) : null) ||
           (cur.type === "modifier"

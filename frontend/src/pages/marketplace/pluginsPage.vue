@@ -99,6 +99,7 @@ export default {
   data() {
     return {
       plugins: [],
+      registryPlugins: [],
       isLoading: false,
       isUploading: false,
       isDeleting: false,
@@ -107,12 +108,18 @@ export default {
       selectedFile: null,
     };
   },
+  computed: {
+    availableFromRegistry() {
+      return (this.registryPlugins || []).filter((p) => !p.installed);
+    },
+  },
   methods: {
     ...mapActions([
       "getPlugins",
       "uploadPlugin",
       "deletePlugin",
       "reloadPlugin",
+      "getReferencePlugins",
     ]),
 
     async fetchData() {
@@ -123,6 +130,15 @@ export default {
         },
         onError: (error) => {
           displaySonnerError(error);
+        },
+      });
+      await this.getReferencePlugins({
+        onSuccess: (response) => {
+          const items = response.data?.value ?? response.data ?? [];
+          this.registryPlugins = Array.isArray(items) ? items : [];
+        },
+        onError: () => {
+          this.registryPlugins = [];
         },
       });
       this.isLoading = false;
@@ -318,6 +334,40 @@ export default {
       </Dialog>
     </PageHeader>
 
+    <div
+      v-if="availableFromRegistry.length"
+      class="mb-6 rounded-lg border p-4 space-y-3"
+    >
+      <div>
+        <h2 class="text-sm font-semibold">{{ $t("marketplace.pluginsPage.registryTitle") }}</h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ $t("marketplace.pluginsPage.registryDescription") }}
+        </p>
+      </div>
+      <div class="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow class="hover:bg-transparent">
+              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
+              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
+              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="plugin in availableFromRegistry" :key="plugin.key">
+              <TableCell class="px-3 font-medium">{{ plugin.displayName }}</TableCell>
+              <TableCell class="px-3 font-mono text-xs text-muted-foreground">{{ plugin.key }}</TableCell>
+              <TableCell class="px-3">
+                <Badge variant="outline" class="text-xs tabular-nums">
+                  v{{ plugin.latestVersion || "-" }}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+
     <PageSection
       :loading="isLoading"
       :empty="plugins.length === 0"
@@ -384,7 +434,7 @@ export default {
                   </Badge>
                 </TableCell>
                 <TableCell class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate">
-                  {{ plugin.filePath || "—" }}
+                  {{ plugin.filePath || "-" }}
                 </TableCell>
                 <TableCell class="hidden xl:table-cell px-3 align-top text-xs text-muted-foreground tabular-nums whitespace-nowrap">
                   {{ formatLoadedAt(plugin.loadedAt) }}

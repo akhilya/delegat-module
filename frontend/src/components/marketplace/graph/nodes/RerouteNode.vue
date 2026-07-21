@@ -1,7 +1,7 @@
 <script setup>
 import { Handle, Position } from "@vue-flow/core";
 
-// A transparent pass-through inserted by double-clicking a wire — drag it to bend the wire's path.
+// A transparent pass-through inserted by double-clicking a wire - drag it to bend the wire's path.
 defineProps({
   id: String,
   data: { type: Object, default: () => ({}) },

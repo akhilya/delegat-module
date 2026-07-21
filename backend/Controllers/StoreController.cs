@@ -18,15 +18,18 @@ public class StoreController : ControllerBase
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IAuthorizationService _authorizationService;
 
     public StoreController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IAuthorizationService authorizationService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
+        _authorizationService = authorizationService;
     }
 
     [HttpGet]
@@ -37,7 +40,7 @@ public class StoreController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
             s => true,
-            q => q.Include(s => s.members).Include(s => s.storeAdmins)
+            q => q.Include(s => s.members)
         );
 
         var paged = stores
@@ -69,11 +72,12 @@ public class StoreController : ControllerBase
 
     [HttpPost]
     [Route("/stores/")]
+    [RequiresPermission(Permissions.StoresCreate)]
     public async Task<IActionResult> PostStore([FromBody] AddForm input)
     {
         var user = await _currentUserService.GetUserAsync();
-        if (user == null || !user.isActive || !user.isAdmin)
-            throw ApiException.Forbidden("Only administrators can create stores");
+        if (user == null || !user.isActive)
+            throw ApiException.Unauthorized("User not found", code: "user_not_found");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var existingStore = await storeRepo.FindAsync(s => s.name == input.name);
@@ -93,10 +97,6 @@ public class StoreController : ControllerBase
 
             foreach (var member in activeUsers.DistinctBy(u => u.Id))
                 newStore.members.Add(member);
-
-            var creator = activeUsers.FirstOrDefault(u => u.Id == user.Id);
-            if (creator != null)
-                newStore.storeAdmins.Add(creator);
         }
         else
         {
@@ -105,7 +105,6 @@ public class StoreController : ControllerBase
                 throw ApiException.Unauthorized("User not found", code: "user_not_found");
 
             newStore.members.Add(creator);
-            newStore.storeAdmins.Add(creator);
         }
 
         await storeRepo.AddWithoutSaveAsync(newStore);
@@ -116,12 +115,9 @@ public class StoreController : ControllerBase
 
     [HttpPost]
     [Route("/stores/{id}/members/")]
+    [RequiresPermission(Permissions.StoreMembersManage, requireStoreMembership: true)]
     public async Task<IActionResult> PostAddStoreMember(int id, [FromBody] AddMemberForm input)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Only administrators can add members");
-
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
@@ -145,12 +141,9 @@ public class StoreController : ControllerBase
 
     [HttpDelete]
     [Route("/stores/{id}/members/{userId}")]
+    [RequiresPermission(Permissions.StoreMembersManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteStoreMember(int id, int userId)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Only administrators can remove members");
-
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
@@ -162,29 +155,23 @@ public class StoreController : ControllerBase
             throw ApiException.BadRequest("User is not a member of this store");
 
         store.members.Remove(memberToRemove);
-        var adminToRemove = store.storeAdmins.FirstOrDefault(m => m.Id == userId);
-        if (adminToRemove != null)
-            store.storeAdmins.Remove(adminToRemove);
 
-        // Clear selected store if user was removed from their selected store
         if (memberToRemove.selectedStoreId == id)
-        {
             memberToRemove.selectedStoreId = null;
-        }
 
         await _unitOfWork.SaveChangesAsync();
+
+        if (_currentUserService.GetUserId() == userId)
+            Response.Cookies.Delete("selected_store_id");
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }
 
     [HttpGet]
     [Route("/stores/{id}/detail")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> GetStoreDetail(int id)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Only administrators can view store details");
-
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
@@ -196,12 +183,9 @@ public class StoreController : ControllerBase
 
     [HttpPatch]
     [Route("/stores/{id}")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> PatchStore(int id, [FromBody] UpdateStoreForm input)
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Insufficient permissions to modify the store");
-
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
@@ -224,12 +208,13 @@ public class StoreController : ControllerBase
             store.name = name;
         }
 
-        var isPlatformAdmin = currentUser?.isAdmin == true;
-        if ((input.memberIds != null || input.storeAdminIds != null) && !isPlatformAdmin)
-            throw ApiException.Forbidden("Only a platform administrator can change store members and admins");
-
         if (input.memberIds != null)
         {
+            var membersAuth = await _authorizationService.AuthorizeAsync(
+                User, PermissionPolicyProvider.StorePolicyName(Permissions.StoreMembersManage));
+            if (!membersAuth.Succeeded)
+                throw ApiException.Forbidden("Insufficient permissions to change store members");
+
             var memberIds = input.memberIds.Distinct().ToHashSet();
             var removedMembers = store.members.Where(member => !memberIds.Contains(member.Id)).ToList();
             var users = await _unitOfWork.Repository<User>()
@@ -250,25 +235,15 @@ public class StoreController : ControllerBase
                     removedMember.selectedStoreId = null;
             }
 
-            var removedStoreAdmins = store.storeAdmins.Where(admin => !memberIds.Contains(admin.Id)).ToList();
-            foreach (var admin in removedStoreAdmins)
-                store.storeAdmins.Remove(admin);
+            var currentUserId = _currentUserService.GetUserId();
+            if (currentUserId != null && removedMembers.Any(m => m.Id == currentUserId.Value))
+            {
+                Response.Cookies.Delete("selected_store_id");
+            }
         }
 
-        if (input.storeAdminIds != null)
-        {
-            var adminIds = input.storeAdminIds.Distinct().ToHashSet();
-            var memberIds = store.members.Select(m => m.Id).ToHashSet();
-            if (!adminIds.All(memberIds.Contains))
-                throw ApiException.BadRequest("A store administrator must be a member of this store");
-
-            var admins = store.members.Where(m => adminIds.Contains(m.Id)).ToList();
-            store.storeAdmins.Clear();
-            foreach (var admin in admins)
-                store.storeAdmins.Add(admin);
-        }
-
-        if (input.timezone != null)
+        // Null/whitespace = leave unchanged (partial PATCH; e.g. members-only edit when CP catalog is empty).
+        if (!string.IsNullOrWhiteSpace(input.timezone))
         {
             var tz = input.timezone.Trim();
             if (!StoreTimeHelper.IsValidTimezoneId(tz))
@@ -286,12 +261,9 @@ public class StoreController : ControllerBase
 
     [HttpGet]
     [Route("/stores/{id}/currencies")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> GetStoreCurrencies(int id, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
-
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
             throw ApiException.NotFound("Store not found");
@@ -301,12 +273,9 @@ public class StoreController : ControllerBase
 
     [HttpPost]
     [Route("/stores/{id}/currencies")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> AddStoreCurrency(int id, [FromBody] AddStoreCurrencyForm input, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
-
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
@@ -339,12 +308,9 @@ public class StoreController : ControllerBase
 
     [HttpPatch]
     [Route("/stores/{id}/currencies/{code}")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> PatchStoreCurrency(int id, string code, [FromBody] PatchStoreCurrencyForm input, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
-
         code = CurrencyService.NormalizeCode(code);
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
@@ -375,12 +341,9 @@ public class StoreController : ControllerBase
 
     [HttpDelete]
     [Route("/stores/{id}/currencies/{code}")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteStoreCurrency(int id, string code, CancellationToken ct)
     {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (!await CanManageStoreAsync(id, currentUser))
-            throw ApiException.Forbidden("Insufficient permissions", code: "access_denied_store");
-
         code = CurrencyService.NormalizeCode(code);
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
@@ -402,12 +365,9 @@ public class StoreController : ControllerBase
 
     [HttpGet]
     [Route("/users/all")]
+    [RequiresPermission(Permissions.UsersManage)]
     public async Task<IActionResult> GetAllUsers()
     {
-        var currentUser = await _currentUserService.GetUserAsync();
-        if (currentUser == null || !currentUser.isActive || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can view all users");
-
         var userRepo = _unitOfWork.Repository<User>();
         var users = await userRepo.GetAllAsync(u => u.isActive);
 
@@ -423,7 +383,6 @@ public class StoreController : ControllerBase
     {
         public string? name { get; set; }
         public List<int>? memberIds { get; set; }
-        public List<int>? storeAdminIds { get; set; }
         public string? timezone { get; set; }
         public bool? extendedPriceParameters { get; set; }
     }
@@ -441,18 +400,5 @@ public class StoreController : ControllerBase
     }
 
     private static IQueryable<Store> StoreIncludes(IQueryable<Store> query) =>
-        query.Include(s => s.members).Include(s => s.storeAdmins).Include(s => s.currencies);
-
-    private async Task<bool> CanManageStoreAsync(int storeId, User? user)
-    {
-        if (user == null || !user.isActive)
-            return false;
-
-        if (user.isAdmin)
-            return true;
-
-        return await _unitOfWork.Repository<Store>()
-            .Query()
-            .AnyAsync(s => s.Id == storeId && s.storeAdmins.Any(a => a.Id == user.Id && a.isActive));
-    }
+        query.Include(s => s.members).Include(s => s.currencies);
 }

@@ -43,7 +43,7 @@ const MULTI_INPUT_OPS = new Set([
   "formatString", "join", "makeArray", "arrayAppend", "arrayPrepend",
 ]);
 
-/** Visual height estimate — must be >= rendered card height to avoid overlap. */
+/** Visual height estimate - must be >= rendered card height to avoid overlap. */
 export function estimateNodeHeight(node) {
   if (!node) return 56;
 

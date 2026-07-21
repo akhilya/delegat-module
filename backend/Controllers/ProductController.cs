@@ -143,6 +143,60 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves a paginated lean list of products that have a barcode in the current store.
+    /// </summary>
+    /// <param name="searchQuery">Optional search string to filter by name or SKU.</param>
+    /// <param name="startIndex">Zero-based index of the first item to return.</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    [HttpGet]
+    [Route("/products/barcodes")]
+    public async Task<IActionResult> GetProductBarcodes(
+        string? searchQuery,
+        int startIndex = 0,
+        int pageSize = 25)
+    {
+        if (startIndex < 0) startIndex = 0;
+        if (pageSize < 1) pageSize = 25;
+        if (pageSize > 200) pageSize = 200;
+
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var query = _context.products
+            .AsNoTracking()
+            .Where(p => p.storeId == selectedStoreId.Value
+                        && p.barcode != null
+                        && p.barcode != "");
+
+        if (!string.IsNullOrEmpty(searchQuery))
+            query = query.Where(p => p.name.Contains(searchQuery) || p.sku.Contains(searchQuery));
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(p => p.name)
+            .Skip(startIndex)
+            .Take(pageSize)
+            .Select(p => new
+            {
+                id = p.Id,
+                p.name,
+                p.sku,
+                p.barcode,
+            })
+            .ToListAsync();
+
+        var lastPage = startIndex + pageSize >= totalCount;
+        return Ok(new
+        {
+            items,
+            totalCount,
+            lastPage,
+        });
+    }
+
+    /// <summary>
     /// Retrieves a single product by its identifier, including all related entities.
     /// </summary>
     /// <param name="productId">The product identifier.</param>
@@ -187,6 +241,7 @@ public class ProductController : ControllerBase
     /// <returns>A redirect path to the newly created product's edit page.</returns>
     [HttpPost]
     [Route("/products")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> CreateProduct([FromBody] Product.UserAddForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -263,6 +318,7 @@ public class ProductController : ControllerBase
     /// <returns>A success indicator.</returns>
     [HttpPatch]
     [Route("/products/{productId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateProduct(int productId, [FromBody] Product.UpdateForm input)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -354,6 +410,7 @@ public class ProductController : ControllerBase
     /// <returns>Result with local update status and per-marketplace results.</returns>
     [HttpPost]
     [Route("/products/{productId}/update-sku")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> UpdateProductSku(int productId, [FromBody] UpdateSkuInput input, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -513,6 +570,7 @@ public class ProductController : ControllerBase
     /// <returns>A success indicator with the count of updated products.</returns>
     [HttpPatch]
     [Route("/products/bulk")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkUpdateProducts([FromBody] BulkUpdateRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -710,6 +768,7 @@ public class ProductController : ControllerBase
     /// <returns>A redirect path to the products list.</returns>
     [HttpDelete]
     [Route("/products/{productId}")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteProduct(int productId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -735,6 +794,7 @@ public class ProductController : ControllerBase
     /// <returns>A success indicator with the count of deleted products.</returns>
     [HttpPost]
     [Route("/products/bulk-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkDeleteProducts([FromBody] BulkDeleteRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -830,6 +890,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/{productId}/restore")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> RestoreProduct(int productId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -854,6 +915,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/bulk-restore")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkRestore([FromBody] BulkDeleteRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -876,6 +938,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Route("/products/{productId}/permanent")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> PermanentDeleteProduct(int productId)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -985,6 +1048,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/bulk-permanent-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> BulkPermanentDelete([FromBody] BulkDeleteRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1102,6 +1166,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/export-template")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ExportTemplate([FromBody] ExportRequest request)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1156,6 +1221,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/import-preview")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportPreview(IFormFile file)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -1194,6 +1260,7 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/import-apply")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportApply(IFormFile file)
     {
         var userId = _currentUserService.GetUserId() ?? 0;

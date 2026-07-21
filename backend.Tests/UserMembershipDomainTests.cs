@@ -52,20 +52,21 @@ public class UserMembershipDomainTests
     }
 
     [Fact]
-    public async Task AdminFlag_IsDistinctFromStoreAdmin()
+    public async Task AdminFlag_IsOwnerMarker_NotStoreScoped()
     {
         await using var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
         var admin = data.AddUser("admin", isAdmin: true);
         var member = data.AddUser("member");
         var store = data.AddStore("S");
-        data.AddMember(store, member, asAdmin: true);
-        data.AddMember(store, admin, asAdmin: false);
+        data.AddMember(store, member);
+        data.AddMember(store, admin);
         await data.SaveAsync();
 
         Assert.True(admin.isAdmin);
-        Assert.Contains(store.storeAdmins, a => a.Id == member.Id);
-        Assert.DoesNotContain(store.storeAdmins, a => a.Id == admin.Id);
+        Assert.False(member.isAdmin);
+        Assert.Contains(store.members, m => m.Id == member.Id);
+        Assert.Contains(store.members, m => m.Id == admin.Id);
     }
 
     [Fact]

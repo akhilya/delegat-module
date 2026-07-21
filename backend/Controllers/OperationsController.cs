@@ -442,10 +442,9 @@ public class OperationsController : ControllerBase
 
     [HttpGet]
     [Route("/settings/operations/summary")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> GetOperationsSummary(CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
-
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
@@ -479,10 +478,9 @@ public class OperationsController : ControllerBase
 
     [HttpPost]
     [Route("/settings/operations/clear")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> ClearOperationsQueue([FromBody] ClearOperationsInput input, CancellationToken ct)
     {
-        await EnsureAdminAsync(ct);
-
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
             return BadRequest(new { message = "Store is not selected", code = "store_not_selected" });
@@ -678,13 +676,6 @@ public class OperationsController : ControllerBase
     private Task<int> ClearTransfers(int storeId, string status, CancellationToken ct) =>
         FilterTransfersByStatus(_context.pendingProductTransfers.Where(x => x.sourceStoreId == storeId || x.targetStoreId == storeId), status)
             .ExecuteDeleteAsync(ct);
-
-    private async Task EnsureAdminAsync(CancellationToken ct)
-    {
-        var currentUser = await _currentUserService.GetUserAsync(ct);
-        if (currentUser == null || !currentUser.isAdmin)
-            throw ApiException.Forbidden("Only administrators can manage background process queues");
-    }
 
     [HttpDelete]
     [Route("/operations/{operationId}")]

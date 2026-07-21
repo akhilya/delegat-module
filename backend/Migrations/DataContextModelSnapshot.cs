@@ -239,6 +239,76 @@ namespace Delegat.Migrations
                     b.ToTable("aiStoreSettings");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ApiRequestLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("apiKeyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("durationMs")
+                        .HasColumnType("int");
+
+                    b.Property<string>("errorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("keyDisplayHint")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("method")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("path")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("queryString")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("remoteIpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("requestBody")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("responseBody")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("statusCode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("userAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<int?>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("apiKeyId", "createdAt");
+
+                    b.HasIndex("statusCode", "createdAt");
+
+                    b.HasIndex("userId", "createdAt");
+
+                    b.ToTable("apiRequestLogs");
+                });
+
             modelBuilder.Entity("Delegat.Models.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -1659,6 +1729,82 @@ namespace Delegat.Migrations
                     b.ToTable("productVariantLinks");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ReferenceCurrency", b =>
+                {
+                    b.Property<string>("code")
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)");
+
+                    b.Property<string>("label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("symbol")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<DateTime>("syncedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("code");
+
+                    b.ToTable("referenceCurrencies");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ReferencePlugin", b =>
+                {
+                    b.Property<string>("key")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("artifactUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("changelog")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("displayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("latestVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("minPlatformVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("syncedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("key");
+
+                    b.ToTable("referencePlugins");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ReferenceTimezone", b =>
+                {
+                    b.Property<string>("id")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("syncedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("id");
+
+                    b.ToTable("referenceTimezones");
+                });
+
             modelBuilder.Entity("Delegat.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -1722,6 +1868,24 @@ namespace Delegat.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("stores");
+                });
+
+            modelBuilder.Entity("Delegat.Models.StoreAdministrator", b =>
+                {
+                    b.Property<int>("StoreId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("StoreId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("StoreAdministrators", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("Delegat.Models.StoreAttribute", b =>
@@ -2283,32 +2447,14 @@ namespace Delegat.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("UserId"));
 
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
-                    b.HasKey("UserId");
+                    b.HasKey("UserId", "RoleId");
 
                     b.ToTable("UserRoles");
-                });
-
-            modelBuilder.Entity("StoreAdministrators", b =>
-                {
-                    b.Property<int>("StoreId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("StoreId", "UserId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("StoreAdministrators");
                 });
 
             modelBuilder.Entity("StoreUser", b =>
@@ -2727,6 +2873,21 @@ namespace Delegat.Migrations
                     b.Navigation("user");
                 });
 
+            modelBuilder.Entity("Delegat.Models.StoreAdministrator", b =>
+                {
+                    b.HasOne("Delegat.Models.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Delegat.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Delegat.Models.StoreAttribute", b =>
                 {
                     b.HasOne("Delegat.Models.Store", "store")
@@ -2904,21 +3065,6 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("user");
-                });
-
-            modelBuilder.Entity("StoreAdministrators", b =>
-                {
-                    b.HasOne("Delegat.Models.Store", null)
-                        .WithMany()
-                        .HasForeignKey("StoreId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Delegat.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("StoreUser", b =>

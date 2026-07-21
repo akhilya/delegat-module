@@ -42,6 +42,7 @@ public class ImageController : ControllerBase
     /// <returns>200 OK on success.</returns>
     [HttpPost]
     [Route("products/{productId}/images")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     public async Task<IActionResult> PostProductImages(int productId, int[] files)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

@@ -180,7 +180,7 @@ public class MappingToolHandlers : ToolHandlerBase
         string externalCategoryId;
         if (p.MappingId.HasValue)
         {
-            // Resolve connection + external category from the mapping — the AI on a mapping
+            // Resolve connection + external category from the mapping - the AI on a mapping
             // page knows mappingId but not the marketplace category id
             var mapping = await _context.categoryMappings.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == p.MappingId && m.connection.storeId == storeId, ct);
@@ -204,7 +204,7 @@ public class MappingToolHandlers : ToolHandlerBase
 
         var groupingKey = ProductSyncService.ResolveGroupingFieldKey(adapter);
 
-        // Endpoint-based adapters group via API — the mapping's grouping field is synthetic
+        // Endpoint-based adapters group via API - the mapping's grouping field is synthetic
         // and doesn't exist in the live schema, so append it for the model
         if (groupingKey == ProductSyncService.SyntheticGroupFieldKey && fields.All(f => f.Key != groupingKey))
         {
@@ -221,12 +221,12 @@ public class MappingToolHandlers : ToolHandlerBase
             f.Key, f.Name, f.Type, f.IsRequired, f.Description,
             f.Unit, f.MaxLength, f.IsAspect,
             // Large dictionaries (WB colors/brands: thousands of values) would blow up
-            // the context — show a sample and point the model at search_field_options
+            // the context - show a sample and point the model at search_field_options
             options = f.Options == null ? null
                 : f.Options.Take(15).Select(o => new { o.Value, o.Label }).ToList(),
             optionsTotal = f.Options?.Count,
             optionsNote = f.Options?.Count > 15
-                ? "shown 15 of " + f.Options.Count + " — use search_field_options to find a specific value"
+                ? "shown 15 of " + f.Options.Count + " - use search_field_options to find a specific value"
                 : null,
             isGroupingField = groupingKey != null && f.Key == groupingKey ? (bool?)true : null,
         }).ToList();
@@ -323,7 +323,7 @@ public class MappingToolHandlers : ToolHandlerBase
             return (new { error = $"Field '{p.AdapterFieldKey}' not found on the adapter" }, "Field not found");
         if (field.Options is not { Count: > 0 })
             return (new { options = Array.Empty<object>(), totalOptions = 0 },
-                $"Field '{field.Name}' has no predefined options — the value is free-form");
+                $"Field '{field.Name}' has no predefined options - the value is free-form");
 
         var query = p.Query ?? "";
         var matches = string.IsNullOrWhiteSpace(query)
@@ -429,7 +429,7 @@ public class MappingToolHandlers : ToolHandlerBase
             .FirstOrDefaultAsync(m => m.Id == p.Id && m.connection.storeId == storeId, ct);
         if (mapping == null) return (new { error = "Not found" }, "Not found");
         var report = await _graphMutation.GetCoverageReportAsync(p.Id, ct);
-        return (report, $"Coverage — card: {report.Card.Connected}/{report.Card.Total}" +
+        return (report, $"Coverage - card: {report.Card.Connected}/{report.Card.Total}" +
             (report.Price != null ? $", prices: {report.Price.Connected}/{report.Price.Total}" : "") +
             $"; required card: {report.Card.RequiredConnected}/{report.Card.RequiredTotal}");
     }
@@ -535,7 +535,7 @@ public class MappingToolHandlers : ToolHandlerBase
         }
         catch (InvalidOperationException ex)
         {
-            // e.g. value not in the allowed options — return the option list so the model can retry
+            // e.g. value not in the allowed options - return the option list so the model can retry
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "set_static_value",
@@ -596,7 +596,7 @@ public class MappingToolHandlers : ToolHandlerBase
         }
         catch (InvalidOperationException ex)
         {
-            // e.g. unknown modifier type — the message lists valid types so the model can retry
+            // e.g. unknown modifier type - the message lists valid types so the model can retry
             return (new { error = ex.Message }, ex.Message);
         }
         await _operationService.RecordAsync(storeId, userId, "add_modifier",
@@ -945,7 +945,7 @@ public class MappingToolHandlers : ToolHandlerBase
             .ToListAsync(ct);
 
         if (matches.Count == 0)
-            return (null, $"Connection \"{search}\" not found — call list_connections");
+            return (null, $"Connection \"{search}\" not found - call list_connections");
         if (matches.Count > 1)
             return (null,
                 $"Found {matches.Count} connections: {string.Join(", ", matches.Select(m => $"{m.name} (#{m.Id})"))}. Specify connectionId.");
@@ -956,7 +956,7 @@ public class MappingToolHandlers : ToolHandlerBase
     }
 
     // Fetches adapter field definitions for a mapping (mapping must have connection loaded).
-    // Returns empty on adapter failure — callers degrade gracefully.
+    // Returns empty on adapter failure - callers degrade gracefully.
     private async Task<List<ExternalField>> GetAdapterFieldDefsAsync(CategoryMapping mapping, CancellationToken ct)
     {
         try

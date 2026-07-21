@@ -220,7 +220,7 @@ public class PriceSyncService
             await _context.SaveChangesAsync(ct);
             sw.Stop();
 
-            var msg = $"Updated {updated} products, skipped {skipped} — {sw.ElapsedMilliseconds}ms";
+            var msg = $"Updated {updated} products, skipped {skipped} - {sw.ElapsedMilliseconds}ms";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "success", msg);
             return PriceSyncResult.Success(updated, skipped, msg);
@@ -231,7 +231,7 @@ public class PriceSyncService
             var errMsg = $"Price import error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
+                    $"{errMsg} - {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }
@@ -403,7 +403,7 @@ public class PriceSyncService
                 await _context.SaveChangesAsync(ct);
                 sw.Stop();
 
-                var msg = $"Exported {result.SuccessCount} prices, errors: {result.FailedCount}, skipped: {skippedNoPrice + skippedDuplicateExternalIds} — {sw.ElapsedMilliseconds}ms";
+                var msg = $"Exported {result.SuccessCount} prices, errors: {result.FailedCount}, skipped: {skippedNoPrice + skippedDuplicateExternalIds} - {sw.ElapsedMilliseconds}ms";
                 if (canLog)
                 {
                     await _operationLogger.LogAsync(operationId!, storeId!.Value,
@@ -427,7 +427,7 @@ public class PriceSyncService
             var errMsg = errorMessages?.FirstOrDefault() ?? "Price export error";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
+                    $"{errMsg} - {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
@@ -436,7 +436,7 @@ public class PriceSyncService
             var errMsg = $"Price export error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
+                    $"{errMsg} - {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }
@@ -487,7 +487,7 @@ public class PriceSyncService
             .GroupBy(v => v.productId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Build data for export — per-variant if variants exist, otherwise single stock per link
+        // Build data for export - per-variant if variants exist, otherwise single stock per link
         var stockExportEntries = new List<(ProductMarketplaceLink Link, StockInfo Stock)>();
         foreach (var l in links.Where(l => l.product != null))
         {
@@ -573,7 +573,7 @@ public class PriceSyncService
                 sw.Stop();
 
                 var skipped = result.FailedCount + skippedDuplicateStockTargets;
-                var msg = $"Exported {result.SuccessCount} stock entries, errors: {result.FailedCount}, skipped: {skippedDuplicateStockTargets} — {sw.ElapsedMilliseconds}ms";
+                var msg = $"Exported {result.SuccessCount} stock entries, errors: {result.FailedCount}, skipped: {skippedDuplicateStockTargets} - {sw.ElapsedMilliseconds}ms";
                 if (canLog)
                 {
                     await _operationLogger.LogAsync(operationId!, storeId!.Value,
@@ -597,7 +597,7 @@ public class PriceSyncService
             var errMsg = errorMessages?.FirstOrDefault() ?? "Stock export error";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
+                    $"{errMsg} - {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
         catch (Exception ex)
@@ -606,7 +606,7 @@ public class PriceSyncService
             var errMsg = $"Stock export error: {ex.Message}";
             if (canLog)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "error",
-                    $"{errMsg} — {sw.ElapsedMilliseconds}ms");
+                    $"{errMsg} - {sw.ElapsedMilliseconds}ms");
             return PriceSyncResult.Failure(errMsg);
         }
     }

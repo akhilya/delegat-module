@@ -60,7 +60,7 @@ public class ProductTransferService
         int userId,
         CancellationToken ct = default)
     {
-        // Same-store target is allowed (clone-in-place is a useful operation —
+        // Same-store target is allowed (clone-in-place is a useful operation -
         // SKU collision will force the user to pick a new SKU). Move-into-self
         // is blocked at execute-time, not preview-time, so the user can still
         // see the preview before deciding which mode to use.
@@ -115,8 +115,8 @@ public class ProductTransferService
             if (matchedCategory != null && product.category!.attributes.Any())
             {
                 // Compare source category ATTRIBUTE DEFINITIONS (not just product values)
-                // against target category. This surfaces ALL missing definitions — even those
-                // the product doesn't currently have a value for — so the user can choose to
+                // against target category. This surfaces ALL missing definitions - even those
+                // the product doesn't currently have a value for - so the user can choose to
                 // sync them before cloning. Otherwise the cloned product can't be edited with
                 // the full set of fields.
                 var targetKeys = new HashSet<string>(matchedCategory.attributes.Select(a => a.key));
@@ -130,7 +130,7 @@ public class ProductTransferService
             }
             else if (matchedCategory == null && product.category!.attributes.Any())
             {
-                // No category match — all attribute definitions become unmappable unless we auto-create.
+                // No category match - all attribute definitions become unmappable unless we auto-create.
                 foreach (var srcAttr in product.category!.attributes)
                     unmappableAttrNames.Add(srcAttr.name ?? $"#{srcAttr.Id}");
             }
@@ -216,11 +216,11 @@ public class ProductTransferService
     ///
     /// When <paramref name="operationLogger"/> is provided, per-file progress and warnings
     /// are emitted to that operation (so the side panel and SignalR clients see them).
-    /// Without a logger, the method runs silently — useful for quick test paths.
+    /// Without a logger, the method runs silently - useful for quick test paths.
     ///
     /// File-copy failures are NOT fatal: failed files are skipped, logged as warnings,
     /// and the resulting product is still created (with a "partial" final status if any
-    /// file failed). User cancellation via <paramref name="ct"/> rolls everything back —
+    /// file failed). User cancellation via <paramref name="ct"/> rolls everything back -
     /// no new product, all copied blobs cleaned up best-effort.
     /// </summary>
     public async Task<TransferResult> ExecuteAsync(
@@ -237,7 +237,7 @@ public class ProductTransferService
             throw new InvalidOperationException($"Unknown mode: {request.mode}");
 
         // Same-store is OK for clone (just an in-store duplicate), but move-into-self
-        // is meaningless — it would soft-delete the original and create the same thing
+        // is meaningless - it would soft-delete the original and create the same thing
         // back in the same store.
         if (request.targetStoreId == sourceStoreId && request.mode == "move")
             throw new InvalidOperationException("Cannot move into the same store. Use clone mode instead.");
@@ -415,7 +415,7 @@ public class ProductTransferService
 
         // ---- Plan MinIO copies -------------------------------------------------------
         // We pre-plan source->dest paths so we can roll them back if the DB transaction
-        // fails. Path includes the new productId, which we don't have yet — placeholder
+        // fails. Path includes the new productId, which we don't have yet - placeholder
         // it, fix after the new product is saved.
 
         var newProductGuid = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -686,7 +686,7 @@ public class ProductTransferService
                         fileIdMap[srcFile.Id] = newFile.Id;
                         transferred.Add((newFile.Id, newPath));
 
-                        // Copy file tags — map TagDefinitions to target store
+                        // Copy file tags - map TagDefinitions to target store
                         foreach (var srcTag in srcFile.tags)
                         {
                             var srcDef = srcTag.tagDefinition;
@@ -695,12 +695,12 @@ public class ProductTransferService
                             int targetTagId;
                             if (srcDef.storeId == request.targetStoreId)
                             {
-                                // Same store clone — reuse directly
+                                // Same store clone - reuse directly
                                 targetTagId = srcTag.tagDefinitionId;
                             }
                             else
                             {
-                                // Cross-store — find or create matching TagDefinition in target
+                                // Cross-store - find or create matching TagDefinition in target
                                 var existing = await _context.tagDefinitions
                                     .FirstOrDefaultAsync(td =>
                                         td.storeId == request.targetStoreId && td.name == srcDef.name, ct);
@@ -905,7 +905,7 @@ public class ProductTransferService
         }
         catch (Exception)
         {
-            // Best-effort cleanup of MinIO objects we created — DB rollback already happened.
+            // Best-effort cleanup of MinIO objects we created - DB rollback already happened.
             foreach (var path in copiedMinIOObjects)
             {
                 try { await _storageService.DeleteAsync(path, CancellationToken.None); }
@@ -1042,7 +1042,7 @@ public class TransferRequest
     public string groupAction { get; set; } = "none";
     public int? groupId { get; set; }
     public string? groupName { get; set; }
-    /// <summary>Required true if source has marketplace links — confirms user understands they will be broken.</summary>
+    /// <summary>Required true if source has marketplace links - confirms user understands they will be broken.</summary>
     public bool confirmBreakLinks { get; set; }
     /// <summary>When true and target store already has a category with the same name but missing
     /// attributes, the missing attribute definitions are added to the existing category.

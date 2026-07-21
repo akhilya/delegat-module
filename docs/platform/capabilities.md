@@ -1,4 +1,4 @@
-# Delegat.Module — Platform Capabilities
+# Delegat.Module - Platform Capabilities
 
 ## Distribution Model
 
@@ -7,7 +7,7 @@
 - Dedicated MySQL, MinIO, backend, and frontend containers
 - Stack: `docker-compose.prod.yml` (mysql + minio + delegat-api + frontend/nginx)
 - Deploy: Dokploy + GitHub Actions
-- Isolation: physical — cross-tenant data leakage is architecturally impossible
+- Isolation: physical - cross-tenant data leakage is architecturally impossible
 
 > Selling, billing, fleet updates, Ops/Customer consoles, **Platform Link** (instance ↔ control plane): [../architecture/control-plane.md](../architecture/control-plane.md)  
 > Infrastructure details (provisioning, scaling, Registry draft): [../architecture/saas-architecture.md](../architecture/saas-architecture.md)
@@ -51,12 +51,17 @@
 - JWT in HttpOnly, SameSite=Strict cookie
 - Refresh tokens stored in DB with rotation on use
 - ASP.NET Identity with account lockout (5 attempts, 15 min lockout)
+- **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies
+- `User.isAdmin` is an **instance owner marker** only (break-glass / assign owner); API access is not granted by the flag alone
+- `roles.manage` is **admin-only**: effective solely for `isAdmin`, never assignable via roles or grants
+- `api.access` gates Public API key management UI/API and authenticating with API keys
+- Effective permissions = union of role claims + per-user grants; hydrated on each JWT validation from DB
+- Store-scoped permissions also require store membership (`selected_store` or `/stores/{id}`)
 - Invitation tokens for registration
 - CSRF protection via X-CSRF header (CsrfHeaderMiddleware)
 - Rate limiting: 300 req/min global, 10 req/min on auth endpoints
-- isAdmin flag (no RBAC — sufficient for per-instance model)
-- Admin seed via env vars (ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD)
-- **Public API v1:** API keys (`dk_…`) for ERP/1C/n8n — see [docs/api/public-v1.md](../api/public-v1.md)
+- Admin seed via env vars (ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD) → Owner role
+- **Public API v1:** API keys (`dk_…`) for ERP/1C/n8n - see [docs/api/public-v1.md](../api/public-v1.md); request activity logged for key owners
 
 ### AI Assistant
 - Embedded Claude-powered agent via `AiChatPanel` (floating chat, all pages)
@@ -65,25 +70,35 @@
 - **Inline error explanation:** "✦ Объяснить ошибку" button next to sync/adapter errors
 - **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
 - **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
-- **Admin model management:** `/settings/admin/ai` — connect any Anthropic or OpenAI-compatible model
-- **Access:** controlled by `AI_ENABLED` env var (tariff feature — see architecture docs)
-- All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` — editable without rebuilding services
+- **Admin model management:** `/settings/admin/ai` - connect any Anthropic or OpenAI-compatible model
+- **Access:** controlled by `AI_ENABLED` env var (tariff feature - see architecture docs)
+- All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
 
 ### Quotas
-- `MAX_PRODUCTS` — max products per store
-- `MAX_STORAGE_GB` — max storage per store
-- `MAX_FILES` — max files per store
-- `MAX_CONNECTIONS` — max marketplace connections
-- `AI_ENABLED` — whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility)
+- `MAX_PRODUCTS` - max products per store
+- `MAX_STORAGE_GB` - max storage per store
+- `MAX_FILES` - max files per store
+- `MAX_CONNECTIONS` - max marketplace connections
+- `AI_ENABLED` - whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility)
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
 
+### Platform Link (optional)
+- Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))
+- HMAC-signed m2m calls to Control Plane
+- Reference Catalog synced into MySQL (`referenceCurrencies`, `referenceTimezones`, `referencePlugins`)
+- Instance API: `GET /reference/currencies|timezones|plugins|status` (UI has no hardcoded catalogs)
+- 5xx sampled reporting + optional heartbeat
+- Empty catalogs until CP sync (or future initialization wizard)
+
 ### Background Services
-- ImageDownloadBackgroundService — downloads images from marketplaces
-- ProductImportBackgroundService — processes product import queue (PendingProductImport)
-- ProductExportBackgroundService — processes product export queue (PendingProductExport)
-- QueueCleanupBackgroundService — deletes terminal queue rows and operations older than retention
+- ImageDownloadBackgroundService - downloads images from marketplaces
+- ProductImportBackgroundService - processes product import queue (PendingProductImport)
+- ProductExportBackgroundService - processes product export queue (PendingProductExport)
+- QueueCleanupBackgroundService - deletes terminal queue rows and operations older than retention
+- ReferenceCatalogSyncHostedService - pulls Reference Catalog from Control Plane
+- PlatformHeartbeatHostedService - optional liveness to Control Plane
 - Startup recovery: InProgress tasks reset to Pending on container restart
 
 ### Infrastructure
@@ -108,11 +123,11 @@
 
 ## What's Still Needed
 
-### Critical — before first customers
+### Critical - before first customers
 
 #### Onboarding / First-Run Wizard
-- **Current:** Admin seed via env vars + invitation tokens. No visual wizard.
-- **Needed:** Steps: account setup → store configuration → marketplace connection → first sync.
+- **Current:** Admin seed via env vars + invitation tokens. Reference catalogs fill from Control Plane via Platform Link (`GET /reference/status`). No visual wizard yet.
+- **Needed:** Steps: account setup → store configuration (base currency / timezone from reference catalog) → marketplace connection → first sync.
 
 #### Backup & Recovery
 - **Current:** Manual MySQL dump for administrators via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.
@@ -152,7 +167,7 @@
 | Item | Reason |
 |------|---------|
 | Data isolation audits / Global Query Filters | DB is physically isolated |
-| RBAC | isAdmin is sufficient at this stage |
+| Per-store permission rows | Global perms + membership cover 1B; refine later if needed |
 | Third-party plugin marketplace | After platform stabilizes |
 | Audit logging | Nice-to-have |
 | i18n | Russian-language market only |

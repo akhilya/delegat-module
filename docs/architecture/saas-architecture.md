@@ -1,4 +1,4 @@
-# Delegat.Module — SaaS Distribution Architecture
+# Delegat.Module - SaaS Distribution Architecture
 
 > This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal (technical draft).
 >
@@ -14,20 +14,20 @@
 Each customer receives an **isolated Docker stack**: dedicated MySQL, MinIO, delegat-api, and frontend.
 
 **Why not shared MySQL/MinIO:**
-- Migrating from shared to per-instance requires schema dumps, coordinated downtime, and updating connection strings in Dokploy for every instance — unjustifiably complex
+- Migrating from shared to per-instance requires schema dumps, coordinated downtime, and updating connection strings in Dokploy for every instance - unjustifiably complex
 - Physical isolation makes cross-tenant data leakage architecturally impossible
 
 **Per-instance resource consumption (idle):**
 
 | Service | RAM |
 |---------|-----|
-| delegat-api (.NET 8) | 150–250 MB |
-| frontend (nginx) | 10–20 MB |
-| MySQL 8.4 (tuned) | 180–350 MB |
-| MinIO | 50–80 MB |
-| **Total** | **390–700 MB** |
+| delegat-api (.NET 8) | 150-250 MB |
+| frontend (nginx) | 10-20 MB |
+| MySQL 8.4 (tuned) | 180-350 MB |
+| MinIO | 50-80 MB |
+| **Total** | **390-700 MB** |
 
-8 GB VM: 10–12 instances. 16 GB VM: 20–24 instances.
+8 GB VM: 10-12 instances. 16 GB VM: 20-24 instances.
 
 **MySQL tuning** (add to `docker-compose.prod.yml`):
 ```yaml
@@ -43,15 +43,15 @@ Reduces MySQL consumption from ~350 MB to ~180 MB.
 
 ---
 
-## 2. DNS — Selectel Wildcard
+## 2. DNS - Selectel Wildcard
 
 **Current configuration:** Selectel DNS with wildcard record `*.your-domain.com → node IP`.
 
-Individual A records per subdomain are **not needed** — the wildcard covers all subdomains automatically.
+Individual A records per subdomain are **not needed** - the wildcard covers all subdomains automatically.
 
 **Multi-node DNS routing:**
 When multiple nodes have different IPs, the wildcard maps to a single IP. Options:
-- **Option A (recommended for start):** A single nginx/HAProxy in front of all nodes — one IP, routes by HTTP Host header
+- **Option A (recommended for start):** A single nginx/HAProxy in front of all nodes - one IP, routes by HTTP Host header
 - **Option B:** Per-node wildcards (`*.node-a.your-domain.com`, `*.node-b.your-domain.com`)
 
 ---
@@ -62,7 +62,7 @@ When multiple nodes have different IPs, the wildcard maps to a single IP. Option
 [Selectel DNS]
   *.your-domain.com → L4 load balancer (or single node IP)
 
-[Node A — 16 GB VM]          [Node B — 16 GB VM]
+[Node A - 16 GB VM]          [Node B - 16 GB VM]
   Dokploy Agent                 Dokploy Agent
   ├── client1.your-domain.com   ├── client3.your-domain.com
   │   ├── delegat-api           │   ├── delegat-api
@@ -72,12 +72,12 @@ When multiple nodes have different IPs, the wildcard maps to a single IP. Option
   └── client2.your-domain.com
       └── ...
 
-[Central Portal — 4 GB VM]
+[Central Portal - 4 GB VM]
   PostgreSQL (Registry DB)
   Provisioner Service
   Monitoring Poller
 
-[CI/CD — GitHub Actions]
+[CI/CD - GitHub Actions]
   push → build images → push GHCR → rolling update all instances
 ```
 
@@ -97,17 +97,17 @@ When multiple nodes have different IPs, the wildcard maps to a single IP. Option
 | Starter | 15 | 5,000 | 3 | false |
 | Pro | 50 | 50,000 | 10 | true |
 | Business | 150 | 200,000 | 25 | true |
-| Enterprise | 500 | — | — | true |
+| Enterprise | 500 | - | - | true |
 
 `AI_ENABLED=true` unlocks the chat assistant, auto-mapping, and inline error explanation.
-The AI model itself is configured by the instance admin in `/settings/admin/ai` — the platform
+The AI model itself is configured by the instance admin in `/settings/admin/ai` - the platform
 does not supply an API key; customers bring their own (Anthropic, OpenAI, etc.).
 
 **Upgrade** (15 GB → 500 GB):
 1. Portal updates `MAX_STORAGE_GB=500` via Dokploy API
-2. Trigger redeploy (~30–60 sec downtime)
+2. Trigger redeploy (~30-60 sec downtime)
 
-**Downgrade** (500 GB → 15 GB) — soft-cap strategy:
+**Downgrade** (500 GB → 15 GB) - soft-cap strategy:
 1. Set new limit via Dokploy API → trigger redeploy
 2. Existing data is **not deleted** (grandfathered)
 3. New uploads are blocked (`EnsureStorageQuotaAsync` handles this already)
@@ -131,18 +131,18 @@ does not supply an API key; customers bring their own (Anthropic, OpenAI, etc.).
 
 ---
 
-## 6. Redis — Not Needed
+## 6. Redis - Not Needed
 
 | Use case | Redis needed? | Solution |
 |----------|--------------|---------|
 | Rate limiting | ❌ | In-memory (1 API container per instance) |
 | Refresh tokens | ❌ | MySQL is sufficient |
 | SignalR backplane | ❌ | In-memory (1 API container) |
-| Marketplace API cache | ⚠️ | `IMemoryCache` (built into ASP.NET) — 1 hour TTL |
+| Marketplace API cache | ⚠️ | `IMemoryCache` (built into ASP.NET) - 1 hour TTL |
 
-**The only worthwhile case — caching `GetCategoryFieldsAsync`:**
+**The only worthwhile case - caching `GetCategoryFieldsAsync`:**
 
-Marketplace API calls take 1–5 seconds. Opening `fieldMappingPage` triggers a new request each time.
+Marketplace API calls take 1-5 seconds. Opening `fieldMappingPage` triggers a new request each time.
 
 Solution without Redis:
 ```csharp
@@ -281,10 +281,10 @@ Cron: every 5 minutes
 |-------|------|--------|
 | 0 | Health check, quotas, admin seed, startup recovery | ✅ Done |
 | 1 | MySQL tuning in `docker-compose.prod.yml` | Quick |
-| 2 | IMemoryCache for marketplace API | 1–2 days |
+| 2 | IMemoryCache for marketplace API | 1-2 days |
 | 3 | First-run wizard in Dashboard | Before first customers |
-| 4 | Central Portal backend (Registry DB + Provisioner) | 2–3 weeks |
-| 5 | Central Portal frontend + billing | 1–2 weeks |
+| 4 | Central Portal backend (Registry DB + Provisioner) | 2-3 weeks |
+| 5 | Central Portal frontend + billing | 1-2 weeks |
 | 6 | Auto-scaling (Hetzner API + cloud-init) | At >1 VM/week growth |
 
 ---
@@ -298,4 +298,4 @@ Cron: every 5 minutes
 2. **Payments:** **T-Bank** chosen (see [control-plane.md](control-plane.md)). Remaining: exact API product, recurring, trial card hold.
 3. **Email provider:** SendGrid / Postmark / self-hosted SMTP / RF transactional provider?
 4. **License key:** offline HMAC protection or closed-source repo is sufficient?
-5. **Alerts:** email only or add Telegram bot for monitoring alerts? (Support Telegram bridge: DM to one ops in MVP — see control-plane.md §10.)
+5. **Alerts:** email only or add Telegram bot for monitoring alerts? (Support Telegram bridge: DM to one ops in MVP - see control-plane.md §10.)

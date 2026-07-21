@@ -81,7 +81,7 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
-import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
+import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
@@ -148,7 +148,7 @@ export default {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-    FieldChangesTable,
+    FieldChangesPreviewDialog,
   },
   props: {
     productId: {
@@ -245,7 +245,7 @@ export default {
       }];
     },
     importWarning() {
-      return this.hasIrreversibleFields()
+      return this.importIrreversibleFields.length > 0
         ? this.$t("productMarketplaceIntegrations.irreversibleFieldsWarning")
         : null;
     },
@@ -447,7 +447,7 @@ export default {
       await this.handleExportToAll();
     },
 
-    // Import from a specific marketplace (pull changes) — preview first
+    // Import from a specific marketplace (pull changes) - preview first
     async handleImportFromLink(conn) {
       this.importingLinkId = conn.linkId;
       this.isLoadingPreview = true;
@@ -473,40 +473,6 @@ export default {
       this.importingLinkId = null;
     },
 
-    isFieldIncluded(field) {
-      return !this.importExcludedFields.has(field);
-    },
-    toggleFieldIncluded(field) {
-      const next = new Set(this.importExcludedFields);
-      if (next.has(field)) {
-        next.delete(field);
-      } else {
-        next.add(field);
-      }
-      this.importExcludedFields = next;
-    },
-    isFieldIrreversible(field) {
-      return this.importPreviewData?.irreversibleFields?.includes(field);
-    },
-    allFieldsExcluded() {
-      if (!this.importPreviewData?.updatedFields) return true;
-      return this.importPreviewData.updatedFields.every((f) => this.importExcludedFields.has(f));
-    },
-    allFieldsIncluded() {
-      if (!this.importPreviewData?.updatedFields) return false;
-      return this.importPreviewData.updatedFields.every((f) => !this.importExcludedFields.has(f));
-    },
-    toggleAllFields() {
-      if (!this.importPreviewData?.updatedFields) return;
-      if (this.allFieldsIncluded()) {
-        this.importExcludedFields = new Set(this.importPreviewData.updatedFields);
-      } else {
-        this.importExcludedFields = new Set();
-      }
-    },
-    hasIrreversibleFields() {
-      return this.importPreviewData?.irreversibleFields?.length > 0;
-    },
     async confirmImport() {
       if (!this.previewLinkId) return;
       this.isApplyingImport = true;
@@ -554,6 +520,13 @@ export default {
       this.importExcludedFields = new Set();
     },
 
+    resetImportPreview() {
+      this.importPreviewData = null;
+      this.previewLinkId = null;
+      this.previewConnection = null;
+      this.importExcludedFields = new Set();
+    },
+
     getFieldLabel(field) {
       if (field.startsWith("attr:")) return field.substring(5);
       const known = ["name", "description", "price", "storageQuantity"];
@@ -563,7 +536,7 @@ export default {
     },
 
     formatFieldValue(field, value) {
-      if (value === null || value === undefined) return "—";
+      if (value === null || value === undefined) return "-";
       if (field === "price") {
         return formatMoney(value, this.storeBaseCurrency);
       }
@@ -822,9 +795,9 @@ export default {
     },
 
     formatDate(date) {
-      if (!date) return "—";
+      if (!date) return "-";
       const d = new Date(date);
-      if (Number.isNaN(d.getTime())) return "—";
+      if (Number.isNaN(d.getTime())) return "-";
       const now = new Date();
       const diffMs = now - d;
       const diffMins = Math.floor(diffMs / 60000);
@@ -970,7 +943,11 @@ export default {
           </div>
         </div>
         <Badge :variant="getConnectionStatusInfo(conn).variant" class="shrink-0">
-          <component :is="getConnectionStatusInfo(conn).icon" class="size-3 mr-1" />
+          <component
+            :is="getConnectionStatusInfo(conn).icon"
+            v-if="getConnectionStatusInfo(conn).icon"
+            class="size-3 mr-1"
+          />
           {{ getConnectionStatusInfo(conn).label }}
         </Badge>
         <TooltipProvider v-if="connections?.hasSizes">
@@ -1073,15 +1050,15 @@ export default {
             </TableHeader>
             <TableBody>
               <TableRow v-for="v in variantsData[conn.connectionId].variants" :key="v.id">
-                <TableCell class="text-xs py-1">{{ v.size || '—' }}</TableCell>
+                <TableCell class="text-xs py-1">{{ v.size || '-' }}</TableCell>
                 <TableCell class="text-xs py-1">
-                  <code class="bg-muted px-1 rounded">{{ v.sku || '—' }}</code>
+                  <code class="bg-muted px-1 rounded">{{ v.sku || '-' }}</code>
                 </TableCell>
                 <TableCell class="text-xs py-1">
-                  <code class="bg-muted px-1 rounded">{{ v.barcode || '—' }}</code>
+                  <code class="bg-muted px-1 rounded">{{ v.barcode || '-' }}</code>
                 </TableCell>
-                <TableCell class="text-xs py-1">{{ v.price != null ? v.price : '—' }}</TableCell>
-                <TableCell class="text-xs py-1">{{ v.quantity != null ? v.quantity : '—' }}</TableCell>
+                <TableCell class="text-xs py-1">{{ v.price != null ? v.price : '-' }}</TableCell>
+                <TableCell class="text-xs py-1">{{ v.quantity != null ? v.quantity : '-' }}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -1162,7 +1139,7 @@ export default {
         </DropdownMenu>
       </div>
 
-      <!-- Connections without mapping — muted "needs setup" state, not an error -->
+      <!-- Connections without mapping - muted "needs setup" state, not an error -->
       <div
         v-for="conn in connectionsWithoutMapping"
         :key="conn.connectionId"
@@ -1218,34 +1195,22 @@ export default {
     </div>
 
     <!-- Import Preview Dialog -->
-    <Dialog v-model:open="showImportPreviewDialog">
-      <DialogContent size="3xl" class="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{{ $t("productMarketplaceIntegrations.importDialogTitle") }}</DialogTitle>
-          <DialogDescription>
-            {{ $t("productMarketplaceIntegrations.importDialogDescription") }}
-          </DialogDescription>
-        </DialogHeader>
-        <div v-if="importPreviewData" class="py-4 max-h-[60vh] overflow-y-auto">
-          <FieldChangesTable
-            :items="importPreviewItems"
-            selectable
-            :excluded-fields="importExcludedFields"
-            :irreversible-fields="importIrreversibleFields"
-            :warning="importWarning"
-            @update:excluded-fields="importExcludedFields = $event"
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" @click="cancelImport">{{ $t("productMarketplaceIntegrations.cancelAction") }}</Button>
-          <Button @click="confirmImport" :disabled="isApplyingImport || allFieldsExcluded()">
-            <Loader2 v-if="isApplyingImport" class="size-4 mr-2 animate-spin" />
-            <Download v-else class="size-4 mr-2" />
-            {{ $t("productMarketplaceIntegrations.confirmAction") }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <FieldChangesPreviewDialog
+      v-if="showImportPreviewDialog"
+      :open="showImportPreviewDialog"
+      :title="$t('productMarketplaceIntegrations.importDialogTitle')"
+      :description="$t('productMarketplaceIntegrations.importDialogDescription')"
+      :items="importPreviewItems"
+      selectable
+      :excluded-fields="importExcludedFields"
+      :irreversible-fields="importIrreversibleFields"
+      :warning="importWarning"
+      :confirm-loading="isApplyingImport"
+      @update:open="(v) => (showImportPreviewDialog = v)"
+      @update:excluded-fields="importExcludedFields = $event"
+      @confirm="confirmImport"
+      @cancel="resetImportPreview"
+    />
 
     <!-- Bulk Mapping Selection Dialog -->
     <Dialog v-model:open="showBulkMappingDialog">

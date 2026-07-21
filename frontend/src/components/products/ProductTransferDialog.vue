@@ -50,7 +50,7 @@ const emit = defineEmits(["update:open", "transferred"]);
 
 const store = useStore();
 
-// Russian plural form picker. forms = [one, few, many] — for English callers can reuse the same string 3x.
+// Russian plural form picker. forms = [one, few, many] - for English callers can reuse the same string 3x.
 function pluralize(n, forms) {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -116,7 +116,7 @@ async function loadMemberships() {
 }
 
 // Stores available as transfer target. Move excludes current store; clone allows it
-// (in-store duplicate is a useful operation — SKU collision will force a new SKU).
+// (in-store duplicate is a useful operation - SKU collision will force a new SKU).
 const availableTargetStores = computed(() => {
   if (mode.value === "move" && currentStoreId.value != null) {
     return memberships.value.filter((s) => s.id !== currentStoreId.value);
@@ -124,7 +124,7 @@ const availableTargetStores = computed(() => {
   return memberships.value;
 });
 
-// If user switched to "move" while having current store selected as target — clear it.
+// If user switched to "move" while having current store selected as target - clear it.
 watch(mode, (newMode) => {
   if (newMode === "move" && targetStoreId.value === currentStoreId.value) {
     targetStoreId.value = null;
@@ -245,7 +245,7 @@ async function submit() {
     productId: props.productId,
     input,
     onSuccess: (response) => {
-      // Backend now enqueues — returns { queued: true, operationId, totalFiles }.
+      // Backend now enqueues - returns { queued: true, operationId, totalFiles }.
       // Real progress lives in the operations side panel.
       const result = response.data.value;
       const targetStoreName = preview.value.targetStore?.name || t("products.productTransferDialog.targetStoreFallback");
@@ -358,7 +358,7 @@ function close() {
         </div>
 
         <div v-else-if="preview" class="space-y-4">
-          <!-- SKU collision — dynamic: amber while unresolved, green once user entered a valid alternative -->
+          <!-- SKU collision - dynamic: amber while unresolved, green once user entered a valid alternative -->
           <div v-if="preview.skuConflict"
                :class="[
                  'space-y-2 rounded-md border p-3 transition-colors',

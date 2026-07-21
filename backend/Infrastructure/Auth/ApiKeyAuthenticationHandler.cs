@@ -14,15 +14,18 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     public const string SchemeName = PublicApiAuthorizeAttribute.Scheme;
 
     private readonly DataContext _db;
+    private readonly IPermissionService _permissions;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        DataContext db)
+        DataContext db,
+        IPermissionService permissions)
         : base(options, logger, encoder)
     {
         _db = db;
+        _permissions = permissions;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -54,6 +57,10 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         if (user == null)
             return AuthenticateResult.Fail("User is inactive");
 
+        var effective = await _permissions.GetEffectivePermissionsAsync(user.Id);
+        if (!effective.Contains(Permissions.ApiAccess, StringComparer.OrdinalIgnoreCase))
+            return AuthenticateResult.Fail("API access permission required");
+
         try
         {
             await _db.userApiKeys
@@ -71,6 +78,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? $"user-{user.Id}"),
             new Claim("apiKeyId", apiKey.Id.ToString()),
+            new Claim("apiKeyHint", $"{apiKey.keyPrefix}…{apiKey.last4}"),
+            new Claim(Permissions.ClaimType, Permissions.ApiAccess),
         };
 
         var identity = new ClaimsIdentity(claims, SchemeName);

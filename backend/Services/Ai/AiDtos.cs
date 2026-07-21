@@ -12,7 +12,7 @@ public class AiRequest
     public List<AiMessage> messages { get; set; } = new();
     public List<AiTool>? tools { get; set; }
     public bool stream { get; set; }
-    public string? user { get; set; } // session/conversation id — breaks KV-cache between sessions
+    public string? user { get; set; } // session/conversation id - breaks KV-cache between sessions
 }
 
 public class AiMessage

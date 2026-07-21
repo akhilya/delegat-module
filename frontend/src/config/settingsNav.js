@@ -3,7 +3,7 @@ import {
   PAGE_SETTINGS_USER,
   PAGE_ADMIN_STORES,
   PAGE_ADMIN_USERS,
-  PAGE_ADMIN_TOKENS,
+  PAGE_ADMIN_API,
   PAGE_ADMIN_PLUGINS,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADMIN_AI,
@@ -14,23 +14,24 @@ import {
   User,
   Store,
   Users,
-  Key,
+  KeyRound,
   Plug,
   AlertTriangle,
   Sparkles,
   ScrollText,
 } from "lucide-vue-next";
 import { t } from "@/i18n";
+import { hasPermission, PERMS } from "@/lib/permissions";
 
 /** @typedef {{ id: string, label?: string, labelKey?: string, to: string, icon: import('vue').Component, visible?: (ctx: NavContext) => boolean }} SettingsNavItem */
-/** @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean }} NavContext */
+/** @typedef {{ me: object|null, canManageStore: boolean, isAdmin: boolean, hasPermission?: (p: string) => boolean }} NavContext */
 
 export const SETTINGS_ROUTE_LABEL_KEYS = {
   [PAGE_SETTINGS]: "nav.overview",
   [PAGE_SETTINGS_USER]: "nav.user",
   [PAGE_ADMIN_STORES]: "nav.stores",
   [PAGE_ADMIN_USERS]: "nav.users",
-  [PAGE_ADMIN_TOKENS]: "nav.tokens",
+  [PAGE_ADMIN_API]: "nav.api",
   [PAGE_ADMIN_PLUGINS]: "nav.plugins",
   [PAGE_ADMIN_ERROR_LOGS]: "nav.errorLogs",
   [PAGE_ADMIN_AI]: "nav.ai",
@@ -50,6 +51,11 @@ export const SETTINGS_ROUTE_LABELS = new Proxy(
 
 const ADMIN_PREFIX = "/settings/admin";
 
+function can(ctx, permission) {
+  if (typeof ctx.hasPermission === "function") return ctx.hasPermission(permission);
+  return hasPermission(ctx.me, permission);
+}
+
 /**
  * @param {NavContext} ctx
  * @returns {SettingsNavItem[]}
@@ -58,7 +64,9 @@ export function getPersonalSettingsItems(ctx) {
   const items = [
     { id: "user", labelKey: "nav.user", to: PAGE_SETTINGS_USER, icon: User },
   ];
-  if (ctx.canManageStore && !ctx.isAdmin) {
+  const canStoreSettings = can(ctx, PERMS.StoreSettingsManage) || ctx.canManageStore;
+  const hasPlatformSettings = can(ctx, PERMS.SettingsPlatform) || can(ctx, PERMS.StoresCreate);
+  if (canStoreSettings && !hasPlatformSettings) {
     items.push({ id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store });
   }
   return items;
@@ -69,19 +77,30 @@ export function getPersonalSettingsItems(ctx) {
  * @returns {SettingsNavItem[]}
  */
 export function getAdminSettingsItems(ctx) {
-  if (!ctx.isAdmin) return [];
-  return [
-    { id: "overview", labelKey: "nav.overview", to: PAGE_SETTINGS, icon: Settings2 },
-    { id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store },
-    { id: "users", labelKey: "nav.users", to: PAGE_ADMIN_USERS, icon: Users },
-    { id: "tokens", labelKey: "nav.tokens", to: PAGE_ADMIN_TOKENS, icon: Key },
-    { id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug },
-    { id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle },
-    { id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText },
-    ...(ctx.me?.aiEnabled !== false
-      ? [{ id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles }]
-      : []),
-  ];
+  const items = [];
+  if (can(ctx, PERMS.SettingsPlatform)) {
+    items.push({ id: "overview", labelKey: "nav.overview", to: PAGE_SETTINGS, icon: Settings2 });
+  }
+  if (can(ctx, PERMS.StoresCreate) || can(ctx, PERMS.StoreSettingsManage)) {
+    items.push({ id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store });
+  }
+  if (can(ctx, PERMS.UsersManage)) {
+    items.push({ id: "users", labelKey: "nav.users", to: PAGE_ADMIN_USERS, icon: Users });
+  }
+  if (can(ctx, PERMS.ApiAccess)) {
+    items.push({ id: "api", labelKey: "nav.api", to: PAGE_ADMIN_API, icon: KeyRound });
+  }
+  if (can(ctx, PERMS.PluginsManage)) {
+    items.push({ id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug });
+  }
+  if (can(ctx, PERMS.SettingsPlatform)) {
+    items.push({ id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle });
+    items.push({ id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText });
+    if (ctx.me?.aiEnabled !== false) {
+      items.push({ id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles });
+    }
+  }
+  return items;
 }
 
 /**

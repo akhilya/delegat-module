@@ -13,7 +13,6 @@ import {
   renderAttributeValueCell,
 } from "@/lib/attributeTableCell";
 import { formatDateTimeCell } from "@/utils/dateTime";
-import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { formatMoney } from "@/lib/currency";
 
 /** Creates a copy icon SVG DOM element. */
@@ -102,8 +101,8 @@ function renderCopyableSku(sku: string, extraClass = "") {
 }
 
 /** Renders a date value as two lines: date on top, time below in muted text. */
-function renderDateCell(val: string | null | undefined, timezone = DEFAULT_TIMEZONE) {
-  if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "—");
+function renderDateCell(val: string | null | undefined, timezone = "UTC") {
+  if (!val) return h("span", { class: "text-muted-foreground text-sm" }, "-");
   const { date, time } = formatDateTimeCell(val, timezone);
   return h("div", { class: "flex flex-col" }, [
     h("span", { class: "text-sm tabular-nums" }, date),
@@ -226,7 +225,7 @@ export const columns: ProductColumnDef[] = [
     cell: ({ row }) => {
       const barcode = row.original.barcode;
       if (!barcode) {
-        return h("span", { class: "text-muted-foreground text-sm" }, "—");
+        return h("span", { class: "text-muted-foreground text-sm" }, "-");
       }
       return h(BarcodeCell, { barcode });
     },
@@ -239,7 +238,7 @@ export const columns: ProductColumnDef[] = [
     cell: ({ row }) => {
       const categoryName = row.original.categoryName;
       if (!categoryName) {
-        return h("span", { class: "text-muted-foreground text-sm" }, "—");
+        return h("span", { class: "text-muted-foreground text-sm" }, "-");
       }
       return h("span", { class: "text-sm" }, categoryName);
     },
@@ -253,7 +252,7 @@ export const columns: ProductColumnDef[] = [
     cell: ({ row }) => {
       const value = row.original.storageQuantity;
       if (value === null || value === undefined) {
-        return h("span", { class: "text-muted-foreground" }, "—");
+        return h("span", { class: "text-muted-foreground" }, "-");
       }
       return h("span", {}, value);
     },
@@ -267,7 +266,7 @@ export const columns: ProductColumnDef[] = [
     cell: ({ row }) => {
       const value = row.original.price;
       if (value === null || value === undefined) {
-        return h("span", { class: "text-muted-foreground" }, "—");
+        return h("span", { class: "text-muted-foreground" }, "-");
       }
       return h("span", {}, String(value));
     },
@@ -553,7 +552,7 @@ function withPriceCurrency(col: ProductColumnDef, baseCurrency?: string | null):
     cell: ({ row }) => {
       const value = row.original.price;
       if (value === null || value === undefined) {
-        return h("span", { class: "text-muted-foreground" }, "—");
+        return h("span", { class: "text-muted-foreground" }, "-");
       }
       return h("span", {}, formatMoney(value, baseCurrency));
     },

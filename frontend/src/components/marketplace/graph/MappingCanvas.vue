@@ -266,7 +266,7 @@ function enrichFieldsWithDefs(fields, defs) {
   });
 }
 
-/** Enrich adapter field labels/tooltips once — not on every refreshAnalysis (avoids re-render thrash). */
+/** Enrich adapter field labels/tooltips once - not on every refreshAnalysis (avoids re-render thrash). */
 function applyFieldDefEnrichment() {
   const adapterNode = findNode(ADAPTER_NODE_ID);
   if (adapterNode) {
@@ -892,7 +892,7 @@ watch(
   () => props.previewProductId,
   (id) => (id ? schedulePreview() : clearNodePreview()),
 );
-// Sources can arrive after the initial load — re-push them to the adapter's dropdown when they do.
+// Sources can arrive after the initial load - re-push them to the adapter's dropdown when they do.
 watch(
   () => props.availableSources,
   () => {
@@ -902,7 +902,7 @@ watch(
   },
   { deep: true },
 );
-// Field defs (name/description/unit) can arrive after graph load — enrich once, not on every analysis pass.
+// Field defs (name/description/unit) can arrive after graph load - enrich once, not on every analysis pass.
 watch(
   () => [props.externalFieldDefs, props.priceFieldDefs],
   () => {
@@ -911,7 +911,7 @@ watch(
   },
   { deep: true },
 );
-// Price-API field list can arrive after graph load — append missing fields to the price sink.
+// Price-API field list can arrive after graph load - append missing fields to the price sink.
 watch(
   () => props.priceFieldMappings,
   (mappings) => {
@@ -937,7 +937,7 @@ watch(
   },
   { deep: true },
 );
-// Only react to structural changes (add/remove — e.g. the Delete key), not position/select/data,
+// Only react to structural changes (add/remove - e.g. the Delete key), not position/select/data,
 // to avoid a feedback loop with preview's own updateNodeData() calls.
 onNodesChange((changes) => {
   const cs = changes || [];
@@ -1209,7 +1209,7 @@ function onPointerMove(e) {
 }
 
 function openMenuAt(clientX, clientY) {
-  pendingConnect.value = null; // plain right-click/Tab — not a wire drop
+  pendingConnect.value = null; // plain right-click/Tab - not a wire drop
   const rect = flowWrap.value?.getBoundingClientRect();
   menu.value = {
     open: true,
@@ -1278,7 +1278,7 @@ function onKeydown(e) {
     return; // don't hijack typing in the inspector / menu search
 
   // Clipboard shortcuts (Ctrl/Cmd + C / V / D). Use e.code (physical key) so they work
-  // regardless of the active keyboard layout — with a non-Latin layout e.key would differ.
+  // regardless of the active keyboard layout - with a non-Latin layout e.key would differ.
   if (e.ctrlKey || e.metaKey) {
     if (e.code === "KeyZ") {
       e.preventDefault();
@@ -1450,7 +1450,7 @@ function cleanData(d) {
 
 const clipboard = ref({ nodes: [], edges: [] });
 
-// Selected, copyable nodes — prefer Vue Flow's selection, fall back to the inspector's node.
+// Selected, copyable nodes - prefer Vue Flow's selection, fall back to the inspector's node.
 function currentSelection() {
   const fromVf = (getSelectedNodes?.value || []).filter(
     (n) => n.deletable !== false,
@@ -2092,7 +2092,7 @@ async function importMappingFile(event) {
   background: var(--accent);
 }
 
-/* Single "adapter fields" sink node — metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
+/* Single "adapter fields" sink node - metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
   min-width: 300px;
   max-width: 420px;
@@ -2176,7 +2176,7 @@ async function importMappingFile(event) {
   background: var(--muted-foreground);
 }
 
-/* Default (static / floating) edges — plain wire, no animation. */
+/* Default (static / floating) edges - plain wire, no animation. */
 .vf-canvas .vue-flow__edge-path {
   stroke: #b1b1b7;
   stroke-width: 2.5;
