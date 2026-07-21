@@ -29,7 +29,9 @@ jobs:
         run: dotnet restore backend.Tests/Delegat.Tests.csproj
 
       - name: Build
-        run: dotnet build backend.Tests/Delegat.Tests.csproj --no-restore --configuration Release -p:BuildPlugins=false
+        # -maxcpucount:1 avoids parallel ProjectReference builds racing on SDK deps.json
+        # (backend + YandexMarket both reference the same SDK project).
+        run: dotnet build backend.Tests/Delegat.Tests.csproj --no-restore --configuration Release -p:BuildPlugins=false -maxcpucount:1
 
       - name: Test
         run: dotnet test backend.Tests/Delegat.Tests.csproj --no-build --configuration Release --verbosity normal
