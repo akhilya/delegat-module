@@ -32,15 +32,19 @@
 [Marketing / Landing]
         │
         ▼
-[Customer Console] ──── billing ────► [Payment provider RF]
+[Customer Console] ──── billing ────► [T-Bank]
         │                                    │
-        │ successful payment                 │ webhooks
+        │ trial / payment                    │ webhooks
         ▼                                    ▼
 [Provisioner] ── Dokploy API ──► [Node] ──► Instance stack
-        │
+        │                                      │
+        │   Platform Link (m2m + user SSO)     │
+        │◄──── 5xx / diagnostics / support ────┘
         ▼
-[Ops Console] — releases, fleet update, backups, tickets, nodes
+[Ops Console] — releases, fleet, backups, tickets, nodes
 ```
+
+Инстанс остаётся физически изолированным по данным каталога, но имеет **доверенный канал** к control plane (не «совсем оффлайн appliance»).
 
 ---
 
@@ -61,6 +65,7 @@
 | 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** — **purge** volumes/данных |
 | 10 | Первый вход | **Обязательная смена** временного admin-пароля при первом входе в инстанс |
 | 11 | Репозиторий | Control plane — **отдельный monorepo** от `delegat-module` (платформа инстанса) |
+| 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: отчёты 5xx, вызов сервисов CP (диагностика / заполнение), позже — поддержка **внутри UI инстанса** с автологином |
 
 ---
 
@@ -96,6 +101,7 @@ Account (email, auth)
 - зашифрованные секреты стека (MySQL, MinIO, JWT, ENCRYPTION_KEY, admin password)
 - `last_deployed_version` / `release_id`
 - `last_seen_at` (health)
+- `instance_public_id` + зашифрованный **Platform Link secret** (m2m; выдаётся при provision, ротация из Ops)
 
 **Release:**
 
@@ -234,7 +240,102 @@ Trigger: Ops «обновить все / выбранные» до Release X
 
 ---
 
-## 9. Backup & DR (два контура)
+## 9. Связь инстанса с Control Plane (Platform Link)
+
+Инстанс и control plane — разные системы и репозитории, но **продуктово инстанс не «глухой»**: он знает, куда стучаться, и умеет делать это **с автоматической авторизацией**.
+
+### 9.1 Зачем
+
+| Use case | Когда | Кто инициирует |
+|----------|-------|----------------|
+| **5xx / критические ошибки** | Необработанные исключения, health degradation | Backend инстанса → CP (telemetry / incident) |
+| **Сервисы CP «для заполнения»** | Помощь онбордингу, диагностический upload, будущие cloud-хелперы | UI/API инстанса → CP API |
+| **Поддержка в UI инстанса** (later) | Тикет / чат без ухода на другой логин | Пользователь в инстансе → CP Support с **SSO** |
+| Heartbeat (опционально) | Дополнение к внешнему health poller | Инстанс → CP |
+
+Каталог, MySQL и MinIO инстанса **не** становятся multi-tenant: по каналу уходит только то, что явно разрешено (ошибки, метаданные инстанса, контекст тикета — без произвольного доступа CP к товарам клиента, пока это не запрошено отдельно).
+
+### 9.2 Два уровня авторизации
+
+Нужны **оба** — путать нельзя.
+
+#### A. Machine-to-machine (инстанс как устройство)
+
+При provision control plane кладёт в env инстанса:
+
+```text
+CONTROL_PLANE_URL=https://console.example.com
+INSTANCE_ID=inst_…
+INSTANCE_LINK_SECRET=…   # или пара id+secret; хранить как остальные секреты
+```
+
+Инстанс подписывает запросы к CP (HMAC или short-lived JWT, signed secret’ом):
+
+- `POST /platform/v1/errors` — 5xx / batch ошибок  
+- `POST /platform/v1/heartbeat` — опционально  
+- `POST /platform/v1/diagnostics` — «заполнение»/upload по разрешённой схеме  
+- будущие cloud endpoints  
+
+CP проверяет подпись, `INSTANCE_ID`, статус инстанса (`active` / не `purged`).  
+Ротация secret — из Ops (новый secret → Dokploy env → redeploy или hot-reload, если появится).
+
+#### B. User SSO (человек в UI инстанса → CP без повторного логина)
+
+Когда пользователь (уже залогиненный в инстансе) открывает «Поддержка» / «Кабинет» / «Заполнить через CP»:
+
+```
+1. Frontend инстанса → Backend инстанса: «нужен CP session»
+2. Backend инстанса (m2m + локальный userId/email/role) → CP:
+     POST /platform/v1/sso/exchange
+     → one-time code / short-lived handoff token (TTL секунды)
+3. Browser redirect или iframe:
+     https://console…/sso/consume?code=…
+4. CP создаёт/привязывает сессию Account (по заранее связанному email / org membership)
+5. Пользователь сразу в тикетах / нужном сервисе CP — без формы логина
+```
+
+**Привязка идентичности:** при provision admin email инстанса = email Account в CP (или явный `platform_user_id` в Registry). Расширение на non-admin пользователей инстанса — later (invite sync / email match).
+
+Требования к SSO:
+
+- code одноразовый, короткий TTL  
+- привязка к `instance_id` + `user`  
+- аудит в CP  
+- пользователь без Account в CP → понятный fallback (создать soft-link / «откройте консоль»)
+
+### 9.3 Что меняется в репозитории инстанса (`delegat-module`)
+
+Минимальный задел (когда дойдём до реализации):
+
+| Компонент | Назначение |
+|-----------|------------|
+| Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` | Конфиг канала |
+| `PlatformLinkClient` (backend) | Подпись и HTTP к CP |
+| Middleware / exception hook | Отправка 5xx (с сэмплингом / dedup) |
+| UI: «Поддержка» / «Документация» | Deep-link или SSO handoff |
+| Kill-switch | Если URL/secret пусты — инстанс работает offline (self-host без CP) |
+
+Self-host / dev без control plane остаётся валидным: Platform Link **опционален**.
+
+### 9.4 Безопасность
+
+- Secret только на backend инстанса, не в frontend bundle  
+- CP API для m2m — отдельный префикс, rate limit per instance  
+- Тело 5xx: stack/message + версия / request id; **не** слать PII каталога и credentials маркетплейсов по умолчанию  
+- SSO code не логировать в plaintext  
+- При `suspended` / `purged` CP отклоняет m2m и SSO  
+
+### 9.5 Эволюция поддержки
+
+| Этап | UX |
+|------|-----|
+| MVP | Тикеты в Customer Console; из инстанса — SSO deep-link «открыть поддержку» |
+| Next | Виджет/панель поддержки **внутри** инстанса (тот же ticket API CP, сессия через SSO) |
+| Later | Богатый контекст тикета: версия, последние 5xx, adapter errors (через Platform Link) |
+
+---
+
+## 10. Backup & DR (два контура)
 
 | | Control Plane (Ops) | Внутри инстанса (клиент) |
 |--|---------------------|---------------------------|
@@ -247,9 +348,9 @@ Trigger: Ops «обновить все / выбранные» до Release X
 
 ---
 
-## 10. Поддержка: тикеты + Telegram
+## 11. Поддержка: тикеты + Telegram
 
-### 10.1 Рекомендованная модель (зафиксирована)
+### 11.1 Рекомендованная модель (зафиксирована)
 
 **Источник истины — тикет в БД control plane.**  
 Telegram — канал для ops: уведомление о новом сообщении / тикете и возможность ответить так, чтобы ответ попал в тред тикета.
@@ -265,19 +366,21 @@ Telegram — канал для ops: уведомление о новом соо�
 Статусы: open / waiting / …        Меняются в Ops (или командой бота)
 ```
 
-### 10.2 Почему не «чат = зеркало Telegram»
+### 11.2 Почему не «чат = зеркало Telegram»
 
 Полноценный realtime-чат с двусторонней синхронизацией (прочитано, несколько операторов, гонки, вложения) по объёму близок к Intercom. Для старта тикетный UX честнее по SLA и проще в поддержке.
 
-### 10.3 Docs и тикеты
+### 11.3 Docs и тикеты
 
 Вместо комментариев к статьям в MVP: CTA «статья не помогла → открыть тикет» с `article_id` / URL в контексте тикета.
 
+Из **инстанса** тот же поток предпочтительно через Platform Link SSO (§9), а не вторую регистрацию.
+
 ---
 
-## 11. Документация для пользователей
+## 12. Документация для пользователей
 
-### 11.1 Выбор движка: GitBook
+### 12.1 Выбор движка: GitBook
 
 Сравнение коротко (критерий: «проще наполнить + видео + меньше сопровождения»):
 
@@ -291,13 +394,13 @@ Telegram — канал для ops: уведомление о новом соо�
 В Customer Console и UI инстанса — пункт «Документация» с deep-link на GitBook space.  
 Комментарии к статьям — **не MVP**; CTA «не помогло → тикет» с URL статьи.
 
-SSO в GitBook — опционально later (§12).
+SSO в GitBook — опционально later (§13). Platform Link SSO (§9) относится к **Customer Console / поддержке**, не к GitBook.
 
 ---
 
-## 12. Open questions
+## 13. Open questions
 
-Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., force password change, GitBook, Telegram DM (MVP), отдельный monorepo control plane.
+Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., force password change, GitBook, Telegram DM (MVP), отдельный monorepo control plane, **Platform Link** (m2m + user SSO).
 
 Ещё открыто:
 
@@ -310,11 +413,14 @@ SSO в GitBook — опционально later (§12).
 7. **Feature request:** внутренний board vs публичный roadmap.  
 8. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
 9. **Юридика:** оферта, 152-ФЗ, политика данных; предупреждения клиенту за N дней до purge.  
-10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).
+10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).  
+11. **«Сервер для заполнения»:** какой именно сервис CP имеется в виду в первой очереди (онбординг-хелпер, diagnostic pack, AI/cloud fill, другое)?  
+12. **Platform Link crypto:** HMAC vs instance JWT; нужен ли mutual TLS; политика ротации secret.  
+13. **SSO identity:** только admin email = Account, или сразу все пользователи инстанса с match по email?
 
 ---
 
-## 13. Roadmap control plane (укрупнённо)
+## 14. Roadmap control plane (укрупнённо)
 
 Связано с [saas-architecture.md](saas-architecture.md) §8; здесь — продуктовый срез.
 
@@ -323,34 +429,36 @@ SSO в GitBook — опционально later (§12).
 | 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR) — ✅ |
 | A | Registry DB + Provisioner + Ops: create instance вручную / semi-auto |
 | B | Billing РФ + self-serve Customer Console (оплата → авто-provision) |
+| B′ | **Platform Link:** выдача `INSTANCE_ID`/secret при provision; heartbeat; приём 5xx |
 | C | Release approve + fleet update + health poller |
 | D | Ops backups/restore + break-glass |
-| E | Tickets + Telegram bridge |
-| F | Docs (внешний движок) + feature requests + полировка lifecycle/оферты |
-| G | Canary, multi-instance org, auto-scale нод |
+| E | Tickets + Telegram bridge + **SSO handoff из инстанса** |
+| F | Docs (GitBook) + feature requests + полировка lifecycle/оферты |
+| G | Виджет поддержки внутри инстанса; canary; multi-instance org; auto-scale нод |
 
 ---
 
-## 14. Связь с документацией инстанса
+## 15. Связь с документацией инстанса
 
 | Документ | Роль |
 |----------|------|
 | [capabilities.md](../platform/capabilities.md) | Что умеет **инстанс** |
 | [product.md](../platform/product.md) | UX/бренд **инстанса** (каталог) |
 | [saas-architecture.md](saas-architecture.md) | Ноды, RAM, compose, квоты, черновик Registry/Provisioner |
-| **Этот файл** | Продукт и решения **control plane** (продажа, контроль, деплой) |
+| **Этот файл** | Продукт и решения **control plane** (продажа, контроль, деплой, Platform Link) |
 
 **Репозитории:**
 
 | Repo | Содержимое |
 |------|------------|
-| `delegat-module` (этот) | Платформа инстанса + design docs control plane (этот файл как источник правды до/параллельно с переносом) |
-| **control-plane monorepo** (отдельный) | Customer Console, Ops Console, Provisioner, billing Т-Банк, tickets, Registry DB |
+| `delegat-module` (этот) | Платформа инстанса + design docs control plane (+ будущий `PlatformLinkClient`) |
+| **control-plane monorepo** (отдельный) | Customer Console, Ops Console, Provisioner, billing Т-Банк, tickets, Registry DB, **Platform Link API** |
 
 В control-plane monorepo по мере роста имеет смысл разнести:
 
 ```
 docs/control-plane.md          ← обзор (копия/канон)
+docs/platform-link.md          ← m2m + SSO контракт
 docs/billing.md
 docs/instance-lifecycle.md
 docs/support-tickets.md
@@ -358,7 +466,7 @@ docs/support-tickets.md
 
 ---
 
-## 15. Исходный backlog (из brainstorm)
+## 16. Исходный backlog (из brainstorm)
 
 Сохранённый список идей основателя — покрыт доменами выше:
 
