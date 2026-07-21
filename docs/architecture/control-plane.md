@@ -65,7 +65,7 @@
 | 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** — **purge** volumes/данных |
 | 10 | Первый вход | **Обязательная смена** временного admin-пароля при первом входе в инстанс |
 | 11 | Репозиторий | Control plane — **отдельный monorepo** от `delegat-module` (платформа инстанса) |
-| 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: отчёты 5xx, вызов сервисов CP (диагностика / заполнение), позже — поддержка **внутри UI инстанса** с автологином |
+| 12 | Связь инстанс ↔ CP | Инстанс **слабо связан** с control plane через **Platform Link**: machine credentials + user SSO. Use cases: **Reference Catalog** (валюты, timezones, реестр плагинов…), 5xx, позже поддержка в UI инстанса |
 
 ---
 
@@ -248,12 +248,53 @@ Trigger: Ops «обновить все / выбранные» до Release X
 
 | Use case | Когда | Кто инициирует |
 |----------|-------|----------------|
+| **Reference Catalog («заполнение»)** | Списки валют, timezones, реестр плагинов и др. справочники — единый источник на CP вместо хардкода в инстансе | Backend/UI инстанса → CP (часто публичный или m2m read) |
 | **5xx / критические ошибки** | Необработанные исключения, health degradation | Backend инстанса → CP (telemetry / incident) |
-| **Сервисы CP «для заполнения»** | Помощь онбордингу, диагностический upload, будущие cloud-хелперы | UI/API инстанса → CP API |
+| **Диагностика** | Upload diagnostic pack по запросу ops/support | UI/API инстанса → CP API |
 | **Поддержка в UI инстанса** (later) | Тикет / чат без ухода на другой логин | Пользователь в инстансе → CP Support с **SSO** |
 | Heartbeat (опционально) | Дополнение к внешнему health poller | Инстанс → CP |
 
-Каталог, MySQL и MinIO инстанса **не** становятся multi-tenant: по каналу уходит только то, что явно разрешено (ошибки, метаданные инстанса, контекст тикета — без произвольного доступа CP к товарам клиента, пока это не запрошено отдельно).
+Каталог товаров, MySQL и MinIO инстанса **не** становятся multi-tenant. Справочники с CP — **read-mostly metadata**, не данные продавца.
+
+### 9.1.1 Reference Catalog — что выносится на Control Plane
+
+Сейчас часть справочников зашита в инстанс (пример: `frontend/src/lib/timezones.js`, `frontend/src/lib/currency.js` → `ADDABLE_CURRENCIES`; плагины ставятся локально upload’ом DLL). Цель: **один раз править на CP**, все инстансы получают актуальный список.
+
+| Справочник | Сейчас (инстанс) | На CP | Что остаётся в инстансе |
+|------------|------------------|-------|-------------------------|
+| **Валюты (каталог кодов)** | Хардкод `ADDABLE_CURRENCIES` | Список ISO-кодов + label/locale hints | Выбор магазина, `StoreCurrency`, курсы `rateToBase`, `baseCurrency` |
+| **Timezones** | Хардкод `STORE_TIMEZONES` | Список IANA + display labels | Поле `store.timezone` (выбранное значение) |
+| **Реестр плагинов** | Локальный upload / DLL на диске инстанса | Каталог адаптеров: key, имя, версии, changelog, URL артефакта, min platform version | Установленные плагины, connections, credentials |
+| *(позже)* | — | Локали UI hints, feature flags, шаблоны онбординга… | Локальный кэш + fallback |
+
+**Принцип:** CP владеет **глобальным справочником**; инстанс владеет **выборами и бизнес-данными** магазина.
+
+```
+Control Plane                         Instance
+─────────────────                     ────────
+currencies catalog  ──fetch/cache──►  UI: «добавить валюту»
+timezones catalog   ──fetch/cache──►  UI: select timezone
+plugin registry     ──fetch/cache──►  UI: «доступные адаптеры»
+                                      + install from registry URL
+store.currencies / rates   (local DB)
+store.timezone             (local DB)
+installed plugin DLLs      (local disk)
+```
+
+**Доставка в инстанс:**
+
+1. При старте / по TTL инстанс тянет каталоги с CP (`GET /platform/v1/catalog/...`).  
+2. Кэш в памяти (и опционально на диск) — UI не зависит от сети на каждый клик.  
+3. Если CP недоступен → **fallback** на последний кэш или встроенный минимальный seed (self-host / offline).  
+4. Auth: для публичных справочников достаточно `INSTANCE_ID` + подпись **или** даже signed URL / read-only token; секрет нужен, чтобы не открывать произвольный scrape без контроля. Для self-host без CP — только локальный seed.
+
+**Реестр плагинов (особо):**
+
+- CP хранит метаданные + ссылку на артефакт (GHCR / blob storage CP), не исходники клиентов.  
+- Инстанс показывает «доступно к установке» vs «уже установлено».  
+- Установка: скачать пакет по URL (m2m) → существующий `PluginManager` / upload path.  
+- Совместимость: поле `minPlatformVersion` / `compatibleWith` сверяется с версией инстанса.  
+- Ops на CP публикует/снимает версии плагинов отдельно от fleet update образа платформы (можно связать позже).
 
 ### 9.2 Два уровня авторизации
 
@@ -271,9 +312,13 @@ INSTANCE_LINK_SECRET=…   # или пара id+secret; хранить как о
 
 Инстанс подписывает запросы к CP (HMAC или short-lived JWT, signed secret’ом):
 
+- `GET  /platform/v1/catalog/currencies` — справочник валют  
+- `GET  /platform/v1/catalog/timezones` — справочник timezones  
+- `GET  /platform/v1/catalog/plugins` — реестр плагинов (+ optional `GET …/plugins/{key}`)  
 - `POST /platform/v1/errors` — 5xx / batch ошибок  
 - `POST /platform/v1/heartbeat` — опционально  
-- `POST /platform/v1/diagnostics` — «заполнение»/upload по разрешённой схеме  
+- `POST /platform/v1/diagnostics` — diagnostic upload  
+- `POST /platform/v1/sso/exchange` — user handoff  
 - будущие cloud endpoints  
 
 CP проверяет подпись, `INSTANCE_ID`, статус инстанса (`active` / не `purged`).  
@@ -311,9 +356,11 @@ CP проверяет подпись, `INSTANCE_ID`, статус инстанс
 |-----------|------------|
 | Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` | Конфиг канала |
 | `PlatformLinkClient` (backend) | Подпись и HTTP к CP |
+| `ReferenceCatalogService` | Fetch + cache currencies / timezones / plugin registry; fallback seed |
+| UI stores settings / plugins page | Читать справочники из API инстанса (который ходит в CP), не из hardcoded `lib/*` |
 | Middleware / exception hook | Отправка 5xx (с сэмплингом / dedup) |
 | UI: «Поддержка» / «Документация» | Deep-link или SSO handoff |
-| Kill-switch | Если URL/secret пусты — инстанс работает offline (self-host без CP) |
+| Kill-switch | Если URL/secret пусты — инстанс работает offline на встроенном seed |
 
 Self-host / dev без control plane остаётся валидным: Platform Link **опционален**.
 
@@ -414,9 +461,13 @@ SSO в GitBook — опционально later (§13). Platform Link SSO (§9) 
 8. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
 9. **Юридика:** оферта, 152-ФЗ, политика данных; предупреждения клиенту за N дней до purge.  
 10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).  
-11. **«Сервер для заполнения»:** какой именно сервис CP имеется в виду в первой очереди (онбординг-хелпер, diagnostic pack, AI/cloud fill, другое)?  
-12. **Platform Link crypto:** HMAC vs instance JWT; нужен ли mutual TLS; политика ротации secret.  
-13. **SSO identity:** только admin email = Account, или сразу все пользователи инстанса с match по email?
+11. **Platform Link crypto:** HMAC vs instance JWT; нужен ли mutual TLS; политика ротации secret.  
+12. **SSO identity:** только admin email = Account, или сразу все пользователи инстанса с match по email?  
+13. **Catalog cache TTL** и стратегия инвалидации (ETag / `If-None-Match` / push от CP).  
+14. **Plugin artifacts:** где хранить пакеты (GHCR private vs blob на CP); кто подписывает артефакт.  
+15. **Кто редактирует справочники на CP:** только Ops, или контент-роль без полного Ops доступа?
+
+Закрыто по смыслу «сервер для заполнения»: это **Reference Catalog** (§9.1.1) — валюты, timezones, реестр плагинов и аналогичные глобальные списки.
 
 ---
 
@@ -429,7 +480,7 @@ SSO в GitBook — опционально later (§13). Platform Link SSO (§9) 
 | 0 | Инстанс готов к управлению снаружи (health, quotas, seed, GHCR) — ✅ |
 | A | Registry DB + Provisioner + Ops: create instance вручную / semi-auto |
 | B | Billing РФ + self-serve Customer Console (оплата → авто-provision) |
-| B′ | **Platform Link:** выдача `INSTANCE_ID`/secret при provision; heartbeat; приём 5xx |
+| B′ | **Platform Link:** credentials при provision; **Reference Catalog** (currencies, timezones, plugins); heartbeat; 5xx |
 | C | Release approve + fleet update + health poller |
 | D | Ops backups/restore + break-glass |
 | E | Tickets + Telegram bridge + **SSO handoff из инстанса** |
@@ -458,7 +509,7 @@ SSO в GitBook — опционально later (§13). Platform Link SSO (§9) 
 
 ```
 docs/control-plane.md          ← обзор (копия/канон)
-docs/platform-link.md          ← m2m + SSO контракт
+docs/platform-link.md          ← m2m + SSO + Reference Catalog контракт
 docs/billing.md
 docs/instance-lifecycle.md
 docs/support-tickets.md
@@ -479,4 +530,4 @@ docs/support-tickets.md
 7. Документация и видео-гайды (готовый движок) + обратная связь через тикеты  
 8. Ticket-based поддержка (+ Telegram для ops)  
 9. Форма заказа доработок / смена тарифа (два потока: feature request и plan change)
-10. **Platform Link:** инстанс ↔ control plane (5xx, сервисы CP, SSO в поддержку)
+10. **Platform Link:** инстанс ↔ control plane — Reference Catalog (валюты, timezones, плагины), 5xx, SSO в поддержку
