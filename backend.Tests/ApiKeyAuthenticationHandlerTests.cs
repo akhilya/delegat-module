@@ -63,6 +63,7 @@ public class ApiKeyAuthenticationHandlerTests
             => Task.CompletedTask;
         public Task HydrateClaimsAsync(ClaimsIdentity identity, int userId, CancellationToken ct = default)
             => Task.CompletedTask;
+        public void InvalidateUserAccess(int userId) { }
     }
 
     private static async Task<(ApiKeyAuthenticationHandler handler, DefaultHttpContext http, DataContext db, FakePermissionService perms)> CreateHandlerAsync(

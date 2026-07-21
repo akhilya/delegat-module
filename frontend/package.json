@@ -61,5 +61,10 @@
     "globals": "^16.2.0",
     "prettier": "^3.6.1",
     "vite": "^6.3.5"
+  },
+  "overrides": {
+    "tar": "7.5.20",
+    "js-yaml": "4.3.0",
+    "brace-expansion": "1.1.16"
   }
 }
