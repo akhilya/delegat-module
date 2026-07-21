@@ -1,6 +1,9 @@
 # Delegat.Module — SaaS Distribution Architecture
 
-> This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal.
+> This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal (technical draft).
+>
+> **Product decisions for the Control Plane** (self-serve billing, Ops vs Customer surfaces, support, backups policy):  
+> [control-plane.md](control-plane.md)
 >
 > Platform features and roadmap: [../platform/capabilities.md](../platform/capabilities.md)
 
@@ -161,6 +164,9 @@ Add Redis only if: horizontal scaling of the API within an instance (not planned
 
 ## 7. Central Portal
 
+> Product scope, Customer vs Ops consoles, RF billing, tickets+Telegram, and open questions:  
+> [control-plane.md](control-plane.md). This section remains the technical Registry/Provisioner sketch.
+
 **Stack:** .NET 8 + PostgreSQL + Vue 3. Separate VM (~4 GB RAM).
 
 ### Registry DB Schema
@@ -285,8 +291,11 @@ Cron: every 5 minutes
 
 ## Open Questions
 
+> Broader Control Plane open questions (trial, suspend behavior, docs engine, etc.):  
+> [control-plane.md](control-plane.md) §12.
+
 1. **Multi-node DNS:** L4 load balancer (single IP for all nodes) or per-node wildcard?
-2. **Payments:** Russian payment provider or Stripe for international customers?
-3. **Email provider:** SendGrid / Postmark / self-hosted SMTP?
+2. **Payments:** **T-Bank** chosen (see [control-plane.md](control-plane.md)). Remaining: exact API product, recurring, trial card hold.
+3. **Email provider:** SendGrid / Postmark / self-hosted SMTP / RF transactional provider?
 4. **License key:** offline HMAC protection or closed-source repo is sufficient?
-5. **Alerts:** email only or add Telegram bot for monitoring alerts?
+5. **Alerts:** email only or add Telegram bot for monitoring alerts? (Support Telegram bridge: DM to one ops in MVP — see control-plane.md §10.)

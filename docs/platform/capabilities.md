@@ -9,7 +9,8 @@
 - Deploy: Dokploy + GitHub Actions
 - Isolation: physical — cross-tenant data leakage is architecturally impossible
 
-> Infrastructure details (provisioning, scaling, central portal): [../architecture/saas-architecture.md](../architecture/saas-architecture.md)
+> Selling, billing, fleet updates, Ops/Customer consoles: [../architecture/control-plane.md](../architecture/control-plane.md)  
+> Infrastructure details (provisioning, scaling, Registry draft): [../architecture/saas-architecture.md](../architecture/saas-architecture.md)
 
 ---
 
