@@ -7,7 +7,10 @@
 > Возможности самого инстанса: [../platform/capabilities.md](../platform/capabilities.md)  
 > Продуктовый brief инстанса (UI каталога): [../platform/product.md](../platform/product.md)
 >
-> **Статус:** дизайн / pre-implementation. Код control plane в репозитории ещё не реализован.
+> **Статус:** дизайн / pre-implementation. Код control plane **не** живёт в этом репозитории —
+> для него заведён **отдельный monorepo** (см. §2). Здесь — каноническое описание продукта
+> и решений, пока control-plane repo пуст или зеркалит этот документ.
+>
 > Инстанс уже готов быть управляемым снаружи (`/api/health`, квоты через env, admin seed, GHCR).
 
 ---
@@ -50,10 +53,14 @@
 | 1 | Онбординг | **Full self-serve:** оплата → автоматический provision инстанса с **approved release** |
 | 2 | Кардинальность | **Сейчас продуктово:** 1 аккаунт → 1 активный инстанс. **Архитектурно сразу:** `Account` / `Organization` не привязаны жёстко к одному instance (связь 1:N, лимит «1 active» на тарифе) |
 | 3 | Бэкапы | В control plane бэкап/restore — **только Ops**. Пользовательский dump/restore — отдельная фича **внутри инстанса** (не путать) |
-| 4 | Документация | UX «часть продукта» (пункт в консоли, deep-link из инстанса), **движок контента — готовый** (GitBook / Mintlify / аналог). Самописный docs CMS не делать |
-| 5 | Поддержка | **Свой ticket-модуль** + Telegram как **ops-канал** (уведомления и reply в тикет). Не строить полноценный bidirectional «чат ↔ Telegram» как Intercom в MVP |
-| 6 | Рынок / платежи | Старт — **Россия**. Провайдер: **Т-Банк / ЮMoney (и аналоги)** — конкретный выбор TBD |
+| 4 | Документация | UX «часть продукта»; движок — **GitBook** (см. §11). Самописный docs CMS не делать |
+| 5 | Поддержка | **Свой ticket-модуль** + Telegram как **ops-канал**. MVP: уведомления/reply в **личку** одному ops (группу/shared — позже при необходимости) |
+| 6 | Рынок / платежи | Старт — **Россия**. Эквайринг: **Т-Банк** |
 | 7 | Релизы | Новые инстансы и обновления флота идут с **последней подтверждённой в Ops ревизии**, не с «сырого» `latest` из CI |
+| 8 | Trial | **7 дней** пробного периода |
+| 9 | Неоплата / отмена | Сначала **stop** контейнеров инстанса; через **2 месяца** — **purge** volumes/данных |
+| 10 | Первый вход | **Обязательная смена** временного admin-пароля при первом входе в инстанс |
+| 11 | Репозиторий | Control plane — **отдельный monorepo** от `delegat-module` (платформа инстанса) |
 
 ---
 
@@ -66,7 +73,7 @@
 | **Ops Console** | Вы | Approve release, fleet update, nodes, health, break-glass, backups/restore, тикеты |
 | **Knowledge + Support** | Все | Внешний docs-движок + ticket-модуль (+ Telegram bridge) |
 
-Клиентский кабинет и Ops — **два UI**, один backend control plane (отдельный сервис/репозиторий от инстанса).
+Клиентский кабинет и Ops — **два UI**, один backend control plane в **отдельном monorepo** от `delegat-module`.
 
 ---
 
@@ -148,19 +155,32 @@ Account (email, auth)
 
 ### 7.1 Принципы
 
-- Рынок старта: **Россия** → эквайринг/кошельки уровня **Т-Банк, ЮMoney** (и аналоги). Выбор провайдера — open question (§12).  
-- Full automation: успешная оплата (webhook) → Provisioner.  
-- Подписка с автопродлением; отмена прекращает продление, инстанс живёт до конца оплаченного периода (уточнить в оферте).
+- Рынок старта: **Россия**.  
+- Платёжный провайдер: **Т-Банк** (T-Bank Acquiring / API — конкретный продукт API уточнить при интеграции).  
+- Full automation: успешная оплата или старт trial (webhook / подтверждение) → Provisioner.  
+- Подписка с автопродлением; отмена прекращает продление — инстанс остаётся доступным до конца уже оплаченного периода (зафиксировать в оферте).
 
-### 7.2 Состояния подписки (черновик)
+### 7.2 Trial
+
+- Длительность: **7 дней**.  
+- Open: нужна ли привязка карты / оплата ₽1 на старте trial (зависит от возможностей Т-Банк и антифрода) — см. §12.
+
+### 7.3 Состояния подписки и поведение инстанса
 
 ```
-trial? → active → past_due → grace → suspended → cancelled → purged
+trial → active → past_due → grace? → suspended → cancelled → purged
 ```
 
-На каждом шаге нужно явно определить поведение **инстанса** (баннер / read-only / stop containers / wipe volumes). Детализация — в следующих итерациях brainstorm / `billing.md`.
+Зафиксированное поведение при неоплате / после отмены (когда доступ должен прекратиться):
 
-### 7.3 Тарифы ↔ квоты инстанса
+| Фаза | Инстанс |
+|------|---------|
+| `suspended` / доступ прекращён | **Stop** контейнеров (стек остановлен, данные на диске сохраняются) |
+| + **2 месяца** после stop | **Purge**: удаление volumes (MySQL + MinIO) и запись instance как `terminated` / `purged` |
+
+Детали `past_due` / длина `grace` (баннер в консоли до stop) — уточнить в оферте и §12.
+
+### 7.4 Тарифы ↔ квоты инстанса
 
 Инстанс уже читает лимиты из env (`MAX_STORAGE_GB`, `MAX_PRODUCTS`, `MAX_CONNECTIONS`, `AI_ENABLED`).  
 Control plane при provision и plan change выставляет их через Dokploy API и redeploy.
@@ -173,13 +193,15 @@ Control plane при provision и plan change выставляет их чере
 
 ### 8.1 Статусы (черновик)
 
-`provisioning` → `active` → `degraded` | `suspended` → `terminating` → `terminated`  
+`provisioning` → `active` → `degraded` | `suspended` → (`terminated` / `purged` после purge)  
 (+ `failed` на ошибке provision)
+
+Stop сохраняет volumes; purge через 2 месяца удаляет данные (см. §7.3).
 
 ### 8.2 Provision flow (self-serve)
 
 ```
-1. Оплата успешна (webhook провайдера)
+1. Старт trial (7 дней) или успешная оплата (webhook Т-Банк)
 2. Создать Organization + Subscription + Instance (status=provisioning)
 3. Выбрать ноду (least-loaded)
 4. Сгенерировать секреты, зашифровать в Registry
@@ -187,6 +209,7 @@ Control plane при provision и plan change выставляет их чере
 6. Poll https://{subdomain}/api/health (timeout ~5 min)
 7. Welcome email: URL + admin + временный пароль
 8. status=active
+9. Первый вход в инстанс → обязательная смена временного admin-пароля (force change)
 ```
 
 ### 8.3 Обновления флота
@@ -231,6 +254,8 @@ Trigger: Ops «обновить все / выбранные» до Release X
 **Источник истины — тикет в БД control plane.**  
 Telegram — канал для ops: уведомление о новом сообщении / тикете и возможность ответить так, чтобы ответ попал в тред тикета.
 
+**MVP delivery:** бот пишет в **личку** одному ops (простота). Shared-группа / несколько операторов — когда нагрузка вырастет.
+
 ```
 Клиент (Customer Console)          Ops
 ─────────────────────────          ───
@@ -252,29 +277,40 @@ Telegram — канал для ops: уведомление о новом соо�
 
 ## 11. Документация для пользователей
 
-- Контент и видео-гайды — во **внешнем готовом** решении (поиск, версии, эмбеды видео из коробки).  
-- В Customer Console и (опционально) в UI инстанса — пункт «Документация» с deep-link.  
-- Комментарии к статьям — **не MVP**; обратная связь через тикеты.  
-- Кандидаты движков: GitBook, Mintlify, ReadMe, Outline — выбор TBD (§12).
+### 11.1 Выбор движка: GitBook
+
+Сравнение коротко (критерий: «проще наполнить + видео + меньше сопровождения»):
+
+| Вариант | Плюсы | Минусы |
+|---------|-------|--------|
+| **GitBook** ✅ | Визуальный редактор, вставка видео URL (YouTube и т.п.) в один клик, хостинг из коробки, поиск, версии | SaaS-подписка; видео лучше хостить снаружи (не грузить большие MP4 в GitBook) |
+| Mintlify | Красивый DX, docs-as-code (MDX), быстрый сайт | Больше «разработческий» workflow; видео через iframe/MDX |
+| VitePress (self-host) | Бесплатно, стек Vue | Сами деплой/поиск/версии/авторский UX — против цели «только наполнение» |
+
+**Решение:** использовать **GitBook**. Видео-гайды — на Rutube/YouTube (или аналог) + embed в статью.  
+В Customer Console и UI инстанса — пункт «Документация» с deep-link на GitBook space.  
+Комментарии к статьям — **не MVP**; CTA «не помогло → тикет» с URL статьи.
+
+SSO в GitBook — опционально later (§12).
 
 ---
 
 ## 12. Open questions
 
-Актуальные дыры для следующего brainstorm:
+Закрыто в §2: Т-Банк, trial 7 дней, stop→purge 2 мес., force password change, GitBook, Telegram DM (MVP), отдельный monorepo control plane.
 
-1. **Платёжный провайдер:** Т-Банк vs ЮMoney (vs другой РФ) — комиссии, рекуррент, юр. лицо, webhooks.  
-2. **Trial:** есть ли пробный период и сколько дней; нужна ли карта сразу.  
-3. **Поведение инстанса** на `past_due` / `grace` / `suspended` / после `cancelled`.  
-4. **Обязательная смена** временного admin-пароля при первом входе.  
-5. **DNS / TLS multi-node:** один edge (Host-header) vs per-node wildcards ([saas-architecture.md](saas-architecture.md) §2).  
-6. **Email:** transactional-провайдер (и письма на русском).  
-7. **Docs-движок:** какой именно + нужен ли SSO позже.  
-8. **Telegram bridge:** личка одному ops vs shared channel/группа; команды бота.  
-9. **Feature request:** внутренний board vs публичный roadmap.  
-10. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
-11. **Юридика:** оферта, 152-ФЗ, политика данных, срок purge volumes после terminate.  
-12. **Репозиторий control plane:** mono-repo vs отдельный git repo.
+Ещё открыто:
+
+1. **Trial + карта:** нужна ли привязка карты / холд на старте 7-дневного trial (ограничения Т-Банк + антифрод).  
+2. **Grace до stop:** сколько дней `past_due` с баннером до остановки контейнеров; совпадает ли отмена в конце периода с тем же stop→purge.  
+3. **DNS / TLS multi-node:** один edge (Host-header) vs per-node wildcards ([saas-architecture.md](saas-architecture.md) §2).  
+4. **Email:** transactional-провайдер для РФ (welcome, счета, suspend, purge warning).  
+5. **GitBook SSO** позже или достаточно публичных docs.  
+6. **Telegram:** команды бота (`/reply`, смена статуса) vs ответ только из Ops UI; позже — группа вместо лички.  
+7. **Feature request:** внутренний board vs публичный roadmap.  
+8. **License / anti-abuse** для образов (нужно ли при закрытом provision).  
+9. **Юридика:** оферта, 152-ФЗ, политика данных; предупреждения клиенту за N дней до purge.  
+10. **Имя/URL** control-plane monorepo и домены (`console.` / `docs.` / лендинг).
 
 ---
 
@@ -304,13 +340,20 @@ Telegram — канал для ops: уведомление о новом соо�
 | [saas-architecture.md](saas-architecture.md) | Ноды, RAM, compose, квоты, черновик Registry/Provisioner |
 | **Этот файл** | Продукт и решения **control plane** (продажа, контроль, деплой) |
 
-При реализации control plane рекомендуется выделить отдельные файлы по мере роста:
+**Репозитории:**
+
+| Repo | Содержимое |
+|------|------------|
+| `delegat-module` (этот) | Платформа инстанса + design docs control plane (этот файл как источник правды до/параллельно с переносом) |
+| **control-plane monorepo** (отдельный) | Customer Console, Ops Console, Provisioner, billing Т-Банк, tickets, Registry DB |
+
+В control-plane monorepo по мере роста имеет смысл разнести:
 
 ```
-docs/architecture/control-plane.md     ← этот документ (обзор + решения)
-docs/architecture/billing.md           ← позже
-docs/architecture/instance-lifecycle.md
-docs/architecture/support-tickets.md
+docs/control-plane.md          ← обзор (копия/канон)
+docs/billing.md
+docs/instance-lifecycle.md
+docs/support-tickets.md
 ```
 
 ---

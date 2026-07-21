@@ -2,7 +2,7 @@
 
 Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart, Yandex Market).
 
-Each customer runs an **isolated instance** (Docker stack). Selling, provisioning, billing, fleet updates, and ops control belong to a separate **Control Plane** (design docs; not implemented in this repo yet).
+Each customer runs an **isolated instance** (Docker stack). Selling, provisioning, billing, fleet updates, and ops control belong to a separate **Control Plane** (design docs in this repo; implementation will live in a **separate monorepo**).
 
 ## Stack
 

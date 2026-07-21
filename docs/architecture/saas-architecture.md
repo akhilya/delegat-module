@@ -295,7 +295,7 @@ Cron: every 5 minutes
 > [control-plane.md](control-plane.md) §12.
 
 1. **Multi-node DNS:** L4 load balancer (single IP for all nodes) or per-node wildcard?
-2. **Payments (RF first):** T-Bank vs YooMoney (or other) — recurring charges, legal entity, webhooks. International/Stripe later if needed.
+2. **Payments:** **T-Bank** chosen (see [control-plane.md](control-plane.md)). Remaining: exact API product, recurring, trial card hold.
 3. **Email provider:** SendGrid / Postmark / self-hosted SMTP / RF transactional provider?
 4. **License key:** offline HMAC protection or closed-source repo is sufficient?
-5. **Alerts:** email only or add Telegram bot for monitoring alerts? (Support Telegram bridge is separate — see control-plane.md §10.)
+5. **Alerts:** email only or add Telegram bot for monitoring alerts? (Support Telegram bridge: DM to one ops in MVP — see control-plane.md §10.)
