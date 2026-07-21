@@ -70,6 +70,14 @@ public class DatabaseDumpTests
         Assert.Equal("mysqldump_unavailable", ex.Code);
     }
 
+    [Theory]
+    [InlineData("Access denied for user 'x'@'%' using password: secret", "secret", "Access denied for user 'x'@'%' using password: ***")]
+    [InlineData("ok", null, "ok")]
+    public void SanitizeStderr_RedactsPassword(string stderr, string? password, string expected)
+    {
+        Assert.Equal(expected, DatabaseDumpService.SanitizeStderr(stderr, password));
+    }
+
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
         var controller = new SettingsController(dump);

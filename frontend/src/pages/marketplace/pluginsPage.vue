@@ -5,8 +5,6 @@ import PageSection from "@/components/pageSection.vue";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
@@ -18,7 +16,8 @@ import {
   RefreshCw,
   Upload,
   Package,
-  Info,
+  FileCode2,
+  X,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -61,8 +60,6 @@ export default {
     PageSection,
     PageHeader,
     Button,
-    Input,
-    Label,
     Badge,
     Table,
     TableBody,
@@ -77,7 +74,8 @@ export default {
     RefreshCw,
     Upload,
     Package,
-    Info,
+    FileCode2,
+    X,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -106,11 +104,24 @@ export default {
       isReloading: null,
       showUploadDialog: false,
       selectedFile: null,
+      isDraggingUpload: false,
     };
   },
   computed: {
     availableFromRegistry() {
       return (this.registryPlugins || []).filter((p) => !p.installed);
+    },
+    selectedFileSizeLabel() {
+      if (!this.selectedFile) return "";
+      const bytes = this.selectedFile.size;
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    },
+  },
+  watch: {
+    showUploadDialog(open) {
+      if (!open) this.resetUploadForm();
     },
   },
   methods: {
@@ -144,15 +155,33 @@ export default {
       this.isLoading = false;
     },
 
-    handleFileSelect(event) {
-      const file = event.target.files[0];
-      if (file) {
-        if (!file.name.endsWith('.dll')) {
-          displaySonnerError(this.$t("marketplace.pluginsPage.selectDllFile"));
-          return;
-        }
-        this.selectedFile = file;
+    acceptDllFile(file) {
+      if (!file) return false;
+      const name = file.name || "";
+      if (!name.toLowerCase().endsWith(".dll")) {
+        displaySonnerError(this.$t("marketplace.pluginsPage.selectDllFile"));
+        return false;
       }
+      this.selectedFile = file;
+      this.isDraggingUpload = false;
+      return true;
+    },
+
+    handleFileSelect(event) {
+      const file = event.target.files?.[0];
+      if (!this.acceptDllFile(file) && this.$refs.fileInput) {
+        this.$refs.fileInput.value = "";
+      }
+    },
+
+    handleUploadDrop(event) {
+      this.isDraggingUpload = false;
+      const file = event.dataTransfer?.files?.[0];
+      this.acceptDllFile(file);
+    },
+
+    openFilePicker() {
+      this.$refs.fileInput?.click();
     },
 
     async handleUpload() {
@@ -170,7 +199,6 @@ export default {
         formData,
         onSuccess: () => {
           displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginUploaded"));
-          this.resetUploadForm();
           this.showUploadDialog = false;
           this.fetchData();
         },
@@ -218,7 +246,7 @@ export default {
 
     resetUploadForm() {
       this.selectedFile = null;
-      // Reset file input
+      this.isDraggingUpload = false;
       const fileInput = this.$refs.fileInput;
       if (fileInput) {
         fileInput.value = "";
@@ -263,71 +291,137 @@ export default {
             {{ $t("marketplace.pluginsPage.uploadPlugin") }}
           </Button>
         </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{{ $t("marketplace.pluginsPage.uploadPlugin") }}</DialogTitle>
+        <DialogContent size="lg" class="gap-0 p-0">
+          <DialogHeader class="space-y-1 border-b px-6 py-4 text-left">
+            <DialogTitle class="flex items-center gap-2 text-base">
+              <Package class="size-4 text-muted-foreground" />
+              {{ $t("marketplace.pluginsPage.uploadDialogTitle") }}
+            </DialogTitle>
             <DialogDescription>
-              {{ $t("marketplace.pluginsPage.selectDllFileToUpload") }}
+              {{ $t("marketplace.pluginsPage.uploadDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
 
-          <div class="py-4 space-y-4">
-            <div class="space-y-2">
-              <Label>{{ $t("marketplace.pluginsPage.pluginFileLabel") }}</Label>
-              <div class="border-2 border-dashed rounded-lg p-6 text-center">
-                <input
-                  ref="fileInput"
-                  type="file"
-                  accept=".dll"
-                  class="hidden"
-                  @change="handleFileSelect"
-                />
-                <div v-if="!selectedFile" class="space-y-2">
-                  <Package class="size-12 mx-auto text-muted-foreground" />
-                  <p class="text-sm text-muted-foreground">
-                    {{ $t("marketplace.pluginsPage.dragFileHere") }}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    @click="$refs.fileInput.click()"
-                  >
-                    {{ $t("marketplace.pluginsPage.chooseFile") }}
-                  </Button>
+          <div class="space-y-4 px-6 py-5">
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".dll,application/x-msdownload,application/octet-stream"
+              class="hidden"
+              @change="handleFileSelect"
+            />
+
+            <!-- Empty: drop target -->
+            <button
+              v-if="!selectedFile"
+              type="button"
+              class="group flex w-full flex-col items-center justify-center rounded-lg border border-dashed px-5 py-10 text-center outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              :class="
+                isDraggingUpload
+                  ? 'border-foreground/40 bg-muted/40'
+                  : 'border-muted-foreground/30 hover:border-foreground/35 hover:bg-muted/25'
+              "
+              @click="openFilePicker"
+              @dragover.prevent="isDraggingUpload = true"
+              @dragleave.prevent="isDraggingUpload = false"
+              @drop.prevent="handleUploadDrop"
+            >
+              <div
+                class="mb-3 flex size-10 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors group-hover:text-foreground"
+              >
+                <Upload class="size-4" />
+              </div>
+              <p class="text-sm font-medium text-foreground">
+                {{ $t("marketplace.pluginsPage.dropzoneTitle") }}
+              </p>
+              <p class="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                {{ $t("marketplace.pluginsPage.dropzoneHint") }}
+              </p>
+              <span
+                class="mt-4 inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-medium"
+              >
+                {{ $t("marketplace.pluginsPage.chooseFile") }}
+              </span>
+            </button>
+
+            <!-- Selected: payload card -->
+            <div
+              v-else
+              class="overflow-hidden rounded-lg border bg-muted/20"
+            >
+              <div class="flex items-start gap-3 px-3.5 py-3">
+                <div
+                  class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background"
+                >
+                  <FileCode2 class="size-4 text-foreground" />
                 </div>
-                <div v-else class="space-y-2">
-                  <Puzzle class="size-12 mx-auto text-primary" />
-                  <p class="font-medium">{{ selectedFile.name }}</p>
-                  <p class="text-xs text-muted-foreground">
-                    {{ (selectedFile.size / 1024).toFixed(1) }} KB
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium text-foreground">
+                    {{ selectedFile.name }}
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    @click="resetUploadForm"
+                  <div
+                    class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground"
                   >
-                    {{ $t("marketplace.pluginsPage.chooseAnother") }}
-                  </Button>
+                    <span class="font-mono tabular-nums uppercase tracking-wide">.dll</span>
+                    <span class="text-border" aria-hidden="true">·</span>
+                    <span class="tabular-nums">{{ selectedFileSizeLabel }}</span>
+                  </div>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 shrink-0 text-muted-foreground"
+                  :title="$t('marketplace.pluginsPage.chooseAnother')"
+                  :disabled="isUploading"
+                  @click="resetUploadForm"
+                >
+                  <X class="size-4" />
+                </Button>
+              </div>
+              <div
+                class="flex items-center justify-between gap-2 border-t bg-background/60 px-3.5 py-2"
+              >
+                <span class="text-[11px] text-muted-foreground">
+                  {{ $t("marketplace.pluginsPage.readyToInstall") }}
+                </span>
+                <button
+                  type="button"
+                  class="text-[11px] font-medium text-foreground underline-offset-2 hover:underline"
+                  :disabled="isUploading"
+                  @click="openFilePicker"
+                >
+                  {{ $t("marketplace.pluginsPage.chooseAnother") }}
+                </button>
               </div>
             </div>
 
-            <div class="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
-              <Info class="size-4 inline mr-2" />
-              {{ $t("marketplace.pluginsPage.sdkInterfaceHint") }}
-            </div>
+            <p class="text-xs leading-relaxed text-muted-foreground">
+              {{ $t("marketplace.pluginsPage.sdkInterfaceHintBefore") }}
+              <code
+                class="rounded-sm bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground"
+              >IMarketplacePlugin</code>
+              {{ $t("marketplace.pluginsPage.sdkInterfaceHintAfter") }}
+            </p>
           </div>
 
-          <DialogFooter>
+          <DialogFooter class="border-t px-6 py-4 sm:justify-between">
             <DialogClose as-child>
-              <Button variant="outline" @click="resetUploadForm">{{ $t("common.cancel") }}</Button>
+              <Button variant="outline" :disabled="isUploading">
+                {{ $t("common.cancel") }}
+              </Button>
             </DialogClose>
             <Button
-              @click="handleUpload"
               :disabled="isUploading || !selectedFile"
+              @click="handleUpload"
             >
               <Loader2 v-if="isUploading" class="size-4 mr-2 animate-spin" />
-              {{ $t("common.upload") }}
+              <Upload v-else class="size-4 mr-2" />
+              {{
+                isUploading
+                  ? $t("marketplace.pluginsPage.uploading")
+                  : $t("marketplace.pluginsPage.installPlugin")
+              }}
             </Button>
           </DialogFooter>
         </DialogContent>

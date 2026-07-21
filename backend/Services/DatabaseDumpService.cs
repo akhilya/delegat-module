@@ -70,6 +70,8 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
             startInfo.ArgumentList.Add("--triggers");
             startInfo.ArgumentList.Add("--events");
             startInfo.ArgumentList.Add("--hex-blob");
+            // App DB users lack global PROCESS; without this MySQL 8.0.21+ fails dumping tablespaces.
+            startInfo.ArgumentList.Add("--no-tablespaces");
             startInfo.ArgumentList.Add("--default-character-set=utf8mb4");
             startInfo.ArgumentList.Add("--databases");
             startInfo.ArgumentList.Add(_settings.Database);
@@ -88,9 +90,13 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
                 if (process.ExitCode != 0)
                 {
                     _logger.LogError(
-                        "mysqldump exited with code {ExitCode}. Stderr length={StderrLength}",
+                        "mysqldump exited with code {ExitCode} for database {Database}@{Server}:{Port} as {User}. Stderr: {Stderr}",
                         process.ExitCode,
-                        stderr.Length);
+                        _settings.Database,
+                        _settings.Server,
+                        _settings.Port,
+                        _settings.User,
+                        SanitizeStderr(stderr, _settings.Password));
                     throw new ApiException(
                         "Database dump failed. Check that MySQL is reachable and credentials are valid.",
                         StatusCodes.Status500InternalServerError,
@@ -179,6 +185,19 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
+    }
+
+    /// <summary>Redact secrets from mysqldump stderr before logging.</summary>
+    internal static string SanitizeStderr(string stderr, string? password)
+    {
+        if (string.IsNullOrEmpty(stderr)) return string.Empty;
+        var sanitized = stderr.Trim();
+        if (!string.IsNullOrEmpty(password))
+            sanitized = sanitized.Replace(password, "***", StringComparison.Ordinal);
+        const int maxLen = 2000;
+        if (sanitized.Length > maxLen)
+            sanitized = sanitized[..maxLen] + "…";
+        return sanitized;
     }
 
     private static void RestrictFilePermissions(string path)
