@@ -2,7 +2,7 @@
 
 ## Architecture
 
-- [**control-plane.md**](architecture/control-plane.md) — Central platform: sell, control, deploy instances; Platform Link (m2m + SSO)
+- [**control-plane.md**](architecture/control-plane.md) — Central platform; Platform Link + Reference Catalog (currencies, timezones, plugins)
 - [**saas-architecture.md**](architecture/saas-architecture.md) — Per-instance SaaS: provisioning, scaling, quotas, Redis, Registry/Provisioner draft
 - [**ai-assistant.md**](architecture/ai-assistant.md) — AI assistant: architecture, prompts, tools, rollback, tariff access
 - [**ai-system.md**](architecture/ai-system.md) — Full AI system reference (RAG-oriented)

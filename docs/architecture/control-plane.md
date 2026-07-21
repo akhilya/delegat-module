@@ -39,7 +39,7 @@
 [Provisioner] ── Dokploy API ──► [Node] ──► Instance stack
         │                                      │
         │   Platform Link (m2m + user SSO)     │
-        │◄──── 5xx / diagnostics / support ────┘
+        │◄──── catalog / 5xx / support SSO ────┘
         ▼
 [Ops Console] — releases, fleet, backups, tickets, nodes
 ```
