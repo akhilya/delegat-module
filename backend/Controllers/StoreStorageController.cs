@@ -5,11 +5,13 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Services;
+using Delegat.Services.FolderJobs;
 
 namespace Delegat.Controllers;
 
@@ -23,6 +25,7 @@ public class StoreStorageController : ControllerBase
     private readonly ThumbnailService _thumbnailService;
     private readonly QuotaService _quotaService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly FolderJobService _folderJobService;
 
     public StoreStorageController(
         ICurrentUserService currentUserService,
@@ -30,7 +33,8 @@ public class StoreStorageController : ControllerBase
         DataContext context,
         ThumbnailService thumbnailService,
         QuotaService quotaService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        FolderJobService folderJobService)
     {
         _currentUserService = currentUserService;
         _storageService = storageService;
@@ -38,6 +42,7 @@ public class StoreStorageController : ControllerBase
         _thumbnailService = thumbnailService;
         _quotaService = quotaService;
         _serviceProvider = serviceProvider;
+        _folderJobService = folderJobService;
     }
 
     private async Task<int> GetSelectedStoreId(CancellationToken ct = default)
@@ -299,22 +304,41 @@ public class StoreStorageController : ControllerBase
     public async Task<IActionResult> GetFolders(CancellationToken ct)
     {
         var storeId = await GetSelectedStoreId(ct);
-        var folders = await _context.storeFolders
+        var rows = await _context.storeFolders
             .AsNoTracking()
             .Where(f => f.storeId == storeId)
-            .Include(f => f.files)
-            .Include(f => f.childFolders)
+            .Select(f => new
+            {
+                f.Id,
+                f.name,
+                f.storeId,
+                f.parentFolderId,
+                f.createdAt,
+                fileCount = f.files.Count(),
+                subfolderCount = f.childFolders.Count(),
+                directSize = f.files.Sum(x => (long?)x.length) ?? 0L
+            })
             .ToListAsync(ct);
 
-        return Ok(folders.Select(f => new
+        var totals = FolderTreeStats.ComputeTotals(rows
+            .Select(r => new FolderTreeStats.FolderStatRow(r.Id, r.parentFolderId, r.fileCount, r.subfolderCount, r.directSize))
+            .ToList());
+
+        return Ok(rows.Select(f =>
         {
-            f.Id,
-            f.name,
-            f.storeId,
-            f.parentFolderId,
-            f.createdAt,
-            fileCount = f.files.Count,
-            subfolderCount = f.childFolders.Count
+            var t = totals[f.Id];
+            return new
+            {
+                f.Id,
+                f.name,
+                f.storeId,
+                f.parentFolderId,
+                f.createdAt,
+                f.fileCount,
+                f.subfolderCount,
+                totalFileCount = t.TotalFileCount,
+                totalSizeBytes = t.TotalSizeBytes
+            };
         }));
     }
 
@@ -356,7 +380,9 @@ public class StoreStorageController : ControllerBase
             folder.parentFolderId,
             folder.createdAt,
             fileCount = 0,
-            subfolderCount = 0
+            subfolderCount = 0,
+            totalFileCount = 0,
+            totalSizeBytes = 0L
         });
     }
 
@@ -406,39 +432,18 @@ public class StoreStorageController : ControllerBase
             return Ok();
         }
 
+        var userId = _currentUserService.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
         var allFolderIds = new List<int> { id };
         await CollectDescendantFolderIds(id, storeId, allFolderIds, ct);
+        var totalFileCount = await _context.storeFiles.AsNoTracking()
+            .CountAsync(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value), ct);
 
-        var filesToDelete = await _context.storeFiles
-            .AsNoTracking()
-            .Where(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value))
-            .ToListAsync(ct);
+        var operationId = await _folderJobService.EnqueueDeleteAsync(
+            storeId, userId, FolderJobScope.Store, null, id, folder.name, totalFileCount, ct);
 
-        var fileIds = filesToDelete.Select(f => f.Id).ToList();
-        if (fileIds.Count > 0)
-        {
-            await _context.storeFileTags.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
-            await _context.storeFileShareTokens.Where(t => fileIds.Contains(t.fileId)).ExecuteDeleteAsync(ct);
-        }
-        await _context.storeFolderShareTokens
-            .Where(t => t.folderId.HasValue && allFolderIds.Contains(t.folderId.Value))
-            .ExecuteDeleteAsync(ct);
-
-        foreach (var file in filesToDelete)
-        {
-            await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
-            await _storageService.DeleteAsync(file.filePath);
-        }
-
-        await _context.storeFiles
-            .Where(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value))
-            .ExecuteDeleteAsync(ct);
-
-        allFolderIds.Reverse();
-        foreach (var folderId in allFolderIds)
-            await _context.storeFolders.Where(f => f.Id == folderId).ExecuteDeleteAsync(ct);
-
-        return Ok();
+        return Accepted(new { queued = true, operationId });
     }
 
     public record MoveFolderRequest(int? newParentFolderId);
@@ -558,6 +563,25 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var folderId = id == "root" ? (int?)null : int.Parse(id);
         await StreamFolderZip(storeId, folderId, ct);
+    }
+
+    [HttpPost]
+    [Route("/store-storage/folders/{id}/archive")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
+    public async Task<IActionResult> EnqueueArchive(string id, CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        var userId = _currentUserService.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
+        int? folderId = id == "root" ? null : int.Parse(id);
+        var (fileCount, totalBytes, folderName) = await _folderJobService.GetStoreScopeStatsAsync(storeId, folderId, ct);
+
+        var operationId = await _folderJobService.EnqueueArchiveAsync(
+            storeId, userId, FolderJobScope.Store, null, folderId,
+            folderName, fileCount, totalBytes, ct);
+
+        return Accepted(new { queued = true, operationId, fileCount, totalBytes });
     }
 
     public record ShareRequest(int ttlHours);
@@ -746,24 +770,15 @@ public class StoreStorageController : ControllerBase
 
     internal async Task StreamFolderZip(int storeId, int? folderId, CancellationToken ct = default)
     {
-        string folderName;
+        var (fileCount, totalBytes, folderName) = await _folderJobService.GetStoreScopeStatsAsync(storeId, folderId, ct);
+        StorageLimits.EnsureWithinArchiveLimits(fileCount, totalBytes);
+
         var allFolderIds = new List<int>();
 
         if (folderId.HasValue)
         {
-            var folder = await _context.storeFolders
-                .AsNoTracking()
-                .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct);
-            if (folder == null)
-                throw ApiException.NotFound("Folder not found");
-
-            folderName = folder.name;
             allFolderIds.Add(folderId.Value);
             await CollectDescendantFolderIds(folderId.Value, storeId, allFolderIds, ct);
-        }
-        else
-        {
-            folderName = "store-storage";
         }
 
         var files = folderId.HasValue

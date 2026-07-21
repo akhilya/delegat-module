@@ -47,6 +47,7 @@ public class PublicProductsController : ControllerBase
     /// <param name="categoryId">Optional category filter; <c>-1</c> = no category.</param>
     /// <param name="page">1-based page index.</param>
     /// <param name="pageSize">Page size (max 200).</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

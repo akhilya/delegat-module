@@ -38,6 +38,7 @@ public class MappingService
     /// </summary>
     /// <param name="product">Product with loaded relations</param>
     /// <param name="categoryMapping">Category mapping with loaded fieldMappings</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <returns>Dictionary: marketplace field key -> value</returns>
     public Task<Dictionary<string, object?>> BuildExportDataAsync(
         Product product,

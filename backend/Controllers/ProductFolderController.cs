@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Models.Products;
 using Delegat.Services;
+using Delegat.Services.FolderJobs;
 
 namespace Delegat.Controllers;
 
@@ -21,20 +23,20 @@ public class ProductFolderController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IStorageService _storageService;
     private readonly DataContext _context;
-    private readonly ThumbnailService _thumbnailService;
+    private readonly FolderJobService _folderJobService;
 
     public ProductFolderController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IStorageService storageService,
         DataContext context,
-        ThumbnailService thumbnailService)
+        FolderJobService folderJobService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _context = context;
-        _thumbnailService = thumbnailService;
+        _folderJobService = folderJobService;
     }
 
     private async Task<Product> GetAndValidateProduct(int productId)
@@ -58,22 +60,41 @@ public class ProductFolderController : ControllerBase
     {
         await GetAndValidateProduct(productId);
 
-        var folders = await _context.productFolders
+        var rows = await _context.productFolders
             .AsNoTracking()
             .Where(f => f.productId == productId)
-            .Include(f => f.files)
-            .Include(f => f.childFolders)
+            .Select(f => new
+            {
+                f.Id,
+                f.name,
+                f.productId,
+                f.parentFolderId,
+                f.createdAt,
+                fileCount = f.files.Count(),
+                subfolderCount = f.childFolders.Count(),
+                directSize = f.files.Sum(x => (long?)x.length) ?? 0L
+            })
             .ToListAsync();
 
-        var result = folders.Select(f => new
+        var totals = FolderTreeStats.ComputeTotals(rows
+            .Select(r => new FolderTreeStats.FolderStatRow(r.Id, r.parentFolderId, r.fileCount, r.subfolderCount, r.directSize))
+            .ToList());
+
+        var result = rows.Select(f =>
         {
-            f.Id,
-            f.name,
-            f.productId,
-            f.parentFolderId,
-            f.createdAt,
-            fileCount = f.files.Count,
-            subfolderCount = f.childFolders.Count
+            var t = totals[f.Id];
+            return new
+            {
+                f.Id,
+                f.name,
+                f.productId,
+                f.parentFolderId,
+                f.createdAt,
+                f.fileCount,
+                f.subfolderCount,
+                totalFileCount = t.TotalFileCount,
+                totalSizeBytes = t.TotalSizeBytes
+            };
         });
 
         return Ok(result);
@@ -118,7 +139,9 @@ public class ProductFolderController : ControllerBase
             folder.parentFolderId,
             folder.createdAt,
             fileCount = 0,
-            subfolderCount = 0
+            subfolderCount = 0,
+            totalFileCount = 0,
+            totalSizeBytes = 0L
         });
     }
 
@@ -148,7 +171,7 @@ public class ProductFolderController : ControllerBase
     [Route("/products/{productId}/folders/{id}")]
     public async Task<IActionResult> DeleteFolder(int productId, int id, [FromQuery] bool recursive = false)
     {
-        await GetAndValidateProduct(productId);
+        var product = await GetAndValidateProduct(productId);
 
         var folder = await _context.productFolders
             .AsNoTracking()
@@ -168,45 +191,19 @@ public class ProductFolderController : ControllerBase
             return Ok();
         }
 
-        // Recursive delete: collect all descendant folder IDs
+        var userId = _currentUserService.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
         var allFolderIds = new List<int> { id };
         await CollectDescendantFolderIds(id, productId, allFolderIds);
+        var totalFileCount = await _context.files.AsNoTracking()
+            .CountAsync(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value));
 
-        // Load all files in these folders to delete from storage
-        var filesToDelete = await _context.files
-            .AsNoTracking()
-            .Where(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value))
-            .ToListAsync();
+        var operationId = await _folderJobService.EnqueueDeleteAsync(
+            product.storeId, userId, FolderJobScope.Product, productId, id, folder.name, totalFileCount,
+            HttpContext.RequestAborted);
 
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            // Delete file tags first (FK constraint)
-            var fileIdsToDelete = filesToDelete.Select(f => f.Id).ToList();
-            if (fileIdsToDelete.Any())
-                await _context.tags.Where(t => fileIdsToDelete.Contains(t.fileId)).ExecuteDeleteAsync();
-
-            // Delete files from storage
-            foreach (var file in filesToDelete)
-            {
-                await _thumbnailService.DeleteThumbnailsAsync(file.filePath);
-                await _storageService.DeleteAsync(file.filePath);
-            }
-
-            // Delete files from DB
-            await _context.files
-                .Where(f => f.folderId.HasValue && allFolderIds.Contains(f.folderId.Value))
-                .ExecuteDeleteAsync();
-
-            // Delete folders from DB (children first due to FK)
-            // Reverse so deepest children are deleted first
-            allFolderIds.Reverse();
-            foreach (var folderId in allFolderIds)
-            {
-                await _context.productFolders.Where(f => f.Id == folderId).ExecuteDeleteAsync();
-            }
-        });
-
-        return Ok();
+        return Accepted(new { queued = true, operationId });
     }
 
     private async Task CollectDescendantFolderIds(int parentId, int productId, List<int> result)
@@ -281,6 +278,25 @@ public class ProductFolderController : ControllerBase
         await StreamFolderZip(productId, folderId);
     }
 
+    [HttpPost]
+    [Route("/products/{productId}/folders/{id}/archive")]
+    public async Task<IActionResult> EnqueueArchive(int productId, string id)
+    {
+        var product = await GetAndValidateProduct(productId);
+        var userId = _currentUserService.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
+        int? folderId = id == "root" ? null : int.Parse(id);
+        var (fileCount, totalBytes, folderName) = await _folderJobService.GetProductScopeStatsAsync(
+            productId, folderId, HttpContext.RequestAborted);
+
+        var operationId = await _folderJobService.EnqueueArchiveAsync(
+            product.storeId, userId, FolderJobScope.Product, productId, folderId,
+            folderName, fileCount, totalBytes, HttpContext.RequestAborted);
+
+        return Accepted(new { queued = true, operationId, fileCount, totalBytes });
+    }
+
     public record ShareFolderRequest(int ttlHours);
 
     [HttpPost]
@@ -330,24 +346,20 @@ public class ProductFolderController : ControllerBase
 
     /// <summary>
     /// Streams a zip archive of files in the given folder scope to Response.Body.
+    /// Used by public share links; enforces the same size/count limits as background archives.
     /// </summary>
     internal async Task StreamFolderZip(int productId, int? folderId)
     {
-        string folderName;
+        var (fileCount, totalBytes, folderName) = await _folderJobService.GetProductScopeStatsAsync(
+            productId, folderId, HttpContext.RequestAborted);
+        StorageLimits.EnsureWithinArchiveLimits(fileCount, totalBytes);
+
         var allFolderIds = new List<int>();
 
         if (folderId.HasValue)
         {
-            var folder = await _context.productFolders.AsNoTracking()
-                .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId);
-            if (folder == null) throw ApiException.NotFound("Folder not found");
-            folderName = folder.name;
             allFolderIds.Add(folderId.Value);
             await CollectDescendantFolderIds(folderId.Value, productId, allFolderIds);
-        }
-        else
-        {
-            folderName = "files";
         }
 
         // Get files in target scope

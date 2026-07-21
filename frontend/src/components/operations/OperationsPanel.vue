@@ -29,6 +29,7 @@ const hasCompleted = computed(() =>
 );
 const historyHasMore = computed(() => store.state.operations.historyHasMore);
 const historyLoaded = computed(() => store.state.operations.historyLoaded);
+const activeCount = computed(() => activeOperations.value.length);
 
 watch(panelOpen, (open) => {
   if (open) {
@@ -78,7 +79,6 @@ function handleRemove(id) {
 
 <template>
   <Teleport to="body">
-    <!-- Backdrop -->
     <Transition name="backdrop">
       <div
         v-if="panelOpen"
@@ -87,57 +87,68 @@ function handleRemove(id) {
       />
     </Transition>
 
-    <!-- Panel -->
     <Transition name="panel">
-      <div
+      <aside
         v-if="panelOpen"
-        class="fixed inset-y-0 right-0 w-[680px] max-w-[95vw] z-[9998] bg-background border-l shadow-xl flex flex-col"
+        class="fixed inset-y-0 right-0 w-[720px] max-w-[95vw] z-[9998] bg-background border-l shadow-xl flex flex-col"
+        role="complementary"
+        :aria-label="t('operations.panelTitle')"
       >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <h2 class="text-sm font-semibold">{{ t("operations.panelTitle") }}</h2>
-          <div class="flex items-center gap-1">
-            <AlertDialog v-if="hasCompleted">
-              <AlertDialogTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-7 w-7"
-                  :title="t('operations.clearCompletedTitle')"
-                >
-                  <Trash2 class="size-3.5" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{{ t("operations.clearCompletedConfirmTitle") }}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {{ t("operations.clearCompletedConfirmDescription") }}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-                  <AlertDialogAction @click="clearCompleted">{{ t("operations.clearCompletedConfirm") }}</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7"
-              @click="close"
-            >
-              <X class="size-4" />
-            </Button>
+        <header class="flex items-center gap-2 px-4 py-3 border-b shrink-0 bg-background">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-sm font-semibold tracking-tight">
+              {{ t("operations.panelTitle") }}
+            </h2>
+            <p v-if="activeCount > 0" class="text-[11px] text-muted-foreground mt-0.5">
+              {{ t("operations.activeCountLabel", { count: activeCount }) }}
+            </p>
           </div>
-        </div>
+          <AlertDialog v-if="hasCompleted">
+            <AlertDialogTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8 shrink-0"
+                :title="t('operations.clearCompletedTitle')"
+              >
+                <Trash2 class="size-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{{ t("operations.clearCompletedConfirmTitle") }}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {{ t("operations.clearCompletedConfirmDescription") }}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
+                <AlertDialogAction @click="clearCompleted">
+                  {{ t("operations.clearCompletedConfirm") }}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8 shrink-0"
+            @click="close"
+          >
+            <X class="size-4" />
+          </Button>
+        </header>
 
-        <!-- Operations list -->
-        <div class="flex-1 overflow-y-auto p-3 space-y-3">
-          <!-- Active operations -->
-          <template v-if="activeOperations.length > 0">
-            <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
-              {{ t("operations.active") }}
+        <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+          <section v-if="activeOperations.length > 0" class="space-y-2">
+            <div class="flex items-center gap-2 px-1">
+              <span class="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                {{ t("operations.active") }}
+              </span>
+              <span class="h-px flex-1 bg-border/80" />
+              <span class="text-[10px] tabular-nums text-muted-foreground">
+                {{ activeOperations.length }}
+              </span>
             </div>
             <div class="space-y-2">
               <OperationItem
@@ -151,25 +162,19 @@ function handleRemove(id) {
                 @remove="handleRemove"
               />
             </div>
-          </template>
+          </section>
 
-          <!-- History operations -->
-          <template v-if="historyOperations.length > 0">
-            <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
-              {{ t("operations.history") }}
-            </div>
-            <div class="space-y-2">
-              <OperationItem
-                v-for="op in historyOperations"
-                :key="op.id"
-                :operation="op"
-                @retry="handleRetry"
-                @pause="handlePause"
-                @resume="handleResume"
-                @stop="handleStop"
-                @remove="handleRemove"
-              />
-            </div>
+          <section v-if="historyOperations.length > 0" class="space-y-2">
+            <OperationItem
+              v-for="op in historyOperations"
+              :key="op.id"
+              :operation="op"
+              @retry="handleRetry"
+              @pause="handlePause"
+              @resume="handleResume"
+              @stop="handleStop"
+              @remove="handleRemove"
+            />
             <div v-if="historyHasMore" class="flex justify-center pt-1">
               <Button
                 variant="ghost"
@@ -180,21 +185,19 @@ function handleRemove(id) {
                 {{ t("operations.loadMore") }}
               </Button>
             </div>
-          </template>
+          </section>
 
-          <!-- Loading state -->
           <div
             v-if="!historyLoaded && activeOperations.length === 0"
-            class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2"
+            class="flex flex-col items-center justify-center min-h-[40vh] text-muted-foreground gap-2"
           >
-            <Loader2 class="size-6 animate-spin" />
+            <Loader2 class="size-5 animate-spin" />
             <span class="text-sm">{{ t("operations.loading") }}</span>
           </div>
 
-          <!-- Empty state -->
           <div
             v-else-if="activeOperations.length === 0 && historyOperations.length === 0"
-            class="flex h-full items-center justify-center"
+            class="flex min-h-[40vh] items-center justify-center"
           >
             <EmptyState
               size="sm"
@@ -207,7 +210,7 @@ function handleRemove(id) {
             </EmptyState>
           </div>
         </div>
-      </div>
+      </aside>
     </Transition>
   </Teleport>
 </template>
@@ -229,5 +232,14 @@ function handleRemove(id) {
 .panel-enter-from,
 .panel-leave-to {
   transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop-enter-active,
+  .backdrop-leave-active,
+  .panel-enter-active,
+  .panel-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 </style>

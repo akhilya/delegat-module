@@ -108,7 +108,7 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async postLogOut(ctx, { onSuccess, onError }) {
+    async postLogOut(ctx, { onSuccess, onError } = {}) {
       return await useAxios(
         `/auth/logOut`,
         { method: "POST", cache: false },
@@ -120,12 +120,13 @@ export default {
       )
         .then((response) => {
           resetAuthCache();
-          router.push(response.data.value.next);
+          router.push(response.data.value.next ?? PAGE_SIGN_IN);
+          onSuccess?.(response);
         })
         .catch((error) => {
           resetAuthCache();
           router.push(PAGE_SIGN_IN);
-          onError(error);
+          onError?.(error);
         });
     },
   },

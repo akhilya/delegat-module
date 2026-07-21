@@ -38,6 +38,8 @@ public class ProductFolder : IEntity, IMapToDTO<object>
         parentFolderId,
         createdAt,
         fileCount = files?.Count ?? 0,
-        subfolderCount = childFolders?.Count ?? 0
+        subfolderCount = childFolders?.Count ?? 0,
+        totalFileCount = files?.Count ?? 0,
+        totalSizeBytes = files?.Sum(f => f.length) ?? 0L
     };
 }

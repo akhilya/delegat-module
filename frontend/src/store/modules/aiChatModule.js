@@ -10,6 +10,59 @@ function newSessionId() { return crypto.randomUUID(); }
 
 let abortController = null;
 
+/** Parse persisted toolCallsJson — either tool-call array or UI context card envelope. */
+function parsePersistedMessageMeta(toolCallsJson) {
+  if (!toolCallsJson) return { toolCalls: [], contextCard: null };
+  try {
+    const parsed = JSON.parse(toolCallsJson);
+    if (parsed && parsed._ui === "operationContext") {
+      return { toolCalls: [], contextCard: parsed.card || null };
+    }
+    if (Array.isArray(parsed)) {
+      return {
+        toolCalls: parsed.map((tc) => ({ ...tc, status: "done" })),
+        contextCard: null,
+      };
+    }
+  } catch { /* ignore corrupt payload */ }
+  return { toolCalls: [], contextCard: null };
+}
+
+function mapStoredMessage(m) {
+  const { toolCalls, contextCard } = parsePersistedMessageMeta(m.toolCallsJson);
+  return {
+    id: m.dbId,
+    dbId: m.dbId,
+    role: m.role,
+    content: m.content || "",
+    toolCalls,
+    contextCard,
+    plan: null,
+    apiBlocks: [],
+    done: m.role === "assistant",
+    feedbackRating: m.feedbackRating ?? null,
+  };
+}
+
+function serializeToolCallsJson(m) {
+  if (m.contextCard) {
+    return JSON.stringify({ _ui: "operationContext", card: m.contextCard });
+  }
+  if (m.toolCalls?.length) {
+    return JSON.stringify(
+      m.toolCalls.map((tc) => ({ name: tc.name, input: tc.input, summary: tc.summary })),
+    );
+  }
+  return null;
+}
+
+function titleSeedFromUserMessage(msg) {
+  if (msg?.contextCard?.title) {
+    return msg.contextCard.title;
+  }
+  return msg?.content || "";
+}
+
 // Build the conversation history array to send to the backend.
 // When a message has apiBlocks (full tool_use + tool_result pairs), we use them directly
 // so the model sees properly structured tool call history instead of text fragments.
@@ -314,27 +367,25 @@ export default {
         commit("setSessionId", data.sessionId);
         if (data.title) commit("setConversationTitle", data.title);
 
-        const messages = (data.messages || []).map((m) => ({
-          id: m.dbId,
-          dbId: m.dbId,
-          role: m.role,
-          content: m.content || "",
-          toolCalls: m.toolCallsJson
-            ? JSON.parse(m.toolCallsJson).map((tc) => ({ ...tc, status: "done" }))
-            : [],
-          plan: null,
-          apiBlocks: [],
-          done: m.role === "assistant",
-          feedbackRating: m.feedbackRating ?? null,
-        }));
+        const messages = (data.messages || []).map(mapStoredMessage);
         commit("setMessages", messages);
       } catch { /* silent */ }
     },
 
-    async sendMessage({ state, commit, dispatch }, text) {
+    async sendMessage({ state, commit, dispatch }, payload) {
       const activeSessionId = state.sessionId; // capture to detect session switches mid-stream
 
-      const userMsg = { id: Date.now(), role: "user", content: text };
+      const content = typeof payload === "string" ? payload : payload?.content;
+      const contextCard =
+        typeof payload === "object" && payload?.contextCard ? payload.contextCard : null;
+      if (!content) return;
+
+      const userMsg = {
+        id: Date.now(),
+        role: "user",
+        content,
+        ...(contextCard ? { contextCard } : {}),
+      };
       commit("addMessage", userMsg);
       commit("setLoading", true);
 
@@ -449,9 +500,7 @@ export default {
           messages: msgs.map((m) => ({
             role: m.role,
             content: m.content || "",
-            toolCallsJson: m.toolCalls?.length
-              ? JSON.stringify(m.toolCalls.map((tc) => ({ name: tc.name, input: tc.input, summary: tc.summary })))
-              : null,
+            toolCallsJson: serializeToolCallsJson(m),
             createdAt: new Date().toISOString(),
           })),
         };
@@ -461,8 +510,9 @@ export default {
           commit("applyDbIds", saved);
           if (!state.conversationTitle) {
             const firstUserMsg = state.messages.find((m) => m.role === "user");
-            if (firstUserMsg?.content) {
-              dispatch("generateTitle", firstUserMsg.content);
+            const seed = titleSeedFromUserMessage(firstUserMsg);
+            if (seed) {
+              dispatch("generateTitle", seed);
             }
           }
         }
@@ -479,19 +529,7 @@ export default {
         if (!data) return;
         commit("setSessionId", data.sessionId);
         commit("setConversationTitle", data.title ?? null);
-        const messages = (data.messages || []).map((m) => ({
-          id: m.dbId,
-          dbId: m.dbId,
-          role: m.role,
-          content: m.content || "",
-          toolCalls: m.toolCallsJson
-            ? JSON.parse(m.toolCallsJson).map((tc) => ({ ...tc, status: "done" }))
-            : [],
-          plan: null,
-          apiBlocks: [],
-          done: m.role === "assistant",
-          feedbackRating: m.feedbackRating ?? null,
-        }));
+        const messages = (data.messages || []).map(mapStoredMessage);
         commit("setMessages", messages);
       } catch { /* silent */ }
     },

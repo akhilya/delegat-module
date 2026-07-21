@@ -180,6 +180,7 @@ public class FileController : ControllerBase
     /// </summary>
     /// <param name="productId">The product identifier.</param>
     /// <param name="files">The files to upload.</param>
+    /// <param name="folderId">Optional target folder.</param>
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPut]
     [Route("/products/{productId}/files")]
@@ -247,6 +248,7 @@ public class FileController : ControllerBase
     /// Streaming upload for very large files (multi-GB). Reads multipart form data directly without model binding.
     /// </summary>
     /// <param name="productId">The product identifier.</param>
+    /// <param name="folderId">Optional target folder.</param>
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPost]
     [Route("/products/{productId}/files/stream")]
@@ -359,11 +361,9 @@ public class FileController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes a product file from both the database and object storage.
+    /// Request body for moving a file into a folder.
     /// </summary>
-    /// <param name="productId">The product identifier.</param>
-    /// <param name="id">The file identifier.</param>
-    /// <returns>200 OK on success.</returns>
+    /// <param name="folderId">Target folder id, or null for root.</param>
     public record MoveFileRequest(int? folderId);
 
     [HttpPatch]
@@ -440,6 +440,12 @@ public class FileController : ControllerBase
         return Ok(file.MapToDTO(_serviceProvider));
     }
 
+    /// <summary>
+    /// Deletes a product file from both the database and object storage.
+    /// </summary>
+    /// <param name="productId">The product identifier.</param>
+    /// <param name="id">The file identifier.</param>
+    /// <returns>200 OK on success.</returns>
     [HttpDelete]
     [Route("/products/{productId}/files/{id}")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]

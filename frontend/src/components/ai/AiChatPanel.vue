@@ -15,6 +15,7 @@ import {
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import AiPlanCard from "./AiPlanCard.vue";
+import OperationContextBubble from "./OperationContextBubble.vue";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -729,15 +730,28 @@ function renderMarkdown(text) {
 
         <!-- Message list -->
         <template v-for="msg in messages" :key="msg.id">
-          <!-- User message: right-aligned bubble -->
-          <div v-if="msg.role === 'user'" class="group flex flex-col items-end gap-0.5">
-            <div class="bg-muted text-foreground rounded-2xl rounded-br-none px-4 py-2.5 text-sm max-w-[80%] break-words">
+          <!-- User message: context card or right-aligned bubble -->
+          <div
+            v-if="msg.role === 'user'"
+            class="group flex flex-col gap-0.5"
+            :class="msg.contextCard ? 'items-stretch w-full' : 'items-end'"
+          >
+            <OperationContextBubble
+              v-if="msg.contextCard"
+              :card="msg.contextCard"
+              :raw="msg.content"
+            />
+            <div
+              v-else
+              class="bg-muted text-foreground rounded-2xl rounded-br-none px-4 py-2.5 text-sm max-w-[80%] break-words"
+            >
               {{ msg.content }}
             </div>
             <Button
               variant="ghost"
               size="icon"
               class="size-7 opacity-0 group-hover:opacity-100 text-muted-foreground"
+              :class="msg.contextCard ? 'self-end' : ''"
               :title="copiedId === msg.id ? t('ai.copied') : t('common.copy')"
               @click="copyText(msg.id, msg.content)"
             >

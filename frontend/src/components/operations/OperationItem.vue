@@ -24,10 +24,13 @@ import {
   ArrowRightLeft,
   Trash2,
   Sparkles,
+  User,
+  Cable,
+  Copy,
+  Check,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,6 +51,9 @@ import {
 import OperationLogTimeline from "./OperationLogTimeline.vue";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { t } from "@/i18n";
+import { http, loadMe } from "@/main";
+import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { hasPermission, PERMS } from "@/lib/permissions";
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -61,8 +67,14 @@ loadMemberships();
 const store = useStore();
 const expanded = ref(false);
 const loadingLogs = ref(false);
+const downloadingArtifact = ref(false);
+const copyingLogs = ref(false);
+const logsCopied = ref(false);
+const explainingWithAi = ref(false);
+const aiAvailable = ref(false);
 const now = ref(Date.now());
 let timer = null;
+let copyTimer = null;
 
 watch(expanded, async (isExpanded) => {
   if (isExpanded && props.operation._fromHistory && !props.operation._logsLoaded) {
@@ -77,11 +89,21 @@ watch(expanded, async (isExpanded) => {
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
   timer = setInterval(() => { now.value = Date.now(); }, 1000);
+  try {
+    const me = await loadMe();
+    aiAvailable.value = me?.aiEnabled !== false && hasPermission(me, PERMS.AiUse);
+    if (aiAvailable.value) {
+      store.dispatch("aiModels/getPickerModels", { onError: () => {} });
+    }
+  } catch {
+    aiAvailable.value = false;
+  }
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  if (copyTimer) clearTimeout(copyTimer);
 });
 
 const typeIcon = computed(() => {
@@ -106,6 +128,10 @@ const typeIcon = computed(() => {
     case "file-upload":
       return Upload;
     case "file-delete":
+      return Trash2;
+    case "folder-archive":
+      return Download;
+    case "folder-delete":
       return Trash2;
     case "ai-mapping":
       return Sparkles;
@@ -181,10 +207,10 @@ const isFinished = computed(() =>
 const isRunning = computed(() => props.operation.status === "running");
 const isPaused = computed(() => props.operation.status === "paused");
 const supportsPause = computed(() =>
-  props.operation.type !== "file-upload" && props.operation.type !== "file-delete",
+  !["file-upload", "file-delete", "folder-archive", "folder-delete"].includes(props.operation.type),
 );
 const canStop = computed(() => isRunning.value || isPaused.value);
-const canExpand = computed(() => !props.operation._fromHistory || props.operation._canExpand !== false);
+const canExpand = computed(() => true);
 
 function formatDuration(ms) {
   if (ms < 1000) return t("operations.durationMs", { ms });
@@ -208,47 +234,256 @@ const statusLabel = computed(() => {
   if (!["running", "paused", "completed", "failed", "partial", "cancelled"].includes(status)) return "";
   return t(`operations.status.${status}`);
 });
+
+const canDownloadArtifact = computed(() =>
+  props.operation.type === "folder-archive" && props.operation.status === "completed",
+);
+
+const hasLogs = computed(() => (props.operation.logs?.length || 0) > 0);
+const logsLoaded = computed(() => !props.operation._fromHistory || props.operation._logsLoaded);
+const showEmptyLogs = computed(() =>
+  expanded.value && logsLoaded.value && !loadingLogs.value && !hasLogs.value,
+);
+
+const hasAiModels = computed(() => {
+  const picker = store.state.aiModels?.pickerModels ?? [];
+  const all = store.state.aiModels?.models ?? [];
+  const src = picker.length ? picker : all;
+  return src.some((m) => m.isEnabled !== false && (m.id ?? m.Id) != null);
+});
+
+const showExplainAi = computed(() => aiAvailable.value);
+
+const MAX_LOG_CHARS = 48000;
+
+async function ensureLogsLoaded() {
+  if (!props.operation._fromHistory || props.operation._logsLoaded) return;
+  loadingLogs.value = true;
+  try {
+    await store.dispatch("operations/loadOperationLogs", props.operation.id);
+  } finally {
+    loadingLogs.value = false;
+  }
+}
+
+function buildOperationContextText() {
+  const op = props.operation;
+  const lines = [
+    "=== OPERATION ===",
+    `Id: ${op.id}`,
+    `Type: ${op.type || "-"}`,
+    `Title: ${op.title || "-"}`,
+    `Status: ${op.status || "-"}`,
+    `Author: ${op.authorUserName || "-"}`,
+    `AuthorUserId: ${op.authorUserId ?? "-"}`,
+    `Connection: ${op.connectionName || "-"}`,
+    `ConnectionId: ${op.connectionId ?? "-"}`,
+    `BatchId: ${op.batchId || "-"}`,
+    `BatchType: ${op.batchType || "-"}`,
+    `StartedAt: ${op.startedAt || "-"}`,
+    `FinishedAt: ${op.finishedAt || "-"}`,
+    `Duration: ${elapsed.value}`,
+  ];
+
+  if (op.progress) {
+    lines.push(
+      `Progress: total=${op.progress.total ?? 0}, completed=${op.progress.completed ?? 0}, failed=${op.progress.failed ?? 0}, pending=${op.progress.pending ?? 0}`,
+    );
+  }
+  if (op.summary) {
+    lines.push(`Summary: ${op.summary}`);
+  }
+
+  lines.push("", "=== LOGS ===");
+  const logs = op.logs || [];
+  if (logs.length === 0) {
+    lines.push("(no log entries available - may have been cleaned up)");
+  } else {
+    for (const log of logs) {
+      const ts = log.timestamp ? formatTime(log.timestamp) : "";
+      lines.push(`[${ts}] [${log.level || "info"}] ${log.message || ""}`);
+    }
+  }
+
+  let text = lines.join("\n");
+  if (text.length > MAX_LOG_CHARS) {
+    text = `${text.slice(0, MAX_LOG_CHARS)}\n…(truncated)`;
+  }
+  return text;
+}
+
+async function copyLogs() {
+  if (copyingLogs.value) return;
+  copyingLogs.value = true;
+  try {
+    await ensureLogsLoaded();
+    await navigator.clipboard.writeText(buildOperationContextText());
+    logsCopied.value = true;
+    displaySonnerSuccess(t("operations.logsCopied"));
+    if (copyTimer) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { logsCopied.value = false; }, 2000);
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    copyingLogs.value = false;
+  }
+}
+
+async function explainWithAi() {
+  if (explainingWithAi.value || !showExplainAi.value) return;
+  explainingWithAi.value = true;
+  try {
+    await ensureLogsLoaded();
+
+    if (!hasAiModels.value) {
+      await store.dispatch("aiModels/getPickerModels", { onError: () => {} });
+    }
+    if (!hasAiModels.value) {
+      displaySonnerError(t("operations.aiNoModels"));
+      return;
+    }
+
+    const prompt = `${t("operations.aiExplainPrompt")}\n\n${buildOperationContextText()}`;
+
+    store.commit("aiChat/setPageContext", {
+      page: "operation",
+      operationId: props.operation.id,
+      operationTitle: props.operation.title,
+      operationType: props.operation.type,
+      connectionId: props.operation.connectionId ?? null,
+      connectionName: props.operation.connectionName ?? null,
+    });
+
+    store.dispatch("operations/closePanel");
+    store.commit("aiChat/setOpen", true);
+    await store.dispatch("aiChat/startNewConversation");
+    await store.dispatch("aiChat/sendMessage", {
+      content: prompt,
+      contextCard: {
+        kind: "operation",
+        title: props.operation.title || props.operation.type || "",
+        type: props.operation.type || "",
+        status: props.operation.status || "",
+        authorUserName: props.operation.authorUserName || null,
+        connectionName: props.operation.connectionName || null,
+        logCount: (props.operation.logs || []).length,
+        summary: props.operation.summary || null,
+        duration: elapsed.value,
+      },
+    });
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    explainingWithAi.value = false;
+  }
+}
+
+async function downloadArtifact() {
+  if (downloadingArtifact.value || !canDownloadArtifact.value) return;
+  downloadingArtifact.value = true;
+  try {
+    const response = await http({
+      url: `/operations/${props.operation.id}/artifact`,
+      method: "GET",
+      responseType: "blob",
+    });
+    const disposition = response.headers?.["content-disposition"] || "";
+    const match = disposition.match(/filename\*=UTF-8''(.+)/);
+    const filename = match ? decodeURIComponent(match[1]) : "archive.zip";
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    downloadingArtifact.value = false;
+  }
+}
 </script>
 
 <template>
   <Collapsible v-model:open="expanded" :disabled="!canExpand">
-    <Card class="gap-0 overflow-hidden py-0">
+    <div class="overflow-hidden rounded-lg border bg-card">
       <CollapsibleTrigger as-child :disabled="!canExpand">
-        <Button
-          variant="ghost"
-          class="w-full h-auto justify-start gap-2 rounded-none p-3 text-left font-normal hover:bg-muted/30"
-          :class="!canExpand ? 'cursor-default hover:bg-transparent' : ''"
+        <button
+          type="button"
+          class="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <component :is="typeIcon" class="size-4 text-muted-foreground shrink-0" />
-          <span class="text-sm font-medium truncate flex-1">
-            {{ operation.title }}
-          </span>
-          <span class="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
-            <Clock class="size-3" />
-            {{ elapsed }}
-          </span>
-          <Badge :class="statusBadgeClass">
-            {{ statusLabel }}
-          </Badge>
-          <component
-            :is="statusIcon"
-            class="size-4 shrink-0"
-            :class="[
-              statusClass,
-              operation.status === 'running' ? 'animate-spin' : '',
-            ]"
-          />
-          <component
-            v-if="canExpand"
-            :is="expanded ? ChevronUp : ChevronDown"
-            class="size-3.5 text-muted-foreground shrink-0"
-          />
-        </Button>
+          <div class="flex items-start gap-2.5">
+            <component
+              :is="typeIcon"
+              class="size-4 text-muted-foreground shrink-0 mt-0.5"
+            />
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium truncate flex-1">
+                  {{ operation.title }}
+                </span>
+                <Badge :class="statusBadgeClass" class="shrink-0">
+                  {{ statusLabel }}
+                </Badge>
+                <component
+                  :is="statusIcon"
+                  class="size-3.5 shrink-0"
+                  :class="[
+                    statusClass,
+                    operation.status === 'running' ? 'animate-spin' : '',
+                  ]"
+                />
+                <component
+                  :is="expanded ? ChevronUp : ChevronDown"
+                  class="size-3.5 text-muted-foreground shrink-0"
+                />
+              </div>
+
+              <!-- Always-visible identity / timing meta (independent of logs) -->
+              <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                <span
+                  v-if="operation.authorUserName"
+                  class="inline-flex items-center gap-1 min-w-0 max-w-full"
+                >
+                  <User class="size-3 shrink-0 opacity-70" />
+                  <span class="truncate">{{ operation.authorUserName }}</span>
+                </span>
+                <span
+                  v-if="operation.connectionName"
+                  class="inline-flex items-center gap-1 min-w-0 max-w-[40%]"
+                >
+                  <Cable class="size-3 shrink-0 opacity-70" />
+                  <span class="truncate">{{ operation.connectionName }}</span>
+                </span>
+                <span class="inline-flex items-center gap-1 tabular-nums shrink-0">
+                  <Clock class="size-3 shrink-0 opacity-70" />
+                  {{ elapsed }}
+                </span>
+                <span class="tabular-nums shrink-0 opacity-80">
+                  {{ formatTime(operation.startedAt) }}
+                  <template v-if="operation.finishedAt">
+                    → {{ formatTime(operation.finishedAt) }}
+                  </template>
+                </span>
+              </div>
+
+              <p
+                v-if="isFinished && operation.summary"
+                class="text-[11px] text-muted-foreground/90 line-clamp-2 leading-snug"
+              >
+                {{ operation.summary }}
+              </p>
+            </div>
+          </div>
+        </button>
       </CollapsibleTrigger>
 
-      <div v-if="!isFinished && operation.progress && operation.progress.total > 0" class="px-3 pb-1.5">
+      <div
+        v-if="!isFinished && operation.progress && operation.progress.total > 0"
+        class="px-3 pb-2"
+      >
         <div class="flex items-center gap-2">
-          <Progress :model-value="progressPercent" class="h-1.5 flex-1" />
+          <Progress :model-value="progressPercent" class="h-1 flex-1" />
           <span class="text-[10px] text-muted-foreground tabular-nums shrink-0">
             {{ Math.round(progressPercent) }}%
           </span>
@@ -256,26 +491,29 @@ const statusLabel = computed(() => {
       </div>
 
       <CollapsibleContent>
-        <div class="px-3 pb-3 space-y-2">
-          <div v-if="!isFinished && operation.progress" class="grid grid-cols-4 gap-1.5 text-center text-xs">
-            <div class="bg-muted/50 rounded p-1.5">
-              <div class="font-medium">{{ operation.progress.total }}</div>
+        <div class="px-3 pb-3 space-y-2.5 border-t border-border/60 pt-2.5">
+          <div
+            v-if="!isFinished && operation.progress"
+            class="grid grid-cols-4 gap-1.5 text-center text-[11px]"
+          >
+            <div class="bg-muted/50 rounded-md px-1.5 py-1.5">
+              <div class="font-medium tabular-nums">{{ operation.progress.total }}</div>
               <div class="text-muted-foreground">{{ t("operations.total") }}</div>
             </div>
-            <div class="bg-warning/10 rounded p-1.5">
-              <div class="font-medium text-warning-foreground">
+            <div class="bg-warning/10 rounded-md px-1.5 py-1.5">
+              <div class="font-medium text-warning-foreground tabular-nums">
                 {{ operation.progress.pending }}
               </div>
               <div class="text-muted-foreground">{{ t("operations.pending") }}</div>
             </div>
-            <div class="bg-success/10 rounded p-1.5">
-              <div class="font-medium text-success-foreground">
+            <div class="bg-success/10 rounded-md px-1.5 py-1.5">
+              <div class="font-medium text-success-foreground tabular-nums">
                 {{ operation.progress.completed }}
               </div>
               <div class="text-muted-foreground">{{ t("operations.completed") }}</div>
             </div>
-            <div class="bg-error/10 rounded p-1.5">
-              <div class="font-medium text-error-foreground">
+            <div class="bg-error/10 rounded-md px-1.5 py-1.5">
+              <div class="font-medium text-error-foreground tabular-nums">
                 {{ operation.progress.failed }}
               </div>
               <div class="text-muted-foreground">{{ t("operations.errors") }}</div>
@@ -286,19 +524,22 @@ const statusLabel = computed(() => {
             <Loader2 class="size-3 animate-spin" />
             {{ t("operations.loadingLogs") }}
           </div>
-          <OperationLogTimeline v-else :logs="operation.logs" />
-
-          <div v-if="operation.authorUserName" class="text-xs text-muted-foreground">
-            {{ t("operations.startedBy", { name: operation.authorUserName }) }}
+          <OperationLogTimeline v-else-if="hasLogs" :logs="operation.logs" />
+          <div
+            v-else-if="showEmptyLogs"
+            class="rounded-md border border-dashed bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground"
+          >
+            <p class="font-medium text-foreground/80">{{ t("operations.logsUnavailableTitle") }}</p>
+            <p class="mt-0.5 leading-snug">{{ t("operations.logsUnavailableDescription") }}</p>
           </div>
 
-          <div class="flex items-center gap-1.5 pt-1.5 border-t">
+          <div class="flex flex-wrap items-center gap-1.5 pt-1">
             <Button
               v-if="isRunning && supportsPause"
               variant="outline"
               size="sm"
               class="h-7 text-xs"
-              @click="emit('pause', operation.id)"
+              @click.stop="emit('pause', operation.id)"
             >
               <Pause class="size-3 mr-1" />
               {{ t("operations.pause") }}
@@ -308,7 +549,7 @@ const statusLabel = computed(() => {
               variant="outline"
               size="sm"
               class="h-7 text-xs"
-              @click="emit('resume', operation.id)"
+              @click.stop="emit('resume', operation.id)"
             >
               <Play class="size-3 mr-1" />
               {{ t("operations.resume") }}
@@ -318,7 +559,7 @@ const statusLabel = computed(() => {
               variant="outline"
               size="sm"
               class="h-7 text-xs text-error hover:text-error"
-              @click="emit('stop', operation.id)"
+              @click.stop="emit('stop', operation.id)"
             >
               <Square class="size-3 mr-1" />
               {{ t("operations.stop") }}
@@ -328,21 +569,49 @@ const statusLabel = computed(() => {
               variant="outline"
               size="sm"
               class="h-7 text-xs"
-              @click="emit('retry', operation.id)"
+              @click.stop="emit('retry', operation.id)"
             >
               <RefreshCw class="size-3 mr-1" />
               {{ t("operations.retry", { count: operation.progress.failed }) }}
             </Button>
+            <Button
+              v-if="canDownloadArtifact"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              :disabled="downloadingArtifact"
+              @click.stop="downloadArtifact"
+            >
+              <Download class="size-3 mr-1" :class="downloadingArtifact ? 'animate-pulse' : ''" />
+              {{ t("operations.downloadArtifact") }}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              :disabled="copyingLogs"
+              @click.stop="copyLogs"
+            >
+              <Check v-if="logsCopied" class="size-3 mr-1 text-success" />
+              <Copy v-else class="size-3 mr-1" />
+              {{ logsCopied ? t("operations.logsCopiedShort") : t("operations.copyLogs") }}
+            </Button>
+            <Button
+              v-if="showExplainAi"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              :disabled="explainingWithAi || store.state.aiChat.isLoading"
+              @click.stop="explainWithAi"
+            >
+              <Loader2 v-if="explainingWithAi" class="size-3 mr-1 animate-spin" />
+              <Sparkles v-else class="size-3 mr-1" />
+              {{ t("operations.explainWithAi") }}
+            </Button>
             <div class="flex-1" />
-            <span class="text-[10px] text-muted-foreground">
-              {{ formatTime(operation.startedAt) }}
-              <template v-if="operation.finishedAt">
-                → {{ formatTime(operation.finishedAt) }}
-              </template>
-            </span>
             <AlertDialog>
               <AlertDialogTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-7 w-7">
+                <Button variant="ghost" size="icon" class="h-7 w-7" @click.stop>
                   <X class="size-3.5" />
                 </Button>
               </AlertDialogTrigger>
@@ -355,13 +624,15 @@ const statusLabel = computed(() => {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-                  <AlertDialogAction @click="emit('remove', operation.id)">{{ t("operations.deleteConfirm") }}</AlertDialogAction>
+                  <AlertDialogAction @click="emit('remove', operation.id)">
+                    {{ t("operations.deleteConfirm") }}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </div>
         </div>
       </CollapsibleContent>
-    </Card>
+    </div>
   </Collapsible>
 </template>

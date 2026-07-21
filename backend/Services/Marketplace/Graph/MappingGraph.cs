@@ -21,17 +21,19 @@ public class MappingGraph
 }
 
 /// <summary>
-/// A single node. <see cref="type"/> selects behaviour:
-/// "attribute" | "storeAttribute" | "productField" | "static" | "groupName"
-/// | "modifier" | "formatString" | "join" | "output" | "adapterFields" | "adapterPriceFields".
+/// Vue Flow node coordinates - persisted by the editor, ignored by the evaluator.
 /// </summary>
-/// <summary>Vue Flow node coordinates - persisted by the editor, ignored by the evaluator.</summary>
 public class GraphPosition
 {
     public double x { get; set; }
     public double y { get; set; }
 }
 
+/// <summary>
+/// A single node. <see cref="GraphNode.type"/> selects behaviour:
+/// "attribute" | "storeAttribute" | "productField" | "static" | "groupName"
+/// | "modifier" | "formatString" | "join" | "output" | "adapterFields" | "adapterPriceFields".
+/// </summary>
 public class GraphNode
 {
     public string id { get; set; } = "";

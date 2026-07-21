@@ -1185,6 +1185,71 @@ namespace Delegat.Migrations
                     b.ToTable("operationLogEntries");
                 });
 
+            modelBuilder.Entity("Delegat.Models.PendingFolderJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("jobType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("processedItems")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<long?>("resultBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("resultFileName")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("resultObjectKey")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("scope")
+                        .HasColumnType("int");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("totalItems")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("pendingFolderJobs");
+                });
+
             modelBuilder.Entity("Delegat.Models.PendingImageDownload", b =>
                 {
                     b.Property<int>("Id")

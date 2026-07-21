@@ -75,6 +75,7 @@ const mutations = {
     op.status = status;
     op.finishedAt = op.finishedAt || new Date().toISOString();
     if (summary) {
+      op.summary = summary;
       const level = status === "failed" ? "error" : "success";
       const alreadyLogged = op.logs.some(
         (log) => log.message === summary && log.level === level,
@@ -124,6 +125,7 @@ function mapServerOperation(item) {
     authorUserId: item.authorUserId || null,
     startedAt: item.createdAt,
     finishedAt: item.finishedAt || null,
+    summary: item.summary || null,
     progress: item.totalItems != null ? {
       total: item.totalItems,
       completed: item.completedItems || 0,
@@ -184,6 +186,7 @@ const actions = {
         canRetry: data.batchType === "export" || data.batchType === "import",
         batchId: data.batchId || null,
         batchType: data.batchType || null,
+        summary: null,
         isLocalClientOperation: false,
       };
       commit("ADD_OPERATION", op);
@@ -282,6 +285,7 @@ const actions = {
       canRetry: false,
       batchId: null,
       batchType: null,
+      summary: null,
       isLocalClientOperation: false,
     };
     commit("ADD_OPERATION", op);
@@ -309,6 +313,7 @@ const actions = {
       canRetry: operation.canRetry ?? false,
       batchId: operation.batchId || null,
       batchType: operation.batchType || null,
+      summary: null,
       isLocalClientOperation:
         operation.isLocalClientOperation ?? typeof operation.onCancel === "function",
     };
@@ -376,7 +381,7 @@ const actions = {
         cache: false,
       });
       const data = response.data;
-      const items = (data.items || []).map((item) => ({ ...mapServerOperation(item), _canExpand: false }));
+      const items = (data.items || []).map((item) => ({ ...mapServerOperation(item), _canExpand: true }));
       commit("MERGE_HISTORY", items);
       commit("SET_HISTORY_PAGE", page);
       commit("SET_HISTORY_HAS_MORE", data.hasMore ?? false);

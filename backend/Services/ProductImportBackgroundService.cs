@@ -26,6 +26,7 @@ public class ProductImportBackgroundService : BackgroundService
     /// </summary>
     /// <param name="scopeFactory">Factory for creating DI scopes.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="operationLogger">Operation progress logger.</param>
     public ProductImportBackgroundService(
         IServiceScopeFactory scopeFactory,
         ILogger<ProductImportBackgroundService> logger,

@@ -63,6 +63,7 @@ public static class ModifierPipeline
     /// </summary>
     /// <param name="value">Input value.</param>
     /// <param name="modifiersJson">JSON array of modifier descriptors: [{"type":"...", "params":{...}}, ...]</param>
+    /// <param name="context">Optional modifier evaluation context.</param>
     /// <returns>Transformed value.</returns>
     public static object? ApplyModifiers(object? value, string? modifiersJson, ModifierContext? context = null)
     {

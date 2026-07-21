@@ -353,6 +353,17 @@ public static class AiPrompts
             $"Page: Marketplace connection\n" +
             $"Connection: \"{SanitizeForPrompt(ctx.ConnectionName)}\" (id={ctx.ConnectionId})\n" +
             $"When user says 'this connection' or 'its mappings' - use connectionId={ctx.ConnectionId}.",
+        "operation" =>
+            $"=== CURRENT PAGE ===\n" +
+            $"Page: Background operations panel\n" +
+            $"Operation: \"{SanitizeForPrompt(ctx.OperationTitle)}\" " +
+            $"(id={SanitizeForPrompt(ctx.OperationId)}, type={SanitizeForPrompt(ctx.OperationType)})\n" +
+            (ctx.ConnectionId.HasValue
+                ? $"Related connection: \"{SanitizeForPrompt(ctx.ConnectionName)}\" (id={ctx.ConnectionId})\n"
+                : "") +
+            "The user pasted operation metadata and log lines in the message. " +
+            "Explain what happened, highlight errors/warnings, and suggest concrete next steps. " +
+            "Do not invent log lines that are not present.",
         _ => $"=== CURRENT PAGE ===\nPage: {SanitizeForPrompt(ctx.Page)}"
     };
 

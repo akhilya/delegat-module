@@ -164,7 +164,7 @@ public class PluginController : ControllerBase
     /// </summary>
     [HttpDelete("{key}")]
     [RequiresPermission(Permissions.PluginsManage)]
-    public async Task<IActionResult> DeletePlugin(string key)
+    public IActionResult DeletePlugin(string key)
     {
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)

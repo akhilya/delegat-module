@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Services;
 
@@ -14,15 +15,18 @@ public class OperationsController : ControllerBase
     private readonly DataContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOperationLogger _operationLogger;
+    private readonly IStorageService _storageService;
 
     public OperationsController(
         DataContext context,
         ICurrentUserService currentUserService,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        IStorageService storageService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _operationLogger = operationLogger;
+        _storageService = storageService;
     }
 
     [HttpGet]
@@ -356,6 +360,15 @@ public class OperationsController : ControllerBase
                          || p.status == ImageDownloadStatus.Cancelled))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
             }
+            else if (op.batchType == "folder-job")
+            {
+                cancelledCount = await _context.pendingFolderJobs
+                    .Where(p => p.operationId == op.batchId &&
+                        (p.status == FolderJobStatus.Pending
+                         || p.status == FolderJobStatus.InProgress
+                         || p.status == FolderJobStatus.Failed))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
+            }
         }
 
         // Calculate final stats
@@ -676,6 +689,43 @@ public class OperationsController : ControllerBase
     private Task<int> ClearTransfers(int storeId, string status, CancellationToken ct) =>
         FilterTransfersByStatus(_context.pendingProductTransfers.Where(x => x.sourceStoreId == storeId || x.targetStoreId == storeId), status)
             .ExecuteDeleteAsync(ct);
+
+    [HttpGet]
+    [Route("/operations/{operationId}/artifact")]
+    public async Task DownloadArtifact(string operationId, CancellationToken ct)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (storeId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var op = await _context.operations.AsNoTracking()
+            .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId.Value, ct);
+        if (op == null)
+            throw ApiException.NotFound("Operation not found");
+
+        var job = await _context.pendingFolderJobs.AsNoTracking()
+            .FirstOrDefaultAsync(j => j.operationId == operationId && j.storeId == storeId.Value, ct);
+
+        if (job == null
+            || job.jobType != FolderJobType.Archive
+            || job.status != FolderJobStatus.Completed
+            || string.IsNullOrEmpty(job.resultObjectKey))
+        {
+            throw ApiException.NotFound("Archive artifact not available", code: "artifact_not_found");
+        }
+
+        if (!await _storageService.ExistsAsync(job.resultObjectKey))
+            throw ApiException.NotFound("Archive artifact not found in storage", code: "artifact_not_found");
+
+        var fileName = job.resultFileName ?? "archive.zip";
+        var encoded = Uri.EscapeDataString(fileName);
+        Response.ContentType = "application/zip";
+        if (job.resultBytes is long len)
+            Response.ContentLength = len;
+        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}";
+
+        await _storageService.StreamToAsync(job.resultObjectKey, Response.Body, ct);
+    }
 
     [HttpDelete]
     [Route("/operations/{operationId}")]

@@ -151,11 +151,11 @@ function shareFolderUrl(folderId) {
     : `/products/${productRequired()}/folders/${id}/share`;
 }
 
-function downloadFolderUrl(folderId) {
+function archiveFolderUrl(folderId) {
   const id = folderId ?? "root";
   return isStoreScope.value
-    ? `/store-storage/folders/${id}/download`
-    : `/products/${productRequired()}/folders/${id}/download`;
+    ? `/store-storage/folders/${id}/archive`
+    : `/products/${productRequired()}/folders/${id}/archive`;
 }
 
 function fileTagUrl(fileId, tagId) {
@@ -989,13 +989,21 @@ async function deleteFolder() {
   if (!deleteFolderTarget.value) return;
   const isEmpty = deleteFolderTarget.value.fileCount === 0 && deleteFolderTarget.value.subfolderCount === 0;
   try {
-    await http.delete(`${foldersUrl(deleteFolderTarget.value.id)}?recursive=${!!(!isEmpty && deleteFolderRecursive.value)}`, { cache: false });
+    const response = await http.delete(
+      `${foldersUrl(deleteFolderTarget.value.id)}?recursive=${!!(!isEmpty && deleteFolderRecursive.value)}`,
+      { cache: false },
+    );
+    const data = response.data?.value ?? response.data;
     const removeIds = [deleteFolderTarget.value.id];
     if (deleteFolderRecursive.value) {
       collectDescendantIds(deleteFolderTarget.value.id, removeIds);
     }
     folders.value = folders.value.filter((f) => !removeIds.includes(f.id));
-    displaySonnerSuccess(t("products.productFileManager.folderDeleted"));
+    if (data?.queued) {
+      displaySonnerSuccess(t("products.productFileManager.folderDeleteQueued"));
+    } else {
+      displaySonnerSuccess(t("products.productFileManager.folderDeleted"));
+    }
     if (deleteFolderRecursive.value) emit("filesChanged");
   } catch (error) {
     displaySonnerError(error);
@@ -1097,28 +1105,39 @@ async function copyPublicUrl(file) {
 
 const isDownloadingArchive = ref(false);
 const downloadingFolderId = ref(null);
+const MAX_ARCHIVE_BYTES = 10 * 1024 * 1024 * 1024;
+const MAX_ARCHIVE_FILES = 50000;
+
+function getFolderArchiveStats(folderId) {
+  if (folderId == null) {
+    return {
+      totalFileCount: props.files.length,
+      totalSizeBytes: props.files.reduce((sum, f) => sum + (f.length || 0), 0),
+    };
+  }
+  const folder = folders.value.find((f) => f.id === folderId);
+  return {
+    totalFileCount: folder?.totalFileCount ?? folder?.fileCount ?? 0,
+    totalSizeBytes: folder?.totalSizeBytes ?? 0,
+  };
+}
 
 async function downloadFolderArchive(folderId) {
   if (isDownloadingArchive.value) return;
+  const stats = getFolderArchiveStats(folderId);
+  if (stats.totalFileCount > MAX_ARCHIVE_FILES || stats.totalSizeBytes > MAX_ARCHIVE_BYTES) {
+    displaySonnerError(t("products.productFileManager.archiveTooLarge", {
+      files: stats.totalFileCount,
+      size: formatBytes(stats.totalSizeBytes),
+    }));
+    return;
+  }
+
   isDownloadingArchive.value = true;
   downloadingFolderId.value = folderId;
-  displaySonnerSuccess(t("products.productFileManager.archiveBuilding"));
   try {
-    const response = await http({
-      url: downloadFolderUrl(folderId),
-      method: 'GET',
-      responseType: 'blob',
-      timeout: 10 * 60 * 1000,
-    });
-    const disposition = response.headers?.['content-disposition'] || '';
-    const match = disposition.match(/filename\*=UTF-8''(.+)/);
-    const filename = match ? decodeURIComponent(match[1]) : 'archive.zip';
-    const url = URL.createObjectURL(response.data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    await http.post(archiveFolderUrl(folderId), null, { cache: false });
+    displaySonnerSuccess(t("products.productFileManager.archiveQueued"));
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -1852,7 +1871,11 @@ watch(() => props.productId, () => {
             id="recursive-delete"
           />
           <label for="recursive-delete" class="text-sm cursor-pointer">
-            {{ t("products.productFileManager.deleteFolderContentsLabel", { fileCount: deleteFolderTarget.fileCount, subfolderCount: deleteFolderTarget.subfolderCount }) }}
+            {{ t("products.productFileManager.deleteFolderContentsLabel", {
+              fileCount: deleteFolderTarget.totalFileCount ?? deleteFolderTarget.fileCount,
+              subfolderCount: deleteFolderTarget.subfolderCount,
+              size: formatBytes(deleteFolderTarget.totalSizeBytes ?? 0),
+            }) }}
           </label>
         </div>
         <AlertDialogFooter>

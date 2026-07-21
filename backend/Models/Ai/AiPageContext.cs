@@ -13,4 +13,13 @@ public class AiPageContext
     public string? CategoryName { get; set; }
     /// <summary>Product selected for mapping preview on fieldMapping page.</summary>
     public int? PreviewProductId { get; set; }
+
+    /// <summary>Background operation id when explaining operation logs.</summary>
+    public string? OperationId { get; set; }
+
+    /// <summary>Background operation title when explaining operation logs.</summary>
+    public string? OperationTitle { get; set; }
+
+    /// <summary>Background operation type (e.g. batch-export, folder-archive).</summary>
+    public string? OperationType { get; set; }
 }

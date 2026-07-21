@@ -35,6 +35,8 @@ public class CategoryImportService
     /// <param name="externalCategoryId">Category ID on the marketplace.</param>
     /// <param name="localCategoryName">Local category name (falls back to marketplace name if null).</param>
     /// <param name="externalCategoryName">Category name on the marketplace (passed from frontend).</param>
+    /// <param name="localCategoryId">Optional existing local category to update instead of creating a new one.</param>
+    /// <param name="selectedFieldKeys">Optional subset of marketplace field keys to import.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Result of the category import operation.</returns>
     public async Task<CategoryImportResult> ImportExternalCategoryAsync(

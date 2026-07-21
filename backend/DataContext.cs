@@ -22,6 +22,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<PendingProductImport> pendingProductImports { get; set; }
     public DbSet<PendingProductExport> pendingProductExports { get; set; }
     public DbSet<PendingProductTransfer> pendingProductTransfers { get; set; }
+    public DbSet<PendingFolderJob> pendingFolderJobs { get; set; }
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }

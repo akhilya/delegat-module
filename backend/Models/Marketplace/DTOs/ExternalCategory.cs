@@ -1,46 +1,23 @@
 namespace Delegat.Models.Marketplace.DTOs;
 
 /// <summary>
-/// Category from an external marketplace
+/// Category from an external marketplace.
 /// </summary>
+/// <param name="Id">Category identifier on the marketplace.</param>
+/// <param name="Name">Category name.</param>
+/// <param name="ParentId">Parent category ID (null for root categories).</param>
+/// <param name="ParentName">Parent category name.</param>
+/// <param name="FullPath">Full category path (e.g. "Clothing / Men's / T-Shirts").</param>
+/// <param name="HasChildren">Whether the category has child categories.</param>
+/// <param name="ChildrenCount">Number of child categories.</param>
+/// <param name="HasSizes">Hint from plugin: whether this category supports sizes (e.g. clothing).</param>
 public record ExternalCategory(
-    /// <summary>
-    /// Category identifier on the marketplace
-    /// </summary>
     string Id,
-
-    /// <summary>
-    /// Category name
-    /// </summary>
     string Name,
-
-    /// <summary>
-    /// Parent category ID (null for root categories)
-    /// </summary>
     string? ParentId = null,
-
-    /// <summary>
-    /// Parent category name
-    /// </summary>
     string? ParentName = null,
-
-    /// <summary>
-    /// Full category path (e.g. "Clothing / Men's / T-Shirts")
-    /// </summary>
     string? FullPath = null,
-
-    /// <summary>
-    /// Whether the category has child categories
-    /// </summary>
     bool HasChildren = false,
-
-    /// <summary>
-    /// Number of child categories
-    /// </summary>
     int? ChildrenCount = null,
-
-    /// <summary>
-    /// Hint from plugin: whether this category supports sizes (e.g. clothing).
-    /// </summary>
     bool? HasSizes = null
 );

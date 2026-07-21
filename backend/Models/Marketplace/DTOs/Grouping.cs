@@ -6,21 +6,12 @@ namespace Delegat.Models.Marketplace.DTOs;
 /// Configuration for field-based grouping (e.g. Ozon).
 /// MappingService will inject GroupFieldKey into the product export data.
 /// </summary>
+/// <param name="GroupFieldKey">Field key for grouping (e.g. "group_id" for Ozon).</param>
+/// <param name="MarketplaceGeneratesId">If true, the marketplace generates the group ID itself.</param>
+/// <param name="Description">Optional description of how grouping works on this marketplace.</param>
 public record FieldBasedGroupingConfig(
-    /// <summary>
-    /// Field key for grouping (e.g. "group_id" for Ozon)
-    /// </summary>
     string GroupFieldKey,
-
-    /// <summary>
-    /// If true, the marketplace generates the group ID itself.
-    /// If false, we provide our own (e.g. local group ID or UUID).
-    /// </summary>
     bool MarketplaceGeneratesId = false,
-
-    /// <summary>
-    /// Optional description of how grouping works on this marketplace
-    /// </summary>
     string? Description = null
 );
 
@@ -29,32 +20,21 @@ public record FieldBasedGroupingConfig(
 #region Endpoint-based Grouping
 
 /// <summary>
-/// External group (from a marketplace)
+/// External group (from a marketplace).
 /// </summary>
+/// <param name="ExternalId">External group ID on the marketplace.</param>
+/// <param name="Name">Group name.</param>
+/// <param name="ProductExternalIds">External IDs of products in this group.</param>
+/// <param name="AdditionalData">Additional data from the marketplace.</param>
 public record ExternalGroup(
-    /// <summary>
-    /// External group ID on the marketplace
-    /// </summary>
     string ExternalId,
-
-    /// <summary>
-    /// Group name
-    /// </summary>
     string? Name,
-
-    /// <summary>
-    /// External IDs of products in this group
-    /// </summary>
     List<string> ProductExternalIds,
-
-    /// <summary>
-    /// Additional data from the marketplace
-    /// </summary>
     Dictionary<string, object>? AdditionalData = null
 );
 
 /// <summary>
-/// Result of creating a group via an endpoint
+/// Result of creating a group via an endpoint.
 /// </summary>
 public record CreateGroupResult(
     bool Success,
@@ -64,7 +44,7 @@ public record CreateGroupResult(
 );
 
 /// <summary>
-/// Result of modifying group membership
+/// Result of modifying group membership.
 /// </summary>
 public record GroupMembershipResult(
     bool Success,
@@ -76,7 +56,7 @@ public record GroupMembershipResult(
 );
 
 /// <summary>
-/// Error when adding/removing a product from a group
+/// Error when adding/removing a product from a group.
 /// </summary>
 public record GroupMembershipError(
     string ExternalProductId,
