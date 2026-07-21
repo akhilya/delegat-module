@@ -38,7 +38,7 @@ docs/             — Documentation
 
 ## Documentation
 
-- [Control Plane](docs/architecture/control-plane.md) — central platform: sell, deploy, control instances
+- [Control Plane](docs/architecture/control-plane.md) — central platform: sell, deploy, control instances (+ Platform Link)
 - [Platform capabilities](docs/platform/capabilities.md) — what an instance can do
 - [SaaS architecture](docs/architecture/saas-architecture.md) — per-instance infra, quotas, provisioner draft
 - [Public API v1](docs/api/public-v1.md) — partner API (`/api/v1`, Swagger at `/swagger`)
