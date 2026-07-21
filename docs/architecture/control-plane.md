@@ -479,3 +479,4 @@ docs/support-tickets.md
 7. Документация и видео-гайды (готовый движок) + обратная связь через тикеты  
 8. Ticket-based поддержка (+ Telegram для ops)  
 9. Форма заказа доработок / смена тарифа (два потока: feature request и plan change)
+10. **Platform Link:** инстанс ↔ control plane (5xx, сервисы CP, SSO в поддержку)
