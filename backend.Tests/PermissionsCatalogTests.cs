@@ -5,11 +5,15 @@ namespace Delegat.Tests;
 public class PermissionsCatalogTests
 {
     [Fact]
-    public void Owner_HasAllPermissions()
+    public void Owner_HasAllAssignablePermissions()
     {
         var owner = AppRoles.RolePermissions[AppRoles.Owner];
-        foreach (var perm in Permissions.All)
+        foreach (var perm in Permissions.Assignable)
             Assert.Contains(perm, owner);
+
+        // roles.manage is instance-owner (isAdmin) only - injected at runtime, not on the role template.
+        foreach (var perm in Permissions.AdminOnly)
+            Assert.DoesNotContain(perm, owner);
     }
 
     [Fact]
