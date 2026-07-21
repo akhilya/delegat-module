@@ -1,6 +1,8 @@
 # Delegat.Module
 
-Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart).
+Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart, Yandex Market).
+
+Each customer runs an **isolated instance** (Docker stack). Selling, provisioning, billing, fleet updates, and ops control belong to a separate **Control Plane** (design docs; not implemented in this repo yet).
 
 ## Stack
 
@@ -36,10 +38,11 @@ docs/             — Documentation
 
 ## Documentation
 
-- [Platform capabilities](docs/platform/capabilities.md)
-- [SaaS architecture](docs/architecture/saas-architecture.md)
+- [Control Plane](docs/architecture/control-plane.md) — central platform: sell, deploy, control instances
+- [Platform capabilities](docs/platform/capabilities.md) — what an instance can do
+- [SaaS architecture](docs/architecture/saas-architecture.md) — per-instance infra, quotas, provisioner draft
 - [Public API v1](docs/api/public-v1.md) — partner API (`/api/v1`, Swagger at `/swagger`)
-- [OpenCart adapter](docs/adapters/opencart.md)
+- [Full docs index](docs/README.md)
 
 ## Releases
 
