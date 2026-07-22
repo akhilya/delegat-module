@@ -6,10 +6,18 @@ const memberships = ref([]);
 const selectedStoreId = ref(null);
 const loaded = ref(false);
 
+/** Clear module-level cache after store switch so the next loadMemberships hits /auth/me again. */
+export function resetSelectedStoreCache() {
+  memberships.value = [];
+  selectedStoreId.value = null;
+  loaded.value = false;
+}
+
 export function useSelectedStore() {
   const store = useStore();
 
-  async function loadMemberships() {
+  async function loadMemberships({ force = false } = {}) {
+    if (force) resetSelectedStoreCache();
     if (loaded.value) return memberships.value;
     await new Promise((resolve) => {
       store.dispatch("getMe", {

@@ -15,9 +15,10 @@ import AppSidebarFooter from "@/components/sidebar/AppSidebarFooter.vue";
 import { buildSidebarGroups } from "@/config/sidebarNav";
 import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
-import { http } from "@/main";
+import { http, invalidateMeCache } from "@/main";
 import { hasAnyPermission, PERMS } from "@/lib/permissions";
-import { ME_UPDATED_EVENT } from "@/lib/meCache";
+import { ME_UPDATED_EVENT, notifyMeUpdated } from "@/lib/meCache";
+import { resetSelectedStoreCache } from "@/composables/useSelectedStore";
 
 export default {
   components: {
@@ -217,11 +218,21 @@ export default {
         if (!confirmed) return;
       }
 
+      const previousStoreId = this.me?.selectedStoreId ?? null;
+      // Optimistic UI: Select keeps showing the old store until /auth/me is refreshed,
+      // and getMe() was serving a stale in-memory me cache after select.
+      if (this.me) {
+        this.me = { ...this.me, selectedStoreId: storeId };
+      }
+
       this.$store.commit("setSwitchingStore", true);
       await this.postSelectStore({
         storeId,
         onSuccess: async (response) => {
+          invalidateMeCache();
+          resetSelectedStoreCache();
           await this.loadShellData(false);
+          notifyMeUpdated(this.me);
           this.$store.dispatch("operations/reconnectSignalR");
           const next = response.data.value.next;
           const targetPath = new URL(next, window.location.origin).pathname;
@@ -232,6 +243,9 @@ export default {
           this.$store.commit("setSwitchingStore", false);
         },
         onError: (error) => {
+          if (this.me) {
+            this.me = { ...this.me, selectedStoreId: previousStoreId };
+          }
           this.$store.commit("setSwitchingStore", false);
           displaySonnerError(error);
         },

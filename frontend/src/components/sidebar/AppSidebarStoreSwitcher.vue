@@ -39,6 +39,7 @@ const showEmptyState = computed(() => !hasMemberships.value && props.emptyMode !
   <SidebarMenu v-if="hasMemberships">
     <SidebarMenuItem class="p-0">
       <Select
+        :key="selectedStoreId != null ? String(selectedStoreId) : 'none'"
         :model-value="selectedStoreId != null ? String(selectedStoreId) : ''"
         @update:model-value="emit('select-store', Number($event))"
       >
