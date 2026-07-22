@@ -76,7 +76,7 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
-      - dotnet
+      - ".NET"
     commit-message:
       prefix: "chore(deps)"
     # Floating ranges by design — Dependabot cannot usefully pin these
