@@ -9,7 +9,7 @@
     "dev:stop": "docker compose down"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "dotenv-cli": "^8.0.0"
+    "concurrently": "^10.0.3",
+    "dotenv-cli": "^11.0.0"
   }
 }
