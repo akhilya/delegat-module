@@ -9,6 +9,7 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
+import { fillProductEditUrl } from "@/lib/productEditUrl";
 import {
   Loader2,
   Upload,
@@ -739,7 +740,11 @@ export default {
 
     getMarketplaceProductUrl(conn) {
       if (!conn.externalProductId || !conn.productEditUrlTemplate) return null;
-      return conn.productEditUrlTemplate.replace("{externalId}", conn.externalProductId);
+      const publicCreds = conn.publicCredentials || conn.PublicCredentials || {};
+      return fillProductEditUrl(conn.productEditUrlTemplate, {
+        ...publicCreds,
+        externalId: conn.externalProductId,
+      });
     },
 
     getConnectionStatusInfo(conn) {

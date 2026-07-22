@@ -6,6 +6,7 @@ using Delegat.Enums;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Security;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
@@ -27,6 +28,7 @@ public class ProductSyncController : ControllerBase
     private readonly DataContext _context;
     private readonly ILogger<ProductSyncController> _logger;
     private readonly IOperationLogger _operationLogger;
+    private readonly EncryptionService? _encryptionService;
 
     public ProductSyncController(
         ICurrentUserService currentUserService,
@@ -37,7 +39,8 @@ public class ProductSyncController : ControllerBase
         PriceSyncService priceSyncService,
         DataContext context,
         ILogger<ProductSyncController> logger,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -48,6 +51,7 @@ public class ProductSyncController : ControllerBase
         _context = context;
         _logger = logger;
         _operationLogger = operationLogger;
+        _encryptionService = encryptionService;
     }
 
     #region Product Links
@@ -1592,6 +1596,12 @@ public class ProductSyncController : ControllerBase
                 adapterKey = link.connection?.adapterKey,
                 adapterName = adapter?.DisplayName ?? link.connection?.adapterKey,
                 productEditUrlTemplate = adapter?.ProductEditUrlTemplate,
+                publicCredentials = link.connection == null
+                    ? null
+                    : ConnectionCredentialsHelper.ExtractPublicCredentials(
+                        link.connection.credentialsJson,
+                        adapter?.GetCredentialsSchema(),
+                        _encryptionService),
                 externalProductId = link.externalProductId,
                 externalSku = link.externalSku,
                 status = link.status.ToString(),
@@ -1670,6 +1680,10 @@ public class ProductSyncController : ControllerBase
                     adapterKey = conn.adapterKey,
                     adapterName = adapter?.DisplayName ?? conn.adapterKey,
                     productEditUrlTemplate = adapter?.ProductEditUrlTemplate,
+                    publicCredentials = ConnectionCredentialsHelper.ExtractPublicCredentials(
+                        conn.credentialsJson,
+                        adapter?.GetCredentialsSchema(),
+                        _encryptionService),
                     // Mapping status
                     hasMapping,
                     needsMapping = !hasMapping && product.categoryId.HasValue,

@@ -16,6 +16,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Fixed
+- Marketplace connection settings return non-secret credentials (e.g. Yandex businessId, Ozon clientId); product edit URLs substitute all template placeholders; saving empty API key no longer wipes the stored secret
+- Pre-export mapping resolve uses POST body instead of query string (fix 414 Request-URI Too Large on large bulk selections)
 - Yandex bulk export: split offer-mappings/cards requests by JSON body size to stay under Partner API ~500 KB limit
 - Wildberries: honor `X-Ratelimit-Retry` (max 1 retry), pause shared limiter on 429; cache dictionaries/category fields/card limits via IMemoryCache; limits dialog no longer blocked when quotas fail
 - Wildberries Content API: hold 1 in-flight lease until HTTP finishes (stop colors overlapping cards/list), single-flight global directories per connection, short negative cache on empty directory load, mark 429 retries in adapter logs; directory GETs fail-fast on 429 without pausing cards/list; lease released before retry delay; log duration excludes queue wait

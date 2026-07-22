@@ -543,11 +543,13 @@ export default {
 
     /**
      * Resolves available mappings for a list of products (pre-export check).
+     * POST body — large selections must not go in the query string (414).
      */
     async resolveMappings(ctx, { connectionId, productIds }) {
-      const params = productIds.map((id) => `productIds=${id}`).join("&");
-      const response = await http.get(
-        `/marketplace/connections/${connectionId}/resolve-mappings?${params}`
+      const response = await http.post(
+        `/marketplace/connections/${connectionId}/resolve-mappings`,
+        { productIds },
+        { cache: false },
       );
       return response.data;
     },

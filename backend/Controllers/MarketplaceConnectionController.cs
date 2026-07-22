@@ -127,15 +127,21 @@ public class MarketplaceConnectionController : ControllerBase
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
         var hasCredentials = !string.IsNullOrEmpty(connection.credentialsJson);
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        var publicCredentials = ConnectionCredentialsHelper.ExtractPublicCredentials(
+            connection.credentialsJson,
+            adapter?.GetCredentialsSchema(),
+            _encryptionService);
 
         return Ok(new MarketplaceConnection.ConnectionDetailDTO
         {
             id = connection.Id,
             name = connection.name,
             adapterKey = connection.adapterKey,
-            // Never return decrypted credentials - client must re-enter to rotate
+            // Never return decrypted secrets - client must re-enter to rotate
             credentialsJson = null,
             hasCredentials = hasCredentials,
+            publicCredentials = publicCredentials,
             settingsJson = connection.settingsJson,
             isActive = connection.isActive,
             lastSyncAt = connection.lastSyncAt,
@@ -212,7 +218,12 @@ public class MarketplaceConnectionController : ControllerBase
         }
         else if (_encryptionService != null)
         {
-            input.credentialsJson = _encryptionService.Encrypt(input.credentialsJson);
+            var schema = _adapterRegistry.GetByKey(connection.adapterKey)?.GetCredentialsSchema();
+            input.credentialsJson = ConnectionCredentialsHelper.MergeAndEncrypt(
+                connection.credentialsJson,
+                input.credentialsJson,
+                schema,
+                _encryptionService);
         }
         else
         {
@@ -318,11 +329,34 @@ public class MarketplaceConnectionController : ControllerBase
         try
         {
             var result = await adapter.TestConnectionAsync(connection, ct);
+
+            Dictionary<string, string>? publicCredentials = null;
+            if (result.Success && result.Details != null && _encryptionService != null)
+            {
+                var schema = adapter.GetCredentialsSchema();
+                if (ConnectionCredentialsHelper.TryPersistMissingPublicFieldsFromDetails(
+                        connection,
+                        result.Details,
+                        schema,
+                        _encryptionService,
+                        "businessId", "campaignId"))
+                {
+                    await repo.UpdateAsync(connection);
+                }
+
+                publicCredentials = ConnectionCredentialsHelper.ExtractPublicCredentials(
+                    connection.credentialsJson,
+                    schema,
+                    _encryptionService);
+            }
+
             return Ok(new
             {
                 success = result.Success,
                 message = result.Success ? result.Message : null,
-                errorMessage = result.Success ? null : result.Message
+                errorMessage = result.Success ? null : result.Message,
+                details = result.Details,
+                publicCredentials
             });
         }
         catch (Exception ex)
@@ -332,7 +366,9 @@ public class MarketplaceConnectionController : ControllerBase
             {
                 success = false,
                 message = (string?)null,
-                errorMessage = ex.Message
+                errorMessage = ex.Message,
+                details = (object?)null,
+                publicCredentials = (object?)null
             });
         }
     }

@@ -347,6 +347,11 @@ public class MarketplaceConnection : IEntity, IMapToDTO<MarketplaceConnection.Co
         public bool hasCredentials { get; set; }
 
         /// <summary>
+        /// Non-secret credential fields (e.g. businessId, clientId) safe to show in the UI.
+        /// </summary>
+        public Dictionary<string, string>? publicCredentials { get; set; }
+
+        /// <summary>
         /// JSON-serialized settings.
         /// </summary>
         public string? settingsJson { get; set; }

@@ -783,15 +783,18 @@ public class CategoryMappingController : ControllerBase
 
     /// <summary>
     /// Resolve available mappings for a list of products (pre-export check).
+    /// Uses POST so large selections do not hit Request-URI Too Large (414).
     /// </summary>
-    [HttpGet]
+    [HttpPost]
     [Route("/marketplace/connections/{connectionId}/resolve-mappings")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ResolveMappings(
         int connectionId,
-        [FromQuery] List<int> productIds,
+        [FromBody] ResolveMappingsInput? input,
         CancellationToken ct = default)
     {
         var connection = await GetConnectionAsync(connectionId);
+        var productIds = input?.productIds;
 
         if (productIds == null || productIds.Count == 0)
             return Ok(new { products = Array.Empty<object>() });
@@ -1244,6 +1247,11 @@ public class CategoryMappingController : ControllerBase
     public struct SaveMappingSelectionsInput
     {
         public List<MappingSelectionItem> selections { get; set; }
+    }
+
+    public sealed class ResolveMappingsInput
+    {
+        public List<int>? productIds { get; set; }
     }
 
     public struct MappingSelectionItem

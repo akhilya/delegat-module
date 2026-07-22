@@ -659,7 +659,8 @@
         "connectionTitle": "Подключение",
         "activeConnection": "Активное подключение",
         "credentialsTitle": "Данные для подключения",
-        "credentialsHint": "Учётные данные уже сохранены. Оставьте поля пустыми, чтобы не менять их, или введите новые значения для замены.",
+        "changeSecret": "Изменить",
+        "cancelSecretEdit": "Отмена",
         "capabilitiesTitle": "Возможности адаптера"
       },
       "mappings": {

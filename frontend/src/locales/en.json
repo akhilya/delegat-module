@@ -659,7 +659,8 @@
         "connectionTitle": "Connection",
         "activeConnection": "Active connection",
         "credentialsTitle": "Connection credentials",
-        "credentialsHint": "Credentials are already saved. Leave fields empty to keep them unchanged, or enter new values to replace them.",
+        "changeSecret": "Change",
+        "cancelSecretEdit": "Cancel",
         "capabilitiesTitle": "Adapter capabilities"
       },
       "mappings": {

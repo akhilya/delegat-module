@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { mapActions } from "vuex";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
+import { fillProductEditUrl } from "@/lib/productEditUrl";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -264,6 +265,8 @@ export default {
       },
       externalCategorySearch: "",
       credentialValues: {},
+      /** Secret field keys currently unlocked for re-entry (mask hidden). */
+      editingSecrets: {},
       PAGE_MARKETPLACE,
       // Category navigation state
       isLoadingCategories: false,
@@ -724,6 +727,9 @@ export default {
         this.fetchMappings(),
         this.fetchLocalCategories(),
       ]);
+      // Credentials schema comes from adapters; connection carries publicCredentials.
+      // Both must be ready — parse here so we don't race Promise.all completion order.
+      this.parseCredentials();
       this.isLoading = false;
       // fetchLimits is lazy: only when the limits dialog opens (see showLimitsDialog watcher).
       // Avoid competing with mapping/category WB Content API calls on every page load.
@@ -743,7 +749,6 @@ export default {
         onSuccess: (response) => {
           this.connection = extractResponseData(response);
           setPageTitle(this.connection.name);
-          this.parseCredentials();
           if (this.$store.state.aiChat) {
             this.$store.commit("aiChat/setPageContext", {
               page: "connection",
@@ -943,22 +948,59 @@ export default {
     },
 
     parseCredentials() {
-      // Credentials are never returned by the API - leave fields empty;
-      // saving with empty fields keeps existing secrets on the server.
+      // Secrets are never returned by the API - leave those empty so saving keeps them.
+      // Non-secret fields come back as publicCredentials.
       this.credentialValues = {};
-      if (this.connection?.hasCredentials && this.credentialFields?.length) {
-        for (const field of this.credentialFields) {
+      this.editingSecrets = {};
+      const publicCreds =
+        this.connection?.publicCredentials ||
+        this.connection?.PublicCredentials ||
+        {};
+      if (!this.credentialFields?.length) return;
+
+      for (const field of this.credentialFields) {
+        if (field.isSecret) {
           this.credentialValues[field.key] = "";
+        } else {
+          this.credentialValues[field.key] =
+            publicCreds[field.key] != null ? String(publicCreds[field.key]) : "";
         }
       }
     },
 
-    buildCredentialsJson() {
-      const hasAnyValue = Object.values(this.credentialValues).some(
-        (v) => v != null && String(v).trim() !== "",
+    isSecretMasked(fieldKey) {
+      return Boolean(
+        this.connection?.hasCredentials && !this.editingSecrets[fieldKey],
       );
-      if (!hasAnyValue) return null;
-      return JSON.stringify(this.credentialValues);
+    },
+
+    startEditSecret(fieldKey) {
+      this.editingSecrets = { ...this.editingSecrets, [fieldKey]: true };
+      this.credentialValues = { ...this.credentialValues, [fieldKey]: "" };
+    },
+
+    cancelEditSecret(fieldKey) {
+      const next = { ...this.editingSecrets };
+      delete next[fieldKey];
+      this.editingSecrets = next;
+      this.credentialValues = { ...this.credentialValues, [fieldKey]: "" };
+    },
+
+    buildCredentialsJson() {
+      if (!this.credentialFields?.length) return null;
+
+      const payload = {};
+      let hasMeaningfulValue = false;
+      for (const field of this.credentialFields) {
+        const raw = this.credentialValues[field.key];
+        const value = raw == null ? "" : String(raw).trim();
+        payload[field.key] = value;
+        if (value) hasMeaningfulValue = true;
+      }
+
+      // No credentials configured and nothing entered — skip patch field.
+      if (!this.connection?.hasCredentials && !hasMeaningfulValue) return null;
+      return JSON.stringify(payload);
     },
 
     async handleSave() {
@@ -996,6 +1038,17 @@ export default {
         onSuccess: (response) => {
           this.testResult = extractResponseData(response, {});
           if (this.testResult.success) {
+            const pub =
+              this.testResult.publicCredentials ||
+              this.testResult.PublicCredentials;
+            if (pub && this.connection) {
+              this.connection = {
+                ...this.connection,
+                publicCredentials: pub,
+                hasCredentials: true,
+              };
+              this.parseCredentials();
+            }
             displaySonnerSuccess(
               this.testResult.message ||
                 this.$t("marketplace.connectionPage.notifications.testSuccess"),
@@ -2437,8 +2490,15 @@ export default {
 
     getMarketplaceProductUrl(externalId) {
       const template = this.capabilities?.productEditUrlTemplate;
-      if (!template) return null;
-      return template.replace("{externalId}", externalId);
+      if (!template || !externalId) return null;
+      const publicCreds =
+        this.connection?.publicCredentials ||
+        this.connection?.PublicCredentials ||
+        {};
+      return fillProductEditUrl(template, {
+        ...publicCreds,
+        externalId,
+      });
     },
 
     formatPrice(price) {
@@ -2727,12 +2787,6 @@ export default {
                 v-if="credentialFields?.length"
                 :title="$t('marketplace.connectionPage.settings.credentialsTitle')"
               >
-                <p
-                  v-if="connection?.hasCredentials"
-                  class="text-sm text-muted-foreground mb-4"
-                >
-                  {{ $t("marketplace.connectionPage.settings.credentialsHint") }}
-                </p>
                 <SettingsFormField
                   v-for="field in credentialFields"
                   :key="field.key"
@@ -2740,12 +2794,44 @@ export default {
                   :label-for="`cred-${field.key}`"
                   :required="field.isRequired && !connection?.hasCredentials"
                 >
-                  <PasswordInput
-                    v-if="field.isSecret"
-                    :id="`cred-${field.key}`"
-                    v-model="credentialValues[field.key]"
-                    :placeholder="field.placeholder || field.description"
-                  />
+                  <div
+                    v-if="field.isSecret && isSecretMasked(field.key)"
+                    class="w-full space-y-1.5"
+                  >
+                    <Input
+                      :id="`cred-${field.key}`"
+                      model-value="••••••••••••"
+                      disabled
+                      type="password"
+                      class="w-full"
+                      autocomplete="off"
+                    />
+                    <Button
+                      type="button"
+                      variant="link"
+                      class="h-auto px-0"
+                      @click="startEditSecret(field.key)"
+                    >
+                      {{ $t("marketplace.connectionPage.settings.changeSecret") }}
+                    </Button>
+                  </div>
+                  <div v-else-if="field.isSecret" class="w-full space-y-1.5">
+                    <PasswordInput
+                      :id="`cred-${field.key}`"
+                      v-model="credentialValues[field.key]"
+                      class="w-full"
+                      :placeholder="field.placeholder || field.description"
+                    />
+                    <Button
+                      v-if="connection?.hasCredentials"
+                      type="button"
+                      variant="link"
+                      class="h-auto px-0 text-muted-foreground"
+                      @click="cancelEditSecret(field.key)"
+                    >
+                      {{ $t("marketplace.connectionPage.settings.cancelSecretEdit") }}
+                    </Button>
+                  </div>
                   <Input
                     v-else
                     :id="`cred-${field.key}`"
