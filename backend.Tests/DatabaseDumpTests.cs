@@ -78,6 +78,37 @@ public class DatabaseDumpTests
         Assert.Equal(expected, DatabaseDumpService.SanitizeStderr(stderr, password));
     }
 
+    [Fact]
+    public async Task DefaultsExtraFile_IsWrittenWithoutUtf8Bom()
+    {
+        // mysqldump aborts if the option file starts with EF BB BF:
+        // "Found option without preceding group in config file".
+        Assert.Empty(DatabaseDumpService.DefaultsExtraFileEncoding.GetPreamble());
+
+        var path = Path.Combine(Path.GetTempPath(), $"delegat-cnf-bom-{Guid.NewGuid():N}.cnf");
+        try
+        {
+            await File.WriteAllTextAsync(
+                path,
+                "[client]\nhost=127.0.0.1\n",
+                DatabaseDumpService.DefaultsExtraFileEncoding);
+
+            await using var stream = File.OpenRead(path);
+            var header = new byte[3];
+            var read = await stream.ReadAsync(header);
+            Assert.True(read >= 1);
+            Assert.False(
+                read >= 3 && header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF,
+                "defaults-extra-file must not start with a UTF-8 BOM");
+            Assert.Equal((byte)'[', header[0]);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
         var controller = new SettingsController(dump);

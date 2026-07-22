@@ -8,6 +8,12 @@ namespace Delegat.Services;
 
 public sealed class DatabaseDumpService : IDatabaseDumpService
 {
+    /// <summary>
+    /// mysqldump rejects option files that start with a UTF-8 BOM
+    /// ("Found option without preceding group"). Do not use Encoding.UTF8.
+    /// </summary>
+    internal static readonly Encoding DefaultsExtraFileEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     private readonly MySqlSettings _settings;
     private readonly ILogger<DatabaseDumpService> _logger;
     private readonly string _executable;
@@ -53,7 +59,7 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
             cnfPath = Path.Combine(Path.GetTempPath(), $"delegat-mysqldump-{Guid.NewGuid():N}.cnf");
             dumpPath = Path.Combine(Path.GetTempPath(), $"delegat-dump-{Guid.NewGuid():N}.sql");
 
-            await File.WriteAllTextAsync(cnfPath, BuildDefaultsExtraFile(), Encoding.UTF8, cancellationToken);
+            await File.WriteAllTextAsync(cnfPath, BuildDefaultsExtraFile(), DefaultsExtraFileEncoding, cancellationToken);
             RestrictFilePermissions(cnfPath);
 
             var startInfo = new ProcessStartInfo
