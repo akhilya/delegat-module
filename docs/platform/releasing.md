@@ -35,3 +35,7 @@ Prefer pasting the new changelog section into the GitHub Release body (or later 
 
 - `frontend/package.json` `version` — may lag; do not treat as canonical
 - Git tags alone — always bump `VERSION` so the release workflow runs
+
+## CI note for Dependabot
+
+Dependabot PR workflows do **not** receive Actions repository secrets. Private submodule checkout needs `SUBMODULE_PAT` duplicated under **Settings → Secrets and variables → Dependabot** (same name as the Actions secret). Workflows use `secrets.SUBMODULE_PAT || github.token` so a missing secret does not fail checkout with an empty `token` input.

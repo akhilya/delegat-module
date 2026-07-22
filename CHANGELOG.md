@@ -25,6 +25,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Env logging flags (`LOG_*`) become seed defaults only; DB is source of truth after first boot
 
 ### Fixed
+- CI checkout for Dependabot: fall back when `SUBMODULE_PAT` is unavailable; bump Actions off Node 20 runtimes
 - MySQL dump for app users and UTF-8 BOM option file
 - Logout handling; `ENCRYPTION_KEY` passed into the API container in production
 - Product save gating for required fields; AI model dialog / DialogContent hardening
