@@ -179,6 +179,10 @@ public class JwtAuthController : ControllerBase
             dto.logAdapterHttpEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAdapterHttpLoggingEnabled();
         }
 
+        var publicApi = _serviceProvider.GetService<Delegat.Services.IPublicApiSettingsService>();
+        dto.publicApiEnabled = publicApi?.IsPublicApiEnabled
+            ?? Delegat.Infrastructure.Configuration.FeatureFlags.IsPublicApiEnabled();
+
         return dto;
     }
 

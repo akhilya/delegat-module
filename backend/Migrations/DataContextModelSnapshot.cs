@@ -671,6 +671,22 @@ namespace Delegat.Migrations
                     b.ToTable("instanceLoggingSettings");
                 });
 
+            modelBuilder.Entity("Delegat.Models.InstancePublicApiSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("publicApiEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("instancePublicApiSettings");
+                });
+
             modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
                 {
                     b.Property<int>("Id")

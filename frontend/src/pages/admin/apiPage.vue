@@ -76,17 +76,19 @@ export default {
       revokingId: null,
       logsLoading: false,
       logApiRequestsEnabled: false,
+      publicApiEnabled: true,
       _onMeUpdated: null,
     };
   },
   computed: {
     showLogsTab() {
-      return this.logApiRequestsEnabled === true;
+      return this.publicApiEnabled === true && this.logApiRequestsEnabled === true;
     },
   },
   methods: {
     applyLoggingFlag(me) {
       this.logApiRequestsEnabled = me?.logApiRequestsEnabled === true;
+      this.publicApiEnabled = me?.publicApiEnabled !== false;
       if (!this.showLogsTab && this.tab === "logs") this.tab = "keys";
     },
 
@@ -205,6 +207,13 @@ export default {
         <ExternalLink class="size-3.5" />
       </a>
     </PageHeader>
+
+    <div
+      v-if="!publicApiEnabled"
+      class="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
+    >
+      {{ $t("pages.apiPage.disabledBanner") }}
+    </div>
 
     <Tabs
       v-if="showLogsTab"

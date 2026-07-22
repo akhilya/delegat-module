@@ -119,6 +119,9 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// <summary>Whether adapter HTTP logs are persisted (admin toggle).</summary>
         public bool logAdapterHttpEnabled { get; set; }
 
+        /// <summary>Whether Public API (/api/v1) accepts traffic (admin toggle).</summary>
+        public bool publicApiEnabled { get; set; } = true;
+
         /// <summary>Assigned Identity role names.</summary>
         public IReadOnlyList<string> roles { get; set; } = Array.Empty<string>();
 

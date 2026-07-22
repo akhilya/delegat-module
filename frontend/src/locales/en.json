@@ -579,6 +579,7 @@
         "subtitle": "Current load and request quotas for the adapter API",
         "unavailableTitle": "Limits unavailable",
         "unavailableDescription": "This adapter doesn't support API limit tracking.",
+        "quotasUnavailable": "Marketplace quotas are temporarily unavailable (rate limit). Showing local load only.",
         "requestsPerSecond": "Requests per second",
         "currentWindow": "Current window",
         "totalRequestsSinceStart": "Total requests since start:",
@@ -589,6 +590,7 @@
         "connectionSaved": "Connection saved",
         "testSuccess": "Connection successful",
         "testError": "Connection error",
+        "cacheCleared": "Dictionary cache cleared",
         "selectBothCategories": "Select both categories",
         "mappingCreated": "Mapping created",
         "selectLocalCategory": "Select a local category",
@@ -646,7 +648,9 @@
       },
       "header": {
         "subtitle": "Adapter connection: settings, category mappings, and product syncing.",
-        "test": "Test"
+        "test": "Test",
+        "moreActions": "More actions",
+        "clearCache": "Clear cache"
       },
       "settings": {
         "connectionTitle": "Connection",
@@ -2661,13 +2665,20 @@
       "emptyHistoryDescription": "Completed operations will appear here: export, import, and AI tasks."
     },
     "settingsOverviewPage": {
-      "description": "Logging, database backup, and platform maintenance",
+      "description": "Public API, logging, database backup, and platform maintenance",
+      "publicApiTitle": "Public API",
+      "publicApiDescription": "Accept partner traffic on /api/v1. Click Save to apply — no restart needed.",
+      "publicApiEnabledLabel": "Public API enabled",
+      "publicApiEnabledHint": "When off, all /api/v1 requests return 503. API keys and Swagger stay available in the admin UI.",
+      "savePublicApiButton": "Save",
+      "publicApiSaved": "Public API settings saved",
       "loggingTitle": "Logging",
       "loggingDescription": "Enable or disable log persistence. Click Save to apply — no restart needed.",
       "logErrorsLabel": "Error logs",
       "logErrorsHint": "Persist API exceptions to MySQL (Error logs page).",
       "logApiRequestsLabel": "Public API logs",
       "logApiRequestsHint": "Record /api/v1 requests including bodies (tab on the API page). Can be disk-heavy.",
+      "logApiRequestsDisabledHint": "Unavailable while Public API is disabled.",
       "logAdapterHttpLabel": "Adapter HTTP logs",
       "logAdapterHttpHint": "Outbound marketplace adapter HTTP exchanges (Adapter logs page).",
       "saveLoggingButton": "Save",
@@ -2809,6 +2820,7 @@
     },
     "apiPage": {
       "description": "Create API keys for external integrations and review Public API request activity.",
+      "disabledBanner": "Public API is currently disabled. Partner /api/v1 calls return 503. Enable it under Administration.",
       "openSwagger": "Open Swagger",
       "tabKeys": "Keys",
       "tabLogs": "Request logs",

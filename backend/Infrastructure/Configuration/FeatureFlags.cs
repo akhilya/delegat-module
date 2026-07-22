@@ -30,6 +30,10 @@ public static class FeatureFlags
     public static bool IsAdapterHttpLoggingEnabled()
         => ParseBoolEnv("LOG_ADAPTER_HTTP_ENABLED", defaultValue: false);
 
+    /// <summary>Accept Public API (/api/v1) traffic. Seed default for admin UI (default: enabled).</summary>
+    public static bool IsPublicApiEnabled()
+        => ParseBoolEnv("PUBLIC_API_ENABLED", defaultValue: true);
+
     public static int GetQueueRetentionDays()
     {
         var raw = Environment.GetEnvironmentVariable("QUEUE_RETENTION_DAYS");

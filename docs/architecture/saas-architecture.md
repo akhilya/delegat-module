@@ -144,18 +144,19 @@ does not supply an API key; customers bring their own (Anthropic, OpenAI, etc.).
 
 Marketplace API calls take 1-5 seconds. Opening `fieldMappingPage` triggers a new request each time.
 
-Solution without Redis:
+**Implemented (IMemoryCache, no Redis):**
+- Host `MarketplaceMetadataCache` (`IMarketplaceMetadataCache`) injected into plugin `ConnectionContext`
+- Controllers cache `GetCategoryFields` for 1 hour (`category-fields:{adapter}:{connectionId}:{externalCategoryId}`)
+- Wildberries plugin caches global directories (24h), TNVED/charcs/subjects (6–24h), and card limits (15 min)
+- Ozon plugin caches category tree (24h), fields (6h), attribute dictionaries (24h, paginated), quotas (15 min)
+- Yandex plugin caches category tree + parameters via MetadataCache (static tree fallback kept)
+- OpenCart plugin caches categories (15m) and fields (30m), connection-scoped
+- WB HTTP client: on 429 wait for `X-Ratelimit-Retry` and pause the shared rate limiter (max 1 retry)
+
 ```csharp
 // Program.cs
 builder.Services.AddMemoryCache();
-
-// In CategoryMappingController:
-var cacheKey = $"category-fields:{connection.adapterKey}:{externalCategoryId}";
-if (!_cache.TryGetValue(cacheKey, out List<ExternalField> fields))
-{
-    fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId, ct);
-    _cache.Set(cacheKey, fields, TimeSpan.FromHours(1));
-}
+builder.Services.AddSingleton<IMarketplaceMetadataCache, MarketplaceMetadataCache>();
 ```
 
 Add Redis only if: horizontal scaling of the API within an instance (not planned).

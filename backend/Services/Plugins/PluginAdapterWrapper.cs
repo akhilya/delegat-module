@@ -19,17 +19,20 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     private readonly ILogger _logger;
     private readonly EncryptionService? _encryptionService;
     private readonly IAdapterHttpLogger? _httpLogger;
+    private readonly IMarketplaceMetadataCache? _metadataCache;
 
     public PluginAdapterWrapper(
         IMarketplacePlugin plugin,
         ILoggerFactory loggerFactory,
         EncryptionService? encryptionService = null,
-        IAdapterHttpLogger? httpLogger = null)
+        IAdapterHttpLogger? httpLogger = null,
+        IMarketplaceMetadataCache? metadataCache = null)
     {
         _plugin = plugin;
         _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
         _encryptionService = encryptionService;
         _httpLogger = httpLogger;
+        _metadataCache = metadataCache;
     }
 
     #region Metadata
@@ -80,6 +83,35 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     {
         var context = CreateContext(connection);
         return _plugin.GetRateLimiterForConnection(context);
+    }
+
+    public int ClearMetadataCaches(MarketplaceConnection connection)
+    {
+        var removed = 0;
+        if (_metadataCache != null)
+        {
+            // Host-side caches (category fields controller + limits quotas)
+            removed += _metadataCache.RemoveByPrefix(
+                $"category-fields:{connection.adapterKey}:{connection.Id}:");
+            _metadataCache.Remove($"limits-quotas:{connection.Id}");
+            removed++;
+
+            // Adapter metadata prefixes used by plugins
+            removed += connection.adapterKey switch
+            {
+                "wildberries" => _metadataCache.RemoveByPrefix("wb:"),
+                "ozon" => _metadataCache.RemoveByPrefix("ozon:"),
+                "yandex" => _metadataCache.RemoveByPrefix("yandex:"),
+                "opencart" =>
+                    _metadataCache.RemoveByPrefix($"opencart:cats:{connection.Id}:")
+                    + _metadataCache.RemoveByPrefix($"opencart:fields:{connection.Id}:"),
+                _ => _metadataCache.RemoveByPrefix($"{connection.adapterKey}:")
+            };
+        }
+
+        var context = CreateContext(connection);
+        _plugin.ClearLocalMetadataCaches(context);
+        return removed;
     }
 
     #endregion
@@ -689,7 +721,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             Credentials = credentials,
             Settings = settings,
             Logger = _logger,
-            HttpLogger = _httpLogger
+            HttpLogger = _httpLogger,
+            MetadataCache = _metadataCache
         };
     }
 

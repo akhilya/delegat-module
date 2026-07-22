@@ -88,6 +88,10 @@
   - `LOG_API_REQUESTS_ENABLED` (default `false`) — Public API `/api/v1` activity including bodies
   - `LOG_ADAPTER_HTTP_ENABLED` (default `false`) — outbound marketplace adapter HTTP exchanges
   - Stored in `instanceLoggingSettings`; change via `GET/PATCH /settings/logging`
+- Public API enable toggle (same Administration page; apply immediately; env seeds first boot only):
+  - `PUBLIC_API_ENABLED` (default `true`)
+  - Stored in `instancePublicApiSettings`; change via `GET/PATCH /settings/public-api`
+  - When off, `/api/v1` returns `503 PUBLIC_API_DISABLED` and Public API request logging is forced off
 
 ### Platform Link (optional)
 - Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))

@@ -111,7 +111,7 @@ public class DatabaseDumpTests
 
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
-        var controller = new SettingsController(dump, new StubLoggingSettings());
+        var controller = new SettingsController(dump, new StubLoggingSettings(), new StubPublicApiSettings());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),
@@ -128,6 +128,16 @@ public class DatabaseDumpTests
         public Task<LoggingSettingsDto> GetAsync(CancellationToken ct = default) =>
             Task.FromResult(new LoggingSettingsDto(true, false, false, DateTime.UtcNow));
         public Task<LoggingSettingsDto> UpdateAsync(UpdateLoggingSettingsRequest request, CancellationToken ct = default) =>
+            GetAsync(ct);
+    }
+
+    private sealed class StubPublicApiSettings : IPublicApiSettingsService
+    {
+        public bool IsPublicApiEnabled => true;
+        public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<PublicApiSettingsDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(new PublicApiSettingsDto(true, DateTime.UtcNow));
+        public Task<PublicApiSettingsDto> UpdateAsync(UpdatePublicApiSettingsRequest request, CancellationToken ct = default) =>
             GetAsync(ct);
     }
 

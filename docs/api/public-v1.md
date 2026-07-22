@@ -53,6 +53,12 @@ Store-scoped resources:
 
 Discover stores: `GET /api/v1/stores`.
 
+### Instance enablement
+
+Public API can be turned off in **Administration** without restarting the instance (`GET/PATCH /settings/public-api`, permission `settings.platform`). Seed default: env `PUBLIC_API_ENABLED` (default `true`); afterwards the DB row `instancePublicApiSettings` is the source of truth.
+
+When disabled, every `/api/v1/*` request returns **503** with `error.code = PUBLIC_API_DISABLED`. Managing API keys in the dashboard still works.
+
 ## Conventions
 
 ### Pagination
@@ -85,6 +91,7 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 409 | `conflict` | Quota / uniqueness / state conflict |
 | 422 | `validation_error` | Invalid body (when used) |
 | 429 | `rate_limited` | Too many requests |
+| 503 | `PUBLIC_API_DISABLED` | Instance Public API toggle is off |
 
 ### Async marketplace operations
 

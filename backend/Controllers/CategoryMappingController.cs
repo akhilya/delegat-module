@@ -7,10 +7,12 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
 using Delegat.Services.Plugins;
+using IMarketplaceMetadataCache = Delegat.Marketplace.SDK.IMarketplaceMetadataCache;
 
 namespace Delegat.Controllers;
 
@@ -25,6 +27,7 @@ public class CategoryMappingController : ControllerBase
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly CategoryImportService _categoryImportService;
     private readonly PluginVersionSyncService _pluginVersionSyncService;
+    private readonly IMarketplaceMetadataCache _metadataCache;
     private readonly ILogger<CategoryMappingController> _logger;
 
     private readonly IOperationLogger _operationLogger;
@@ -37,6 +40,7 @@ public class CategoryMappingController : ControllerBase
         IMarketplaceAdapterRegistry adapterRegistry,
         CategoryImportService categoryImportService,
         PluginVersionSyncService pluginVersionSyncService,
+        IMarketplaceMetadataCache metadataCache,
         ILogger<CategoryMappingController> logger,
         IOperationLogger operationLogger)
     {
@@ -47,6 +51,7 @@ public class CategoryMappingController : ControllerBase
         _adapterRegistry = adapterRegistry;
         _categoryImportService = categoryImportService;
         _pluginVersionSyncService = pluginVersionSyncService;
+        _metadataCache = metadataCache;
         _logger = logger;
         _operationLogger = operationLogger;
     }
@@ -721,7 +726,14 @@ public class CategoryMappingController : ControllerBase
 
         try
         {
-            var fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId, ct);
+            var cacheKey = MarketplaceMetadataCache.CategoryFieldsKey(
+                connection.adapterKey, connection.Id, externalCategoryId);
+            if (!_metadataCache.TryGetValue(cacheKey, out List<ExternalField>? fields) || fields == null)
+            {
+                fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId, ct);
+                _metadataCache.Set(cacheKey, fields, MarketplaceMetadataCache.CategoryFieldsTtl);
+            }
+
             var result = fields.OrderBy(f => f.SortOrder).Select(f => new
             {
                 key = f.Key,

@@ -7,9 +7,11 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
+using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Modifiers;
+using IMarketplaceMetadataCache = Delegat.Marketplace.SDK.IMarketplaceMetadataCache;
 
 namespace Delegat.Controllers;
 
@@ -22,6 +24,7 @@ public class FieldMappingController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly MappingService _mappingService;
+    private readonly IMarketplaceMetadataCache _metadataCache;
     private readonly ILogger<FieldMappingController> _logger;
 
     public FieldMappingController(
@@ -30,6 +33,7 @@ public class FieldMappingController : ControllerBase
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
         MappingService mappingService,
+        IMarketplaceMetadataCache metadataCache,
         ILogger<FieldMappingController> logger)
     {
         _currentUserService = currentUserService;
@@ -37,6 +41,7 @@ public class FieldMappingController : ControllerBase
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
         _mappingService = mappingService;
+        _metadataCache = metadataCache;
         _logger = logger;
     }
 
@@ -64,7 +69,14 @@ public class FieldMappingController : ControllerBase
 
         try
         {
-            var fields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
+            var cacheKey = MarketplaceMetadataCache.CategoryFieldsKey(
+                connection.adapterKey, connection.Id, mapping.externalCategoryId);
+            if (!_metadataCache.TryGetValue(cacheKey, out List<ExternalField>? fields) || fields == null)
+            {
+                fields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
+                _metadataCache.Set(cacheKey, fields, MarketplaceMetadataCache.CategoryFieldsTtl);
+            }
+
             return Ok(fields.Select(f => new
             {
                 key = f.Key,

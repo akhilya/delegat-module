@@ -311,6 +311,29 @@ export default {
         .catch((error) => onError(error));
     },
 
+    /**
+     * Clears adapter metadata caches (dictionaries, category trees, quotas) for a connection.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {string|number} params.connectionId - The connection ID.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async clearConnectionMetadataCache(ctx, { connectionId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/clear-metadata-cache`,
+        { method: "POST", cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     // === External Categories ===
 
     /**

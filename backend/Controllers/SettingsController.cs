@@ -10,13 +10,16 @@ public class SettingsController : ControllerBase
 {
     private readonly IDatabaseDumpService _databaseDumpService;
     private readonly ILoggingSettingsService _loggingSettings;
+    private readonly IPublicApiSettingsService _publicApiSettings;
 
     public SettingsController(
         IDatabaseDumpService databaseDumpService,
-        ILoggingSettingsService loggingSettings)
+        ILoggingSettingsService loggingSettings,
+        IPublicApiSettingsService publicApiSettings)
     {
         _databaseDumpService = databaseDumpService;
         _loggingSettings = loggingSettings;
+        _publicApiSettings = publicApiSettings;
     }
 
     /// <summary>
@@ -53,5 +56,28 @@ public class SettingsController : ControllerBase
             return BadRequest(new { error = "Body required" });
 
         return Ok(await _loggingSettings.UpdateAsync(request, ct));
+    }
+
+    /// <summary>Current Public API enable toggle (admin UI).</summary>
+    [HttpGet]
+    [Route("/settings/public-api")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<PublicApiSettingsDto>> GetPublicApiSettings(CancellationToken ct)
+    {
+        return Ok(await _publicApiSettings.GetAsync(ct));
+    }
+
+    /// <summary>Enable or disable Public API. Takes effect immediately (no restart).</summary>
+    [HttpPatch]
+    [Route("/settings/public-api")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<PublicApiSettingsDto>> UpdatePublicApiSettings(
+        [FromBody] UpdatePublicApiSettingsRequest request,
+        CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Body required" });
+
+        return Ok(await _publicApiSettings.UpdateAsync(request, ct));
     }
 }

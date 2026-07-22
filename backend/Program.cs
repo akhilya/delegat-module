@@ -208,6 +208,7 @@ builder.Services.AddSingleton(minioSettings);
 builder.Services.AddSingleton(mysqlSettings);
 builder.Services.AddSingleton<IDatabaseDumpService, DatabaseDumpService>();
 builder.Services.AddSingleton<ILoggingSettingsService, LoggingSettingsService>();
+builder.Services.AddSingleton<IPublicApiSettingsService, PublicApiSettingsService>();
 
 // Platform Link (Control Plane m2m) + Reference Catalog
 var platformLinkOptions = PlatformLinkOptions.FromEnvironment();
@@ -225,6 +226,8 @@ builder.Services.AddHostedService<ReferenceCatalogSyncHostedService>();
 builder.Services.AddHostedService<PlatformHeartbeatHostedService>();
 
 // Marketplace Integration Services - Plugin System
+
+builder.Services.AddSingleton<IMarketplaceMetadataCache, MarketplaceMetadataCache>();
 
 // Plugin Manager (manages loading/unloading of DLL plugins)
 builder.Services.AddSingleton<PluginManager>();
@@ -514,8 +517,9 @@ using (var scope = app.Services.CreateScope())
     await ApplyMigrationsWithRetryAsync(migrator, logger, targetMigration: null);
 }
 
-// Warm logging toggles cache (seed from env on first boot)
+// Warm logging / Public API toggles cache (seed from env on first boot)
 await app.Services.GetRequiredService<ILoggingSettingsService>().EnsureInitializedAsync();
+await app.Services.GetRequiredService<IPublicApiSettingsService>().EnsureInitializedAsync();
 
 // --reset-admin mode: generate a new admin password, print JSON to stdout, exit.
 // Usage inside container: dotnet Delegat.dll --reset-admin
@@ -585,6 +589,7 @@ app.UseSwaggerUI(c =>
 
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<PublicApiEnabledMiddleware>();
 app.UseMiddleware<PublicApiRequestLoggingMiddleware>();
 app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseRateLimiter();

@@ -579,6 +579,7 @@
         "subtitle": "Текущая нагрузка и квоты запросов к API адаптера",
         "unavailableTitle": "Лимиты недоступны",
         "unavailableDescription": "Этот адаптер не поддерживает отслеживание API-лимитов.",
+        "quotasUnavailable": "Квоты маркетплейса временно недоступны (rate limit). Показана локальная нагрузка.",
         "requestsPerSecond": "Запросов в секунду",
         "currentWindow": "Текущее окно",
         "totalRequestsSinceStart": "Всего запросов с момента запуска:",
@@ -589,6 +590,7 @@
         "connectionSaved": "Подключение сохранено",
         "testSuccess": "Подключение успешно",
         "testError": "Ошибка подключения",
+        "cacheCleared": "Кэш словарей очищен",
         "selectBothCategories": "Выберите обе категории",
         "mappingCreated": "Маппинг создан",
         "selectLocalCategory": "Выберите локальную категорию",
@@ -646,7 +648,9 @@
       },
       "header": {
         "subtitle": "Подключение к адаптеру: настройки, маппинги категорий и синхронизация товаров.",
-        "test": "Тест"
+        "test": "Тест",
+        "moreActions": "Дополнительные действия",
+        "clearCache": "Очистить кэш"
       },
       "settings": {
         "connectionTitle": "Подключение",
@@ -2661,13 +2665,20 @@
       "emptyHistoryDescription": "Здесь появятся завершённые операции: экспорт, импорт и AI-задачи."
     },
     "settingsOverviewPage": {
-      "description": "Логирование, резервное копирование и обслуживание платформы",
+      "description": "Public API, логирование, резервное копирование и обслуживание платформы",
+      "publicApiTitle": "Public API",
+      "publicApiDescription": "Приём партнёрского трафика на /api/v1. Нажмите «Сохранить», чтобы применить — перезапуск не нужен.",
+      "publicApiEnabledLabel": "Public API включён",
+      "publicApiEnabledHint": "При выключении все запросы /api/v1 отвечают 503. Ключи и Swagger в админке остаются доступны.",
+      "savePublicApiButton": "Сохранить",
+      "publicApiSaved": "Настройки Public API сохранены",
       "loggingTitle": "Логирование",
       "loggingDescription": "Включение и отключение записи логов. Нажмите «Сохранить», чтобы применить — перезапуск не нужен.",
       "logErrorsLabel": "Логи ошибок",
       "logErrorsHint": "Сохранять исключения API в MySQL (страница «Логи ошибок»).",
       "logApiRequestsLabel": "Логи Public API",
       "logApiRequestsHint": "Писать запросы /api/v1 вместе с телами (вкладка на странице API). Может сильно нагружать диск.",
+      "logApiRequestsDisabledHint": "Недоступно, пока Public API выключен.",
       "logAdapterHttpLabel": "Логи адаптеров HTTP",
       "logAdapterHttpHint": "Исходящие HTTP-запросы маркетплейс-адаптеров (страница «Логи адаптеров»).",
       "saveLoggingButton": "Сохранить",
@@ -2809,6 +2820,7 @@
     },
     "apiPage": {
       "description": "Создавайте API-ключи для внешних интеграций и просматривайте активность запросов Public API.",
+      "disabledBanner": "Public API сейчас выключен. Партнёрские вызовы /api/v1 получают 503. Включить можно в разделе «Администрирование».",
       "openSwagger": "Открыть Swagger",
       "tabKeys": "Ключи",
       "tabLogs": "Логи запросов",

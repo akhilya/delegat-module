@@ -9,6 +9,7 @@ using Delegat.Services.Plugins;
 using Delegat.Models.Marketplace;
 using Delegat.Services;
 using Delegat.Services.Marketplace;
+using IMarketplaceMetadataCache = Delegat.Marketplace.SDK.IMarketplaceMetadataCache;
 
 namespace Delegat.Controllers;
 
@@ -25,6 +26,7 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly EncryptionService? _encryptionService;
     private readonly QuotaService _quotaService;
     private readonly DataContext _db;
+    private readonly IMarketplaceMetadataCache _metadataCache;
 
     public MarketplaceConnectionController(
         ICurrentUserService currentUserService,
@@ -35,6 +37,7 @@ public class MarketplaceConnectionController : ControllerBase
         ILogger<MarketplaceConnectionController> logger,
         QuotaService quotaService,
         DataContext db,
+        IMarketplaceMetadataCache metadataCache,
         EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
@@ -46,6 +49,7 @@ public class MarketplaceConnectionController : ControllerBase
         _quotaService = quotaService;
         _encryptionService = encryptionService;
         _db = db;
+        _metadataCache = metadataCache;
     }
 
     /// <summary>
@@ -395,6 +399,7 @@ public class MarketplaceConnectionController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/marketplace/connections/{connectionId}/limits")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> GetLimits(int connectionId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
@@ -424,13 +429,41 @@ public class MarketplaceConnectionController : ControllerBase
             });
         }
 
-        // Get quotas from marketplace API
-        var quotas = await adapter.GetQuotasAsync(connection, ct);
-
-        // Get rate limiter status
+        // Get rate limiter status (local; always available)
         var rateLimiter = adapter.GetRateLimiterForConnection(connection);
         var currentWindowRequests = rateLimiter?.GetCurrentWindowCount() ?? 0;
         var totalRequestsSinceStart = rateLimiter?.TotalRequests ?? 0;
+
+        // Quotas from marketplace API — best-effort; never fail the whole limits payload
+        List<object> quotaDtos = new();
+        var quotasAvailable = true;
+        var quotasCacheKey = $"limits-quotas:{connection.Id}";
+        try
+        {
+            if (_metadataCache.TryGetValue(quotasCacheKey, out List<object>? cachedQuotas) && cachedQuotas != null)
+            {
+                quotaDtos = cachedQuotas;
+            }
+            else
+            {
+                var quotas = await adapter.GetQuotasAsync(connection, ct);
+                quotaDtos = quotas.Select(q => (object)new
+                {
+                    key = q.Key,
+                    displayName = q.DisplayName,
+                    limit = q.Limit,
+                    usage = q.Usage,
+                    resetsAt = q.ResetsAt
+                }).ToList();
+                if (quotaDtos.Count > 0)
+                    _metadataCache.Set(quotasCacheKey, quotaDtos, TimeSpan.FromMinutes(15));
+            }
+        }
+        catch (Exception ex)
+        {
+            quotasAvailable = false;
+            _logger.LogWarning(ex, "Failed to load marketplace quotas for connection {ConnectionId}", connectionId);
+        }
 
         return Ok(new
         {
@@ -438,14 +471,41 @@ public class MarketplaceConnectionController : ControllerBase
             maxRequestsPerSecond = rateLimitConfig.MaxRequestsPerSecond,
             currentWindowRequests,
             totalRequestsSinceStart,
-            quotas = quotas.Select(q => new
-            {
-                key = q.Key,
-                displayName = q.DisplayName,
-                limit = q.Limit,
-                usage = q.Usage,
-                resetsAt = q.ResetsAt
-            })
+            quotasAvailable,
+            quotas = quotaDtos
         });
+    }
+
+    /// <summary>
+    /// Clears host and adapter metadata caches (category trees, attribute dictionaries, quotas)
+    /// so the next mapping/settings load fetches fresh data from the marketplace API.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/clear-metadata-cache")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ClearMetadataCache(int connectionId)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var repo = _unitOfWork.Repository<MarketplaceConnection>();
+
+        var connection = await repo.FindAsync(
+            c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
+
+        if (connection == null)
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+
+        var removed = adapter.ClearMetadataCaches(connection);
+        _logger.LogInformation(
+            "Cleared metadata cache for connection {ConnectionId} ({AdapterKey}): ~{Removed} entries",
+            connectionId, connection.adapterKey, removed);
+
+        return Ok(new { cleared = true, removed });
     }
 }

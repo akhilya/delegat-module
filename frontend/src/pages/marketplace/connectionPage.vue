@@ -369,6 +369,7 @@ export default {
       isLoadingLimits: false,
       limitsRefreshTimer: null,
       showLimitsDialog: false,
+      isClearingCache: false,
       aiEnabled: false,
     };
   },
@@ -700,6 +701,7 @@ export default {
       "getLocalProductsForExport",
       "exportProductsBulk",
       "getConnectionLimits",
+      "clearConnectionMetadataCache",
       "updateCategoryMapping",
       "duplicateCategoryMapping",
       "resolveMappings",
@@ -723,9 +725,8 @@ export default {
         this.fetchLocalCategories(),
       ]);
       this.isLoading = false;
-      // fetchLimits makes an external API call (GetQuotasAsync) that can be slow;
-      // one-shot after paint; auto-refresh only while the limits dialog is open.
-      this.fetchLimits();
+      // fetchLimits is lazy: only when the limits dialog opens (see showLimitsDialog watcher).
+      // Avoid competing with mapping/category WB Content API calls on every page load.
 
       // If products tab was restored from URL, fetch products now
       if (this.activeTab === "products") {
@@ -787,7 +788,22 @@ export default {
           this.limitsData = extractResponseData(response);
         },
         onError: () => {
-          this.limitsData = null;
+          // Keep last good payload if any; otherwise show local RPS shell so the dialog is usable.
+          if (!this.limitsData) {
+            this.limitsData = {
+              supported: true,
+              maxRequestsPerSecond: 1,
+              currentWindowRequests: 0,
+              totalRequestsSinceStart: 0,
+              quotasAvailable: false,
+              quotas: [],
+            };
+          } else {
+            this.limitsData = {
+              ...this.limitsData,
+              quotasAvailable: false,
+            };
+          }
         },
       });
       this.isLoadingLimits = false;
@@ -996,6 +1012,23 @@ export default {
         },
       });
       this.isTesting = false;
+    },
+
+    async handleClearCache() {
+      this.isClearingCache = true;
+      await this.clearConnectionMetadataCache({
+        connectionId: this.connectionId,
+        onSuccess: () => {
+          this.limitsData = null;
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.cacheCleared"),
+          );
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isClearingCache = false;
     },
 
     async handleCreateMapping() {
@@ -2523,18 +2556,38 @@ export default {
               <Save v-else class="size-4 mr-2" />
               {{ $t("common.save") }}
             </Button>
-            <Button variant="outline" @click="handleTest" :disabled="isTesting">
-              <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
-              <TestTube v-else class="size-4 mr-2" />
-              {{ $t("marketplace.connectionPage.header.test") }}
-            </Button>
-            <Dialog v-model:open="showLimitsDialog">
-              <DialogTrigger as-child>
-                <Button variant="outline" :disabled="!limitsData">
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  :aria-label="$t('marketplace.connectionPage.header.moreActions')"
+                >
+                  <EllipsisVertical class="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem :disabled="isTesting" @click="handleTest">
+                  <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
+                  <TestTube v-else class="size-4 mr-2" />
+                  {{ $t("marketplace.connectionPage.header.test") }}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  :disabled="limitsData != null && limitsData.supported === false"
+                  @click="showLimitsDialog = true"
+                >
                   <Activity class="size-4 mr-2" />
                   {{ $t("marketplace.connectionPage.limits.title") }}
-                </Button>
-              </DialogTrigger>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
+                  <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
+                  <Trash2 v-else class="size-4 mr-2" />
+                  {{ $t("marketplace.connectionPage.header.clearCache") }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Dialog v-model:open="showLimitsDialog">
                     <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle class="flex items-center gap-2">
@@ -2594,6 +2647,13 @@ export default {
                             </p>
                           </CardContent>
                         </Card>
+
+                        <p
+                          v-if="limitsData.quotasAvailable === false"
+                          class="text-xs text-muted-foreground"
+                        >
+                          {{ $t("marketplace.connectionPage.limits.quotasUnavailable") }}
+                        </p>
 
                         <div
                           v-if="limitsData.quotas?.length > 0"

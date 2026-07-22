@@ -66,6 +66,11 @@ public interface IMarketplaceAdapter
     /// </summary>
     MarketplaceRateLimiter? GetRateLimiterForConnection(MarketplaceConnection connection);
 
+    /// <summary>
+    /// Clears host metadata cache entries and plugin-local caches for this connection.
+    /// </summary>
+    int ClearMetadataCaches(MarketplaceConnection connection);
+
     #endregion
 
     #region Connection

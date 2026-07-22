@@ -39,6 +39,8 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
     public virtual MarketplaceRateLimiter? GetRateLimiterForConnection(MarketplaceConnection connection)
         => null;
 
+    public virtual int ClearMetadataCaches(MarketplaceConnection connection) => 0;
+
     #endregion
 
     #region Abstract Methods (must be implemented)

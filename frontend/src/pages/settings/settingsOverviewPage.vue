@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
@@ -15,6 +15,8 @@ import { t } from "@/i18n";
 const isDumping = ref(false);
 const loggingLoading = ref(true);
 const loggingSaving = ref(false);
+const publicApiLoading = ref(true);
+const publicApiSaving = ref(false);
 
 const savedLogging = reactive({
   logErrorsEnabled: true,
@@ -28,11 +30,38 @@ const logging = reactive({
   logAdapterHttpEnabled: false,
 });
 
+const savedPublicApi = reactive({
+  publicApiEnabled: true,
+});
+
+const publicApi = reactive({
+  publicApiEnabled: true,
+});
+
 const loggingDirty = computed(
   () =>
     logging.logErrorsEnabled !== savedLogging.logErrorsEnabled
     || logging.logApiRequestsEnabled !== savedLogging.logApiRequestsEnabled
     || logging.logAdapterHttpEnabled !== savedLogging.logAdapterHttpEnabled,
+);
+
+const publicApiDirty = computed(
+  () => publicApi.publicApiEnabled !== savedPublicApi.publicApiEnabled,
+);
+
+const apiLoggingDisabled = computed(
+  () =>
+    loggingLoading.value
+    || loggingSaving.value
+    || publicApiLoading.value
+    || !publicApi.publicApiEnabled,
+);
+
+watch(
+  () => publicApi.publicApiEnabled,
+  (enabled) => {
+    if (!enabled) logging.logApiRequestsEnabled = false;
+  },
 );
 
 function applyLoggingPayload(data) {
@@ -43,6 +72,13 @@ function applyLoggingPayload(data) {
   };
   Object.assign(savedLogging, next);
   Object.assign(logging, next);
+}
+
+function applyPublicApiPayload(data) {
+  const enabled = data.publicApiEnabled !== false;
+  savedPublicApi.publicApiEnabled = enabled;
+  publicApi.publicApiEnabled = enabled;
+  if (!enabled) logging.logApiRequestsEnabled = false;
 }
 
 function parseDumpFilename(disposition, fallback) {
@@ -102,6 +138,12 @@ async function downloadDatabaseDump() {
   }
 }
 
+async function refreshMe() {
+  invalidateMeCache();
+  const me = await loadMe();
+  notifyMeUpdated(me);
+}
+
 async function loadLoggingSettings() {
   loggingLoading.value = true;
   try {
@@ -114,23 +156,32 @@ async function loadLoggingSettings() {
   }
 }
 
+async function loadPublicApiSettings() {
+  publicApiLoading.value = true;
+  try {
+    const { data } = await http.get("/settings/public-api", { cache: false });
+    applyPublicApiPayload(data);
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    publicApiLoading.value = false;
+  }
+}
+
 async function saveLoggingSettings() {
   if (!loggingDirty.value || loggingSaving.value) return;
   loggingSaving.value = true;
   try {
-    const { data } = await http.patch(
-      "/settings/logging",
-      {
-        logErrorsEnabled: logging.logErrorsEnabled,
-        logApiRequestsEnabled: logging.logApiRequestsEnabled,
-        logAdapterHttpEnabled: logging.logAdapterHttpEnabled,
-      },
-      { cache: false },
-    );
+    const payload = {
+      logErrorsEnabled: logging.logErrorsEnabled,
+      logApiRequestsEnabled: publicApi.publicApiEnabled
+        ? logging.logApiRequestsEnabled
+        : false,
+      logAdapterHttpEnabled: logging.logAdapterHttpEnabled,
+    };
+    const { data } = await http.patch("/settings/logging", payload, { cache: false });
     applyLoggingPayload(data);
-    invalidateMeCache();
-    const me = await loadMe();
-    notifyMeUpdated(me);
+    await refreshMe();
     displaySonnerSuccess(t("pages.settingsOverviewPage.loggingSaved"));
   } catch (error) {
     displaySonnerError(error);
@@ -139,7 +190,29 @@ async function saveLoggingSettings() {
   }
 }
 
-onMounted(loadLoggingSettings);
+async function savePublicApiSettings() {
+  if (!publicApiDirty.value || publicApiSaving.value) return;
+  publicApiSaving.value = true;
+  try {
+    const { data } = await http.patch(
+      "/settings/public-api",
+      { publicApiEnabled: publicApi.publicApiEnabled },
+      { cache: false },
+    );
+    applyPublicApiPayload(data);
+    await loadLoggingSettings();
+    await refreshMe();
+    displaySonnerSuccess(t("pages.settingsOverviewPage.publicApiSaved"));
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    publicApiSaving.value = false;
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadPublicApiSettings(), loadLoggingSettings()]);
+});
 </script>
 
 <template>
@@ -150,6 +223,33 @@ onMounted(loadLoggingSettings);
     />
 
     <PageSection class="!min-h-0">
+      <SettingsFormSection
+        :title="$t('pages.settingsOverviewPage.publicApiTitle')"
+        :description="$t('pages.settingsOverviewPage.publicApiDescription')"
+      >
+        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <div class="min-w-0">
+            <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.publicApiEnabledLabel") }}</div>
+            <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.publicApiEnabledHint") }}</div>
+          </div>
+          <Switch
+            :model-value="publicApi.publicApiEnabled"
+            :disabled="publicApiLoading || publicApiSaving"
+            @update:model-value="(v) => (publicApi.publicApiEnabled = v)"
+          />
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <Button
+            :disabled="publicApiLoading || publicApiSaving || !publicApiDirty"
+            @click="savePublicApiSettings"
+          >
+            <Loader2 v-if="publicApiSaving" class="mr-2 size-4 animate-spin" />
+            {{ $t("pages.settingsOverviewPage.savePublicApiButton") }}
+          </Button>
+        </div>
+      </SettingsFormSection>
+
       <SettingsFormSection
         :title="$t('pages.settingsOverviewPage.loggingTitle')"
         :description="$t('pages.settingsOverviewPage.loggingDescription')"
@@ -169,11 +269,17 @@ onMounted(loadLoggingSettings);
           <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
             <div class="min-w-0">
               <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.logApiRequestsLabel") }}</div>
-              <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.logApiRequestsHint") }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{
+                  publicApi.publicApiEnabled
+                    ? $t("pages.settingsOverviewPage.logApiRequestsHint")
+                    : $t("pages.settingsOverviewPage.logApiRequestsDisabledHint")
+                }}
+              </div>
             </div>
             <Switch
               :model-value="logging.logApiRequestsEnabled"
-              :disabled="loggingLoading || loggingSaving"
+              :disabled="apiLoggingDisabled"
               @update:model-value="(v) => (logging.logApiRequestsEnabled = v)"
             />
           </div>
