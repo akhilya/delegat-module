@@ -24,6 +24,7 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
+import { getCachedMe } from "@/lib/meCache";
 import {
   OP_SPECS,
   descriptorOutputType,
@@ -201,7 +202,9 @@ const logicItems = computed(() => opEntries(true));
 
 const modifierGroups = computed(() => {
   const byCat = {};
+  const aiOn = getCachedMe()?.aiEnabled === true;
   Object.values(MODIFIER_CATALOG).forEach((m) => {
+    if (m.type === "llmGenerate" && !aiOn) return;
     const desc = { group: "modifier", modifierType: m.type };
     if (match(m.displayName, ...(m.aliases || [])) && opVisible(desc, m.applicableTypes))
       (byCat[m.category] ||= []).push({

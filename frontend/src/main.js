@@ -6,13 +6,21 @@ import {
   routeAllowsAccess,
   routeAccessFallback,
   PAGE_PRODUCTS,
+  PAGE_ADMIN_AI,
 } from "./router";
 import { createStore } from "./store";
 import axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import { startLoading, finishLoading } from "./composables/useLoadingBar";
 import { toast } from "vue-sonner";
-import i18n, { getLocale, t } from "./i18n";
+import i18n, { bootstrapLocale, getLocale, t } from "./i18n";
+import {
+  clearMeCache,
+  getCachedMe,
+  primeMeCache,
+} from "./lib/meCache";
+
+export { getCachedMe, primeMeCache } from "./lib/meCache";
 
 export const http = setupCache(
   axios.create({
@@ -55,8 +63,6 @@ function refreshTokens() {
 }
 
 let isAuthenticated = null;
-/** @type {object|null} */
-let cachedMe = null;
 /** @type {Promise<object|null>|null} */
 let mePromise = null;
 
@@ -68,26 +74,20 @@ function isAuthMeRequest(url = "") {
   return /\/auth\/me(?:\?|$)/.test(url);
 }
 
-/**
- * Keep router permission checks sync after any /auth/me (sidebar, settings, app shell).
- * @param {object|null|undefined} me
- */
-export function primeMeCache(me) {
-  if (me && typeof me === "object") cachedMe = me;
-}
-
 async function loadMe() {
-  if (cachedMe) return cachedMe;
+  const cached = getCachedMe();
+  if (cached) return cached;
   if (mePromise) return mePromise;
 
   mePromise = http
     .get("/auth/me", { cache: false })
     .then((response) => {
-      cachedMe = extractMePayload(response.data);
-      return cachedMe;
+      const me = extractMePayload(response.data);
+      primeMeCache(me);
+      return me;
     })
     .catch(() => {
-      cachedMe = null;
+      clearMeCache();
       return null;
     })
     .finally(() => {
@@ -201,10 +201,21 @@ router.beforeEach(async (to) => {
   const needsPermissionCheck = to.matched.some(
     (r) => Array.isArray(r.meta?.permissions) && r.meta.permissions.length > 0,
   );
-  if (needsPermissionCheck && cachedMe && !routeAllowsAccess(cachedMe, to)) {
-    const fallback = routeAccessFallback(cachedMe);
-    if (fallback !== to.path) return { path: fallback };
-    return { path: PAGE_PRODUCTS };
+  if (needsPermissionCheck) {
+    const me = getCachedMe();
+    if (me && !routeAllowsAccess(me, to)) {
+      const fallback = routeAccessFallback(me);
+      if (fallback !== to.path) return { path: fallback };
+      return { path: PAGE_PRODUCTS };
+    }
+  }
+
+  // AI settings requires instance AI_ENABLED (from /auth/me).
+  if (to.path === PAGE_ADMIN_AI || to.path.startsWith(`${PAGE_ADMIN_AI}/`)) {
+    const me = getCachedMe() || (await loadMe());
+    if (me?.aiEnabled !== true) {
+      return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
   }
 
   return true;
@@ -215,12 +226,12 @@ router.onError(() => finishLoading());
 
 export function resetAuthCache() {
   isAuthenticated = null;
-  cachedMe = null;
+  clearMeCache();
   mePromise = null;
 }
 
 export function invalidateMeCache() {
-  cachedMe = null;
+  clearMeCache();
   mePromise = null;
 }
 
@@ -239,7 +250,7 @@ app.use(i18n);
 app.use(router);
 app.use(store);
 
-router.isReady().then(() => {
+Promise.all([router.isReady(), bootstrapLocale()]).then(() => {
   app.mount("#app");
   // Warm /auth/me after mount so the first permissioned nav is sync (skip public auth pages).
   if (!router.currentRoute.value.meta?.public) {

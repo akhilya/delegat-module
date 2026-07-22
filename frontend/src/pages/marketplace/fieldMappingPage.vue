@@ -759,7 +759,7 @@ export default {
       await this.getAllProducts({
         searchQuery: "",
         startIndex: 0,
-        pageSize: 500,
+        pageSize: 50,
         categoryId: this.mappingInfo?.localCategoryId || null,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});

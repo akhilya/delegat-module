@@ -113,6 +113,9 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
     public void Log(ApiRequestLogEntry entry)
     {
+        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsApiRequestLoggingEnabled())
+            return;
+
         try
         {
             entry.RequestBody = Truncate(SanitizeBody(entry.RequestBody));
@@ -237,43 +240,63 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
     private async Task ProcessQueueAsync()
     {
+        var batch = new List<ApiRequestLogEntry>(32);
         try
         {
-            await foreach (var entry in _channel.Reader.ReadAllAsync(_cts.Token))
+            while (!_cts.IsCancellationRequested)
             {
+                batch.Clear();
                 try
                 {
-                    await using var scope = _scopeFactory.CreateAsyncScope();
-                    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-                    db.apiRequestLogs.Add(new ApiRequestLog
-                    {
-                        createdAt = entry.CreatedAt,
-                        apiKeyId = entry.ApiKeyId,
-                        userId = entry.UserId,
-                        keyDisplayHint = entry.KeyDisplayHint,
-                        method = entry.Method,
-                        path = entry.Path,
-                        queryString = entry.QueryString,
-                        statusCode = entry.StatusCode,
-                        durationMs = entry.DurationMs,
-                        remoteIpAddress = entry.RemoteIpAddress,
-                        userAgent = entry.UserAgent,
-                        requestBody = entry.RequestBody,
-                        responseBody = entry.ResponseBody,
-                        errorMessage = entry.ErrorMessage,
-                    });
-                    await db.SaveChangesAsync(_cts.Token);
+                    var first = await _channel.Reader.ReadAsync(_cts.Token);
+                    batch.Add(first);
+                    while (batch.Count < 32 && _channel.Reader.TryRead(out var next))
+                        batch.Add(next);
+
+                    await PersistBatchAsync(batch);
+                }
+                catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to persist API request log");
+                    _logger.LogWarning(ex, "Failed to persist API request log batch");
+                    await Task.Delay(1000, CancellationToken.None);
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
         {
-            // shutdown
+            _logger.LogError(ex, "API request log worker stopped");
         }
+    }
+
+    private async Task PersistBatchAsync(List<ApiRequestLogEntry> batch)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        foreach (var entry in batch)
+        {
+            db.apiRequestLogs.Add(new ApiRequestLog
+            {
+                createdAt = entry.CreatedAt,
+                apiKeyId = entry.ApiKeyId,
+                userId = entry.UserId,
+                keyDisplayHint = entry.KeyDisplayHint,
+                method = entry.Method,
+                path = entry.Path,
+                queryString = entry.QueryString,
+                statusCode = entry.StatusCode,
+                durationMs = entry.DurationMs,
+                remoteIpAddress = entry.RemoteIpAddress,
+                userAgent = entry.UserAgent,
+                requestBody = entry.RequestBody,
+                responseBody = entry.ResponseBody,
+                errorMessage = entry.ErrorMessage,
+            });
+        }
+        await db.SaveChangesAsync(_cts.Token);
     }
 
     public async ValueTask DisposeAsync()

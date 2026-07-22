@@ -1,9 +1,14 @@
 import { createI18n } from "vue-i18n";
 import ru from "@/locales/ru.json";
-import en from "@/locales/en.json";
 
 export const LOCALE_STORAGE_KEY = "delegat.locale";
 export const SUPPORTED_LOCALES = ["ru", "en"];
+
+/** @type {Record<string, () => Promise<Record<string, unknown>>>} */
+const localeLoaders = {
+  ru: () => Promise.resolve(ru),
+  en: () => import("@/locales/en.json").then((m) => m.default),
+};
 
 export function normalizeLocale(value) {
   const raw = String(value || "").toLowerCase().slice(0, 2);
@@ -39,23 +44,50 @@ export function syncDocumentLang(locale) {
   }
 }
 
-const initialLocale = getStoredLocale();
-syncDocumentLang(initialLocale);
+/** Locales already registered in i18n.messages (ru is always in the entry chunk). */
+const loadedLocales = new Set(["ru"]);
 
+// Start on ru (always available). Non-ru locales load via bootstrapLocale() before mount.
 export const i18n = createI18n({
   legacy: false,
-  locale: initialLocale,
-  fallbackLocale: "en",
-  messages: { ru, en },
+  locale: "ru",
+  fallbackLocale: "ru",
+  messages: { ru },
   missingWarn: false,
   fallbackWarn: false,
 });
 
-export function setLocale(locale) {
+async function ensureLocaleLoaded(locale) {
+  const next = normalizeLocale(locale);
+  if (loadedLocales.has(next)) return;
+  const messages = await localeLoaders[next]();
+  i18n.global.setLocaleMessage(next, messages);
+  loadedLocales.add(next);
+}
+
+/**
+ * Switch UI locale. Loads message catalog on demand (ru ships in entry; others lazy).
+ * @returns {Promise<string>}
+ */
+export async function setLocale(locale) {
   const next = persistLocale(locale);
+  await ensureLocaleLoaded(next);
   i18n.global.locale.value = next;
   syncDocumentLang(next);
   return next;
+}
+
+/**
+ * Apply stored locale before first paint (call before app.mount).
+ * @returns {Promise<string>}
+ */
+export function bootstrapLocale() {
+  const stored = getStoredLocale();
+  if (stored === "ru") {
+    syncDocumentLang("ru");
+    return Promise.resolve("ru");
+  }
+  return setLocale(stored);
 }
 
 export function getLocale() {

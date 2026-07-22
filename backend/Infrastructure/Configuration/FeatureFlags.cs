@@ -15,9 +15,20 @@ public static class FeatureFlags
         if (string.IsNullOrWhiteSpace(raw))
             return true;
 
-        return raw.Equals("true", StringComparison.OrdinalIgnoreCase)
-            || raw.Equals("1", StringComparison.OrdinalIgnoreCase);
+        return IsTruthy(raw);
     }
+
+    /// <summary>Persist API exception rows to MySQL. Default: enabled.</summary>
+    public static bool IsErrorLoggingEnabled()
+        => ParseBoolEnv("LOG_ERRORS_ENABLED", defaultValue: true);
+
+    /// <summary>Persist Public API (/api/v1) activity logs including bodies. Default: disabled.</summary>
+    public static bool IsApiRequestLoggingEnabled()
+        => ParseBoolEnv("LOG_API_REQUESTS_ENABLED", defaultValue: false);
+
+    /// <summary>Persist outbound marketplace adapter HTTP exchanges. Default: disabled.</summary>
+    public static bool IsAdapterHttpLoggingEnabled()
+        => ParseBoolEnv("LOG_ADAPTER_HTTP_ENABLED", defaultValue: false);
 
     public static int GetQueueRetentionDays()
     {
@@ -26,4 +37,28 @@ public static class FeatureFlags
             return Math.Clamp(days, 1, 365);
         return 7;
     }
+
+    private static bool ParseBoolEnv(string name, bool defaultValue)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+            return defaultValue;
+
+        if (IsTruthy(raw))
+            return true;
+
+        if (raw.Equals("false", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("0", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("no", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("off", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return defaultValue;
+    }
+
+    private static bool IsTruthy(string raw) =>
+        raw.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || raw.Equals("1", StringComparison.OrdinalIgnoreCase)
+        || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)
+        || raw.Equals("on", StringComparison.OrdinalIgnoreCase);
 }

@@ -78,6 +78,9 @@ export function getRequiredPermissionsForPath(path) {
  * @param {string} path
  */
 export function canAccessPath(me, path) {
+  const p = normalizeRoutePath(path);
+  if (p === PAGE_ADMIN_AI && me?.aiEnabled !== true) return false;
+
   const required = getRequiredPermissionsForPath(path);
   if (!required || required.length === 0) return true;
   return hasAnyPermission(me, required);

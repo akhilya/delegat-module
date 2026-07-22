@@ -103,6 +103,9 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
 
     public void Log(AdapterHttpLogEntry entry)
     {
+        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsAdapterHttpLoggingEnabled())
+            return;
+
         try
         {
             var sanitized = Sanitize(entry);

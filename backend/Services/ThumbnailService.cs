@@ -31,11 +31,10 @@ public class ThumbnailService
 
         var thumbPath = GetThumbnailPath(originalPath, width);
 
-        // Check if cached thumbnail exists
-        if (await _storage.ExistsAsync(thumbPath, ct))
-        {
-            return await _storage.GetStreamAsync(thumbPath, ct);
-        }
+        // Fast path: try cached thumbnail without a separate Exists/Stat round-trip.
+        var cached = await _storage.GetStreamAsync(thumbPath, ct);
+        if (cached != null)
+            return cached;
 
         // Per-path lock to prevent duplicate generation
         var lockKey = thumbPath;
@@ -44,11 +43,10 @@ public class ThumbnailService
         await semaphore.WaitAsync(ct);
         try
         {
-            // Double-check after acquiring lock
-            if (await _storage.ExistsAsync(thumbPath, ct))
-            {
-                return await _storage.GetStreamAsync(thumbPath, ct);
-            }
+            // Double-check after acquiring lock (another waiter may have generated it)
+            cached = await _storage.GetStreamAsync(thumbPath, ct);
+            if (cached != null)
+                return cached;
 
             // Download original
             using var originalStream = await _storage.GetStreamAsync(originalPath, ct);

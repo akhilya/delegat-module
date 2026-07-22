@@ -250,7 +250,7 @@ public class ImageDownloadBackgroundService : BackgroundService
 
             await context.SaveChangesAsync(ct);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Downloaded image {Index} for product {ProductId}: {ImageUrl}",
                 pending.imageIndex, pending.productId, pending.imageUrl);
         }

@@ -142,7 +142,7 @@ public class ProductImportBackgroundService : BackgroundService
         PendingProductImport pending,
         CancellationToken ct)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Starting to process product {Id}:{ExternalId} (current status: {Status})",
             pending.Id, pending.externalProductId, pending.status);
 
@@ -166,7 +166,7 @@ public class ProductImportBackgroundService : BackgroundService
                 batchStoreId: pending.storeId,
                 imageBatchId: pending.batchId != null ? $"{pending.batchId}-img" : null);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Product import result {Id}: IsSuccess={IsSuccess}, AlreadyLinked={AlreadyLinked}, Error={Error}",
                 pending.Id, result.IsSuccess, result.AlreadyLinked, result.ErrorMessage);
 
@@ -180,13 +180,13 @@ public class ProductImportBackgroundService : BackgroundService
 
                 if (result.AlreadyLinked)
                 {
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "Product {ExternalId} was already imported previously (Product ID: {ProductId})",
                         pending.externalProductId, result.ProductId);
                 }
                 else
                 {
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "Imported product {ProductName} (ID: {ProductId}) from the queue",
                         result.ProductName, result.ProductId);
                 }

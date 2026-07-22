@@ -36,6 +36,48 @@ public class FeatureFlagsTests
     }
 
     [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("0", false)]
+    public void IsErrorLoggingEnabled_DefaultsTrue(string? raw, bool expected)
+    {
+        using var _ = SetEnv("LOG_ERRORS_ENABLED", raw);
+        Assert.Equal(expected, FeatureFlags.IsErrorLoggingEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("false", false)]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    public void IsApiRequestLoggingEnabled_DefaultsFalse(string? raw, bool expected)
+    {
+        using var _ = SetEnv("LOG_API_REQUESTS_ENABLED", raw);
+        Assert.Equal(expected, FeatureFlags.IsApiRequestLoggingEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("false", false)]
+    [InlineData("true", true)]
+    [InlineData("on", true)]
+    public void IsAdapterHttpLoggingEnabled_DefaultsFalse(string? raw, bool expected)
+    {
+        using var _ = SetEnv("LOG_ADAPTER_HTTP_ENABLED", raw);
+        Assert.Equal(expected, FeatureFlags.IsAdapterHttpLoggingEnabled());
+    }
+
+    [Fact]
+    public void MaxBufferedDownloadBytes_Is32MiB()
+    {
+        Assert.Equal(32L * 1024 * 1024, Delegat.Infrastructure.Storage.MinIOStorageService.MaxBufferedDownloadBytes);
+    }
+
+    [Theory]
     [InlineData(null, 7)]
     [InlineData("0", 7)]
     [InlineData("nope", 7)]

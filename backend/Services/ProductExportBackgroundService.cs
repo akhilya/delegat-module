@@ -210,7 +210,7 @@ public class ProductExportBackgroundService : BackgroundService
                     pending.externalProductId = itemResult.ExternalProductId;
                     pending.lastError = null;
 
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "Bulk: exported product {ProductId} -> External={ExternalId}",
                         pending.productId, itemResult.ExternalProductId);
 
@@ -326,7 +326,7 @@ public class ProductExportBackgroundService : BackgroundService
         PendingProductExport pending,
         CancellationToken ct)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Starting export of product {Id}:{ProductId} (current status: {Status})",
             pending.Id, pending.productId, pending.status);
 
@@ -345,7 +345,7 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.connectionId,
                 ct);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Product export result {Id}: IsSuccess={IsSuccess}, Error={Error}",
                 pending.Id, result.IsSuccess, result.ErrorMessage);
 
@@ -357,7 +357,7 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.linkId = result.LinkId;
                 pending.lastError = null;
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Exported product {ProductName} (ID: {ProductId}, External: {ExternalId}) from the queue",
                     pending.productName, pending.productId, result.ExternalProductId);
 

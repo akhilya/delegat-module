@@ -25,6 +25,12 @@ public sealed class PublicApiRequestLoggingMiddleware
             return;
         }
 
+        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsApiRequestLoggingEnabled())
+        {
+            await _next(context);
+            return;
+        }
+
         var sw = Stopwatch.StartNew();
         string? requestBody = null;
         string? responseBody = null;

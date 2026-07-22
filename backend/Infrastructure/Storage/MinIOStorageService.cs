@@ -236,7 +236,14 @@ public class MinIOStorageService : IStorageService
     }
 
     /// <summary>
-    /// Download a file as a stream
+    /// Max bytes buffered into memory by <see cref="GetStreamAsync"/>.
+    /// Larger objects must use <see cref="StreamToAsync"/>.
+    /// </summary>
+    public const long MaxBufferedDownloadBytes = 32L * 1024 * 1024;
+
+    /// <summary>
+    /// Download a file as a seekable in-memory stream (capped).
+    /// Returns null if missing, failed, or larger than <see cref="MaxBufferedDownloadBytes"/>.
     /// </summary>
     public async Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default)
     {
@@ -244,10 +251,29 @@ public class MinIOStorageService : IStorageService
         {
             var presignedUrl = await GetPresignedUrlAsync(path, 60);
             var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
-            using var response = await httpClient.GetAsync(presignedUrl, ct);
-            response.EnsureSuccessStatusCode();
-            var ms = new MemoryStream();
+            using var response = await httpClient.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var contentLength = response.Content.Headers.ContentLength;
+            if (contentLength is > MaxBufferedDownloadBytes)
+            {
+                _logger.LogWarning(
+                    "Skipping buffered MinIO download for {Path}: Content-Length {Length} exceeds {Max} bytes; use StreamToAsync",
+                    path, contentLength, MaxBufferedDownloadBytes);
+                return null;
+            }
+
+            var ms = new MemoryStream(contentLength is > 0 and <= int.MaxValue ? (int)contentLength.Value : 0);
             await response.Content.CopyToAsync(ms, ct);
+            if (ms.Length > MaxBufferedDownloadBytes)
+            {
+                _logger.LogWarning(
+                    "Skipping buffered MinIO download for {Path}: actual size {Length} exceeds {Max} bytes",
+                    path, ms.Length, MaxBufferedDownloadBytes);
+                return null;
+            }
+
             ms.Position = 0;
             return ms;
         }

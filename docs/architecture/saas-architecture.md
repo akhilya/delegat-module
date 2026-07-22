@@ -34,12 +34,12 @@ Each customer receives an **isolated Docker stack**: dedicated MySQL, MinIO, del
 services:
   mysql:
     command: >
-      --innodb-buffer-pool-size=64M
+      --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}
       --performance-schema=OFF
       --max-connections=50
       --skip-name-resolve
 ```
-Reduces MySQL consumption from ~350 MB to ~180 MB.
+Default pool is 256M (override with `MYSQL_INNODB_BUFFER_POOL_SIZE`). Lower values trade RAM for slower InnoDB cache.
 
 ---
 
@@ -239,7 +239,7 @@ services:
   mysql:
     image: mysql:8.4
     command: >
-      --innodb-buffer-pool-size=64M
+      --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}
       --performance-schema=OFF
       --max-connections=50
 ```
@@ -254,6 +254,7 @@ Trigger: customer changes plan
   2. Trigger redeploy
   3. If downgrade → email customer with current storage usage
   4. If AI_ENABLED: false → AI services/controllers are not registered at startup; frontend does not load the chat panel (restart required to enable)
+  4b. Logging toggles (restart): LOG_ERRORS_ENABLED (default true), LOG_API_REQUESTS_ENABLED / LOG_ADAPTER_HTTP_ENABLED (default false)
   5. Update instances.plan_id in Registry DB
 ```
 

@@ -1,4 +1,5 @@
 import { t } from "@/i18n";
+import { getCachedMe } from "@/lib/meCache";
 
 /**
  * Modifier catalog - defines all available modifiers, their display names,
@@ -498,9 +499,11 @@ export const MODIFIER_CATEGORIES = {
 
 /**
  * Get available modifiers for a given field type.
+ * Hides llmGenerate when instance AI is off (from last /auth/me).
  */
 export function getAvailableModifiers(externalFieldType) {
   return Object.values(MODIFIER_CATALOG).filter((m) => {
+    if (m.type === "llmGenerate" && getCachedMe()?.aiEnabled !== true) return false;
     if (m.applicableTypes === null) return true;
     if (!externalFieldType) return false;
     return m.applicableTypes.includes(externalFieldType);

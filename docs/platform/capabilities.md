@@ -71,7 +71,7 @@
 - **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
 - **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
 - **Admin model management:** `/settings/admin/ai` - connect any Anthropic or OpenAI-compatible model
-- **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start — change the flag and **restart** the instance to enable.
+- **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start; `/settings/admin/ai` is blocked and `llmGenerate` is hidden in the mapping palette — change the flag and **restart** the instance to enable.
 - All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
 
 ### Quotas
@@ -83,6 +83,10 @@
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
+- Persistent log toggles (restart to apply):
+  - `LOG_ERRORS_ENABLED` (default `true`) — API exception rows in MySQL
+  - `LOG_API_REQUESTS_ENABLED` (default `false`) — Public API `/api/v1` activity including bodies
+  - `LOG_ADAPTER_HTTP_ENABLED` (default `false`) — outbound marketplace adapter HTTP exchanges
 
 ### Platform Link (optional)
 - Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))
@@ -104,9 +108,9 @@
 - (Removed) FileRepairService one-shot MinIO path repair — no longer runs on every boot
 
 ### Infrastructure
-- .NET 8 + EF Core 8 + MySQL 8.4
+- .NET 8 + EF Core 8 + MySQL 8.4 (prod compose default InnoDB buffer pool `256M` via `MYSQL_INNODB_BUFFER_POOL_SIZE`)
 - Vue 3 + Vite + Vuex (Options API)
-- MinIO (S3-compatible) for file storage
+- MinIO (S3-compatible) for file storage; buffered `GetStreamAsync` capped at 32 MiB (larger objects use streaming)
 - Docker Compose + Dokploy
 - Automatic EF Core migrations on startup
 - Health check: `/api/health` with MySQL + MinIO probes

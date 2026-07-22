@@ -21,6 +21,9 @@ public class ErrorLogService : IErrorLogService
 
     public async Task LogAsync(HttpContext context, Exception exception, int statusCode)
     {
+        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsErrorLoggingEnabled())
+            return;
+
         try
         {
             // Use a fresh scope so a failed request DbContext (e.g. pending invalid Store)
