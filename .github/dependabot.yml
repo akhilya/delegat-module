@@ -1,6 +1,9 @@
 # Dependabot version updates for Delegat.Module.
 # Security updates still open outside this schedule when GitHub alerts fire.
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# Policy: only minor/patch version bumps. Major upgrades (Node, .NET, MySQL,
+# Vue Router, Vite, etc.) are deliberate projects — do not auto-open them.
 
 version: 2
 
@@ -19,6 +22,10 @@ updates:
       - javascript
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       root-npm-minor-patch:
         patterns:
@@ -26,11 +33,6 @@ updates:
         update-types:
           - minor
           - patch
-      root-npm-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
 
   # Frontend app
   - package-ecosystem: npm
@@ -46,6 +48,10 @@ updates:
       - javascript
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       frontend-production-minor-patch:
         dependency-type: production
@@ -57,11 +63,6 @@ updates:
         update-types:
           - minor
           - patch
-      frontend-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
 
   # Backend + tests only (skip plugin/sdk submodules — they have their own repos)
   - package-ecosystem: nuget
@@ -79,10 +80,13 @@ updates:
       - ".NET"
     commit-message:
       prefix: "chore(deps)"
-    # Floating ranges by design — Dependabot cannot usefully pin these
     ignore:
+      # Floating ranges by design — Dependabot cannot usefully pin these
       - dependency-name: Anthropic
       - dependency-name: OpenAI
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       nuget-microsoft-minor-patch:
         patterns:
@@ -104,14 +108,6 @@ updates:
         update-types:
           - minor
           - patch
-      nuget-major:
-        patterns:
-          - "*"
-        exclude-patterns:
-          - "Anthropic"
-          - "OpenAI"
-        update-types:
-          - major
 
   - package-ecosystem: docker
     directories:
@@ -128,10 +124,17 @@ updates:
       - docker
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
-      docker-images:
+      docker-images-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: docker-compose
     directory: /
@@ -146,10 +149,17 @@ updates:
       - docker
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
-      compose-images:
+      compose-images-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
@@ -164,7 +174,14 @@ updates:
       - github-actions
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
-      github-actions:
+      github-actions-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch

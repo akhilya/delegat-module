@@ -20,6 +20,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Control Plane architecture docs and MVP brief
 
 ### Changed
+- Dependabot: version updates limited to minor/patch only (no auto major PRs for Node/.NET/MySQL/npm)
 - Further runtime RAM/CPU cuts: MinIO stream buffer cap, InnoDB default 256M, AI gated at startup, logging env/DB toggles
 - Settings nav renamed to Administration; log pages hidden when corresponding toggles are off
 - Env logging flags (`LOG_*`) become seed defaults only; DB is source of truth after first boot
