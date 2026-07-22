@@ -87,9 +87,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Extract changelog section
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          PREV=$(git tag --list 'v*' --sort=-v:refname | awk -v t="$TAG" '$0 != t { print; exit }')
+          {
+            echo "## Delegat.Module ${TAG}"
+            echo
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { capture=1; print; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+            ' CHANGELOG.md
+            echo
+            if [ -n "$PREV" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV}...${TAG}"
+            fi
+          } > release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Delegat.Module ${{ steps.version.outputs.tag }}
-          generate_release_notes: true
+          body_path: release-notes.md
+          generate_release_notes: false

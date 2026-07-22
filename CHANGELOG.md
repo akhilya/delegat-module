@@ -9,6 +9,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-22
+
 ### Added
 - Dependabot version updates (npm, NuGet, Docker, Compose, GitHub Actions) with grouped weekly PRs
 - Admin UI toggles for instance logging (errors, API requests, adapter HTTP) with Save-to-apply; settings persisted in MySQL
@@ -31,6 +33,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Logout handling; `ENCRYPTION_KEY` passed into the API container in production
 - Product save gating for required fields; AI model dialog / DialogContent hardening
 - Dependabot security bumps (including DOMPurify 3.4.12)
+- Frontend minor/patch dependency updates (Vue, Tailwind, ESLint/Prettier tooling)
 
 ### Security
 - Remediation from 2026-07-17 security audits (uploads, secrets, AI, injection)
@@ -84,7 +87,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 - Initial Delegat.Module release
 
-[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/akhilya/delegat-module/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/akhilya/delegat-module/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/akhilya/delegat-module/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/akhilya/delegat-module/compare/v1.2.1...v1.3.0

@@ -27,9 +27,7 @@ Do this in the **same PR/commit** as the code change whenever the change is user
 4. Push to `main`. Changing `VERSION` triggers [`.github/workflows/release.yml`](../../.github/workflows/release.yml):
    - git tag `vX.Y.Z`
    - Docker images to GHCR
-   - GitHub Release
-
-Prefer pasting the new changelog section into the GitHub Release body (or later wire `body_path` in the workflow). Auto-generated commit lists are a fallback, not the product notes.
+   - GitHub Release whose body is the matching `CHANGELOG.md` section for that version
 
 ## What is not the version source
 
