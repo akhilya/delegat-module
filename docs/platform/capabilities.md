@@ -91,7 +91,7 @@
 - Public API enable toggle (same Administration page; apply immediately; env seeds first boot only):
   - `PUBLIC_API_ENABLED` (default `true`)
   - Stored in `instancePublicApiSettings`; change via `GET/PATCH /settings/public-api`
-  - When off, `/api/v1` returns `503 PUBLIC_API_DISABLED` and Public API request logging is forced off
+  - When off, `/api/v1` and `/swagger` return `503 PUBLIC_API_DISABLED`, Public API request logging is forced off, and the API keys page is hidden from the admin sidebar
 
 ### Platform Link (optional)
 - Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))

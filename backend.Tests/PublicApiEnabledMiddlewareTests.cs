@@ -82,4 +82,46 @@ public class PublicApiEnabledMiddlewareTests
         Assert.True(called);
         Assert.NotEqual(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
     }
+
+    [Fact]
+    public async Task SwaggerPath_WhenDisabled_Returns503Envelope()
+    {
+        var called = false;
+        var middleware = new PublicApiEnabledMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/swagger/index.html";
+        context.Response.Body = new MemoryStream();
+
+        await middleware.InvokeAsync(context, new StubPublicApiSettings(enabled: false));
+
+        Assert.False(called);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal("PUBLIC_API_DISABLED", doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SwaggerPath_WhenEnabled_PassesThrough()
+    {
+        var called = false;
+        var middleware = new PublicApiEnabledMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/swagger/v1-public/swagger.json";
+
+        await middleware.InvokeAsync(context, new StubPublicApiSettings(enabled: true));
+
+        Assert.True(called);
+    }
 }

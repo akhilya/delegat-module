@@ -57,7 +57,7 @@ Discover stores: `GET /api/v1/stores`.
 
 Public API can be turned off in **Administration** without restarting the instance (`GET/PATCH /settings/public-api`, permission `settings.platform`). Seed default: env `PUBLIC_API_ENABLED` (default `true`); afterwards the DB row `instancePublicApiSettings` is the source of truth.
 
-When disabled, every `/api/v1/*` request returns **503** with `error.code = PUBLIC_API_DISABLED`. Managing API keys in the dashboard still works.
+When disabled, every `/api/v1/*` and `/swagger` request returns **503** with `error.code = PUBLIC_API_DISABLED`. The API keys page is hidden from the admin sidebar until Public API is turned back on.
 
 ## Conventions
 

@@ -10,7 +10,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
-- Admin toggle to enable/disable Public API (`/api/v1`) without restart; API request logging switch is disabled while API is off
+- Admin toggle to enable/disable Public API (`/api/v1`) without restart; API request logging switch is disabled while API is off; API sidebar page and Swagger are hidden/blocked when off
 - Connection settings: ⋮ menu with Test, API limits, and Clear cache (refresh dictionaries without waiting for TTL)
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 

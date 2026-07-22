@@ -87,7 +87,7 @@ export function getAdminSettingsItems(ctx) {
   if (can(ctx, PERMS.UsersManage)) {
     items.push({ id: "users", labelKey: "nav.users", to: PAGE_ADMIN_USERS, icon: Users });
   }
-  if (can(ctx, PERMS.ApiAccess)) {
+  if (can(ctx, PERMS.ApiAccess) && ctx.me?.publicApiEnabled !== false) {
     items.push({ id: "api", labelKey: "nav.api", to: PAGE_ADMIN_API, icon: KeyRound });
   }
   if (can(ctx, PERMS.PluginsManage)) {

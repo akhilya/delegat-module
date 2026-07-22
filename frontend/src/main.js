@@ -7,6 +7,7 @@ import {
   routeAccessFallback,
   PAGE_PRODUCTS,
   PAGE_ADMIN_AI,
+  PAGE_ADMIN_API,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADAPTER_LOGS,
   PAGE_UNAVAILABLE,
@@ -290,6 +291,14 @@ router.beforeEach(async (to) => {
   if (to.path === PAGE_ADAPTER_LOGS || to.path.startsWith(`${PAGE_ADAPTER_LOGS}/`)) {
     const me = getCachedMe() || (await loadMe());
     if (me?.logAdapterHttpEnabled !== true) {
+      return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
+  }
+
+  // API keys / Swagger page requires the Public API instance toggle.
+  if (to.path === PAGE_ADMIN_API || to.path.startsWith(`${PAGE_ADMIN_API}/`)) {
+    const me = getCachedMe() || (await loadMe());
+    if (me?.publicApiEnabled === false) {
       return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
     }
   }

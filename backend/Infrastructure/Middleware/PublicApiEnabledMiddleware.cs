@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Delegat.Infrastructure.Middleware;
 
 /// <summary>
-/// Short-circuits Public API (/api/v1) with 503 when the instance toggle is off.
+/// Short-circuits Public API (/api/v1) and Swagger when the instance toggle is off.
 /// </summary>
 public sealed class PublicApiEnabledMiddleware
 {
@@ -21,8 +21,14 @@ public sealed class PublicApiEnabledMiddleware
 
     public async Task InvokeAsync(HttpContext context, Services.IPublicApiSettingsService publicApiSettings)
     {
-        if (context.Request.Path.StartsWithSegments("/api/v1")
-            && !publicApiSettings.IsPublicApiEnabled)
+        if (publicApiSettings.IsPublicApiEnabled)
+        {
+            await _next(context);
+            return;
+        }
+
+        var path = context.Request.Path;
+        if (path.StartsWithSegments("/api/v1") || path.StartsWithSegments("/swagger"))
         {
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             context.Response.ContentType = "application/json";

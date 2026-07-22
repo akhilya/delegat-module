@@ -575,6 +575,8 @@ using (var scope = app.Services.CreateScope())
 // Middleware pipeline
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
+// Before Swagger so /swagger is also gated by the Public API instance toggle.
+app.UseMiddleware<PublicApiEnabledMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -589,7 +591,6 @@ app.UseSwaggerUI(c =>
 
 app.UseCors();
 app.UseAuthentication();
-app.UseMiddleware<PublicApiEnabledMiddleware>();
 app.UseMiddleware<PublicApiRequestLoggingMiddleware>();
 app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseRateLimiter();
