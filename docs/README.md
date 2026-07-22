@@ -12,6 +12,7 @@
 - [**capabilities.md**](platform/capabilities.md) - Current instance features and roadmap
 - [**platform-link.md**](platform/platform-link.md) - Instance ↔ Control Plane m2m + Reference Catalog contract (переезжает в CP-репо)
 - [**product.md**](platform/product.md) - Instance product brief: users, goals, design principles, brand
+- [**releasing.md**](platform/releasing.md) - SemVer / `VERSION` / `CHANGELOG.md` process for commits and releases
 
 ## API
 
