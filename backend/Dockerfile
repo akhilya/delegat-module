@@ -1,5 +1,5 @@
 # Stage 1: Build backend
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /source
 
@@ -40,7 +40,7 @@ RUN dotnet publish plugins/Delegat.Marketplace.YandexMarket/Delegat.Marketplace.
 RUN mkdir -p /app/plugins && cp /plugins-out/ozon/Delegat.Marketplace.Ozon.dll /app/plugins/ && cp /plugins-out/wb/Delegat.Marketplace.Wildberries.dll /app/plugins/ && cp /plugins-out/opencart/Delegat.Marketplace.OpenCart.dll /app/plugins/ && cp /plugins-out/yandex/Delegat.Marketplace.YandexMarket.dll /app/plugins/
 
 # Stage 2: Final image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 RUN apt-get update && apt-get install -y --no-install-recommends curl default-mysql-client && rm -rf /var/lib/apt/lists/*
 EXPOSE 5000
 WORKDIR /app
