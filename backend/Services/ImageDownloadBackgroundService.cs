@@ -107,11 +107,7 @@ public class ImageDownloadBackgroundService : BackgroundService
                 {
                     // Leave Pending rows would be re-picked every poll forever; 7-day cleanup
                     // only deletes terminal statuses, so mark them Cancelled now.
-                    var cancelled = await context.pendingImageDownloads
-                        .Where(p => p.batchId == pending.batchId &&
-                            (p.status == ImageDownloadStatus.Pending
-                             || p.status == ImageDownloadStatus.InProgress
-                             || p.status == ImageDownloadStatus.Failed))
+                    var cancelled = await QueryBatchRowsToCancel(context, pending.batchId)
                         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
                     _logger.LogInformation(
                         "Operation {BatchId} is cancelled; marked {Count} queue row(s) as Cancelled",
@@ -298,4 +294,14 @@ public class ImageDownloadBackgroundService : BackgroundService
             return null;
         }
     }
+
+    /// <summary>
+    /// Non-terminal image rows for a cancelled batch (must be marked Cancelled or they are re-polled forever).
+    /// </summary>
+    internal static IQueryable<PendingImageDownload> QueryBatchRowsToCancel(DataContext context, string batchId) =>
+        context.pendingImageDownloads.Where(p =>
+            p.batchId == batchId &&
+            (p.status == ImageDownloadStatus.Pending
+             || p.status == ImageDownloadStatus.InProgress
+             || p.status == ImageDownloadStatus.Failed));
 }
