@@ -10,6 +10,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Dependabot version updates (npm, NuGet, Docker, Compose, GitHub Actions) with grouped weekly PRs
 - Admin UI toggles for instance logging (errors, API requests, adapter HTTP) with Save-to-apply; settings persisted in MySQL
 - Auto-start Vite on `:5173` when the API runs in Development
 - Roles and permissions catalog; Platform Link / reference catalog plumbing

@@ -1,0 +1,170 @@
+# Dependabot version updates for Delegat.Module.
+# Security updates still open outside this schedule when GitHub alerts fire.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+
+version: 2
+
+updates:
+  # Root tooling (concurrently, dotenv-cli)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - javascript
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      root-npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      root-npm-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
+
+  # Frontend app
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - javascript
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      frontend-production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      frontend-development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      frontend-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
+
+  # Backend + tests only (skip plugin/sdk submodules — they have their own repos)
+  - package-ecosystem: nuget
+    directories:
+      - /backend
+      - /backend.Tests
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - dotnet
+    commit-message:
+      prefix: "chore(deps)"
+    # Floating ranges by design — Dependabot cannot usefully pin these
+    ignore:
+      - dependency-name: Anthropic
+      - dependency-name: OpenAI
+    groups:
+      nuget-microsoft-minor-patch:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+          - "AspNetCore.*"
+        update-types:
+          - minor
+          - patch
+      nuget-other-minor-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "Microsoft.*"
+          - "System.*"
+          - "AspNetCore.*"
+          - "Anthropic"
+          - "OpenAI"
+        update-types:
+          - minor
+          - patch
+      nuget-major:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "Anthropic"
+          - "OpenAI"
+        update-types:
+          - major
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      compose-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
