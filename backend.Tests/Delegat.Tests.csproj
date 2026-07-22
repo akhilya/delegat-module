@@ -33,6 +33,8 @@
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
     <ProjectReference Include="..\plugins\Delegat.Marketplace.Ozon\Delegat.Marketplace.Ozon.csproj"
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.Wildberries\Delegat.Marketplace.Wildberries.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
   </ItemGroup>
 
   <ItemGroup>
