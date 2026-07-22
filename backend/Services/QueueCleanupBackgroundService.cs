@@ -56,28 +56,13 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
 
         // Pending/InProgress/Failed rows whose operation is already cancelled would otherwise
         // be re-polled forever (retention cleanup only deletes terminal queue statuses).
-        var orphanedImages = await db.pendingImageDownloads
-            .Where(p => (p.status == ImageDownloadStatus.Pending
-                         || p.status == ImageDownloadStatus.InProgress
-                         || p.status == ImageDownloadStatus.Failed)
-                        && p.batchId != null
-                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+        var orphanedImages = await QueryOrphanedImageDownloads(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
 
-        var orphanedImports = await db.pendingProductImports
-            .Where(p => (p.status == ProductImportStatus.Pending
-                         || p.status == ProductImportStatus.InProgress
-                         || p.status == ProductImportStatus.Failed)
-                        && p.batchId != null
-                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+        var orphanedImports = await QueryOrphanedProductImports(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
 
-        var orphanedExports = await db.pendingProductExports
-            .Where(p => (p.status == ProductExportStatus.Pending
-                         || p.status == ProductExportStatus.InProgress
-                         || p.status == ProductExportStatus.Failed)
-                        && p.batchId != null
-                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+        var orphanedExports = await QueryOrphanedProductExports(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
 
         if (orphanedImages + orphanedImports + orphanedExports > 0)
@@ -190,4 +175,37 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                 deletedExports, deletedImports, deletedImages, deletedTransfers, deletedFolderJobs, deletedOps, retentionDays);
         }
     }
+
+    /// <summary>
+    /// Non-terminal image queue rows tied to a cancelled operation (would be re-polled forever).
+    /// </summary>
+    internal static IQueryable<PendingImageDownload> QueryOrphanedImageDownloads(DataContext db) =>
+        db.pendingImageDownloads.Where(p =>
+            (p.status == ImageDownloadStatus.Pending
+             || p.status == ImageDownloadStatus.InProgress
+             || p.status == ImageDownloadStatus.Failed)
+            && p.batchId != null
+            && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
+
+    /// <summary>
+    /// Non-terminal import queue rows tied to a cancelled operation.
+    /// </summary>
+    internal static IQueryable<PendingProductImport> QueryOrphanedProductImports(DataContext db) =>
+        db.pendingProductImports.Where(p =>
+            (p.status == ProductImportStatus.Pending
+             || p.status == ProductImportStatus.InProgress
+             || p.status == ProductImportStatus.Failed)
+            && p.batchId != null
+            && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
+
+    /// <summary>
+    /// Non-terminal export queue rows tied to a cancelled operation.
+    /// </summary>
+    internal static IQueryable<PendingProductExport> QueryOrphanedProductExports(DataContext db) =>
+        db.pendingProductExports.Where(p =>
+            (p.status == ProductExportStatus.Pending
+             || p.status == ProductExportStatus.InProgress
+             || p.status == ProductExportStatus.Failed)
+            && p.batchId != null
+            && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
 }

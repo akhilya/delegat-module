@@ -71,6 +71,19 @@ public class FeatureFlagsTests
         Assert.Equal(expected, FeatureFlags.IsAdapterHttpLoggingEnabled());
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    [InlineData("false", false)]
+    [InlineData("0", false)]
+    public void IsPublicApiEnabled_DefaultsTrue(string? raw, bool expected)
+    {
+        using var _ = SetEnv("PUBLIC_API_ENABLED", raw);
+        Assert.Equal(expected, FeatureFlags.IsPublicApiEnabled());
+    }
+
     [Fact]
     public void MaxBufferedDownloadBytes_Is32MiB()
     {

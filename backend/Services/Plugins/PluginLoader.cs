@@ -86,7 +86,7 @@ public static class PluginLoader
         }
 
         var dllFiles = Directory.GetFiles(pluginsDirectory, "Delegat.Marketplace.*.dll", SearchOption.TopDirectoryOnly)
-            .Where(f => !Path.GetFileName(f).Equals("Delegat.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase));
+            .Where(f => IsCandidatePluginAssemblyFileName(Path.GetFileName(f)));
 
         foreach (var dllPath in dllFiles)
         {
@@ -105,6 +105,24 @@ public static class PluginLoader
         }
 
         return plugins;
+    }
+
+    /// <summary>
+    /// True for host plugin assemblies (Delegat.Marketplace.*.dll) excluding the shared SDK.
+    /// Legacy PrintO / unrelated DLLs in the plugins folder are ignored.
+    /// </summary>
+    internal static bool IsCandidatePluginAssemblyFileName(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return false;
+
+        if (!fileName.StartsWith("Delegat.Marketplace.", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return !fileName.Equals("Delegat.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
