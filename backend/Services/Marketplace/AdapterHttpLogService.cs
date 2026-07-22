@@ -17,6 +17,9 @@ public interface IAdapterHttpLogQueryService
         CancellationToken ct = default);
 
     Task<AdapterHttpLogDetailDto?> GetDetailAsync(int storeId, int id, CancellationToken ct = default);
+
+    /// <summary>Returns the full stored request or response body (not UI-preview truncated).</summary>
+    Task<string?> GetStoredBodyAsync(int storeId, int id, bool response, CancellationToken ct = default);
 }
 
 public sealed class AdapterHttpLogQuery
@@ -58,8 +61,12 @@ public record AdapterHttpLogDetailDto(
     int DurationMs,
     string? RequestHeadersJson,
     string? RequestBody,
+    bool RequestBodyTruncated,
+    int RequestBodyLength,
     string? ResponseHeadersJson,
     string? ResponseBody,
+    bool ResponseBodyTruncated,
+    int ResponseBodyLength,
     string? ErrorMessage,
     string? OperationId);
 
@@ -68,7 +75,17 @@ public record AdapterHttpLogDetailDto(
 /// </summary>
 public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQueryService, IAsyncDisposable
 {
-    public const int MaxBodyChars = 64 * 1024;
+    /// <summary>Preview size returned in detail responses (full body via download endpoint).</summary>
+    public const int MaxPreviewBodyChars = AdapterHttpLogHelper.MaxPreviewBodyChars;
+
+    /// <summary>Hard cap for bodies written to the database.</summary>
+    public const int MaxStoredBodyChars = AdapterHttpLogHelper.MaxStoredBodyChars;
+
+    /// <summary>Backward-compatible alias for <see cref="MaxStoredBodyChars"/>.</summary>
+    public const int MaxBodyChars = MaxStoredBodyChars;
+
+    public const string TruncationMarker = AdapterHttpLogHelper.TruncationMarker;
+
     public const int DefaultRetentionDays = 7;
     public const int MaxRowsSafety = 200_000;
 
@@ -168,6 +185,9 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             .FirstOrDefaultAsync(x => x.Id == id && x.storeId == storeId, ct);
         if (l == null) return null;
 
+        var (reqPreview, reqTruncated, reqLen) = PreviewBody(l.requestBody);
+        var (resPreview, resTruncated, resLen) = PreviewBody(l.responseBody);
+
         return new AdapterHttpLogDetailDto(
             l.Id,
             l.createdAt,
@@ -180,11 +200,28 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             l.statusCode,
             l.durationMs,
             l.requestHeadersJson,
-            l.requestBody,
+            reqPreview,
+            reqTruncated,
+            reqLen,
             l.responseHeadersJson,
-            l.responseBody,
+            resPreview,
+            resTruncated,
+            resLen,
             l.errorMessage,
             l.operationId);
+    }
+
+    public async Task<string?> GetStoredBodyAsync(int storeId, int id, bool response, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+
+        var l = await db.adapterHttpLogs.AsNoTracking()
+            .Where(x => x.Id == id && x.storeId == storeId)
+            .Select(x => new { x.requestBody, x.responseBody })
+            .FirstOrDefaultAsync(ct);
+        if (l == null) return null;
+        return response ? l.responseBody : l.requestBody;
     }
 
     public async Task CleanupAsync(CancellationToken ct = default)
@@ -223,11 +260,31 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         }
     }
 
+    /// <summary>
+    /// Redacts secrets and caps length for DB persistence (downloadable up to this size).
+    /// </summary>
     public static string TruncateBody(string? body)
     {
         if (string.IsNullOrEmpty(body)) return body ?? "";
-        if (body.Length <= MaxBodyChars) return RedactBody(body);
-        return RedactBody(body[..MaxBodyChars]) + "\n…[truncated]";
+        var redacted = RedactBody(body);
+        if (redacted.Length <= MaxStoredBodyChars) return redacted;
+        return redacted[..MaxStoredBodyChars] + TruncationMarker;
+    }
+
+    /// <summary>
+    /// Builds a short UI preview; full stored body is available via download.
+    /// </summary>
+    public static (string Preview, bool Truncated, int FullLength) PreviewBody(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+            return ("", false, 0);
+
+        var fullLength = body.Length;
+        var alreadyMarked = body.EndsWith(TruncationMarker, StringComparison.Ordinal);
+        if (body.Length <= MaxPreviewBodyChars)
+            return (body, alreadyMarked, fullLength);
+
+        return (body[..MaxPreviewBodyChars] + TruncationMarker, true, fullLength);
     }
 
     public static string RedactHeadersJson(IEnumerable<KeyValuePair<string, IEnumerable<string>>> headers)

@@ -59,14 +59,26 @@ public class AdapterHttpLogServiceTests
     public void TruncateBody_LongBody_TruncatesAndMarks()
     {
         var prefix = "{\"apiKey\":\"leak-me\",\"data\":\"";
-        var filler = new string('x', AdapterHttpLogService.MaxBodyChars);
+        var filler = new string('x', AdapterHttpLogService.MaxStoredBodyChars);
         var body = prefix + filler + "\"}";
 
         var result = AdapterHttpLogService.TruncateBody(body);
 
-        Assert.EndsWith("\n…[truncated]", result);
+        Assert.EndsWith(AdapterHttpLogService.TruncationMarker, result);
         Assert.True(result.Length < body.Length);
         Assert.DoesNotContain("leak-me", result);
+    }
+
+    [Fact]
+    public void PreviewBody_LongStoredBody_TruncatesForUi()
+    {
+        var stored = new string('a', AdapterHttpLogService.MaxPreviewBodyChars + 100);
+        var (preview, truncated, length) = AdapterHttpLogService.PreviewBody(stored);
+
+        Assert.True(truncated);
+        Assert.Equal(stored.Length, length);
+        Assert.EndsWith(AdapterHttpLogService.TruncationMarker, preview);
+        Assert.True(preview.Length < stored.Length);
     }
 
     [Theory]

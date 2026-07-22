@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
@@ -96,6 +97,30 @@ public class ApiKeysController : ControllerBase
             throw ApiException.NotFound("Log entry not found");
 
         return Ok(detail);
+    }
+
+    [HttpGet]
+    [Route("/api-keys/logs/{id:int}/request-body")]
+    public async Task<IActionResult> DownloadRequestBody(int id, CancellationToken ct)
+        => await DownloadBodyAsync(id, response: false, ct);
+
+    [HttpGet]
+    [Route("/api-keys/logs/{id:int}/response-body")]
+    public async Task<IActionResult> DownloadResponseBody(int id, CancellationToken ct)
+        => await DownloadBodyAsync(id, response: true, ct);
+
+    private async Task<IActionResult> DownloadBodyAsync(int id, bool response, CancellationToken ct)
+    {
+        var userId = _currentUser.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
+        var body = await _logs.GetStoredBodyAsync(userId, id, response, ct);
+        if (body == null)
+            throw ApiException.NotFound("Log entry not found");
+
+        var kind = response ? "response" : "request";
+        var bytes = Encoding.UTF8.GetBytes(body);
+        return File(bytes, "application/json; charset=utf-8", $"api-request-log-{id}-{kind}.json");
     }
 
     public class CreateApiKeyRequest

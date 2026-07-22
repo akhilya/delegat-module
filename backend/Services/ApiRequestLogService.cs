@@ -44,7 +44,11 @@ public record ApiRequestLogDetailDto(
     string? RemoteIpAddress,
     string? UserAgent,
     string? RequestBody,
+    bool RequestBodyTruncated,
+    int RequestBodyLength,
     string? ResponseBody,
+    bool ResponseBodyTruncated,
+    int ResponseBodyLength,
     string? ErrorMessage);
 
 public interface IApiRequestLogger
@@ -60,6 +64,8 @@ public interface IApiRequestLogQueryService
         CancellationToken ct = default);
 
     Task<ApiRequestLogDetailDto?> GetDetailAsync(int userId, int id, CancellationToken ct = default);
+
+    Task<string?> GetStoredBodyAsync(int userId, int id, bool response, CancellationToken ct = default);
 }
 
 public sealed class ApiRequestLogEntry
@@ -85,7 +91,16 @@ public sealed class ApiRequestLogEntry
 /// </summary>
 public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQueryService, IAsyncDisposable
 {
-    public const int MaxBodyChars = 64 * 1024;
+    /// <summary>Preview size in detail responses.</summary>
+    public const int MaxPreviewBodyChars = 64 * 1024;
+
+    /// <summary>Hard cap for bodies written to the database / captured by middleware.</summary>
+    public const int MaxStoredBodyChars = 2 * 1024 * 1024;
+
+    /// <summary>Backward-compatible alias for <see cref="MaxStoredBodyChars"/>.</summary>
+    public const int MaxBodyChars = MaxStoredBodyChars;
+
+    public const string TruncationMarker = "\n…[truncated]";
     public const int DefaultRetentionDays = 30;
 
     private static readonly Regex SensitiveJsonValue = new(
@@ -123,8 +138,8 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
         try
         {
-            entry.RequestBody = Truncate(SanitizeBody(entry.RequestBody));
-            entry.ResponseBody = Truncate(SanitizeBody(entry.ResponseBody));
+            entry.RequestBody = TruncateBody(SanitizeBody(entry.RequestBody));
+            entry.ResponseBody = TruncateBody(SanitizeBody(entry.ResponseBody));
             entry.ErrorMessage = Truncate(entry.ErrorMessage, 2000);
             entry.UserAgent = Truncate(entry.UserAgent, 512);
             entry.QueryString = Truncate(entry.QueryString, 2000);
@@ -225,6 +240,9 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
         if (l == null) return null;
 
+        var (reqPreview, reqTruncated, reqLen) = PreviewBody(l.requestBody);
+        var (resPreview, resTruncated, resLen) = PreviewBody(l.responseBody);
+
         return new ApiRequestLogDetailDto(
             l.Id,
             l.createdAt,
@@ -238,9 +256,34 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
             l.durationMs,
             l.remoteIpAddress,
             l.userAgent,
-            l.requestBody,
-            l.responseBody,
+            reqPreview,
+            reqTruncated,
+            reqLen,
+            resPreview,
+            resTruncated,
+            resLen,
             l.errorMessage);
+    }
+
+    public async Task<string?> GetStoredBodyAsync(int userId, int id, bool response, CancellationToken ct = default)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+
+        var keyIds = await db.userApiKeys.AsNoTracking()
+            .Where(k => k.userId == userId)
+            .Select(k => k.Id)
+            .ToListAsync(ct);
+
+        var l = await db.apiRequestLogs.AsNoTracking()
+            .Where(x =>
+                x.Id == id &&
+                (x.userId == userId || (x.apiKeyId != null && keyIds.Contains(x.apiKeyId.Value))))
+            .Select(x => new { x.requestBody, x.responseBody })
+            .FirstOrDefaultAsync(ct);
+
+        if (l == null) return null;
+        return response ? l.responseBody : l.requestBody;
     }
 
     private async Task ProcessQueueAsync()
@@ -322,7 +365,27 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
         });
     }
 
-    private static string? Truncate(string? value, int max = MaxBodyChars)
+    private static string? TruncateBody(string? value)
+    {
+        if (value == null) return null;
+        if (value.Length <= MaxStoredBodyChars) return value;
+        return value[..MaxStoredBodyChars] + TruncationMarker;
+    }
+
+    public static (string? Preview, bool Truncated, int FullLength) PreviewBody(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+            return (body, false, 0);
+
+        var fullLength = body.Length;
+        var alreadyMarked = body.EndsWith(TruncationMarker, StringComparison.Ordinal);
+        if (body.Length <= MaxPreviewBodyChars)
+            return (body, alreadyMarked, fullLength);
+
+        return (body[..MaxPreviewBodyChars] + TruncationMarker, true, fullLength);
+    }
+
+    private static string? Truncate(string? value, int max)
     {
         if (value == null) return null;
         return value.Length <= max ? value : value[..max];

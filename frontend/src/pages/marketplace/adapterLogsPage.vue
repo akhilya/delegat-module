@@ -339,6 +339,7 @@ export default {
       :description="detail?.path || '…'"
       show-headers
       json-bodies
+      body-download-base-url="/adapter-http-logs"
     >
       <template #meta>
         <LogMetaGrid :items="detailMeta">

@@ -83,14 +83,58 @@ public class WildberriesRateLimitAndCacheTests
     }
 
     [Fact]
+    public async Task MarketplaceRateLimiter_Lease_AllowsOnlyOneInFlight()
+    {
+        var limiter = new MarketplaceRateLimiter(maxRequestsPerSecond: 100, maxConcurrent: 1);
+
+        await using var first = await limiter.AcquireLeaseAsync();
+        Assert.Equal(1, limiter.CurrentInFlight);
+
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondAcquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var secondTask = Task.Run(async () =>
+        {
+            secondStarted.SetResult();
+            await using var second = await limiter.AcquireLeaseAsync();
+            secondAcquired.SetResult();
+        });
+
+        await secondStarted.Task;
+        await Task.Delay(80);
+        Assert.False(secondAcquired.Task.IsCompleted, "Second lease must wait while first is held");
+
+        await first.DisposeAsync();
+        await secondAcquired.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await secondTask;
+        Assert.Equal(0, limiter.CurrentInFlight);
+    }
+
+    [Fact]
+    public async Task MarketplaceRateLimiter_Lease_PauseFor_BlocksWhileHeld()
+    {
+        var limiter = new MarketplaceRateLimiter(maxRequestsPerSecond: 10, maxConcurrent: 1);
+        await using var lease = await limiter.AcquireLeaseAsync();
+        limiter.PauseFor(TimeSpan.FromMilliseconds(200));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        // Release first so another acquire can proceed after pause.
+        await lease.DisposeAsync();
+        await using var next = await limiter.AcquireLeaseAsync();
+        sw.Stop();
+
+        Assert.True(sw.ElapsedMilliseconds >= 150, $"Expected pause >= 150ms, got {sw.ElapsedMilliseconds}");
+    }
+
+    [Fact]
     public void MarketplaceMetadataCache_RoundTripsValues()
     {
         using var memory = new MemoryCache(new MemoryCacheOptions());
         var cache = new MarketplaceMetadataCache(memory);
 
-        cache.Set("wb:dir:global", new List<string> { "a", "b" }, TimeSpan.FromMinutes(5));
+        cache.Set("wb:dir:global:7", new List<string> { "a", "b" }, TimeSpan.FromMinutes(5));
 
-        Assert.True(cache.TryGetValue("wb:dir:global", out List<string>? values));
+        Assert.True(cache.TryGetValue("wb:dir:global:7", out List<string>? values));
         Assert.Equal(new[] { "a", "b" }, values);
         Assert.False(cache.TryGetValue("missing", out List<string>? _));
     }
@@ -100,5 +144,11 @@ public class WildberriesRateLimitAndCacheTests
     {
         var key = MarketplaceMetadataCache.CategoryFieldsKey("wildberries", 7, "1234");
         Assert.Equal("category-fields:wildberries:7:1234", key);
+    }
+
+    [Fact]
+    public void GlobalDirectoryCacheKey_IsConnectionScoped()
+    {
+        Assert.Equal("wb:dir:global:42", $"wb:dir:global:{42}");
     }
 }

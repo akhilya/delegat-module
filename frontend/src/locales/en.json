@@ -23,6 +23,7 @@
     "none": "None",
     "copy": "Copy",
     "download": "Download",
+    "downloaded": "Downloaded",
     "upload": "Upload",
     "refresh": "Refresh",
     "reset": "Reset",
@@ -84,7 +85,8 @@
       "body": "Body",
       "headers": "Headers",
       "error": "Error",
-      "durationMs": "{ms} ms"
+      "durationMs": "{ms} ms",
+      "truncated": "truncated"
     },
     "barcodeInput": {
       "onlyDigitsError": "Digits only",

@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Check, Copy } from "lucide-vue-next";
+import { Check, Copy, Download, Loader2 } from "lucide-vue-next";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { highlightJsonHtml, prettyJson } from "./logFormat.js";
 import { useI18n } from "vue-i18n";
+import { http } from "@/main";
 
 const { t } = useI18n();
 
@@ -21,9 +22,15 @@ const props = defineProps({
     default: "default", // default | destructive
   },
   class: { type: null, required: false },
+  /** When true, show Download even without a download URL (uses displayed text). */
+  truncated: { type: Boolean, default: false },
+  /** Authenticated API path to download the full stored body (blob). */
+  downloadUrl: { type: String, default: "" },
+  downloadFilename: { type: String, default: "body.json" },
 });
 
 const copied = ref(false);
+const downloading = ref(false);
 let copyTimer = null;
 
 const hasContent = computed(() => {
@@ -35,6 +42,16 @@ const displayText = computed(() => {
   if (!hasContent.value) return "";
   return props.json ? prettyJson(props.text) : String(props.text);
 });
+
+const looksTruncated = computed(() => {
+  if (props.truncated) return true;
+  const raw = typeof props.text === "string" ? props.text : displayText.value;
+  return typeof raw === "string" && (raw.includes("\n…[truncated]") || raw.endsWith("…[truncated]") || raw.includes("\n…(truncated)"));
+});
+
+const canDownload = computed(
+  () => looksTruncated.value && (!!props.downloadUrl || hasContent.value),
+);
 
 const html = computed(() => {
   if (!props.json || !hasContent.value) return "";
@@ -54,6 +71,57 @@ async function copy() {
     displaySonnerError(t("common.copyFailed"));
   }
 }
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || props.downloadFilename || "body.json";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseFilename(disposition, fallback) {
+  if (!disposition) return fallback;
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utf?.[1]) {
+    try {
+      return decodeURIComponent(utf[1].trim());
+    } catch {
+      /* ignore */
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(disposition);
+  return plain?.[1]?.trim() || fallback;
+}
+
+async function download() {
+  if (downloading.value || !canDownload.value) return;
+  downloading.value = true;
+  try {
+    if (props.downloadUrl) {
+      const response = await http.get(props.downloadUrl, {
+        responseType: "blob",
+        cache: false,
+      });
+      const disposition = response.headers?.["content-disposition"] || "";
+      const filename = parseFilename(disposition, props.downloadFilename || "body.json");
+      triggerBlobDownload(response.data, filename);
+    } else {
+      const blob = new Blob([displayText.value || ""], {
+        type: props.json ? "application/json;charset=utf-8" : "text/plain;charset=utf-8",
+      });
+      triggerBlobDownload(blob, props.downloadFilename || "body.txt");
+    }
+    displaySonnerSuccess(t("common.downloaded"));
+  } catch (error) {
+    displaySonnerError(error);
+  } finally {
+    downloading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -68,18 +136,38 @@ async function copy() {
         "
       >
         {{ label }}
+        <span
+          v-if="looksTruncated"
+          class="ml-1 font-normal italic text-muted-foreground"
+        >
+          ({{ t("components.logs.truncated") }})
+        </span>
       </span>
-      <Button
-        v-if="hasContent"
-        variant="ghost"
-        size="sm"
-        class="h-7 px-2"
-        @click="copy"
-      >
-        <Check v-if="copied" class="mr-1 size-3.5" />
-        <Copy v-else class="mr-1 size-3.5" />
-        {{ t("common.copy") }}
-      </Button>
+      <div class="flex items-center gap-1">
+        <Button
+          v-if="canDownload"
+          variant="ghost"
+          size="sm"
+          class="h-7 px-2"
+          :disabled="downloading"
+          @click="download"
+        >
+          <Loader2 v-if="downloading" class="mr-1 size-3.5 animate-spin" />
+          <Download v-else class="mr-1 size-3.5" />
+          {{ t("common.download") }}
+        </Button>
+        <Button
+          v-if="hasContent"
+          variant="ghost"
+          size="sm"
+          class="h-7 px-2"
+          @click="copy"
+        >
+          <Check v-if="copied" class="mr-1 size-3.5" />
+          <Copy v-else class="mr-1 size-3.5" />
+          {{ t("common.copy") }}
+        </Button>
+      </div>
     </div>
     <pre
       v-if="json && html"

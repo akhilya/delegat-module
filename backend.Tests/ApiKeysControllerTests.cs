@@ -16,6 +16,9 @@ public class ApiKeysControllerTests
 
         public Task<ApiRequestLogDetailDto?> GetDetailAsync(int userId, int id, CancellationToken ct = default)
             => Task.FromResult<ApiRequestLogDetailDto?>(null);
+
+        public Task<string?> GetStoredBodyAsync(int userId, int id, bool response, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
     }
 
     private static ApiKeysController CreateController(FakeCurrentUserService current, UserApiKeyService keys)

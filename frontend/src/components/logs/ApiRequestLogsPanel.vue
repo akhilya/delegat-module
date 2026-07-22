@@ -294,6 +294,8 @@ export default {
           : $t('pages.apiPage.logs.request')
       "
       :description="detail?.path || '…'"
+      body-download-base-url="/api-keys/logs"
+      json-bodies
     >
       <template #overview-extra="{ detail: d }">
         <div v-if="d.userAgent" class="space-y-1">

@@ -28,6 +28,8 @@ const props = defineProps({
   errorLabel: { type: String, default: "" },
   bodyLabel: { type: String, default: "" },
   headersLabel: { type: String, default: "" },
+  /** Base path without trailing slash, e.g. /adapter-http-logs/12 */
+  bodyDownloadBaseUrl: { type: String, default: "" },
 });
 
 defineEmits(["update:open"]);
@@ -50,6 +52,34 @@ const requestHeaders = computed(() => props.detail?.[props.requestHeadersKey]);
 const responseHeaders = computed(() => props.detail?.[props.responseHeadersKey]);
 const errorMessage = computed(() => props.detail?.[props.errorKey]);
 const useJson = computed(() => props.jsonBodies || props.showHeaders);
+
+const requestBodyTruncated = computed(
+  () =>
+    !!(
+      props.detail?.requestBodyTruncated ??
+      props.detail?.RequestBodyTruncated
+    ),
+);
+const responseBodyTruncated = computed(
+  () =>
+    !!(
+      props.detail?.responseBodyTruncated ??
+      props.detail?.ResponseBodyTruncated
+    ),
+);
+
+const detailId = computed(
+  () => props.detail?.id ?? props.detail?.Id ?? null,
+);
+
+const requestDownloadUrl = computed(() => {
+  if (!props.bodyDownloadBaseUrl || detailId.value == null) return "";
+  return `${props.bodyDownloadBaseUrl}/${detailId.value}/request-body`;
+});
+const responseDownloadUrl = computed(() => {
+  if (!props.bodyDownloadBaseUrl || detailId.value == null) return "";
+  return `${props.bodyDownloadBaseUrl}/${detailId.value}/response-body`;
+});
 </script>
 
 <template>
@@ -110,6 +140,9 @@ const useJson = computed(() => props.jsonBodies || props.showHeaders);
             :label="labels.body"
             :text="requestBody || '-'"
             :json="useJson"
+            :truncated="requestBodyTruncated"
+            :download-url="requestDownloadUrl"
+            :download-filename="`log-${detailId ?? 'body'}-request.json`"
           />
         </TabsContent>
 
@@ -126,6 +159,9 @@ const useJson = computed(() => props.jsonBodies || props.showHeaders);
             :label="labels.body"
             :text="responseBody || '-'"
             :json="useJson"
+            :truncated="responseBodyTruncated"
+            :download-url="responseDownloadUrl"
+            :download-filename="`log-${detailId ?? 'body'}-response.json`"
           />
         </TabsContent>
       </div>

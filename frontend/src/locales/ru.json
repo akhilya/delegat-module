@@ -23,6 +23,7 @@
     "none": "Нет",
     "copy": "Копировать",
     "download": "Скачать",
+    "downloaded": "Скачано",
     "upload": "Загрузить",
     "refresh": "Обновить",
     "reset": "Сбросить",
@@ -84,7 +85,8 @@
       "body": "Тело",
       "headers": "Заголовки",
       "error": "Ошибка",
-      "durationMs": "{ms} мс"
+      "durationMs": "{ms} мс",
+      "truncated": "обрезано"
     },
     "barcodeInput": {
       "onlyDigitsError": "Только цифры",

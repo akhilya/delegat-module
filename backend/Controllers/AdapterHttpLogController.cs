@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
@@ -79,7 +80,8 @@ public class AdapterHttpLogController : ControllerBase
     }
 
     /// <summary>
-    /// Full detail for one log entry (headers + bodies).
+    /// Full detail for one log entry (headers + bodies). Large bodies are preview-truncated;
+    /// use the download endpoints for the full stored body.
     /// </summary>
     [HttpGet]
     [Route("/adapter-http-logs/{id:int}")]
@@ -91,6 +93,30 @@ public class AdapterHttpLogController : ControllerBase
         if (detail == null)
             throw ApiException.NotFound("Log entry not found");
         return Ok(detail);
+    }
+
+    [HttpGet]
+    [Route("/adapter-http-logs/{id:int}/request-body")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> DownloadRequestBody(int id, CancellationToken ct = default)
+        => await DownloadBodyAsync(id, response: false, ct);
+
+    [HttpGet]
+    [Route("/adapter-http-logs/{id:int}/response-body")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> DownloadResponseBody(int id, CancellationToken ct = default)
+        => await DownloadBodyAsync(id, response: true, ct);
+
+    private async Task<IActionResult> DownloadBodyAsync(int id, bool response, CancellationToken ct)
+    {
+        var storeId = await RequireStoreIdAsync();
+        var body = await _logs.GetStoredBodyAsync(storeId, id, response, ct);
+        if (body == null)
+            throw ApiException.NotFound("Log entry not found");
+
+        var kind = response ? "response" : "request";
+        var bytes = Encoding.UTF8.GetBytes(body);
+        return File(bytes, "application/json; charset=utf-8", $"adapter-http-log-{id}-{kind}.json");
     }
 
     private async Task<int> RequireStoreIdAsync()
