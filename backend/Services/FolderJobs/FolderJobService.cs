@@ -667,7 +667,8 @@ public sealed class FolderJobService
         }
     }
 
-    private static string SanitizeFileName(string name)
+    /// <summary>Sanitize folder names used as ZIP download file names.</summary>
+    internal static string SanitizeFileName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
