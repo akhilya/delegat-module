@@ -54,6 +54,39 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var staleBefore = DateTime.UtcNow - StaleInProgressAge;
 
+        // Pending/InProgress/Failed rows whose operation is already cancelled would otherwise
+        // be re-polled forever (retention cleanup only deletes terminal queue statuses).
+        var orphanedImages = await db.pendingImageDownloads
+            .Where(p => (p.status == ImageDownloadStatus.Pending
+                         || p.status == ImageDownloadStatus.InProgress
+                         || p.status == ImageDownloadStatus.Failed)
+                        && p.batchId != null
+                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
+
+        var orphanedImports = await db.pendingProductImports
+            .Where(p => (p.status == ProductImportStatus.Pending
+                         || p.status == ProductImportStatus.InProgress
+                         || p.status == ProductImportStatus.Failed)
+                        && p.batchId != null
+                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
+
+        var orphanedExports = await db.pendingProductExports
+            .Where(p => (p.status == ProductExportStatus.Pending
+                         || p.status == ProductExportStatus.InProgress
+                         || p.status == ProductExportStatus.Failed)
+                        && p.batchId != null
+                        && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"))
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
+
+        if (orphanedImages + orphanedImports + orphanedExports > 0)
+        {
+            _logger.LogInformation(
+                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}",
+                orphanedImages, orphanedImports, orphanedExports);
+        }
+
         // Cancel stale InProgress whose operation is cancelled/missing
         var staleExportIds = await db.pendingProductExports
             .Where(p => p.status == ProductExportStatus.InProgress

@@ -101,14 +101,23 @@ public class PluginVersionSyncService
             _logger.LogInformation("Plugin {Key} version changed: {Old} → {New}",
                 loaded.Key, oldVersion ?? "null", loaded.Version);
 
+            var syncCompleted = false;
             try
             {
-                await SyncPluginFieldsAsync(loaded.Key, ct);
+                syncCompleted = await SyncPluginFieldsAsync(loaded.Key, ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to sync fields for plugin {Key}", loaded.Key);
-                // Don't block other plugins
+                // Don't block other plugins; keep previous version so the next boot retries.
+            }
+
+            if (!syncCompleted)
+            {
+                _logger.LogWarning(
+                    "Plugin {Key}: leaving stored version at {Old} because field sync did not complete",
+                    loaded.Key, oldVersion ?? "null");
+                continue;
             }
 
             // Upsert version record
@@ -131,13 +140,14 @@ public class PluginVersionSyncService
         }
     }
 
-    private async Task SyncPluginFieldsAsync(string adapterKey, CancellationToken ct)
+    /// <returns>True when sync finished without hard failure (safe to advance stored plugin version).</returns>
+    private async Task<bool> SyncPluginFieldsAsync(string adapterKey, CancellationToken ct)
     {
         var adapter = _adapterRegistry.GetByKey(adapterKey);
         if (adapter == null)
         {
             _logger.LogWarning("Adapter {Key} not found in registry, skipping sync.", adapterKey);
-            return;
+            return false;
         }
 
         // Find all active connections using this adapter
@@ -148,11 +158,13 @@ public class PluginVersionSyncService
         if (connections.Count == 0)
         {
             _logger.LogDebug("No active connections for adapter {Key}, skipping.", adapterKey);
-            return;
+            return true;
         }
 
         int totalMappings = 0;
         int totalFieldsAdded = 0;
+        int failedMappings = 0;
+        int attemptedMappings = 0;
 
         foreach (var connection in connections)
         {
@@ -169,6 +181,7 @@ public class PluginVersionSyncService
 
             foreach (var mapping in mappings)
             {
+                attemptedMappings++;
                 try
                 {
                     var result = await SyncCategoryMappingFieldsAsync(mapping, connection, adapter, ct);
@@ -180,14 +193,18 @@ public class PluginVersionSyncService
                 }
                 catch (Exception ex)
                 {
+                    failedMappings++;
                     _logger.LogWarning(ex, "Failed to sync mapping {MappingId} ({Category}), continuing.",
                         mapping.Id, mapping.externalCategoryName);
                 }
             }
         }
 
-        _logger.LogInformation("Plugin {Key}: synced {Mappings} mappings, added {Fields} fields.",
-            adapterKey, totalMappings, totalFieldsAdded);
+        _logger.LogInformation("Plugin {Key}: synced {Mappings} mappings, added {Fields} fields ({Failed} failed).",
+            adapterKey, totalMappings, totalFieldsAdded, failedMappings);
+
+        // If every mapping failed (e.g. sustained 429), keep the old version for a later retry.
+        return attemptedMappings == 0 || failedMappings < attemptedMappings;
     }
 
     private async Task<MappingFieldSyncResult> SyncCategoryMappingFieldsAsync(

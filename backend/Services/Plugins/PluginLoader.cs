@@ -85,7 +85,7 @@ public static class PluginLoader
             return plugins;
         }
 
-        var dllFiles = Directory.GetFiles(pluginsDirectory, "*.dll", SearchOption.TopDirectoryOnly)
+        var dllFiles = Directory.GetFiles(pluginsDirectory, "Delegat.Marketplace.*.dll", SearchOption.TopDirectoryOnly)
             .Where(f => !Path.GetFileName(f).Equals("Delegat.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase));
 
         foreach (var dllPath in dllFiles)

@@ -12,11 +12,13 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 - Admin toggle to enable/disable Public API (`/api/v1`) without restart; API request logging switch is disabled while API is off
 - Connection settings: ⋮ menu with Test, API limits, and Clear cache (refresh dictionaries without waiting for TTL)
+- Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Fixed
 - Yandex bulk export: split offer-mappings/cards requests by JSON body size to stay under Partner API ~500 KB limit
 - Wildberries: honor `X-Ratelimit-Retry` (max 1 retry), pause shared limiter on 429; cache dictionaries/category fields/card limits via IMemoryCache; limits dialog no longer blocked when quotas fail
 - Ozon/Yandex/OpenCart: cache category trees, fields, and dictionaries via IMemoryCache; Ozon attribute/values pagination (limit 2000, has_next)
+- Image download queue: mark rows Cancelled when the parent operation is cancelled (stop infinite poll of Pending leftovers)
 
 ## [1.4.0] - 2026-07-22
 

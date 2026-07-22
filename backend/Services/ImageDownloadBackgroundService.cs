@@ -103,9 +103,25 @@ public class ImageDownloadBackgroundService : BackgroundService
                     .Select(o => o.status)
                     .FirstOrDefaultAsync(ct);
 
-                if (opStatus is "paused" or "cancelled")
+                if (opStatus == "cancelled")
                 {
-                    _logger.LogInformation("Operation {BatchId} is in status {Status}, skipping download", pending.batchId, opStatus);
+                    // Leave Pending rows would be re-picked every poll forever; 7-day cleanup
+                    // only deletes terminal statuses, so mark them Cancelled now.
+                    var cancelled = await context.pendingImageDownloads
+                        .Where(p => p.batchId == pending.batchId &&
+                            (p.status == ImageDownloadStatus.Pending
+                             || p.status == ImageDownloadStatus.InProgress
+                             || p.status == ImageDownloadStatus.Failed))
+                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
+                    _logger.LogInformation(
+                        "Operation {BatchId} is cancelled; marked {Count} queue row(s) as Cancelled",
+                        pending.batchId, cancelled);
+                    break;
+                }
+
+                if (opStatus == "paused")
+                {
+                    _logger.LogDebug("Operation {BatchId} is paused, skipping download", pending.batchId);
                     break;
                 }
 
