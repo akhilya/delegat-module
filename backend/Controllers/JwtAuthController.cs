@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
@@ -163,6 +164,21 @@ public class JwtAuthController : ControllerBase
         var access = await _permissionService.GetUserAccessAsync(user.Id);
         dto.roles = access.Roles;
         dto.permissions = access.EffectivePermissions;
+
+        var logging = _serviceProvider.GetService<Delegat.Services.ILoggingSettingsService>();
+        if (logging != null)
+        {
+            dto.logErrorsEnabled = logging.IsErrorLoggingEnabled;
+            dto.logApiRequestsEnabled = logging.IsApiRequestLoggingEnabled;
+            dto.logAdapterHttpEnabled = logging.IsAdapterHttpLoggingEnabled;
+        }
+        else
+        {
+            dto.logErrorsEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsErrorLoggingEnabled();
+            dto.logApiRequestsEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsApiRequestLoggingEnabled();
+            dto.logAdapterHttpEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAdapterHttpLoggingEnabled();
+        }
+
         return dto;
     }
 

@@ -254,7 +254,7 @@ Trigger: customer changes plan
   2. Trigger redeploy
   3. If downgrade → email customer with current storage usage
   4. If AI_ENABLED: false → AI services/controllers are not registered at startup; frontend does not load the chat panel (restart required to enable)
-  4b. Logging toggles (restart): LOG_ERRORS_ENABLED (default true), LOG_API_REQUESTS_ENABLED / LOG_ADAPTER_HTTP_ENABLED (default false)
+  4b. Logging: env seeds defaults on first boot; afterwards Administration UI (`/settings`) toggles without restart
   5. Update instances.plan_id in Registry DB
 ```
 

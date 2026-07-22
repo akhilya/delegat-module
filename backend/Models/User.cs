@@ -110,6 +110,15 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// </summary>
         public bool aiEnabled { get; set; }
 
+        /// <summary>Whether error logs are persisted (admin toggle).</summary>
+        public bool logErrorsEnabled { get; set; }
+
+        /// <summary>Whether Public API request logs are persisted (admin toggle).</summary>
+        public bool logApiRequestsEnabled { get; set; }
+
+        /// <summary>Whether adapter HTTP logs are persisted (admin toggle).</summary>
+        public bool logAdapterHttpEnabled { get; set; }
+
         /// <summary>Assigned Identity role names.</summary>
         public IReadOnlyList<string> roles { get; set; } = Array.Empty<string>();
 

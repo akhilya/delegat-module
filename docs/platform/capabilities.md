@@ -83,10 +83,11 @@
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
-- Persistent log toggles (restart to apply):
+- Logging toggles (admin UI under Administration / `/settings`, apply immediately; env vars only seed first boot):
   - `LOG_ERRORS_ENABLED` (default `true`) — API exception rows in MySQL
   - `LOG_API_REQUESTS_ENABLED` (default `false`) — Public API `/api/v1` activity including bodies
   - `LOG_ADAPTER_HTTP_ENABLED` (default `false`) — outbound marketplace adapter HTTP exchanges
+  - Stored in `instanceLoggingSettings`; change via `GET/PATCH /settings/logging`
 
 ### Platform Link (optional)
 - Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))

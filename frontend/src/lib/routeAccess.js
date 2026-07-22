@@ -80,6 +80,8 @@ export function getRequiredPermissionsForPath(path) {
 export function canAccessPath(me, path) {
   const p = normalizeRoutePath(path);
   if (p === PAGE_ADMIN_AI && me?.aiEnabled !== true) return false;
+  if (p === PAGE_ADMIN_ERROR_LOGS && me?.logErrorsEnabled !== true) return false;
+  if (p === PAGE_ADAPTER_LOGS && me?.logAdapterHttpEnabled !== true) return false;
 
   const required = getRequiredPermissionsForPath(path);
   if (!required || required.length === 0) return true;

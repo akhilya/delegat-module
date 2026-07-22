@@ -12,16 +12,21 @@ public class ErrorLogService : IErrorLogService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ErrorLogService> _logger;
+    private readonly ILoggingSettingsService _loggingSettings;
 
-    public ErrorLogService(IServiceScopeFactory scopeFactory, ILogger<ErrorLogService> logger)
+    public ErrorLogService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<ErrorLogService> logger,
+        ILoggingSettingsService loggingSettings)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _loggingSettings = loggingSettings;
     }
 
     public async Task LogAsync(HttpContext context, Exception exception, int statusCode)
     {
-        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsErrorLoggingEnabled())
+        if (!_loggingSettings.IsErrorLoggingEnabled)
             return;
 
         try

@@ -12,6 +12,7 @@ using Delegat;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Development;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
@@ -206,6 +207,7 @@ builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton(minioSettings);
 builder.Services.AddSingleton(mysqlSettings);
 builder.Services.AddSingleton<IDatabaseDumpService, DatabaseDumpService>();
+builder.Services.AddSingleton<ILoggingSettingsService, LoggingSettingsService>();
 
 // Platform Link (Control Plane m2m) + Reference Catalog
 var platformLinkOptions = PlatformLinkOptions.FromEnvironment();
@@ -302,6 +304,9 @@ builder.Services.AddHostedService<ProductTransferBackgroundService>();
 builder.Services.AddScoped<Delegat.Services.FolderJobs.FolderJobService>();
 builder.Services.AddHostedService<FolderJobBackgroundService>();
 builder.Services.AddHostedService<QueueCleanupBackgroundService>();
+
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddHostedService<ViteDevServerHostedService>();
 
 // SignalR for real-time operation logs
 builder.Services.AddSignalR();
@@ -508,6 +513,9 @@ using (var scope = app.Services.CreateScope())
         ?? throw new InvalidOperationException("EF IMigrator is not available.");
     await ApplyMigrationsWithRetryAsync(migrator, logger, targetMigration: null);
 }
+
+// Warm logging toggles cache (seed from env on first boot)
+await app.Services.GetRequiredService<ILoggingSettingsService>().EnsureInitializedAsync();
 
 // --reset-admin mode: generate a new admin password, print JSON to stdout, exit.
 // Usage inside container: dotnet Delegat.dll --reset-admin

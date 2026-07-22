@@ -95,13 +95,18 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
     private readonly Channel<ApiRequestLogEntry> _channel;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ApiRequestLogService> _logger;
+    private readonly ILoggingSettingsService _loggingSettings;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _worker;
 
-    public ApiRequestLogService(IServiceScopeFactory scopeFactory, ILogger<ApiRequestLogService> logger)
+    public ApiRequestLogService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<ApiRequestLogService> logger,
+        ILoggingSettingsService loggingSettings)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _loggingSettings = loggingSettings;
         _channel = Channel.CreateBounded<ApiRequestLogEntry>(new BoundedChannelOptions(2000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
@@ -113,7 +118,7 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
     public void Log(ApiRequestLogEntry entry)
     {
-        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsApiRequestLoggingEnabled())
+        if (!_loggingSettings.IsApiRequestLoggingEnabled)
             return;
 
         try

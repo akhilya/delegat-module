@@ -85,13 +85,18 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     private readonly Channel<AdapterHttpLogEntry> _channel;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AdapterHttpLogService> _logger;
+    private readonly ILoggingSettingsService _loggingSettings;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _worker;
 
-    public AdapterHttpLogService(IServiceScopeFactory scopeFactory, ILogger<AdapterHttpLogService> logger)
+    public AdapterHttpLogService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<AdapterHttpLogService> logger,
+        ILoggingSettingsService loggingSettings)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _loggingSettings = loggingSettings;
         _channel = Channel.CreateBounded<AdapterHttpLogEntry>(new BoundedChannelOptions(2000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
@@ -103,7 +108,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
 
     public void Log(AdapterHttpLogEntry entry)
     {
-        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsAdapterHttpLoggingEnabled())
+        if (!_loggingSettings.IsAdapterHttpLoggingEnabled)
             return;
 
         try

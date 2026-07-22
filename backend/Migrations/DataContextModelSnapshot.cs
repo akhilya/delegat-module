@@ -649,6 +649,28 @@ namespace Delegat.Migrations
                     b.ToTable("images");
                 });
 
+            modelBuilder.Entity("Delegat.Models.InstanceLoggingSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("logAdapterHttpEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("logApiRequestsEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("logErrorsEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("instanceLoggingSettings");
+                });
+
             modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
                 {
                     b.Property<int>("Id")

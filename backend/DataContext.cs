@@ -76,6 +76,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Persisted server errors for administrators
     public DbSet<ErrorLog> errorLogs { get; set; }
 
+    // Instance runtime settings (admin UI toggles)
+    public DbSet<InstanceLoggingSettings> instanceLoggingSettings { get; set; }
+
     // Outbound marketplace HTTP request logs
     public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }
 

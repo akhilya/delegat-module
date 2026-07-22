@@ -17,6 +17,7 @@ import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { http } from "@/main";
 import { hasAnyPermission, PERMS } from "@/lib/permissions";
+import { ME_UPDATED_EVENT } from "@/lib/meCache";
 
 export default {
   components: {
@@ -45,6 +46,7 @@ export default {
       platformVersion: null,
       appVersion: import.meta.env.VITE_APP_VERSION || null,
       confirmDialog: { open: false, title: "", message: "", resolve: null },
+      _onMeUpdated: null,
     };
   },
   computed: {
@@ -237,7 +239,18 @@ export default {
     },
   },
   mounted() {
+    this._onMeUpdated = (event) => {
+      if (event?.detail && typeof event.detail === "object") {
+        this.me = event.detail;
+      }
+    };
+    window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
     this.loadShellData();
+  },
+  beforeUnmount() {
+    if (this._onMeUpdated) {
+      window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    }
   },
 };
 </script>

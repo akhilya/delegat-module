@@ -15,7 +15,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogTableFrame, LogDateCell, LogRefreshButton } from "@/components/logs";
 import ApiRequestLogsPanel from "@/components/logs/ApiRequestLogsPanel.vue";
-import { http } from "@/main";
+import { http, loadMe } from "@/main";
+import { ME_UPDATED_EVENT } from "@/lib/meCache";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -74,9 +75,21 @@ export default {
       createdPlaintext: null,
       revokingId: null,
       logsLoading: false,
+      logApiRequestsEnabled: false,
+      _onMeUpdated: null,
     };
   },
+  computed: {
+    showLogsTab() {
+      return this.logApiRequestsEnabled === true;
+    },
+  },
   methods: {
+    applyLoggingFlag(me) {
+      this.logApiRequestsEnabled = me?.logApiRequestsEnabled === true;
+      if (!this.showLogsTab && this.tab === "logs") this.tab = "keys";
+    },
+
     refreshLogs() {
       this.$refs.logsPanel?.refresh?.();
     },
@@ -142,6 +155,10 @@ export default {
     },
 
     async onTabChange(value) {
+      if (value === "logs" && !this.showLogsTab) {
+        this.tab = "keys";
+        return;
+      }
       this.tab = value;
       if (value === "logs") {
         await this.$nextTick();
@@ -150,7 +167,24 @@ export default {
     },
   },
   async mounted() {
+    this._onMeUpdated = (event) => {
+      if (event?.detail && typeof event.detail === "object") {
+        this.applyLoggingFlag(event.detail);
+      }
+    };
+    window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+
+    try {
+      this.applyLoggingFlag(await loadMe());
+    } catch {
+      this.applyLoggingFlag(null);
+    }
     await this.fetchApiKeys();
+  },
+  beforeUnmount() {
+    if (this._onMeUpdated) {
+      window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    }
   },
 };
 </script>
@@ -172,7 +206,12 @@ export default {
       </a>
     </PageHeader>
 
-    <Tabs :model-value="tab" class="mt-2" @update:model-value="onTabChange">
+    <Tabs
+      v-if="showLogsTab"
+      :model-value="tab"
+      class="mt-2"
+      @update:model-value="onTabChange"
+    >
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <TabsList>
           <TabsTrigger value="keys" class="gap-1.5">
@@ -192,114 +231,116 @@ export default {
       </div>
 
       <TabsContent value="keys" class="mt-0 outline-none">
-        <PageSection>
-          <p class="mb-5 max-w-2xl text-sm text-muted-foreground">
-            {{ $t("pages.apiPage.keys.introPrefix") }}
-            <code class="text-xs">Authorization: Bearer dk_…</code>.
-            {{ $t("pages.apiPage.keys.introSuffix") }}
-          </p>
+        <div class="keys-panel">
+          <PageSection>
+            <p class="mb-5 max-w-2xl text-sm text-muted-foreground">
+              {{ $t("pages.apiPage.keys.introPrefix") }}
+              <code class="text-xs">Authorization: Bearer dk_…</code>.
+              {{ $t("pages.apiPage.keys.introSuffix") }}
+            </p>
 
-          <div
-            v-if="createdPlaintext"
-            class="mb-5 flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 sm:max-w-2xl"
-          >
-            <div class="text-sm font-medium">{{ $t("pages.apiPage.keys.copyWarning") }}</div>
-            <div class="flex flex-wrap items-center gap-2">
-              <code class="break-all text-xs">{{ createdPlaintext }}</code>
-              <Button variant="outline" size="sm" @click="copyPlaintext">
-                <Copy class="mr-1 size-3.5" />
-                {{ $t("common.copy") }}
+            <div
+              v-if="createdPlaintext"
+              class="mb-5 flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 sm:max-w-2xl"
+            >
+              <div class="text-sm font-medium">{{ $t("pages.apiPage.keys.copyWarning") }}</div>
+              <div class="flex flex-wrap items-center gap-2">
+                <code class="break-all text-xs">{{ createdPlaintext }}</code>
+                <Button variant="outline" size="sm" @click="copyPlaintext">
+                  <Copy class="mr-1 size-3.5" />
+                  {{ $t("common.copy") }}
+                </Button>
+              </div>
+            </div>
+
+            <div class="mb-5 flex flex-wrap items-end gap-3 sm:max-w-2xl">
+              <div class="grid min-w-[220px] flex-1 gap-1.5">
+                <label class="text-sm font-medium" for="api-key-name">{{ $t("pages.apiPage.keys.nameLabel") }}</label>
+                <Input
+                  id="api-key-name"
+                  v-model="newKeyName"
+                  :placeholder="$t('pages.apiPage.keys.namePlaceholder')"
+                  :disabled="isCreatingKey"
+                  @keydown.enter="createApiKey"
+                />
+              </div>
+              <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
+                <Loader2 v-if="isCreatingKey" class="mr-2 size-4 animate-spin" />
+                <KeyRound v-else class="mr-2 size-4" />
+                {{ $t("pages.apiPage.keys.create") }}
               </Button>
             </div>
-          </div>
 
-          <div class="mb-5 flex flex-wrap items-end gap-3 sm:max-w-2xl">
-            <div class="grid min-w-[220px] flex-1 gap-1.5">
-              <label class="text-sm font-medium" for="api-key-name">{{ $t("pages.apiPage.keys.nameLabel") }}</label>
-              <Input
-                id="api-key-name"
-                v-model="newKeyName"
-                :placeholder="$t('pages.apiPage.keys.namePlaceholder')"
-                :disabled="isCreatingKey"
-                @keydown.enter="createApiKey"
-              />
+            <div v-if="apiKeysLoading" class="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 class="size-4 animate-spin" />
+              {{ $t("pages.apiPage.keys.loading") }}
             </div>
-            <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
-              <Loader2 v-if="isCreatingKey" class="mr-2 size-4 animate-spin" />
-              <KeyRound v-else class="mr-2 size-4" />
-              {{ $t("pages.apiPage.keys.create") }}
-            </Button>
-          </div>
 
-          <div v-if="apiKeysLoading" class="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 class="size-4 animate-spin" />
-            {{ $t("pages.apiPage.keys.loading") }}
-          </div>
-
-          <PageSection
-            v-else
-            class="!p-0"
-            :empty="apiKeys.length === 0"
-            :empty-icon="KeyRound"
-            :empty-title="$t('pages.apiPage.keys.emptyTitle')"
-            :empty-description="$t('pages.apiPage.keys.emptyDescription')"
-          >
-            <LogTableFrame v-if="apiKeys.length">
-              <Table class="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="min-w-0">{{ $t("pages.apiPage.keys.columnName") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnHint") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnCreated") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnUsed") }}</TableHead>
-                    <TableHead class="w-28">{{ $t("pages.apiPage.keys.columnStatus") }}</TableHead>
-                    <TableHead class="w-16 text-right" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="key in apiKeys" :key="key.id">
-                    <TableCell class="font-medium">{{ key.name }}</TableCell>
-                    <TableCell>
-                      <code class="text-xs text-muted-foreground">{{ key.displayHint }}</code>
-                    </TableCell>
-                    <TableCell>
-                      <LogDateCell :value="key.createdAt" :timezone="storeTimezone" />
-                    </TableCell>
-                    <TableCell>
-                      <LogDateCell
-                        v-if="key.lastUsedAt"
-                        :value="key.lastUsedAt"
-                        :timezone="storeTimezone"
-                      />
-                      <span v-else class="text-sm text-muted-foreground">-</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge :variant="key.isRevoked ? 'secondary' : 'default'">
-                        {{
-                          key.isRevoked
-                            ? $t("pages.apiPage.keys.statusRevoked")
-                            : $t("pages.apiPage.keys.statusActive")
-                        }}
-                      </Badge>
-                    </TableCell>
-                    <TableCell class="text-right">
-                      <Button
-                        v-if="!key.isRevoked"
-                        variant="ghost"
-                        size="icon"
-                        :disabled="revokingId === key.id"
-                        @click="revokeApiKey(key.id)"
-                      >
-                        <Loader2 v-if="revokingId === key.id" class="size-4 animate-spin" />
-                        <Trash2 v-else class="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </LogTableFrame>
+            <PageSection
+              v-else
+              class="!p-0"
+              :empty="apiKeys.length === 0"
+              :empty-icon="KeyRound"
+              :empty-title="$t('pages.apiPage.keys.emptyTitle')"
+              :empty-description="$t('pages.apiPage.keys.emptyDescription')"
+            >
+              <LogTableFrame v-if="apiKeys.length">
+                <Table class="table-fixed">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="min-w-0">{{ $t("pages.apiPage.keys.columnName") }}</TableHead>
+                      <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnHint") }}</TableHead>
+                      <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnCreated") }}</TableHead>
+                      <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnUsed") }}</TableHead>
+                      <TableHead class="w-28">{{ $t("pages.apiPage.keys.columnStatus") }}</TableHead>
+                      <TableHead class="w-16 text-right" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow v-for="key in apiKeys" :key="key.id">
+                      <TableCell class="font-medium">{{ key.name }}</TableCell>
+                      <TableCell>
+                        <code class="text-xs text-muted-foreground">{{ key.displayHint }}</code>
+                      </TableCell>
+                      <TableCell>
+                        <LogDateCell :value="key.createdAt" :timezone="storeTimezone" />
+                      </TableCell>
+                      <TableCell>
+                        <LogDateCell
+                          v-if="key.lastUsedAt"
+                          :value="key.lastUsedAt"
+                          :timezone="storeTimezone"
+                        />
+                        <span v-else class="text-sm text-muted-foreground">-</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge :variant="key.isRevoked ? 'secondary' : 'default'">
+                          {{
+                            key.isRevoked
+                              ? $t("pages.apiPage.keys.statusRevoked")
+                              : $t("pages.apiPage.keys.statusActive")
+                          }}
+                        </Badge>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        <Button
+                          v-if="!key.isRevoked"
+                          variant="ghost"
+                          size="icon"
+                          :disabled="revokingId === key.id"
+                          @click="revokeApiKey(key.id)"
+                        >
+                          <Loader2 v-if="revokingId === key.id" class="size-4 animate-spin" />
+                          <Trash2 v-else class="size-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </LogTableFrame>
+            </PageSection>
           </PageSection>
-        </PageSection>
+        </div>
       </TabsContent>
 
       <TabsContent value="logs" class="mt-0 outline-none">
@@ -310,5 +351,117 @@ export default {
         />
       </TabsContent>
     </Tabs>
+
+    <!-- Logging off: same keys UI, no tab bar -->
+    <div v-else class="keys-panel">
+      <PageSection>
+        <p class="mb-5 max-w-2xl text-sm text-muted-foreground">
+          {{ $t("pages.apiPage.keys.introPrefix") }}
+          <code class="text-xs">Authorization: Bearer dk_…</code>.
+          {{ $t("pages.apiPage.keys.introSuffix") }}
+        </p>
+
+        <div
+          v-if="createdPlaintext"
+          class="mb-5 flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 sm:max-w-2xl"
+        >
+          <div class="text-sm font-medium">{{ $t("pages.apiPage.keys.copyWarning") }}</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <code class="break-all text-xs">{{ createdPlaintext }}</code>
+            <Button variant="outline" size="sm" @click="copyPlaintext">
+              <Copy class="mr-1 size-3.5" />
+              {{ $t("common.copy") }}
+            </Button>
+          </div>
+        </div>
+
+        <div class="mb-5 flex flex-wrap items-end gap-3 sm:max-w-2xl">
+          <div class="grid min-w-[220px] flex-1 gap-1.5">
+            <label class="text-sm font-medium" for="api-key-name-solo">{{ $t("pages.apiPage.keys.nameLabel") }}</label>
+            <Input
+              id="api-key-name-solo"
+              v-model="newKeyName"
+              :placeholder="$t('pages.apiPage.keys.namePlaceholder')"
+              :disabled="isCreatingKey"
+              @keydown.enter="createApiKey"
+            />
+          </div>
+          <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
+            <Loader2 v-if="isCreatingKey" class="mr-2 size-4 animate-spin" />
+            <KeyRound v-else class="mr-2 size-4" />
+            {{ $t("pages.apiPage.keys.create") }}
+          </Button>
+        </div>
+
+        <div v-if="apiKeysLoading" class="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 class="size-4 animate-spin" />
+          {{ $t("pages.apiPage.keys.loading") }}
+        </div>
+
+        <PageSection
+          v-else
+          class="!p-0"
+          :empty="apiKeys.length === 0"
+          :empty-icon="KeyRound"
+          :empty-title="$t('pages.apiPage.keys.emptyTitle')"
+          :empty-description="$t('pages.apiPage.keys.emptyDescription')"
+        >
+          <LogTableFrame v-if="apiKeys.length">
+            <Table class="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead class="min-w-0">{{ $t("pages.apiPage.keys.columnName") }}</TableHead>
+                  <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnHint") }}</TableHead>
+                  <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnCreated") }}</TableHead>
+                  <TableHead class="w-40">{{ $t("pages.apiPage.keys.columnUsed") }}</TableHead>
+                  <TableHead class="w-28">{{ $t("pages.apiPage.keys.columnStatus") }}</TableHead>
+                  <TableHead class="w-16 text-right" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="key in apiKeys" :key="key.id">
+                  <TableCell class="font-medium">{{ key.name }}</TableCell>
+                  <TableCell>
+                    <code class="text-xs text-muted-foreground">{{ key.displayHint }}</code>
+                  </TableCell>
+                  <TableCell>
+                    <LogDateCell :value="key.createdAt" :timezone="storeTimezone" />
+                  </TableCell>
+                  <TableCell>
+                    <LogDateCell
+                      v-if="key.lastUsedAt"
+                      :value="key.lastUsedAt"
+                      :timezone="storeTimezone"
+                    />
+                    <span v-else class="text-sm text-muted-foreground">-</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge :variant="key.isRevoked ? 'secondary' : 'default'">
+                      {{
+                        key.isRevoked
+                          ? $t("pages.apiPage.keys.statusRevoked")
+                          : $t("pages.apiPage.keys.statusActive")
+                      }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Button
+                      v-if="!key.isRevoked"
+                      variant="ghost"
+                      size="icon"
+                      :disabled="revokingId === key.id"
+                      @click="revokeApiKey(key.id)"
+                    >
+                      <Loader2 v-if="revokingId === key.id" class="size-4 animate-spin" />
+                      <Trash2 v-else class="size-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </LogTableFrame>
+        </PageSection>
+      </PageSection>
+    </div>
   </div>
 </template>

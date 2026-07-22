@@ -17,7 +17,10 @@ public sealed class PublicApiRequestLoggingMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, IApiRequestLogger logger)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IApiRequestLogger logger,
+        ILoggingSettingsService loggingSettings)
     {
         if (!context.Request.Path.StartsWithSegments("/api/v1"))
         {
@@ -25,7 +28,7 @@ public sealed class PublicApiRequestLoggingMiddleware
             return;
         }
 
-        if (!Delegat.Infrastructure.Configuration.FeatureFlags.IsApiRequestLoggingEnabled())
+        if (!loggingSettings.IsApiRequestLoggingEnabled)
         {
             await _next(context);
             return;

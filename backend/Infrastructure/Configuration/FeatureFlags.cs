@@ -18,15 +18,15 @@ public static class FeatureFlags
         return IsTruthy(raw);
     }
 
-    /// <summary>Persist API exception rows to MySQL. Default: enabled.</summary>
+    /// <summary>Persist API exception rows to MySQL. Used to seed admin UI settings on first boot.</summary>
     public static bool IsErrorLoggingEnabled()
         => ParseBoolEnv("LOG_ERRORS_ENABLED", defaultValue: true);
 
-    /// <summary>Persist Public API (/api/v1) activity logs including bodies. Default: disabled.</summary>
+    /// <summary>Persist Public API (/api/v1) activity logs including bodies. Seed default for admin UI.</summary>
     public static bool IsApiRequestLoggingEnabled()
         => ParseBoolEnv("LOG_API_REQUESTS_ENABLED", defaultValue: false);
 
-    /// <summary>Persist outbound marketplace adapter HTTP exchanges. Default: disabled.</summary>
+    /// <summary>Persist outbound marketplace adapter HTTP exchanges. Seed default for admin UI.</summary>
     public static bool IsAdapterHttpLoggingEnabled()
         => ParseBoolEnv("LOG_ADAPTER_HTTP_ENABLED", defaultValue: false);
 

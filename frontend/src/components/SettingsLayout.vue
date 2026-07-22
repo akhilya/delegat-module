@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { loadMe } from "@/main";
+import { ME_UPDATED_EVENT } from "@/lib/meCache";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { resolveSettingsBreadcrumb } from "@/config/settingsNav";
 import { PAGE_SETTINGS, PAGE_SETTINGS_USER } from "@/router";
@@ -34,10 +35,21 @@ watch(
   { immediate: true },
 );
 
+function onMeUpdated(event) {
+  if (event?.detail && typeof event.detail === "object") {
+    me.value = event.detail;
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener(ME_UPDATED_EVENT, onMeUpdated);
   try {
     me.value = await loadMe();
   } catch {}
+});
+
+onUnmounted(() => {
+  window.removeEventListener(ME_UPDATED_EVENT, onMeUpdated);
 });
 </script>
 

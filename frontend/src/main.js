@@ -7,6 +7,8 @@ import {
   routeAccessFallback,
   PAGE_PRODUCTS,
   PAGE_ADMIN_AI,
+  PAGE_ADMIN_ERROR_LOGS,
+  PAGE_ADAPTER_LOGS,
 } from "./router";
 import { createStore } from "./store";
 import axios from "axios";
@@ -214,6 +216,20 @@ router.beforeEach(async (to) => {
   if (to.path === PAGE_ADMIN_AI || to.path.startsWith(`${PAGE_ADMIN_AI}/`)) {
     const me = getCachedMe() || (await loadMe());
     if (me?.aiEnabled !== true) {
+      return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
+  }
+
+  // Log pages require the corresponding admin logging toggle.
+  if (to.path === PAGE_ADMIN_ERROR_LOGS || to.path.startsWith(`${PAGE_ADMIN_ERROR_LOGS}/`)) {
+    const me = getCachedMe() || (await loadMe());
+    if (me?.logErrorsEnabled !== true) {
+      return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
+  }
+  if (to.path === PAGE_ADAPTER_LOGS || to.path.startsWith(`${PAGE_ADAPTER_LOGS}/`)) {
+    const me = getCachedMe() || (await loadMe());
+    if (me?.logAdapterHttpEnabled !== true) {
       return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
     }
   }

@@ -1,4 +1,5 @@
 using Delegat.Models.Marketplace;
+using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,17 @@ namespace Delegat.Tests;
 
 public class AdapterHttpLogCleanupTests
 {
+    private sealed class StubLoggingSettings : ILoggingSettingsService
+    {
+        public bool IsErrorLoggingEnabled => true;
+        public bool IsApiRequestLoggingEnabled => false;
+        public bool IsAdapterHttpLoggingEnabled => true;
+        public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<LoggingSettingsDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(new LoggingSettingsDto(true, false, true, DateTime.UtcNow));
+        public Task<LoggingSettingsDto> UpdateAsync(UpdateLoggingSettingsRequest request, CancellationToken ct = default) =>
+            GetAsync(ct);
+    }
     [Fact]
     public async Task CleanupAsync_RemovesOnlyLogsOlderThanConfiguredRetention()
     {
@@ -27,7 +39,8 @@ public class AdapterHttpLogCleanupTests
                 .BuildServiceProvider();
             await using var service = new AdapterHttpLogService(
                 provider.GetRequiredService<IServiceScopeFactory>(),
-                NullLogger<AdapterHttpLogService>.Instance);
+                NullLogger<AdapterHttpLogService>.Instance,
+                new StubLoggingSettings());
 
             await service.CleanupAsync();
 

@@ -94,8 +94,12 @@ export function getAdminSettingsItems(ctx) {
     items.push({ id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug });
   }
   if (can(ctx, PERMS.SettingsPlatform)) {
-    items.push({ id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle });
-    items.push({ id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText });
+    if (ctx.me?.logErrorsEnabled === true) {
+      items.push({ id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle });
+    }
+    if (ctx.me?.logAdapterHttpEnabled === true) {
+      items.push({ id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText });
+    }
     if (ctx.me?.aiEnabled === true) {
       items.push({ id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles });
     }

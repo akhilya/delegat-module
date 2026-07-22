@@ -111,12 +111,24 @@ public class DatabaseDumpTests
 
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
-        var controller = new SettingsController(dump);
+        var controller = new SettingsController(dump, new StubLoggingSettings());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),
         };
         return controller;
+    }
+
+    private sealed class StubLoggingSettings : ILoggingSettingsService
+    {
+        public bool IsErrorLoggingEnabled => true;
+        public bool IsApiRequestLoggingEnabled => false;
+        public bool IsAdapterHttpLoggingEnabled => false;
+        public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<LoggingSettingsDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(new LoggingSettingsDto(true, false, false, DateTime.UtcNow));
+        public Task<LoggingSettingsDto> UpdateAsync(UpdateLoggingSettingsRequest request, CancellationToken ct = default) =>
+            GetAsync(ct);
     }
 
     private sealed class FakeDumpService : IDatabaseDumpService
