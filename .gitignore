@@ -138,6 +138,9 @@ mcp.json
 design-docs/
 .pr-plan/
 
+# Local build/test output dumps (not publish artifacts)
+artifacts/
+
 # ======================
 # Misc
 # ======================

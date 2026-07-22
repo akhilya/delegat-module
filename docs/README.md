@@ -21,6 +21,11 @@
 
 - [**opencart.md**](adapters/opencart.md) - OpenCart bridge: credentials, actions, payload format
 
+## Security
+
+- [**SECURITY_AUDIT.md**](security/SECURITY_AUDIT.md) - 2026-07-17 audit: encryption, secrets, AI integration
+- [**SECURITY_AUDIT_REPORT.md**](security/SECURITY_AUDIT_REPORT.md) - 2026-07-17 audit: uploads, plugins, storage
+
 ## Implementation Plans
 
 - [**2026-07-21-control-plane-mvp-brief.md**](plans/2026-07-21-control-plane-mvp-brief.md) - CP MVP: repo, DNS, scope, **docs migration §0**, acceptance
