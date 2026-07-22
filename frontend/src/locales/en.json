@@ -336,6 +336,7 @@
     "aiModels": "AI Models",
     "adapterLogs": "Adapter logs",
     "notFound": "Not found",
+    "unavailable": "Server unavailable",
     "adapters": "Adapters",
     "categoryImport": "Import category",
     "fieldMapping": "Field mapping"
@@ -2222,6 +2223,14 @@
       "description": "The requested address doesn't exist or has been moved.",
       "goBack": "Go back",
       "home": "Home"
+    },
+    "unavailablePage": {
+      "eyebrow": "No connection",
+      "title": "Server temporarily unavailable",
+      "description": "An update or restart may be in progress. Your data is safe — wait a moment and try again.",
+      "retry": "Try again",
+      "checking": "Checking…",
+      "autoHint": "Checking automatically"
     },
     "productCreationPage": {
       "breadcrumbTitle": "Create product",

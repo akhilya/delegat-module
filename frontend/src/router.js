@@ -20,6 +20,7 @@ const SettingsShell = () => import("./layouts/SettingsShell.vue");
 const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
 const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
+const UnavailablePage = () => import("./pages/unavailablePage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
@@ -36,6 +37,7 @@ const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
 
 export const PAGE_SIGN_UP = "/signUp";
 export const PAGE_SIGN_IN = "/signIn";
+export const PAGE_UNAVAILABLE = "/unavailable";
 export const PAGE_PRODUCTS = "/products";
 export const PAGE_PRODUCT_CREATION = "/products/create";
 export const PAGE_PRODUCT_EDIT = "/products/:id/edit";
@@ -72,6 +74,11 @@ let _customTitle = null;
 export const routes = [
   { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, titleKey: "routes.signUp" } },
   { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true, titleKey: "routes.signIn" } },
+  {
+    path: PAGE_UNAVAILABLE,
+    component: UnavailablePage,
+    meta: { public: true, titleKey: "routes.unavailable" },
+  },
   { path: "/", component: productsPage, meta: { titleKey: "routes.products" } },
   { path: PAGE_PRODUCTS, component: productsPage, meta: { titleKey: "routes.products" } },
   {

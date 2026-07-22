@@ -9,11 +9,19 @@ import {
   PAGE_ADMIN_AI,
   PAGE_ADMIN_ERROR_LOGS,
   PAGE_ADAPTER_LOGS,
+  PAGE_UNAVAILABLE,
 } from "./router";
 import { createStore } from "./store";
 import axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import { startLoading, finishLoading } from "./composables/useLoadingBar";
+import {
+  configureApiAvailability,
+  checkHealth,
+  isApiUnavailableError,
+  markOffline,
+  getAvailabilityStatus,
+} from "./composables/useApiAvailability";
 import { toast } from "vue-sonner";
 import i18n, { bootstrapLocale, getLocale, t } from "./i18n";
 import {
@@ -161,6 +169,15 @@ http.interceptors.response.use(
       toast.warning(t("errors.rateLimited"));
     }
 
+    // Backend down / proxy gateway errors (deploy, restart) → dedicated page.
+    if (isApiUnavailableError(error)) {
+      const url = originalRequest?.url || "";
+      if (!/\/health(?:\?|$)/.test(url)) {
+        const currentPath = router.currentRoute.value.fullPath;
+        markOffline(currentPath);
+      }
+    }
+
     return Promise.reject(error);
   },
 );
@@ -168,8 +185,37 @@ http.interceptors.response.use(
 export const router = createRouter();
 export const store = createStore();
 
+configureApiAvailability({
+  getRouter: () => router,
+  onRecovered: () => {
+    resetAuthCache();
+  },
+});
+
 router.beforeEach(async (to) => {
   startLoading();
+
+  if (to.path === PAGE_UNAVAILABLE) return true;
+
+  const availability = getAvailabilityStatus();
+  if (availability === "offline") {
+    return {
+      path: PAGE_UNAVAILABLE,
+      query: { from: to.fullPath },
+    };
+  }
+
+  // First navigation (or after a full reload): probe before auth / shell.
+  if (availability === "unknown") {
+    const ok = await checkHealth();
+    if (!ok) {
+      return {
+        path: PAGE_UNAVAILABLE,
+        query: { from: to.fullPath },
+      };
+    }
+  }
+
   if (to.meta.public) return true;
 
   if (isAuthenticated === null) {
@@ -178,7 +224,14 @@ router.beforeEach(async (to) => {
         cache: false,
       });
       isAuthenticated = response.data?.isAuthenticated === true;
-    } catch {
+    } catch (error) {
+      if (isApiUnavailableError(error)) {
+        markOffline(to.fullPath);
+        return {
+          path: PAGE_UNAVAILABLE,
+          query: { from: to.fullPath },
+        };
+      }
       isAuthenticated = false;
     }
   }
@@ -188,7 +241,14 @@ router.beforeEach(async (to) => {
     try {
       await refreshTokens();
       isAuthenticated = true;
-    } catch {
+    } catch (error) {
+      if (isApiUnavailableError(error)) {
+        markOffline(to.fullPath);
+        return {
+          path: PAGE_UNAVAILABLE,
+          query: { from: to.fullPath },
+        };
+      }
       isAuthenticated = null;
       const redirect =
         to.path.startsWith("/signIn") || to.path.startsWith("/signUp")
