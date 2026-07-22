@@ -309,45 +309,51 @@ public class PriceSyncService
             .Select(g => g.First())
             .ToList();
 
-        var pricesToExport = uniqueExportableLinks
-            .Select(l =>
+        var pricesToExport = new List<PriceInfo>();
+        foreach (var l in uniqueExportableLinks)
+        {
+            CategoryMapping? mapping = null;
+            if (l.categoryMappingId != null)
+                mappings.TryGetValue(l.categoryMappingId.Value, out mapping);
+
+            PriceInfo? fromGraph = null;
+            if (mapping != null)
             {
-                CategoryMapping? mapping = null;
-                if (l.categoryMappingId != null)
-                    mappings.TryGetValue(l.categoryMappingId.Value, out mapping);
+                fromGraph = await _mappingService.BuildPriceInfoFromGraphAsync(
+                    l.product!,
+                    mapping,
+                    l.externalProductId,
+                    l.externalSku,
+                    l.product!.storageQuantity,
+                    ct);
+            }
 
-                if (mapping != null)
-                {
-                    var fromGraph = _mappingService.BuildPriceInfoFromGraph(
-                        l.product!,
-                        mapping,
-                        l.externalProductId,
-                        l.externalSku,
-                        l.product!.storageQuantity);
-                    if (fromGraph != null)
-                        return fromGraph;
-                }
-
-                return BuildLegacyPriceInfo(l, extendedPrice, storeBaseCurrency);
-            })
-            .Where(p => p.Price != null)
-            .ToList();
+            var price = fromGraph ?? BuildLegacyPriceInfo(l, extendedPrice, storeBaseCurrency);
+            if (price.Price != null)
+                pricesToExport.Add(price);
+        }
 
         var convertedPrices = new List<PriceInfo>();
         foreach (var price in pricesToExport)
             convertedPrices.Add(await ConvertPriceInfoForExportAsync(price, connection.storeId, ct));
         pricesToExport = convertedPrices;
 
-        var skippedNoPrice = exportableLinks.Count(l =>
+        var skippedNoPrice = 0;
+        foreach (var l in exportableLinks)
         {
             if (l.categoryMappingId != null && mappings.TryGetValue(l.categoryMappingId.Value, out var mapping)
                 && MappingService.SchemaPriceFields(mapping.graphJson).Count > 0)
             {
-                return _mappingService.BuildPriceInfoFromGraph(
-                    l.product!, mapping, l.externalProductId, l.externalSku, l.product!.storageQuantity) == null;
+                var info = await _mappingService.BuildPriceInfoFromGraphAsync(
+                    l.product!, mapping, l.externalProductId, l.externalSku, l.product!.storageQuantity, ct);
+                if (info == null)
+                    skippedNoPrice++;
             }
-            return l.product?.price == null;
-        });
+            else if (l.product?.price == null)
+            {
+                skippedNoPrice++;
+            }
+        }
         var skippedNoIdentifier = links.Count(l =>
             l.product?.price != null
             && string.IsNullOrWhiteSpace(l.externalProductId)

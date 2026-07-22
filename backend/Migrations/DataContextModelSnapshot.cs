@@ -1216,7 +1216,8 @@ namespace Delegat.Migrations
 
                     b.Property<string>("operationId")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<int>("processedItems")
                         .HasColumnType("int");
@@ -1246,6 +1247,12 @@ namespace Delegat.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("operationId");
+
+                    b.HasIndex("storeId");
+
+                    b.HasIndex("status", "createdAt");
 
                     b.ToTable("pendingFolderJobs");
                 });

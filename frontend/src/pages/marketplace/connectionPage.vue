@@ -369,11 +369,20 @@ export default {
       isLoadingLimits: false,
       limitsRefreshTimer: null,
       showLimitsDialog: false,
+      aiEnabled: false,
     };
   },
   watch: {
     activeTab(newVal) {
       this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
+    },
+    showLimitsDialog(open) {
+      if (open) {
+        this.fetchLimits();
+        this.startLimitsAutoRefresh();
+      } else {
+        this.stopLimitsAutoRefresh();
+      }
     },
     productsViewMode(newVal) {
       const query = { ...this.$route.query };
@@ -699,6 +708,13 @@ export default {
 
     async fetchData() {
       this.isLoading = true;
+      try {
+        const { loadMe } = await import("@/main");
+        const me = await loadMe();
+        this.aiEnabled = me?.aiEnabled === true;
+      } catch {
+        this.aiEnabled = false;
+      }
       await Promise.all([
         this.fetchConnection(),
         this.fetchAdapters(),
@@ -708,9 +724,8 @@ export default {
       ]);
       this.isLoading = false;
       // fetchLimits makes an external API call (GetQuotasAsync) that can be slow;
-      // run it after the page is already visible so it doesn't block rendering.
+      // one-shot after paint; auto-refresh only while the limits dialog is open.
       this.fetchLimits();
-      this.startLimitsAutoRefresh();
 
       // If products tab was restored from URL, fetch products now
       if (this.activeTab === "products") {
@@ -728,11 +743,13 @@ export default {
           this.connection = extractResponseData(response);
           setPageTitle(this.connection.name);
           this.parseCredentials();
-          this.$store.commit("aiChat/setPageContext", {
-            page: "connection",
-            connectionId: parseInt(this.connectionId),
-            connectionName: this.connection.name || "",
-          });
+          if (this.$store.state.aiChat) {
+            this.$store.commit("aiChat/setPageContext", {
+              page: "connection",
+              connectionId: parseInt(this.connectionId),
+              connectionName: this.connection.name || "",
+            });
+          }
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -2729,7 +2746,7 @@ export default {
                     }}
                   </span>
                   <AiErrorExplainer
-                    v-if="!testResult.success && (testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError'))"
+                    v-if="aiEnabled && !testResult.success && (testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError'))"
                     :error-message="testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError')"
                     :context="`test_connection`"
                     :connection-id="connection?.id"

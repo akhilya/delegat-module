@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useStore } from "vuex";
+import { useSharedNow } from "@/composables/useSharedNow";
 import {
   Upload,
   Download,
@@ -72,8 +73,7 @@ const copyingLogs = ref(false);
 const logsCopied = ref(false);
 const explainingWithAi = ref(false);
 const aiAvailable = ref(false);
-const now = ref(Date.now());
-let timer = null;
+const now = useSharedNow();
 let copyTimer = null;
 
 watch(expanded, async (isExpanded) => {
@@ -90,10 +90,9 @@ watch(expanded, async (isExpanded) => {
 });
 
 onMounted(async () => {
-  timer = setInterval(() => { now.value = Date.now(); }, 1000);
   try {
     const me = await loadMe();
-    aiAvailable.value = me?.aiEnabled !== false && hasPermission(me, PERMS.AiUse);
+    aiAvailable.value = me?.aiEnabled === true && hasPermission(me, PERMS.AiUse);
     if (aiAvailable.value) {
       store.dispatch("aiModels/getPickerModels", { onError: () => {} });
     }
@@ -102,7 +101,6 @@ onMounted(async () => {
   }
 });
 onUnmounted(() => {
-  if (timer) clearInterval(timer);
   if (copyTimer) clearTimeout(copyTimer);
 });
 

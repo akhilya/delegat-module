@@ -174,7 +174,7 @@ const SIDEBAR_GROUPS = [
         type: "action",
         action: "toggleAi",
         icon: Sparkles,
-        visible: (ctx) => can(ctx, PERMS.AiUse) && ctx.me?.aiEnabled !== false,
+        visible: (ctx) => can(ctx, PERMS.AiUse) && ctx.me?.aiEnabled === true,
       },
       {
         id: "ops",

@@ -36,8 +36,16 @@ const buttonLabel = computed(() => {
     : t("ai.generateWithAi");
 });
 
-onMounted(() => {
-  vuexStore.dispatch("aiModels/getPickerModels", { onError: () => {} });
+onMounted(async () => {
+  try {
+    const { loadMe } = await import("@/main");
+    const me = await loadMe();
+    if (me?.aiEnabled === true) {
+      vuexStore.dispatch("aiModels/getPickerModels", { onError: () => {} });
+    }
+  } catch {
+    /* AI picker optional */
+  }
 });
 
 async function generate() {

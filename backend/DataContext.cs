@@ -453,5 +453,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<GroupValueMarketplaceLink>()
             .HasIndex(l => new { l.connectionId, l.groupValue })
             .IsUnique();
+
+        // Folder job queue: polled every few seconds by status + createdAt
+        builder.Entity<PendingFolderJob>()
+            .Property(j => j.operationId)
+            .HasMaxLength(64);
+        builder.Entity<PendingFolderJob>()
+            .HasIndex(j => new { j.status, j.createdAt });
+        builder.Entity<PendingFolderJob>()
+            .HasIndex(j => j.storeId);
+        builder.Entity<PendingFolderJob>()
+            .HasIndex(j => j.operationId);
     }
 }

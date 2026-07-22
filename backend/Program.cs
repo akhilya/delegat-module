@@ -256,36 +256,43 @@ builder.Services.AddSingleton<IAdapterHttpLogger>(sp => sp.GetRequiredService<Ad
 builder.Services.AddSingleton<IAdapterHttpLogQueryService>(sp => sp.GetRequiredService<AdapterHttpLogService>());
 builder.Services.AddHostedService<AdapterHttpLogCleanupService>();
 
-// AI services
-builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
-builder.Services.AddScoped<AiModelConfigService>();
-builder.Services.AddScoped<AiChatService>();
-// AI tool handlers
-builder.Services.AddScoped<ProductToolHandlers>();
-builder.Services.AddScoped<CategoryToolHandlers>();
-builder.Services.AddScoped<MappingToolHandlers>();
-builder.Services.AddScoped<GroupToolHandlers>();
-builder.Services.AddScoped<SyncToolHandlers>();
-builder.Services.AddScoped<FileToolHandlers>();
-builder.Services.AddScoped<AnalyticsToolHandlers>();
-builder.Services.AddScoped<RollbackToolHandlers>();
-builder.Services.AddScoped<ToolDispatcher>();
-builder.Services.AddScoped<GraphMutationService>();
-builder.Services.AddScoped<MappingIntelligenceService>();
-builder.Services.AddScoped<AiOperationService>();
+// AI services — registered only when AI_ENABLED is true at process start (restart to toggle).
+var aiEnabled = FeatureFlags.IsAiEnabled();
+if (aiEnabled)
+{
+    builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
+    builder.Services.AddScoped<AiModelConfigService>();
+    builder.Services.AddScoped<AiChatService>();
+    builder.Services.AddScoped<ProductToolHandlers>();
+    builder.Services.AddScoped<CategoryToolHandlers>();
+    builder.Services.AddScoped<MappingToolHandlers>();
+    builder.Services.AddScoped<GroupToolHandlers>();
+    builder.Services.AddScoped<SyncToolHandlers>();
+    builder.Services.AddScoped<FileToolHandlers>();
+    builder.Services.AddScoped<AnalyticsToolHandlers>();
+    builder.Services.AddScoped<RollbackToolHandlers>();
+    builder.Services.AddScoped<ToolDispatcher>();
+    builder.Services.AddScoped<GraphMutationService>();
+    builder.Services.AddScoped<MappingIntelligenceService>();
+    builder.Services.AddScoped<AiOperationService>();
+    builder.Services.AddScoped<GenerativeMappingService>();
+}
 
-// Sync services
-builder.Services.AddScoped<GenerativeMappingService>();
-builder.Services.AddScoped<MappingService>();
+// Sync services (MappingService resolves GenerativeMappingService optionally)
+builder.Services.AddScoped<MappingService>(sp =>
+{
+    var generative = aiEnabled ? sp.GetService<GenerativeMappingService>() : null;
+    return new MappingService(
+        sp.GetRequiredService<DataContext>(),
+        sp,
+        generative);
+});
 builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<ProductSyncService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
-
-// One-time startup repair for files broken by old rename behavior
-builder.Services.AddHostedService<FileRepairService>();
 
 // Background services
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
@@ -436,12 +443,18 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.AddControllers(options =>
     {
         options.Conventions.Add(new Delegat.Infrastructure.ApiRoutePrefixConvention());
+        options.Conventions.Add(new Delegat.Infrastructure.AiControllersConvention(aiEnabled));
     })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
+
+if (!aiEnabled)
+{
+    Console.WriteLine("AI_ENABLED=false: AI services and controllers are not registered (restart to enable).");
+}
 
 var app = builder.Build();
 

@@ -253,7 +253,7 @@ Trigger: customer changes plan
        MAX_STORAGE_GB, MAX_PRODUCTS, MAX_CONNECTIONS, AI_ENABLED
   2. Trigger redeploy
   3. If downgrade → email customer with current storage usage
-  4. If AI_ENABLED: false → AI chat panel is hidden on frontend (AiChatPanel checks env)
+  4. If AI_ENABLED: false → AI services/controllers are not registered at startup; frontend does not load the chat panel (restart required to enable)
   5. Update instances.plan_id in Registry DB
 ```
 

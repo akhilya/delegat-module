@@ -7,15 +7,16 @@ import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Monitor } from "lucide-vue-next";
-import AiChatPanel from "@/components/ai/AiChatPanel.vue";
 import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
 import { BRAND_NAME } from "@/brand";
 import { loadMe } from "@/main";
+
+const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPanel.vue"));
 
 export default {
   components: {
@@ -37,7 +38,8 @@ export default {
     const { t } = useI18n();
     const route = useRoute();
     const isPublicPage = computed(() => !!route.meta?.public);
-    const aiEnabled = ref(true);
+    // Default false until /auth/me confirms AI_ENABLED — avoids loading AI chunk on free tier.
+    const aiEnabled = ref(false);
 
     // Mobile warning: show once, remember dismissal in localStorage
     const mobileWarningDismissed = ref(
@@ -60,7 +62,7 @@ export default {
       return this.$store.state.isSwitchingStore;
     },
     isAiPanelOpen() {
-      return this.$store.state.aiChat.isOpen;
+      return this.aiEnabled && this.$store.state.aiChat?.isOpen;
     },
     hasActiveUploads() {
       return this.$store.getters["operations/hasLocalActiveUploads"];
@@ -74,8 +76,10 @@ export default {
     window.addEventListener("beforeunload", this._onBeforeUnload);
     if (!this.isPublicPage) {
       loadMe().then((me) => {
-        if (me) this.aiEnabled = me.aiEnabled !== false;
-      }).catch(() => {});
+        this.aiEnabled = me?.aiEnabled === true;
+      }).catch(() => {
+        this.aiEnabled = false;
+      });
     }
   },
   beforeUnmount() {
@@ -118,7 +122,7 @@ export default {
   <ConfirmDialogHost />
   <template v-if="!isPublicPage">
     <OperationsPanel />
-    <FabGroup />
+    <FabGroup :ai-enabled="aiEnabled" />
   </template>
 
   <!-- Mobile device warning -->

@@ -659,7 +659,14 @@ const aiModelOptions = computed(() =>
     .filter(Boolean),
 );
 
-function loadPickerModels() {
+async function loadPickerModels() {
+  try {
+    const { loadMe } = await import("@/main");
+    const me = await loadMe();
+    if (me?.aiEnabled !== true) return;
+  } catch {
+    return;
+  }
   store.dispatch("aiModels/getPickerModels", { onError: () => {} });
 }
 

@@ -73,9 +73,9 @@ Uses `SocketsHttpHandler` (SOCKS5 native in .NET 6+). Credentials are manually e
 Applied in `AiApiClient.CreateProxiedClient()` and threaded through `BuildOpenAiClient`,
 `BuildAnthropicClient`, and `DiscoverModelsAsync`.
 
-**Access control:** AI features are only available when `AI_ENABLED=true` is set as an env var.
-The quota is enforced in `AiController` (see `AI_ENABLED` env var check).
-Admin can configure models regardless of this flag.
+**Access control:** AI features are only available when `AI_ENABLED=true` is set as an env var
+(read at process start). When disabled, AI services and controllers are not registered and the
+frontend does not load the chat panel; changing the flag requires an instance restart.
 
 ---
 

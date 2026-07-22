@@ -237,6 +237,7 @@ export default {
     const storeAttributes = ref([]);
     const loadedStoreAttributeValues = ref([]);
     const isLoadingStoreAttributes = ref(false);
+    const aiEnabled = ref(false);
     const productGroup = ref(null);
     const isLoadingGroup = ref(false);
     const visibleCategoryAttributes = computed(() =>
@@ -1068,9 +1069,16 @@ export default {
       return ok;
     });
 
-    onMounted(() => {
+    onMounted(async () => {
       window.addEventListener("keydown", handleLightboxKeydown);
       window.addEventListener("beforeunload", onBeforeUnload);
+      try {
+        const { loadMe } = await import("@/main");
+        const me = await loadMe();
+        aiEnabled.value = me?.aiEnabled === true;
+      } catch {
+        aiEnabled.value = false;
+      }
     });
     onUnmounted(() => {
       window.removeEventListener("keydown", handleLightboxKeydown);
@@ -1087,7 +1095,7 @@ export default {
       saveDisabledReasons,
       isProductLoading,
       files,
-      deleteFile,
+      aiEnabled,      deleteFile,
       productId,
       images,
       handleDeleteProduct,
@@ -1318,6 +1326,7 @@ export default {
                       <div class="flex items-center justify-between gap-2">
                         <label for="product-description" class="text-sm font-medium leading-none">{{ $t("pages.productEditPage.fields.description.label") }}</label>
                         <AiDescriptionGenerator
+                          v-if="aiEnabled"
                           :product-name="form.values.product?.name"
                           :product-sku="productSKU"
                           :category-name="category?.name"

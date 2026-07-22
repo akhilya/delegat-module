@@ -36,30 +36,22 @@ public class MappingService
     /// <summary>
     /// Build export data for a product based on field mappings
     /// </summary>
-    /// <param name="product">Product with loaded relations</param>
-    /// <param name="categoryMapping">Category mapping with loaded fieldMappings</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Dictionary: marketplace field key -> value</returns>
-    public Task<Dictionary<string, object?>> BuildExportDataAsync(
+    public async Task<Dictionary<string, object?>> BuildExportDataAsync(
         Product product,
         CategoryMapping categoryMapping,
         CancellationToken ct = default)
     {
         // Export is graph-only: the whole-category node graph is the single source of truth.
-        return Task.FromResult(BuildExportDataFromGraph(product, categoryMapping));
+        return await BuildExportDataFromGraphAsync(product, categoryMapping, ct);
     }
 
-    /// <summary>
-    /// Build export data by evaluating the whole-category visual node graph.
-    /// Reuses the same source resolvers, modifier implementations, and coercion as the
-    /// legacy per-field path, so an auto-migrated single-line graph produces identical output.
-    /// </summary>
     /// <summary>
     /// Evaluate a category's node graph for a product, returning outputs, effective field types,
     /// and per-node values (for the editor's per-node preview).
     /// </summary>
+    [Obsolete("Use EvaluateGraphAsync to avoid blocking the thread pool.")]
     public GraphEvalResult EvaluateGraph(Product product, string? graphJson, int? mappingId = null)
-        => EvaluateGraphAsync(product, graphJson, mappingId).GetAwaiter().GetResult();
+        => EvaluateGraphAsync(product, graphJson, mappingId).ConfigureAwait(false).GetAwaiter().GetResult();
 
     public async Task<GraphEvalResult> EvaluateGraphAsync(
         Product product,
@@ -90,7 +82,10 @@ public class MappingService
             ResolveReference = (reference) => ResolveFieldReference(product, reference)
         };
 
-        var baseCtx = BuildGraphContext(product, modifierContext);
+        var caches = new StorageCaches();
+        await PrefetchStorageAsync(product, graph, caches, ct);
+
+        var baseCtx = BuildGraphContext(product, modifierContext, caches);
         GenerativeMappingService.GenerativeEnsureResult? genResult = null;
 
         if (_generativeService != null && mappingId.HasValue)
@@ -125,10 +120,13 @@ public class MappingService
         return result;
     }
 
-    public Dictionary<string, object?> BuildExportDataFromGraph(Product product, CategoryMapping categoryMapping)
+    public async Task<Dictionary<string, object?>> BuildExportDataFromGraphAsync(
+        Product product,
+        CategoryMapping categoryMapping,
+        CancellationToken ct = default)
     {
         var result = new Dictionary<string, object?>();
-        var eval = EvaluateGraph(product, categoryMapping.graphJson, categoryMapping.Id);
+        var eval = await EvaluateGraphAsync(product, categoryMapping.graphJson, categoryMapping.Id, ct: ct);
 
         var cardKeys = new HashSet<string>(
             SchemaFields(categoryMapping.graphJson)
@@ -144,7 +142,7 @@ public class MappingService
 
         if (!result.ContainsKey("images"))
         {
-            var imageUrls = GetProductImageUrlsAsync(product).GetAwaiter().GetResult();
+            var imageUrls = await GetProductImageUrlsAsync(product);
             if (imageUrls.Count > 0)
                 result["_imageUrls"] = imageUrls;
         }
@@ -152,6 +150,10 @@ public class MappingService
         result["_fieldTypes"] = eval.FieldTypes;
         return result;
     }
+
+    [Obsolete("Use BuildExportDataFromGraphAsync.")]
+    public Dictionary<string, object?> BuildExportDataFromGraph(Product product, CategoryMapping categoryMapping)
+        => BuildExportDataFromGraphAsync(product, categoryMapping).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>Parse the stored graph JSON, or null if empty/invalid.</summary>
     private static MappingGraph? ParseGraph(string? graphJson)
@@ -193,17 +195,18 @@ public class MappingService
     /// Build <see cref="Models.Marketplace.DTOs.PriceInfo"/> by evaluating the price sink of the mapping graph.
     /// Returns null when the price node is absent or required price is missing.
     /// </summary>
-    public PriceInfo? BuildPriceInfoFromGraph(
+    public async Task<PriceInfo?> BuildPriceInfoFromGraphAsync(
         Product product,
         CategoryMapping categoryMapping,
         string externalProductId,
         string? externalSku = null,
-        int? stock = null)
+        int? stock = null,
+        CancellationToken ct = default)
     {
         if (SchemaPriceFields(categoryMapping.graphJson).Count == 0)
             return null;
 
-        var eval = EvaluateGraph(product, categoryMapping.graphJson, categoryMapping.Id);
+        var eval = await EvaluateGraphAsync(product, categoryMapping.graphJson, categoryMapping.Id, ct: ct);
         var outputs = eval.Outputs;
 
         decimal? GetDecimal(string fieldKey) =>
@@ -257,6 +260,16 @@ public class MappingService
             Currency: GetString("currencyId") ?? GetString("currency")
         );
     }
+
+    [Obsolete("Use BuildPriceInfoFromGraphAsync.")]
+    public PriceInfo? BuildPriceInfoFromGraph(
+        Product product,
+        CategoryMapping categoryMapping,
+        string externalProductId,
+        string? externalSku = null,
+        int? stock = null)
+        => BuildPriceInfoFromGraphAsync(product, categoryMapping, externalProductId, externalSku, stock)
+            .ConfigureAwait(false).GetAwaiter().GetResult();
 
     private static bool TryParseDecimal(object? value, out decimal result)
     {
@@ -420,31 +433,147 @@ public class MappingService
         return result;
     }
 
+    private sealed class StorageCaches
+    {
+        public Dictionary<int, object?> StoreFileUrls { get; } = new();
+        public Dictionary<int, object?> StoreFileContents { get; } = new();
+        public Dictionary<string, object?> ProductFileUrls { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, object?> ProductFileContents { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, object?> ProductFilesByExt { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string>? ImageUrls { get; set; }
+    }
+
+    /// <summary>
+    /// Prefetch MinIO URLs/content referenced by the graph so <see cref="GraphEvaluator"/> stays sync
+    /// without blocking the thread pool on storage I/O.
+    /// </summary>
+    private async Task PrefetchStorageAsync(
+        Product product,
+        MappingGraph graph,
+        StorageCaches caches,
+        CancellationToken ct)
+    {
+        var storage = _serviceProvider.GetRequiredService<IStorageService>();
+        var needsImages = false;
+
+        foreach (var node in graph.nodes ?? [])
+        {
+            var type = node.type ?? "";
+            var data = node.data;
+            if (data == null) continue;
+
+            switch (type)
+            {
+                case "storeFileUrl":
+                {
+                    var id = data.storeFileId ?? 0;
+                    if (id <= 0 || caches.StoreFileUrls.ContainsKey(id)) break;
+                    var file = FindStoreFile(product, id);
+                    caches.StoreFileUrls[id] = file == null
+                        ? null
+                        : await storage.GetPublicPresignedUrlAsync(file.filePath, 3600);
+                    break;
+                }
+                case "storeFileContent":
+                {
+                    var id = data.storeFileId ?? 0;
+                    if (id <= 0 || caches.StoreFileContents.ContainsKey(id)) break;
+                    var file = FindStoreFile(product, id);
+                    object? content = null;
+                    if (file != null)
+                    {
+                        using var stream = await storage.GetStreamAsync(file.filePath, ct);
+                        if (stream != null)
+                        {
+                            using var reader = new StreamReader(stream);
+                            content = await reader.ReadToEndAsync(ct);
+                        }
+                    }
+                    caches.StoreFileContents[id] = content;
+                    break;
+                }
+                case "productFileByName":
+                {
+                    var key = data.fileName ?? "";
+                    if (caches.ProductFileUrls.ContainsKey(key)) break;
+                    var file = FindProductFileByName(product, key);
+                    caches.ProductFileUrls[key] = file == null
+                        ? null
+                        : await storage.GetPublicPresignedUrlAsync(file.filePath, 3600);
+                    break;
+                }
+                case "productFileContentByName":
+                {
+                    var key = data.fileName ?? "";
+                    if (caches.ProductFileContents.ContainsKey(key)) break;
+                    var file = FindProductFileByName(product, key);
+                    object? content = null;
+                    if (file != null)
+                    {
+                        using var stream = await storage.GetStreamAsync(file.filePath, ct);
+                        if (stream != null)
+                        {
+                            using var reader = new StreamReader(stream);
+                            content = await reader.ReadToEndAsync(ct);
+                        }
+                    }
+                    caches.ProductFileContents[key] = content;
+                    break;
+                }
+                case "productFilesByExtension":
+                {
+                    var key = (data.fileExtension ?? "").TrimStart('.').ToLowerInvariant();
+                    if (caches.ProductFilesByExt.ContainsKey(key)) break;
+                    var urls = new List<string>();
+                    if (!string.IsNullOrEmpty(key) && product.files != null)
+                    {
+                        foreach (var f in product.files)
+                        {
+                            if (!string.Equals(ProductFileExt(f), key, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            var url = await storage.GetPublicPresignedUrlAsync(f.filePath, 3600);
+                            if (!string.IsNullOrEmpty(url))
+                                urls.Add(url);
+                        }
+                    }
+                    caches.ProductFilesByExt[key] = urls;
+                    break;
+                }
+                case "productField" when string.Equals(data.field, "images", StringComparison.OrdinalIgnoreCase):
+                    needsImages = true;
+                    break;
+            }
+        }
+
+        if (needsImages)
+            caches.ImageUrls = await GetProductImageUrlsAsync(product);
+    }
+
     /// <summary>
     /// Build the evaluation context (source resolvers + coercion) for a concrete product.
     /// Keeps data-access concerns in this service and the evaluator pure/testable.
     /// </summary>
     public GraphEvaluationContext BuildGraphContext(Product product, ModifierContext? modifierContext = null)
-    {
-        // Store-file lookups are shared across all products in a bulk export ⇒ memoize per id.
-        var urlCache = new Dictionary<int, object?>();
-        var contentCache = new Dictionary<int, object?>();
-        // Product-file lookups are per-product ⇒ caches live for this product's evaluation only.
-        var pfUrlCache = new Dictionary<string, object?>();
-        var pfContentCache = new Dictionary<string, object?>();
-        var pfExtCache = new Dictionary<string, object?>();
+        => BuildGraphContext(product, modifierContext, new StorageCaches());
 
+    private GraphEvaluationContext BuildGraphContext(
+        Product product,
+        ModifierContext? modifierContext,
+        StorageCaches caches)
+    {
         return new GraphEvaluationContext
         {
             ResolveCategoryAttribute = (id) => GetCategoryAttributeValue(product, id),
             ResolveStoreAttribute = (id) => GetStoreAttributeValue(product, id),
-            ResolveProductField = (field) => GetProductFieldValue(product, field),
+            ResolveProductField = (field) => GetProductFieldValue(product, field, caches),
             ResolveGroupName = () => GetGroupNameValue(product),
-            ResolveStoreFileUrl = (id) => GetStoreFileUrl(product, id, urlCache),
-            ResolveStoreFileContent = (id) => GetStoreFileContent(product, id, contentCache),
-            ResolveProductFileUrlByName = (name) => GetProductFileUrlByName(product, name, pfUrlCache),
-            ResolveProductFileContentByName = (name) => GetProductFileContentByName(product, name, pfContentCache),
-            ResolveProductFilesByExtension = (ext) => GetProductFilesByExtension(product, ext, pfExtCache),
+            ResolveStoreFileUrl = (id) => caches.StoreFileUrls.GetValueOrDefault(id),
+            ResolveStoreFileContent = (id) => caches.StoreFileContents.GetValueOrDefault(id),
+            ResolveProductFileUrlByName = (name) => caches.ProductFileUrls.GetValueOrDefault(name ?? ""),
+            ResolveProductFileContentByName = (name) => caches.ProductFileContents.GetValueOrDefault(name ?? ""),
+            ResolveProductFilesByExtension = (ext) =>
+                caches.ProductFilesByExt.GetValueOrDefault((ext ?? "").TrimStart('.').ToLowerInvariant())
+                ?? (object)new List<string>(),
             ResolveCategoryAttributeOptions = (id) => GetCategoryAttributeOptions(product, id),
             ResolveStoreAttributeOptions = (id) => GetStoreAttributeOptions(product, id),
             Coerce = (value, type) => CoerceToFieldType(value, type),
@@ -457,47 +586,6 @@ public class MappingService
         id <= 0
             ? null
             : _context.storeFiles.FirstOrDefault(f => f.Id == id && f.storeId == product.storeId);
-
-    /// <summary>Resolve a "storeFileUrl" node to a public (presigned) URL for the file.</summary>
-    private object? GetStoreFileUrl(Product product, int id, Dictionary<int, object?> cache)
-    {
-        if (cache.TryGetValue(id, out var cached))
-            return cached;
-
-        object? url = null;
-        var file = FindStoreFile(product, id);
-        if (file != null)
-        {
-            var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-            url = storageService.GetPublicPresignedUrlAsync(file.filePath, 3600).GetAwaiter().GetResult();
-        }
-
-        cache[id] = url;
-        return url;
-    }
-
-    /// <summary>Resolve a "storeFileContent" node to the file's text content (e.g. rich-JSON).</summary>
-    private object? GetStoreFileContent(Product product, int id, Dictionary<int, object?> cache)
-    {
-        if (cache.TryGetValue(id, out var cached))
-            return cached;
-
-        object? content = null;
-        var file = FindStoreFile(product, id);
-        if (file != null)
-        {
-            var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-            using var stream = storageService.GetStreamAsync(file.filePath).GetAwaiter().GetResult();
-            if (stream != null)
-            {
-                using var reader = new StreamReader(stream);
-                content = reader.ReadToEnd();
-            }
-        }
-
-        cache[id] = content;
-        return content;
-    }
 
     private static string ProductFileName(Delegat.Models.File f) =>
         f.displayName ?? System.IO.Path.GetFileName(f.filePath);
@@ -513,74 +601,6 @@ public class MappingService
         return product.files.FirstOrDefault(f =>
             string.Equals(ProductFileName(f), name, StringComparison.OrdinalIgnoreCase)
             || string.Equals(f.displayName, name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>"productFileByName" → public (presigned) URL of the matching product file.</summary>
-    private object? GetProductFileUrlByName(Product product, string? name, Dictionary<string, object?> cache)
-    {
-        var key = name ?? "";
-        if (cache.TryGetValue(key, out var cached))
-            return cached;
-
-        object? url = null;
-        var file = FindProductFileByName(product, key);
-        if (file != null)
-        {
-            var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-            url = storageService.GetPublicPresignedUrlAsync(file.filePath, 3600).GetAwaiter().GetResult();
-        }
-
-        cache[key] = url;
-        return url;
-    }
-
-    /// <summary>"productFileContentByName" → text content of the matching product file.</summary>
-    private object? GetProductFileContentByName(Product product, string? name, Dictionary<string, object?> cache)
-    {
-        var key = name ?? "";
-        if (cache.TryGetValue(key, out var cached))
-            return cached;
-
-        object? content = null;
-        var file = FindProductFileByName(product, key);
-        if (file != null)
-        {
-            var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-            using var stream = storageService.GetStreamAsync(file.filePath).GetAwaiter().GetResult();
-            if (stream != null)
-            {
-                using var reader = new StreamReader(stream);
-                content = reader.ReadToEnd();
-            }
-        }
-
-        cache[key] = content;
-        return content;
-    }
-
-    /// <summary>"productFilesByExtension" → URLs of every product file with the given extension.</summary>
-    private object? GetProductFilesByExtension(Product product, string? ext, Dictionary<string, object?> cache)
-    {
-        var key = (ext ?? "").TrimStart('.').ToLowerInvariant();
-        if (cache.TryGetValue(key, out var cached))
-            return cached;
-
-        var urls = new List<string>();
-        if (!string.IsNullOrEmpty(key) && product.files != null)
-        {
-            var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-            foreach (var f in product.files)
-            {
-                if (!string.Equals(ProductFileExt(f), key, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                var url = storageService.GetPublicPresignedUrlAsync(f.filePath, 3600).GetAwaiter().GetResult();
-                if (!string.IsNullOrEmpty(url))
-                    urls.Add(url);
-            }
-        }
-
-        cache[key] = urls;
-        return urls;
     }
 
     /// <summary>
@@ -621,7 +641,7 @@ public class MappingService
             .FirstOrDefault()
         ?? throw new InvalidOperationException($"Store {storeId} has no base currency configured");
 
-    private object? GetProductFieldValue(Product product, string? fieldName)
+    private object? GetProductFieldValue(Product product, string? fieldName, StorageCaches? caches = null)
     {
         if (string.IsNullOrEmpty(fieldName))
             return null;
@@ -643,7 +663,7 @@ public class MappingService
             "categoryid" => product.categoryId,
             "categoryname" => product.category?.name,
             "groupname" => GetGroupNameValue(product),
-            "images" => GetProductImageUrlsAsync(product).GetAwaiter().GetResult(),
+            "images" => caches?.ImageUrls ?? (object)new List<string>(),
             _ => null
         };
     }

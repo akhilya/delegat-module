@@ -388,12 +388,13 @@ public class ProductSyncService
             // Auto-export price after successful product export
             if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             {
-                var priceInfo = _mappingService.BuildPriceInfoFromGraph(
+                var priceInfo = await _mappingService.BuildPriceInfoFromGraphAsync(
                     product,
                     categoryMapping,
                     existingLink.externalProductId,
                     existingLink.externalSku ?? product.sku,
-                    product.storageQuantity)
+                    product.storageQuantity,
+                    ct)
                     ?? (product.price.HasValue
                         ? new PriceInfo(existingLink.externalProductId, product.price, Stock: product.storageQuantity)
                         : null);

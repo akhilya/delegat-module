@@ -1,4 +1,8 @@
+using System.Reflection;
+using Delegat.Controllers;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Configuration;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
 
 namespace Delegat.Tests;
 
@@ -44,4 +48,39 @@ public class FeatureFlagsTests
         using var _ = SetEnv("QUEUE_RETENTION_DAYS", raw);
         Assert.Equal(expected, FeatureFlags.GetQueueRetentionDays());
     }
+
+    [Fact]
+    public void AiControllersConvention_RemovesAiControllers_WhenDisabled()
+    {
+        var application = new ApplicationModel();
+        application.Controllers.Add(MakeController(typeof(AiController)));
+        application.Controllers.Add(MakeController(typeof(AiConversationController)));
+        application.Controllers.Add(MakeController(typeof(AiSettingsController)));
+        application.Controllers.Add(MakeController(typeof(ProductController)));
+
+        new AiControllersConvention(aiEnabled: false).Apply(application);
+
+        Assert.Single(application.Controllers);
+        Assert.Equal(nameof(ProductController), application.Controllers[0].ControllerType.Name);
+    }
+
+    [Fact]
+    public void AiControllersConvention_KeepsAiControllers_WhenEnabled()
+    {
+        var application = new ApplicationModel();
+        application.Controllers.Add(MakeController(typeof(AiController)));
+        application.Controllers.Add(MakeController(typeof(ProductController)));
+
+        new AiControllersConvention(aiEnabled: true).Apply(application);
+
+        Assert.Equal(2, application.Controllers.Count);
+    }
+
+    private static ControllerModel MakeController(Type type) =>
+        new(type.GetTypeInfo(), Array.Empty<object>())
+        {
+            ControllerName = type.Name.EndsWith("Controller", StringComparison.Ordinal)
+                ? type.Name[..^"Controller".Length]
+                : type.Name,
+        };
 }

@@ -5,14 +5,22 @@ import { Sparkles, Loader2, Activity } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 
+const props = defineProps({
+  aiEnabled: { type: Boolean, default: false },
+});
+
 const store = useStore();
 
-const isAiOpen    = computed(() => store.state.aiChat.isOpen);
-const isAiLoading = computed(() => store.state.aiChat.isLoading);
+const isAiOpen = computed(() => store.state.aiChat?.isOpen);
+const isAiLoading = computed(() => store.state.aiChat?.isLoading);
 const activeCount = computed(() => store.getters["operations/activeCount"]);
 
-function toggleAi()  { store.commit("aiChat/toggle"); }
-function toggleOps() { store.dispatch("operations/togglePanel"); }
+function toggleAi() {
+  store.commit("aiChat/toggle");
+}
+function toggleOps() {
+  store.dispatch("operations/togglePanel");
+}
 </script>
 
 <template>
@@ -30,6 +38,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
         class="fixed bottom-6 right-4 z-[9996] flex flex-col-reverse gap-2.5"
       >
         <Button
+          v-if="aiEnabled"
           size="icon"
           class="relative size-12 rounded-full shadow-lg shrink-0"
           :title="t('components.fabGroup.aiAssistantTitle')"

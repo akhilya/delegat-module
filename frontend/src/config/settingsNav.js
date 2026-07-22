@@ -96,7 +96,7 @@ export function getAdminSettingsItems(ctx) {
   if (can(ctx, PERMS.SettingsPlatform)) {
     items.push({ id: "logs", labelKey: "nav.errorLogs", to: PAGE_ADMIN_ERROR_LOGS, icon: AlertTriangle });
     items.push({ id: "adapter-logs", labelKey: "nav.adapterLogs", to: PAGE_ADAPTER_LOGS, icon: ScrollText });
-    if (ctx.me?.aiEnabled !== false) {
+    if (ctx.me?.aiEnabled === true) {
       items.push({ id: "ai", labelKey: "nav.ai", to: PAGE_ADMIN_AI, icon: Sparkles });
     }
   }

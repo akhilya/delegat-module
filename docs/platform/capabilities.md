@@ -71,7 +71,7 @@
 - **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
 - **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
 - **Admin model management:** `/settings/admin/ai` - connect any Anthropic or OpenAI-compatible model
-- **Access:** controlled by `AI_ENABLED` env var (tariff feature - see architecture docs)
+- **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start — change the flag and **restart** the instance to enable.
 - All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
 
 ### Quotas
@@ -79,7 +79,7 @@
 - `MAX_STORAGE_GB` - max storage per store
 - `MAX_FILES` - max files per store
 - `MAX_CONNECTIONS` - max marketplace connections
-- `AI_ENABLED` - whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility)
+- `AI_ENABLED` - whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility). Toggle requires process restart.
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
@@ -96,10 +96,12 @@
 - ImageDownloadBackgroundService - downloads images from marketplaces
 - ProductImportBackgroundService - processes product import queue (PendingProductImport)
 - ProductExportBackgroundService - processes product export queue (PendingProductExport)
+- FolderJobBackgroundService - folder archive/delete jobs (`pendingFolderJobs`)
 - QueueCleanupBackgroundService - deletes terminal queue rows and operations older than retention
 - ReferenceCatalogSyncHostedService - pulls Reference Catalog from Control Plane
 - PlatformHeartbeatHostedService - optional liveness to Control Plane
 - Startup recovery: InProgress tasks reset to Pending on container restart
+- (Removed) FileRepairService one-shot MinIO path repair — no longer runs on every boot
 
 ### Infrastructure
 - .NET 8 + EF Core 8 + MySQL 8.4
