@@ -715,7 +715,7 @@ public class ProductSyncService
                 var bulkResult = await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
 
                 // Pre-load existing links by externalProductId to avoid N+1 queries
-                Dictionary<string, ProductMarketplaceLink> dupLinksByExternalId = new();
+                    Dictionary<string, ProductMarketplaceLink> dupLinksByExternalId = new();
                 if (bulkResult.Items != null)
                 {
                     var allExternalIds = bulkResult.Items
@@ -725,9 +725,11 @@ public class ProductSyncService
                         .ToList();
                     if (allExternalIds.Count > 0)
                     {
+                        // GroupBy: duplicate external IDs must not throw and wipe the whole bulk result
                         dupLinksByExternalId = await _context.productMarketplaceLinks
                             .Where(l => l.connectionId == connectionId && allExternalIds.Contains(l.externalProductId))
-                            .ToDictionaryAsync(l => l.externalProductId, ct);
+                            .GroupBy(l => l.externalProductId)
+                            .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
                     }
                 }
 
@@ -818,10 +820,14 @@ public class ProductSyncService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Bulk export failed for connectionId={ConnectionId}", connectionId);
+                // Do not overwrite items already recorded as successful — WP may have created them
+                var reportedIds = itemResults.Select(r => r.ProductId).ToHashSet();
                 foreach (var item in bulkItems)
                 {
-                    if (!failedProductIds.Contains(item.LocalProductId))
-                        itemResults.Add(new BulkProductExportItemResult(item.LocalProductId, false, ErrorMessage: $"Export error: {ex.Message}"));
+                    if (reportedIds.Contains(item.LocalProductId) || failedProductIds.Contains(item.LocalProductId))
+                        continue;
+                    itemResults.Add(new BulkProductExportItemResult(
+                        item.LocalProductId, false, ErrorMessage: $"Export error: {ex.Message}"));
                 }
             }
 

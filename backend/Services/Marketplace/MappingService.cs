@@ -860,7 +860,7 @@ public class MappingService
             if (file != null)
             {
                 var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-                var url = await storageService.GetPublicPresignedUrlAsync(file.filePath, 3600);
+                var url = await storageService.GetPublicPresignedUrlAsync(file.filePath, 7200);
                 if (!string.IsNullOrEmpty(url))
                 {
                     urls.Add(url);

@@ -198,7 +198,9 @@ public class ProductExportBackgroundService : BackgroundService
         {
             var result = await productSyncService.ExportProductsBulkAsync(productIds, connectionId, ct);
 
-            foreach (var itemResult in result.Items)
+            foreach (var itemResult in result.Items
+                .GroupBy(r => r.ProductId)
+                .Select(g => g.FirstOrDefault(x => x.IsSuccess) ?? g.Last()))
             {
                 if (!pendingByProductId.TryGetValue(itemResult.ProductId, out var pending))
                     continue;
