@@ -66,7 +66,8 @@ public class PublicCategoriesController : ControllerBase
                 name = a.name,
                 key = a.key,
                 type = a.type.ToString(),
-                isRequired = a.isRequired
+                isRequired = a.isRequired,
+                isUnique = a.isUnique
             })
         }).ToList();
 

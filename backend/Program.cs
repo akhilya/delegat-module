@@ -249,6 +249,7 @@ builder.Services.AddScoped<StoreStorageController>();
 
 // Excel import/export
 builder.Services.AddScoped<ExcelProductService>();
+builder.Services.AddScoped<AttributeUniquenessService>();
 
 // Cross-store product clone/move
 builder.Services.AddScoped<ProductTransferService>();

@@ -82,6 +82,7 @@ import {
   mergeCategoryAttributesIntoCache,
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { confirm } from "@/composables/useConfirm";
@@ -729,6 +730,7 @@ export default {
           onError: (error) => {
             if (error?.response?.data?.errors)
               form.setErrors(error.response.data.errors);
+            applyAttributeUniquenessError(form, error);
             displaySonnerError(error);
           },
         });

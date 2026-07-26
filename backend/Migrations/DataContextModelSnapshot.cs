@@ -378,6 +378,11 @@ namespace Delegat.Migrations
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<bool>("isUnique")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("key")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2029,6 +2034,11 @@ namespace Delegat.Migrations
 
                     b.Property<bool>("isRequired")
                         .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("isUnique")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("key")
                         .IsRequired()

@@ -295,6 +295,7 @@
     "product_limit_reached": "Product limit reached ({limit})",
     "required_fields_missing": "Required fields are missing: {fields}",
     "sku_already_used": "SKU '{sku}' is already in use",
+    "attribute_value_not_unique": "This value is already used by another product",
     "folder_not_empty": "Folder is not empty",
     "export_failed": "Export failed",
     "import_failed": "Import failed",
@@ -1964,9 +1965,11 @@
     "currentHeader": "Current",
     "newHeader": "New",
     "irreversibleModifiers": "Irreversible modifiers",
-    "emptyValue": "(empty)",
-    "noChangesTitle": "No changes detected",
-    "noChangesDescription": "Adapter data matches the local data."
+      "emptyValue": "(empty)",
+      "noChangesTitle": "No changes detected",
+      "noChangesDescription": "Adapter data matches the local data.",
+      "diffHint": "Changed characters are highlighted",
+      "whitespaceOnlyDiff": "Difference is only whitespace (spaces or line breaks) — shown as ↵ ·"
   },
   "pages": {
     "productEditPage": {
@@ -2484,7 +2487,10 @@
       "multilineHint": "Field with line breaks on the product page",
       "showOnProductPageLabel": "On the product page",
       "showOnProductPageHint": "Show when editing a product",
-      "requiredFieldHint": "Require filling in when creating a product"
+      "requiredFieldHint": "Require filling in when creating a product",
+      "uniqueFieldTitle": "Unique value",
+      "uniqueFieldHint": "Value must not repeat on other products in this category",
+      "uniqueBadge": "uniq"
     },
     "storeAttributesPage": {
       "types": {
@@ -2570,7 +2576,10 @@
         "showOnProductPageLabel": "On the product page",
         "showOnProductPageHint": "Show when editing a product",
         "requiredFieldLabel": "Required field",
-        "requiredFieldHint": "Require filling in when creating a product"
+        "requiredFieldHint": "Require filling in when creating a product",
+        "uniqueFieldLabel": "Unique value",
+        "uniqueFieldHint": "Value must not repeat on other products in the store",
+        "uniqueBadge": "uniq"
       }
     },
     "storeStoragePage": {
@@ -2739,6 +2748,10 @@
       "description": "Personal settings for the current account",
       "profileTitle": "Profile",
       "passwordTitle": "Password",
+      "operationsTitle": "Background jobs",
+      "operationsDescription": "How the operations panel behaves while you work",
+      "autoOpenOperationsLabel": "Open panel when a job starts",
+      "autoOpenOperationsHint": "Automatically show the side panel when an export, import, or other background job begins. You can still open it manually from the toolbar.",
       "userNameLabel": "Username",
       "userNameEmptyError": "User name cannot be empty",
       "profileUpdated": "Profile updated",
@@ -3117,7 +3130,10 @@
       "multilineHint": "Field with line breaks on the product page",
       "showOnProductPageLabel": "On product page",
       "showOnProductPageHint": "Show when editing a product",
-      "requiredFieldHint": "Require this field when creating a product"
+      "requiredFieldHint": "Require this field when creating a product",
+      "uniqueFieldTitle": "Unique value",
+      "uniqueFieldHint": "Value must not repeat on other products in this category",
+      "uniqueBadge": "uniq"
     }
   },
   "columnSelector": {

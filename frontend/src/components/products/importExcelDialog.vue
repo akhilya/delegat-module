@@ -324,11 +324,6 @@ function stepTone(id) {
   return "border border-border bg-muted/40 text-muted-foreground";
 }
 
-function truncate(str, max) {
-  if (!str) return str;
-  return str.length > max ? str.slice(0, max) + "..." : str;
-}
-
 const changesetItems = computed(() => {
   if (!changeset.value.changes || changeset.value.changes.length === 0) return [];
   return changeset.value.changes.map((product) => ({
@@ -336,8 +331,8 @@ const changesetItems = computed(() => {
     fields: product.changes.map((change, j) => ({
       key: `${product.productId}-${j}`,
       label: change.fieldName,
-      oldValue: truncate(change.oldValue, 100),
-      newValue: truncate(change.newValue, 100),
+      oldValue: change.oldValue ?? null,
+      newValue: change.newValue ?? null,
     })),
   }));
 });

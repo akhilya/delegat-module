@@ -34,6 +34,7 @@ import {
   formRecordToAttributeValues,
   listMissingRequiredAttributes,
 } from "@/lib/productAttributeValidation";
+import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
 import { http } from "@/main";
@@ -681,6 +682,7 @@ export default {
             },
             onError: (error) => {
               if (error?.response?.data?.errors) form.setErrors(error.response.data.errors);
+              applyAttributeUniquenessError(form, error);
               displaySonnerError(error);
             },
           });

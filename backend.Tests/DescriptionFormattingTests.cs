@@ -71,6 +71,20 @@ public class DescriptionFormattingTests
         Assert.Equal(plain, back);
     }
 
+    [Fact]
+    public void Differ_IgnoresTrailingNewline()
+    {
+        Assert.False(DescriptionFormatting.Differ("hello\n", "hello"));
+        Assert.False(DescriptionFormatting.Differ("hello\r\n", "hello"));
+        Assert.True(DescriptionFormatting.Differ("hello", "hello!"));
+    }
+
+    [Fact]
+    public void Differ_IgnoresCrlfVsLf()
+    {
+        Assert.False(DescriptionFormatting.Differ("a\r\nb", "a\nb"));
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

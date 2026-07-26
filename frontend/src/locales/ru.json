@@ -295,6 +295,7 @@
     "product_limit_reached": "Достигнут лимит товаров ({limit})",
     "required_fields_missing": "Не заполнены обязательные поля: {fields}",
     "sku_already_used": "Артикул '{sku}' уже используется",
+    "attribute_value_not_unique": "Значение уже используется другим товаром",
     "folder_not_empty": "Папка не пуста",
     "export_failed": "Ошибка экспорта",
     "import_failed": "Ошибка импорта",
@@ -1964,9 +1965,11 @@
     "currentHeader": "Текущее",
     "newHeader": "Новое",
     "irreversibleModifiers": "Необратимые модификаторы",
-    "emptyValue": "(пусто)",
-    "noChangesTitle": "Изменений не обнаружено",
-    "noChangesDescription": "Данные на адаптере совпадают с локальными."
+      "emptyValue": "(пусто)",
+      "noChangesTitle": "Изменений не обнаружено",
+      "noChangesDescription": "Данные на адаптере совпадают с локальными.",
+      "diffHint": "Изменённые символы подсвечены",
+      "whitespaceOnlyDiff": "Разница только в пробелах или переносах строк — показаны как ↵ ·"
   },
   "pages": {
     "productEditPage": {
@@ -2484,7 +2487,10 @@
       "multilineHint": "Поле с переносами строк на странице товара",
       "showOnProductPageLabel": "На странице товара",
       "showOnProductPageHint": "Показывать при редактировании товара",
-      "requiredFieldHint": "Требовать заполнение при создании товара"
+      "requiredFieldHint": "Требовать заполнение при создании товара",
+      "uniqueFieldTitle": "Уникальное",
+      "uniqueFieldHint": "Значение не должно повторяться у других товаров в этой категории",
+      "uniqueBadge": "уник"
     },
     "storeAttributesPage": {
       "types": {
@@ -2570,7 +2576,10 @@
         "showOnProductPageLabel": "На странице товара",
         "showOnProductPageHint": "Показывать при редактировании товара",
         "requiredFieldLabel": "Обязательное поле",
-        "requiredFieldHint": "Требовать заполнение при создании товара"
+        "requiredFieldHint": "Требовать заполнение при создании товара",
+        "uniqueFieldLabel": "Уникальное",
+        "uniqueFieldHint": "Значение не должно повторяться у других товаров магазина",
+        "uniqueBadge": "уник"
       }
     },
     "storeStoragePage": {
@@ -2739,6 +2748,10 @@
       "description": "Персональные параметры текущей учётной записи",
       "profileTitle": "Профиль",
       "passwordTitle": "Пароль",
+      "operationsTitle": "Фоновые процессы",
+      "operationsDescription": "Поведение панели операций во время работы",
+      "autoOpenOperationsLabel": "Открывать панель при запуске задачи",
+      "autoOpenOperationsHint": "Автоматически показывать боковую панель при старте экспорта, импорта или другой фоновой задачи. Открыть вручную по-прежнему можно из панели инструментов.",
       "userNameLabel": "Имя пользователя",
       "userNameEmptyError": "Имя пользователя не может быть пустым",
       "profileUpdated": "Профиль обновлён",
@@ -3117,7 +3130,10 @@
       "multilineHint": "Поле с переносами строк на странице товара",
       "showOnProductPageLabel": "На странице товара",
       "showOnProductPageHint": "Показывать при редактировании товара",
-      "requiredFieldHint": "Требовать заполнение при создании товара"
+      "requiredFieldHint": "Требовать заполнение при создании товара",
+      "uniqueFieldTitle": "Уникальное",
+      "uniqueFieldHint": "Значение не должно повторяться у других товаров в этой категории",
+      "uniqueBadge": "уник"
     }
   },
   "columnSelector": {

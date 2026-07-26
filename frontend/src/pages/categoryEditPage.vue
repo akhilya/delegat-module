@@ -173,6 +173,7 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isUnique: false,
         isMultiline: false,
         showOnProductPage: true,
         options: "",
@@ -362,6 +363,7 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isUnique: false,
         isMultiline: false,
         showOnProductPage: true,
         options: "",
@@ -393,6 +395,7 @@ export default {
         key: attribute.key,
         type: normalizedType,
         isRequired: attribute.isRequired,
+        isUnique: attribute.isUnique === true,
         isMultiline: attribute.isMultiline ?? false,
         showOnProductPage: attribute.showOnProductPage !== false,
         options: this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
@@ -448,6 +451,7 @@ export default {
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
         isRequired: this.attributeForm.isRequired,
+        isUnique: this.attributeForm.isUnique,
         isMultiline: this.isTextAttributeType ? this.attributeForm.isMultiline : false,
         showOnProductPage: this.attributeForm.showOnProductPage,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
@@ -925,6 +929,11 @@ export default {
                               class="shrink-0 text-destructive"
                               :title="$t('pages.categoryEditPage.requiredFieldTitle')"
                             >*</span>
+                            <span
+                              v-if="attribute.isUnique"
+                              class="shrink-0 ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                              :title="$t('pages.categoryEditPage.uniqueFieldTitle')"
+                            >{{ $t("pages.categoryEditPage.uniqueBadge") }}</span>
                           </div>
                           <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
                             {{ attribute.key }}
@@ -1268,6 +1277,19 @@ export default {
                   />
                   <Label for="attr-required" class="font-normal text-muted-foreground">
                     {{ $t("pages.categoryEditPage.requiredFieldHint") }}
+                  </Label>
+                </div>
+              </SettingsFormField>
+
+              <SettingsFormField :label="$t('pages.categoryEditPage.uniqueFieldTitle')">
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="attr-unique"
+                    :model-value="attributeForm.isUnique"
+                    @update:model-value="attributeForm.isUnique = $event"
+                  />
+                  <Label for="attr-unique" class="font-normal text-muted-foreground">
+                    {{ $t("pages.categoryEditPage.uniqueFieldHint") }}
                   </Label>
                 </div>
               </SettingsFormField>

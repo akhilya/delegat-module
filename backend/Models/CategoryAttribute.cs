@@ -39,6 +39,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     public bool isRequired { get; set; } = false;
 
     /// <summary>
+    /// When true, values must be unique among products in the same category/store.
+    /// </summary>
+    public bool isUnique { get; set; } = false;
+
+    /// <summary>
     /// For text attributes: render as multiline textarea on the product page.
     /// </summary>
     public bool isMultiline { get; set; } = false;
@@ -104,6 +109,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         key = form.key;
         type = form.type;
         isRequired = form.isRequired;
+        isUnique = form.isUnique;
         isMultiline = form.isMultiline;
         showOnProductPage = form.showOnProductPage;
         sortOrder = form.sortOrder;
@@ -126,6 +132,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             type = form.type.Value;
         if (form.isRequired.HasValue)
             isRequired = form.isRequired.Value;
+        if (form.isUnique.HasValue)
+            isUnique = form.isUnique.Value;
         if (form.isMultiline.HasValue)
             isMultiline = form.isMultiline.Value;
         if (form.showOnProductPage.HasValue)
@@ -151,6 +159,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             key = key,
             type = type,
             isRequired = isRequired,
+            isUnique = isUnique,
             isMultiline = isMultiline,
             showOnProductPage = showOnProductPage,
             sortOrder = sortOrder,
@@ -218,6 +227,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Whether a value is required.
         /// </summary>
         public bool isRequired { get; set; }
+
+        /// <summary>
+        /// Whether values must be unique within the category.
+        /// </summary>
+        public bool isUnique { get; set; }
 
         /// <summary>
         /// For text attributes: render as multiline textarea on the product page.
@@ -296,6 +310,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isRequired { get; set; }
 
         /// <summary>
+        /// Whether values must be unique within the category.
+        /// </summary>
+        public bool isUnique { get; set; }
+
+        /// <summary>
         /// For text attributes: render as multiline textarea on the product page.
         /// </summary>
         public bool isMultiline { get; set; }
@@ -360,6 +379,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Updated required flag.
         /// </summary>
         public bool? isRequired { get; set; }
+
+        /// <summary>
+        /// Updated unique flag.
+        /// </summary>
+        public bool? isUnique { get; set; }
 
         /// <summary>
         /// Updated multiline flag for text attributes.
@@ -434,6 +458,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Whether a value is required.
         /// </summary>
         public bool isRequired { get; set; }
+
+        /// <summary>
+        /// Whether values must be unique within the category.
+        /// </summary>
+        public bool isUnique { get; set; }
 
         /// <summary>
         /// For text attributes: render as multiline textarea on the product page.

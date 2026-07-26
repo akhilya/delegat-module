@@ -152,6 +152,7 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isUnique: false,
         isMultiline: false,
         showOnProductPage: true,
         options: "",
@@ -276,6 +277,7 @@ export default {
         key: "",
         type: 0,
         isRequired: false,
+        isUnique: false,
         isMultiline: false,
         showOnProductPage: true,
         options: "",
@@ -301,6 +303,7 @@ export default {
         key: attribute.key,
         type: normalizedType,
         isRequired: attribute.isRequired,
+        isUnique: attribute.isUnique === true,
         isMultiline: attribute.isMultiline ?? false,
         showOnProductPage: attribute.showOnProductPage !== false,
         options: this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
@@ -355,6 +358,7 @@ export default {
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
         isRequired: this.attributeForm.isRequired,
+        isUnique: this.attributeForm.isUnique,
         isMultiline: this.isTextAttributeType ? this.attributeForm.isMultiline : false,
         showOnProductPage: this.attributeForm.showOnProductPage,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
@@ -744,8 +748,13 @@ export default {
                       {{ attribute.options ? getOptionsCount(attribute.options) : "-" }}
                     </TableCell>
                     <TableCell class="px-2 text-center text-muted-foreground">
-                      <span v-if="attribute.isRequired" class="text-destructive">*</span>
-                      <span v-else>-</span>
+                      <span v-if="attribute.isRequired" class="text-destructive" :title="$t('pages.storeAttributesPage.dialog.requiredFieldLabel')">*</span>
+                      <span
+                        v-if="attribute.isUnique"
+                        class="ml-1 text-[10px] font-medium uppercase tracking-wide"
+                        :title="$t('pages.storeAttributesPage.dialog.uniqueFieldLabel')"
+                      >{{ $t("pages.storeAttributesPage.dialog.uniqueBadge") }}</span>
+                      <span v-if="!attribute.isRequired && !attribute.isUnique">-</span>
                     </TableCell>
                     <TableCell class="hidden lg:table-cell px-3 text-muted-foreground max-w-xs truncate">
                       {{ attribute.description || "-" }}
@@ -1034,6 +1043,19 @@ export default {
                   />
                   <Label for="store-attr-required" class="font-normal text-muted-foreground">
                     {{ $t("pages.storeAttributesPage.dialog.requiredFieldHint") }}
+                  </Label>
+                </div>
+              </SettingsFormField>
+
+              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.uniqueFieldLabel')">
+                <div class="flex items-center gap-2 h-9">
+                  <Switch
+                    id="store-attr-unique"
+                    :model-value="attributeForm.isUnique"
+                    @update:model-value="attributeForm.isUnique = $event"
+                  />
+                  <Label for="store-attr-unique" class="font-normal text-muted-foreground">
+                    {{ $t("pages.storeAttributesPage.dialog.uniqueFieldHint") }}
                   </Label>
                 </div>
               </SettingsFormField>

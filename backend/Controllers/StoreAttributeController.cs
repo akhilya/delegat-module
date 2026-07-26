@@ -97,6 +97,7 @@ public class StoreAttributeController : ControllerBase
             key = input.key,
             type = input.type,
             isRequired = input.isRequired,
+            isUnique = input.isUnique,
             isMultiline = input.isMultiline,
             showOnProductPage = input.showOnProductPage,
             sortOrder = maxSortOrder + 1,

@@ -1891,7 +1891,7 @@ public class ProductSyncController : ControllerBase
             externalProduct.Description != null)
         {
             var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
-            if (description != null && product.description != description)
+            if (description != null && Delegat.Marketplace.SDK.DescriptionFormatting.Differ(product.description, description))
             {
                 oldValues["description"] = product.description;
                 newValues["description"] = description;
@@ -2034,7 +2034,7 @@ public class ProductSyncController : ControllerBase
         if (externalProduct.Description != null)
         {
             var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
-            if (description != null && product.description != description)
+            if (description != null && Delegat.Marketplace.SDK.DescriptionFormatting.Differ(product.description, description))
             {
                 oldValues["description"] = product.description;
                 newValues["description"] = description;
@@ -2179,7 +2179,7 @@ public class ProductSyncController : ControllerBase
                 if (externalProduct.Description != null)
                 {
                     var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
-                    if (description != null && product.description != description)
+                    if (description != null && Delegat.Marketplace.SDK.DescriptionFormatting.Differ(product.description, description))
                     {
                         oldValues["description"] = product.description;
                         newValues["description"] = description;
@@ -2562,7 +2562,7 @@ public class ProductSyncController : ControllerBase
                     if (externalProduct.Description != null)
                     {
                         var description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description);
-                        if (description != null && product.description != description)
+                        if (description != null && Delegat.Marketplace.SDK.DescriptionFormatting.Differ(product.description, description))
                         {
                             product.description = description;
                             updatedFields.Add("description");

@@ -8,9 +8,23 @@ let connection = null;
 // Keyed by operation ID. Not in Vuex state - functions aren't serializable.
 const cancelCallbacks = new Map();
 
+const AUTO_OPEN_STORAGE_KEY = "operations-auto-open-panel";
+
+function readAutoOpenPanelPref() {
+  try {
+    const raw = localStorage.getItem(AUTO_OPEN_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw !== "0" && raw !== "false";
+  } catch {
+    return true;
+  }
+}
+
 const state = {
   operations: [],
   panelOpen: false,
+  /** When true, starting a background job opens the operations side panel. */
+  autoOpenPanel: readAutoOpenPanelPref(),
   historyLoaded: false,
   historyPage: 0,
   historyHasMore: true,
@@ -19,6 +33,14 @@ const state = {
 const mutations = {
   SET_PANEL_OPEN(state, value) {
     state.panelOpen = value;
+  },
+  SET_AUTO_OPEN_PANEL(state, value) {
+    state.autoOpenPanel = !!value;
+    try {
+      localStorage.setItem(AUTO_OPEN_STORAGE_KEY, state.autoOpenPanel ? "1" : "0");
+    } catch {
+      /* ignore quota / private mode */
+    }
   },
   ADD_OPERATION(state, operation) {
     const idx = state.operations.findIndex((o) => o.id === operation.id);
@@ -144,7 +166,7 @@ function mapServerOperation(item) {
 }
 
 const actions = {
-  async initSignalR({ commit, dispatch }) {
+  async initSignalR({ commit, dispatch, state }) {
     if (connection) return;
 
     const hubUrl = "/hubs/operations";
@@ -193,7 +215,7 @@ const actions = {
       // Don't auto-open panel for client-side operations (file-upload, file-delete) -
       // they register silently via addOperation; the SignalR echo shouldn't override that.
       const silentTypes = ["file-upload", "file-delete"];
-      if (!silentTypes.includes(op.type)) {
+      if (!silentTypes.includes(op.type) && state.autoOpenPanel) {
         commit("SET_PANEL_OPEN", true);
       }
     });
@@ -267,7 +289,7 @@ const actions = {
     dispatch("loadHistory");
   },
 
-  async startOperation({ commit }, { id, type, title, connectionId, connectionName }) {
+  async startOperation({ commit, state }, { id, type, title, connectionId, connectionName }) {
     const op = {
       id,
       type,
@@ -289,13 +311,13 @@ const actions = {
       isLocalClientOperation: false,
     };
     commit("ADD_OPERATION", op);
-    commit("SET_PANEL_OPEN", true);
+    if (state.autoOpenPanel) commit("SET_PANEL_OPEN", true);
     try {
       await http.post("/operations/start", { operationId: id, type, title, connectionId, connectionName });
     } catch { /* SignalR will handle */ }
   },
 
-  addOperation({ commit }, operation) {
+  addOperation({ commit, state }, operation) {
     const op = {
       id: operation.id || crypto.randomUUID().replace(/-/g, ""),
       type: operation.type || "unknown",
@@ -324,7 +346,7 @@ const actions = {
     }
     // Don't auto-open panel for silent operations (e.g. file uploads -
     // user sees progress in the trigger button badge, opens panel manually if needed).
-    if (!operation.silent) {
+    if (!operation.silent && state.autoOpenPanel) {
       commit("SET_PANEL_OPEN", true);
     }
     return op.id;
@@ -473,6 +495,10 @@ const actions = {
 
   closePanel({ commit }) {
     commit("SET_PANEL_OPEN", false);
+  },
+
+  setAutoOpenPanel({ commit }, value) {
+    commit("SET_AUTO_OPEN_PANEL", value);
   },
 };
 

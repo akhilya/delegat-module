@@ -89,6 +89,7 @@ public class PublicStoreAttributesController : ControllerBase
             key = input.key,
             type = input.type,
             isRequired = input.isRequired,
+            isUnique = input.isUnique,
             isMultiline = input.isMultiline,
             showOnProductPage = input.showOnProductPage,
             storeId = storeId,

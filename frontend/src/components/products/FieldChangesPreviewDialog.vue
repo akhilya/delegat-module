@@ -29,7 +29,7 @@ const props = defineProps({
   warning: { type: String, default: null },
   confirmLabel: { type: String, default: "" },
   confirmLoading: { type: Boolean, default: false },
-  size: { type: String, default: "3xl" },
+  size: { type: String, default: "5xl" },
 });
 
 const emit = defineEmits([
@@ -72,14 +72,14 @@ function onConfirm() {
     <DialogContent
       v-if="open"
       :size="size"
-      class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+      class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-1 border-b px-6 py-4 text-left">
-        <DialogTitle class="flex items-center gap-2">
-          <Download class="size-5 text-muted-foreground" />
+      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
+        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
+          <Download class="size-4 text-muted-foreground" />
           {{ title }}
         </DialogTitle>
-        <DialogDescription v-if="description">
+        <DialogDescription v-if="description" class="text-sm text-muted-foreground">
           {{ description }}
         </DialogDescription>
       </DialogHeader>
@@ -99,7 +99,7 @@ function onConfirm() {
         </p>
       </div>
 
-      <DialogFooter class="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
+      <DialogFooter class="shrink-0 gap-2 border-t border-border px-6 py-4 sm:justify-between">
         <DialogClose as-child>
           <Button variant="outline" :disabled="confirmLoading">
             {{ t("common.cancel") }}

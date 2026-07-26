@@ -28,6 +28,7 @@ public class ProductController : ControllerBase
     private readonly ExcelProductService _excelService;
     private readonly QuotaService _quotaService;
     private readonly IOperationLogger _operationLogger;
+    private readonly AttributeUniquenessService _attributeUniqueness;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
@@ -40,7 +41,8 @@ public class ProductController : ControllerBase
         DataContext context,
         ExcelProductService excelService,
         QuotaService quotaService,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        AttributeUniquenessService attributeUniqueness)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -50,6 +52,7 @@ public class ProductController : ControllerBase
         _excelService = excelService;
         _quotaService = quotaService;
         _operationLogger = operationLogger;
+        _attributeUniqueness = attributeUniqueness;
     }
 
     /// <summary>
@@ -263,6 +266,12 @@ public class ProductController : ControllerBase
         if (!string.IsNullOrEmpty(input.barcode) && !IsValidEanBarcode(input.barcode))
             throw ApiException.BadRequest("Invalid barcode. EAN-8 (8 digits) or EAN-13 (13 digits) are allowed");
 
+        await _attributeUniqueness.EnsureUniqueAsync(
+            selectedStoreId.Value,
+            input.categoryId,
+            input.attributeValues,
+            input.storeAttributeValues);
+
         var product = new Product();
         product.AddFill(new Product.AddForm(input, selectedStoreId.Value, input.categoryId));
 
@@ -350,6 +359,14 @@ public class ProductController : ControllerBase
             if (category == null)
                 throw ApiException.BadRequest("Category not found", code: "category_not_found");
         }
+
+        var effectiveCategoryId = input.categoryId ?? product.categoryId;
+        await _attributeUniqueness.EnsureUniqueAsync(
+            selectedStoreId.Value,
+            effectiveCategoryId,
+            input.attributeValues,
+            input.storeAttributeValues,
+            excludeProductId: productId);
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
@@ -596,6 +613,19 @@ public class ProductController : ControllerBase
         var notFoundIds = request.productIds.Except(foundIds).ToList();
         if (notFoundIds.Any())
             throw ApiException.NotFound($"Products not found: {string.Join(", ", notFoundIds)}", code: "product_not_found");
+
+        if (request.updates.attributeValues != null || request.updates.storeAttributeValues != null)
+        {
+            foreach (var product in products)
+            {
+                await _attributeUniqueness.EnsureUniqueAsync(
+                    selectedStoreId.Value,
+                    product.categoryId,
+                    request.updates.attributeValues,
+                    request.updates.storeAttributeValues,
+                    excludeProductId: product.Id);
+            }
+        }
 
         var updatedCount = 0;
 

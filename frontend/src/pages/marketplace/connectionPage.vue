@@ -2668,12 +2668,8 @@ export default {
     },
 
     formatImportFieldValue(field, value) {
-      if (value === null || value === undefined) return this.$t("common.emDash");
+      if (value === null || value === undefined) return null;
       if (field === "price") return this.formatPrice(value);
-      if (field === "description") {
-        const str = String(value);
-        return str.length > 80 ? str.substring(0, 80) + "..." : str;
-      }
       return String(value);
     },
 

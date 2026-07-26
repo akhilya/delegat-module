@@ -26,19 +26,22 @@ public class PublicProductsController : ControllerBase
     private readonly IUnitOfWork _uow;
     private readonly QuotaService _quota;
     private readonly IServiceProvider _sp;
+    private readonly AttributeUniquenessService _attributeUniqueness;
 
     public PublicProductsController(
         PublicApiStoreContext storeCtx,
         DataContext db,
         IUnitOfWork uow,
         QuotaService quota,
-        IServiceProvider sp)
+        IServiceProvider sp,
+        AttributeUniquenessService attributeUniqueness)
     {
         _storeCtx = storeCtx;
         _db = db;
         _uow = uow;
         _quota = quota;
         _sp = sp;
+        _attributeUniqueness = attributeUniqueness;
     }
 
     /// <summary>Lists products. Use <c>categoryId=-1</c> for products without a category.</summary>
@@ -130,6 +133,13 @@ public class PublicProductsController : ControllerBase
         var existing = await repo.FindAsync(p => p.storeId == storeId && p.sku == input.sku);
         if (existing != null)
             throw ApiException.Conflict("A product with this SKU already exists", code: "sku_already_used");
+
+        await _attributeUniqueness.EnsureUniqueAsync(
+            storeId,
+            input.categoryId,
+            input.attributeValues,
+            input.storeAttributeValues,
+            ct: ct);
 
         var product = new Product();
         product.AddFill(new Product.AddForm(input, storeId, input.categoryId));
