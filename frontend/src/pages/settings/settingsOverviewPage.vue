@@ -223,10 +223,7 @@ onMounted(async () => {
     />
 
     <PageSection class="!min-h-0">
-      <SettingsFormSection
-        :title="$t('pages.settingsOverviewPage.publicApiTitle')"
-        :description="$t('pages.settingsOverviewPage.publicApiDescription')"
-      >
+      <SettingsFormSection>
         <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
           <div class="min-w-0">
             <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.publicApiEnabledLabel") }}</div>

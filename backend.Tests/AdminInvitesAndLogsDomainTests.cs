@@ -55,6 +55,22 @@ public class AdminInvitesAndLogsDomainTests
     }
 
     [Fact]
+    public async Task InvitationToken_ActiveCanBeRemoved_UsedRemains()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var used = new InvitationToken { token = "used", used = true, createdAt = DateTime.UtcNow };
+        var active = new InvitationToken { token = "active", used = false, createdAt = DateTime.UtcNow };
+        db.invitationTokens.AddRange(used, active);
+        await db.SaveChangesAsync();
+
+        db.invitationTokens.Remove(active);
+        await db.SaveChangesAsync();
+
+        Assert.Single(db.invitationTokens);
+        Assert.True(db.invitationTokens.Single().used);
+    }
+
+    [Fact]
     public async Task InvitationToken_Delete_RemovesToken()
     {
         await using var db = TestDbFactory.CreateDb();

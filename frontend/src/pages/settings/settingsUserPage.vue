@@ -103,7 +103,7 @@ onMounted(fetchMe);
     />
 
     <PageSection :loading="isLoading">
-      <SettingsFormSection :title="$t('pages.settingsUserPage.profileTitle')">
+      <SettingsFormSection>
         <FieldGroup>
           <SettingsFormField :label="$t('pages.settingsUserPage.userNameLabel')" label-for="user-name">
             <Input id="user-name" v-model="userNameDraft" :disabled="isSavingProfile" />
@@ -139,7 +139,11 @@ onMounted(fetchMe);
         </div>
       </SettingsFormSection>
 
-      <SettingsFormSection :title="$t('pages.settingsUserPage.passwordTitle')" class="mt-8">
+      <SettingsFormSection
+        :title="$t('pages.settingsUserPage.passwordTitle')"
+        :description="$t('pages.settingsUserPage.passwordDescription')"
+        class="mt-8"
+      >
         <FieldGroup>
           <SettingsFormField :label="$t('pages.settingsUserPage.currentPasswordLabel')" label-for="current-password">
             <PasswordInput id="current-password" v-model="currentPassword" :disabled="isChangingPassword" />

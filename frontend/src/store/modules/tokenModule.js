@@ -49,6 +49,32 @@ export default {
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
     },
+
+    /**
+     * Revokes (deletes) an unused invitation token.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {number} params.tokenId - Token id to revoke.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async revokeToken(ctx, { tokenId, onSuccess, onError }) {
+      return await useAxios(
+        `/tokens/${tokenId}`,
+        {
+          method: "DELETE",
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
   },
   mutations: {},
   state: {},

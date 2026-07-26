@@ -317,11 +317,7 @@ export default {
     </PageHeader>
 
     <PageSection :loading="isLoading" class="!min-h-0">
-      <SettingsFormSection
-        :title="$t('pages.aiModelsPage.modelsSectionTitle')"
-        :description="$t('pages.aiModelsPage.modelsSectionDescription')"
-        class="max-w-none"
-      >
+      <SettingsFormSection class="max-w-none">
         <EmptyState
           v-if="models.length === 0"
           :title="$t('pages.aiModelsPage.emptyModelsTitle')"

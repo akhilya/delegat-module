@@ -27,9 +27,11 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Check, Copy, Key, KeyRound, Loader2, Pencil, Plus, Save, UserCheck, UserPlus, Users } from "lucide-vue-next";
+import { Check, Copy, KeyRound, Loader2, Pencil, Plus, Save, Trash2, UserCheck, UserPlus, Users } from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { confirm } from "@/composables/useConfirm";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
   setup() {
@@ -52,6 +54,7 @@ export default {
     DialogHeader,
     DialogTitle,
     PageHeader,
+    EmptyState,
     Table,
     TableBody,
     TableCell,
@@ -60,12 +63,12 @@ export default {
     TableRow,
     Check,
     Copy,
-    Key,
     KeyRound,
     Loader2,
     Pencil,
     Plus,
     Save,
+    Trash2,
     UserCheck,
     UserPlus,
     Users,
@@ -94,6 +97,7 @@ export default {
       tokens: [],
       tokensLoading: false,
       isCreatingToken: false,
+      revokingTokenId: null,
       lastCreatedToken: null,
       copiedToken: null,
     };
@@ -120,6 +124,7 @@ export default {
       "putUserAccess",
       "getAllTokens",
       "createToken",
+      "revokeToken",
     ]),
 
     roleLabel(user) {
@@ -305,6 +310,32 @@ export default {
       }
     },
 
+    async handleRevokeToken(token) {
+      if (!token?.id || token.used) return;
+      const ok = await confirm({
+        title: this.$t("pages.usersPage.invite.revokeTitle"),
+        description: this.$t("pages.usersPage.invite.revokeDescription"),
+        confirmLabel: this.$t("pages.usersPage.invite.revokeAction"),
+      });
+      if (!ok) return;
+
+      this.revokingTokenId = token.id;
+      await this.revokeToken({
+        tokenId: token.id,
+        onSuccess: () => {
+          displaySonnerSuccess(this.$t("pages.usersPage.invite.tokenRevoked"));
+          if (this.lastCreatedToken && this.lastCreatedToken === token.token) {
+            this.lastCreatedToken = null;
+          }
+          this.fetchTokens();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.revokingTokenId = null;
+    },
+
     formatTokenDate(dateString) {
       if (!dateString) return "-";
       const formatted = this.formatStoreDateTime(dateString);
@@ -462,20 +493,20 @@ export default {
       :open="isInviteDialogOpen"
       @update:open="(v) => { if (!v) closeInviteDialog(); else isInviteDialogOpen = true; }"
     >
-      <DialogContent size="2xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader class="shrink-0 border-b px-6 py-4">
+      <DialogContent size="3xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader class="shrink-0 space-y-1.5 border-b px-6 py-4 text-left">
           <DialogTitle>{{ $t("pages.usersPage.invite.title") }}</DialogTitle>
           <DialogDescription>
             {{ $t("pages.usersPage.invite.description") }}
           </DialogDescription>
         </DialogHeader>
 
-        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <p class="text-sm text-muted-foreground">
+        <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-muted-foreground sm:max-w-xl">
               {{ $t("pages.usersPage.invite.hint") }}
             </p>
-            <Button :disabled="isCreatingToken" @click="handleCreateToken">
+            <Button class="shrink-0" :disabled="isCreatingToken" @click="handleCreateToken">
               <Loader2 v-if="isCreatingToken" class="mr-2 size-4 animate-spin" />
               <Plus v-else class="mr-2 size-4" />
               {{ $t("pages.usersPage.invite.createToken") }}
@@ -484,37 +515,44 @@ export default {
 
           <div
             v-if="lastCreatedToken"
-            class="rounded-md border border-amber-500/40 bg-amber-500/10 p-3"
+            class="flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3"
           >
-            <p class="mb-2 text-sm font-medium">
+            <div class="text-sm font-medium">
               {{ $t("pages.usersPage.invite.newTokenCreated") }}
-            </p>
+            </div>
             <div class="flex flex-wrap items-center gap-2">
-              <code class="min-w-0 flex-1 break-all rounded border bg-background px-2 py-1.5 font-mono text-xs">
+              <code class="min-w-0 flex-1 break-all font-mono text-xs">
                 {{ lastCreatedToken }}
               </code>
               <Button variant="outline" size="sm" @click="copyToken(lastCreatedToken)">
-                <Check v-if="copiedToken === lastCreatedToken" class="size-4" />
-                <Copy v-else class="size-4" />
+                <Check v-if="copiedToken === lastCreatedToken" class="mr-1.5 size-3.5" />
+                <Copy v-else class="mr-1.5 size-3.5" />
+                {{ $t("common.copy") }}
               </Button>
             </div>
           </div>
 
-          <div v-if="tokensLoading" class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-            <Loader2 class="size-4 animate-spin" />
-            {{ $t("common.loading") }}
-          </div>
+          <EmptyState
+            v-if="tokensLoading"
+            loading
+            size="sm"
+          />
 
-          <div
+          <EmptyState
             v-else-if="tokens.length === 0"
-            class="rounded-lg border border-dashed px-4 py-10 text-center"
+            size="sm"
+            :title="$t('pages.usersPage.invite.emptyTitle')"
+            :description="$t('pages.usersPage.invite.emptyDescription')"
           >
-            <Key class="mx-auto mb-3 size-8 text-muted-foreground" />
-            <div class="text-sm font-medium">{{ $t("pages.usersPage.invite.emptyTitle") }}</div>
-            <p class="mt-1 text-xs text-muted-foreground">
-              {{ $t("pages.usersPage.invite.emptyDescription") }}
-            </p>
-          </div>
+            <template #icon>
+              <KeyRound />
+            </template>
+            <Button class="mt-2" :disabled="isCreatingToken" @click="handleCreateToken">
+              <Loader2 v-if="isCreatingToken" class="mr-2 size-4 animate-spin" />
+              <Plus v-else class="mr-2 size-4" />
+              {{ $t("pages.usersPage.invite.createToken") }}
+            </Button>
+          </EmptyState>
 
           <div v-else class="overflow-hidden rounded-lg border">
             <div class="overflow-x-auto">
@@ -522,17 +560,17 @@ export default {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{{ $t("pages.usersPage.invite.columnToken") }}</TableHead>
-                    <TableHead>{{ $t("pages.usersPage.invite.columnStatus") }}</TableHead>
-                    <TableHead>{{ $t("pages.usersPage.invite.columnCreated") }}</TableHead>
-                    <TableHead>{{ $t("pages.usersPage.invite.columnUsed") }}</TableHead>
+                    <TableHead class="w-32">{{ $t("pages.usersPage.invite.columnStatus") }}</TableHead>
+                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnCreated") }}</TableHead>
+                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnUsed") }}</TableHead>
                     <TableHead>{{ $t("pages.usersPage.invite.columnUsedBy") }}</TableHead>
-                    <TableHead class="w-[50px]" />
+                    <TableHead class="w-24 text-right" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="token in tokens" :key="token.id">
                     <TableCell>
-                      <code class="font-mono text-sm">{{ tokenHint(token) }}</code>
+                      <code class="font-mono text-xs text-muted-foreground">{{ tokenHint(token) }}</code>
                     </TableCell>
                     <TableCell>
                       <Badge v-if="token.used" variant="secondary">
@@ -552,16 +590,30 @@ export default {
                     <TableCell>
                       {{ token.usedByUserName || "-" }}
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        v-if="!token.used"
-                        variant="ghost"
-                        size="sm"
-                        @click="copyToken(token.token)"
-                      >
-                        <Check v-if="copiedToken === token.token" class="size-4" />
-                        <Copy v-else class="size-4" />
-                      </Button>
+                    <TableCell class="text-right">
+                      <div v-if="!token.used" class="inline-flex items-center justify-end gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          :title="$t('common.copy')"
+                          @click="copyToken(token.token)"
+                        >
+                          <Check v-if="copiedToken === token.token" class="size-4" />
+                          <Copy v-else class="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8 text-destructive hover:text-destructive"
+                          :disabled="revokingTokenId === token.id"
+                          :title="$t('pages.usersPage.invite.revokeAction')"
+                          @click="handleRevokeToken(token)"
+                        >
+                          <Loader2 v-if="revokingTokenId === token.id" class="size-4 animate-spin" />
+                          <Trash2 v-else class="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -570,7 +622,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="shrink-0 border-t px-6 py-4">
+        <DialogFooter class="shrink-0 border-t px-6 py-4 sm:justify-end">
           <Button variant="outline" @click="closeInviteDialog">
             {{ $t("common.close") }}
           </Button>

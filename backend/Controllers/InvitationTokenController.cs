@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 
 namespace Delegat.Controllers;
@@ -47,5 +48,25 @@ public class InvitationTokenController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(newToken.MapToDTO(_serviceProvider));
+    }
+
+    /// <summary>Revokes an unused invitation token by deleting it.</summary>
+    [HttpDelete]
+    [Route("/tokens/{tokenId:int}")]
+    [RequiresPermission(Permissions.UsersManage)]
+    public async Task<IActionResult> DeleteInvitationToken(int tokenId)
+    {
+        var tokenRepo = _unitOfWork.Repository<InvitationToken>();
+        var token = await tokenRepo.FindAsync(t => t.Id == tokenId);
+        if (token == null)
+            throw ApiException.NotFound("Invitation token not found", code: "token_not_found");
+
+        if (token.used)
+            throw ApiException.BadRequest("Used invitation tokens cannot be revoked", code: "token_already_used");
+
+        tokenRepo.DeleteWithoutSave(token);
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(new { success = true });
     }
 }
