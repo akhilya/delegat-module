@@ -625,7 +625,9 @@
         "stocksExportSummary": "Экспортировано остатков: {updated}, пропущено: {skipped}",
         "selectProductsToExport": "Выберите товары для экспорта",
         "selectMappingForAll": "Выберите маппинг для всех товаров (осталось: {count})",
-        "saveMappingSelectionsError": "Ошибка сохранения выбора маппингов"
+        "saveMappingSelectionsError": "Ошибка сохранения выбора маппингов",
+        "linksVerified": "Проверено связей: {total}, в порядке: {ok}, разорвано: {broken}",
+        "linksVerifyError": "Не удалось проверить связи"
       },
       "confirm": {
         "unlinkTitle": "Отвязать товар?",
@@ -646,6 +648,7 @@
         "notSynced": "Не синхронизирован",
         "syncError": "Ошибка",
         "modified": "Изменён",
+        "remoteMissing": "Связь разорвана",
         "active": "Активно",
         "inactive": "Неактивно"
       },
@@ -653,7 +656,8 @@
         "subtitle": "Подключение к адаптеру: настройки, маппинги категорий и синхронизация товаров.",
         "test": "Тест",
         "moreActions": "Дополнительные действия",
-        "clearCache": "Очистить кэш"
+        "clearCache": "Очистить кэш",
+        "verifyLinks": "Проверить связи"
       },
       "settings": {
         "connectionTitle": "Подключение",
@@ -1615,6 +1619,11 @@
     "statusNotSynced": "Не синхронизирован",
     "statusError": "Ошибка",
     "statusModified": "Изменён",
+    "statusBroken": "Связь разорвана",
+    "menuVerify": "Проверить связь",
+    "verifySuccess": "Связь действительна",
+    "verifyBroken": "Товар на маркетплейсе не найден — связь помечена как разорванная",
+    "verifyError": "Не удалось проверить связь",
     "justNow": "только что",
     "minutesAgo": "{count} мин назад",
     "hoursAgo": "{count} ч назад",

@@ -26,6 +26,8 @@ import {
   Ruler,
   Layers,
   Ban,
+  Unlink,
+  SearchCheck,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
@@ -145,6 +147,8 @@ export default {
     Ruler,
     Layers,
     Ban,
+    Unlink,
+    SearchCheck,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -171,6 +175,7 @@ export default {
       exportingConnectionId: null,
       importingLinkId: null,
       unlinkingLinkId: null,
+      verifyingLinkId: null,
       PAGE_MARKETPLACE,
       PAGE_MARKETPLACE_CONNECTION,
       PAGE_MARKETPLACE_FIELD_MAPPING,
@@ -268,6 +273,7 @@ export default {
       "linkProduct",
       "relinkProduct",
       "unlinkProduct",
+      "verifyLink",
     ]),
 
     async fetchData() {
@@ -705,6 +711,31 @@ export default {
       }
     },
 
+    async handleVerifyLink(conn) {
+      if (!conn.isLinked || !conn.linkId || this.verifyingLinkId) return;
+
+      this.verifyingLinkId = conn.linkId;
+      try {
+        await this.verifyLink({
+          linkId: conn.linkId,
+          onSuccess: (response) => {
+            const result = extractResponseData(response, {});
+            if (result.broken > 0 || result.status === "RemoteMissing") {
+              displaySonnerError(t("productMarketplaceIntegrations.verifyBroken"));
+            } else {
+              displaySonnerSuccess(t("productMarketplaceIntegrations.verifySuccess"));
+            }
+            this.fetchData();
+          },
+          onError: (error) => {
+            displaySonnerError(error || t("productMarketplaceIntegrations.verifyError"));
+          },
+        });
+      } finally {
+        this.verifyingLinkId = null;
+      }
+    },
+
     getSelectedMapping(conn) {
       const selectedId = this.mappingSelections[conn.connectionId];
       if (!selectedId || !conn.availableMappings) return null;
@@ -732,6 +763,7 @@ export default {
       if (conn.isLinked) {
         if (this.importingLinkId === conn.linkId) return true;
         if (this.unlinkingLinkId === conn.linkId) return true;
+        if (this.verifyingLinkId === conn.linkId) return true;
         if (this.isApplyingImport && this.previewLinkId === conn.linkId) return true;
         if (this.isRecreating && this.recreateConn?.connectionId === conn.connectionId) return true;
       }
@@ -788,6 +820,13 @@ export default {
             icon: AlertTriangle,
             label: t("productMarketplaceIntegrations.statusModified"),
             color: "text-warning",
+          };
+        case "RemoteMissing":
+          return {
+            variant: "destructive",
+            icon: Unlink,
+            label: t("productMarketplaceIntegrations.statusBroken"),
+            color: "text-error",
           };
         default:
           return {
@@ -1010,6 +1049,14 @@ export default {
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              @click="handleVerifyLink(conn)"
+              :disabled="verifyingLinkId === conn.linkId || !conn.canImport"
+            >
+              <Loader2 v-if="verifyingLinkId === conn.linkId" class="size-4 mr-2 animate-spin" />
+              <SearchCheck v-else class="size-4 mr-2" />
+              {{ $t("productMarketplaceIntegrations.menuVerify") }}
+            </DropdownMenuItem>
             <DropdownMenuItem @click="openLinkDialog(conn, true)">
               <Link2 class="size-4 mr-2" />
               {{ $t("productMarketplaceIntegrations.menuRelink") }}

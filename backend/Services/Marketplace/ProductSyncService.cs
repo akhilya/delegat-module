@@ -282,6 +282,39 @@ public class ProductSyncService
             if (realExternalId != null && realExternalId.StartsWith("pending:"))
                 realExternalId = null;
 
+            // Already known broken — recreate without calling the marketplace for preflight.
+            if (existingLink?.status == ProductMarketplaceStatus.RemoteMissing)
+                realExternalId = null;
+
+            // Preflight: if linked remote product disappeared, mark broken and create a new listing.
+            if (realExternalId != null &&
+                existingLink != null &&
+                adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+            {
+                try
+                {
+                    var remote = await adapter.ImportProductAsync(connection, realExternalId, ct);
+                    if (remote == null)
+                    {
+                        await Log("warning",
+                            $"Remote product {realExternalId} not found on the marketplace — exporting as new");
+                        MarkLinkRemoteMissing(
+                            existingLink,
+                            $"Product '{realExternalId}' not found on the marketplace");
+                        await _context.SaveChangesAsync(ct);
+                        realExternalId = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Do not block export on transient preflight failures.
+                    await Log("warning", $"Could not verify remote product {realExternalId}: {ex.Message}");
+                    _logger.LogWarning(ex,
+                        "Export preflight failed for product {ProductId} external {ExternalId}",
+                        productId, realExternalId);
+                }
+            }
+
             var result = await adapter.ExportProductAsync(
                 connection,
                 exportDataNonNull,
@@ -696,6 +729,9 @@ public class ProductSyncService
                 // "pending:*" placeholders are not real marketplace IDs - treat as null (new product)
                 if (existingExternalId != null && existingExternalId.StartsWith("pending:"))
                     existingExternalId = null;
+                // Broken remote links must recreate, not update a missing ID
+                if (link != null && link.status == ProductMarketplaceStatus.RemoteMissing)
+                    existingExternalId = null;
 
                 bulkItems.Add(new BulkExportItem(productId, exportDataNonNull, existingExternalId));
                 categoryMappingIdByProductId[productId] = categoryMapping.Id;
@@ -1055,6 +1091,11 @@ public class ProductSyncService
             if (externalProduct == null)
             {
                 await Log("error", $"Product {externalProductId} not found on the marketplace");
+                await MarkLinksRemoteMissingByExternalIdAsync(
+                    connectionId,
+                    externalProductId,
+                    $"Product '{externalProductId}' not found on the marketplace",
+                    ct);
                 return ProductImportResult.Failure($"Product with ID '{externalProductId}' not found on the marketplace");
             }
 
@@ -1662,6 +1703,138 @@ public class ProductSyncService
     }
 
     /// <summary>
+    /// Verify that linked remote products still exist. Marks missing ones as <see cref="ProductMarketplaceStatus.RemoteMissing"/>.
+    /// </summary>
+    public async Task<LinkVerifyResult> VerifyLinksAsync(
+        int connectionId,
+        int? linkId = null,
+        CancellationToken ct = default)
+    {
+        var connection = await _context.marketplaceConnections
+            .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
+        if (connection == null)
+            throw new InvalidOperationException($"Connection with ID {connectionId} not found");
+
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw new InvalidOperationException($"Adapter '{connection.adapterKey}' not found");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+            throw new InvalidOperationException(
+                "Adapter does not support product import — cannot verify remote product existence");
+
+        var query = _context.productMarketplaceLinks
+            .Where(l => l.connectionId == connectionId);
+
+        if (linkId.HasValue)
+            query = query.Where(l => l.Id == linkId.Value);
+
+        var links = await query.ToListAsync(ct);
+        var checkable = links
+            .Where(l => !string.IsNullOrWhiteSpace(l.externalProductId) &&
+                        !l.externalProductId.StartsWith("pending:", StringComparison.Ordinal))
+            .ToList();
+
+        if (checkable.Count == 0)
+        {
+            return new LinkVerifyResult(0, 0, 0, 0);
+        }
+
+        var foundIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        const int batchSize = 50;
+        for (var i = 0; i < checkable.Count; i += batchSize)
+        {
+            var chunk = checkable.Skip(i).Take(batchSize).Select(l => l.externalProductId).Distinct().ToList();
+            var found = await adapter.ImportProductsBatchAsync(connection, chunk, ct);
+            foreach (var product in found)
+            {
+                if (!string.IsNullOrWhiteSpace(product.ExternalId))
+                    foundIds.Add(product.ExternalId);
+            }
+        }
+
+        var confirmed = 0;
+        var broken = 0;
+        var recovered = 0;
+        var now = DateTime.UtcNow;
+
+        foreach (var link in checkable)
+        {
+            if (foundIds.Contains(link.externalProductId))
+            {
+                confirmed++;
+                if (link.status == ProductMarketplaceStatus.RemoteMissing)
+                {
+                    link.status = ProductMarketplaceStatus.Synced;
+                    link.lastErrorMessage = null;
+                    link.lastSyncAt = now;
+                    recovered++;
+                }
+            }
+            else
+            {
+                broken++;
+                MarkLinkRemoteMissing(
+                    link,
+                    $"Product '{link.externalProductId}' not found on the marketplace");
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return new LinkVerifyResult(checkable.Count, confirmed, broken, recovered);
+    }
+
+    private async Task MarkLinksRemoteMissingByExternalIdAsync(
+        int connectionId,
+        string externalProductId,
+        string errorMessage,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(externalProductId) ||
+            externalProductId.StartsWith("pending:", StringComparison.Ordinal))
+            return;
+
+        var links = await _context.productMarketplaceLinks
+            .Where(l => l.connectionId == connectionId && l.externalProductId == externalProductId)
+            .ToListAsync(ct);
+
+        if (links.Count == 0)
+            return;
+
+        foreach (var link in links)
+            MarkLinkRemoteMissing(link, errorMessage);
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Mark a single link as remote-missing (e.g. after import-from-link returns not found).
+    /// </summary>
+    public async Task MarkLinkRemoteMissingAsync(
+        int linkId,
+        string errorMessage,
+        CancellationToken ct = default)
+    {
+        var link = await _context.productMarketplaceLinks.FirstOrDefaultAsync(l => l.Id == linkId, ct);
+        if (link == null)
+            return;
+
+        MarkLinkRemoteMissing(link, errorMessage);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    private static void MarkLinkRemoteMissing(ProductMarketplaceLink link, string errorMessage)
+    {
+        link.UpdateFill(new ProductMarketplaceLink.UpdateForm
+        {
+            status = ProductMarketplaceStatus.RemoteMissing,
+            lastErrorMessage = errorMessage.Length > 2000 ? errorMessage[..2000] : errorMessage,
+            lastSyncAt = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
     /// Enqueue product images for background download by ImageDownloadBackgroundService.
     /// </summary>
     private async Task ImportProductImagesAsync(
@@ -2092,6 +2265,11 @@ public class ProductSyncStatus
     public int? LocalStock { get; set; }
     public int? ExternalStock { get; set; }
 }
+
+/// <summary>
+/// Result of verifying marketplace product links against the remote catalog.
+/// </summary>
+public record LinkVerifyResult(int Checked, int Confirmed, int Broken, int Recovered);
 
 /// <summary>
 /// Detail of a single attribute change (for import preview).

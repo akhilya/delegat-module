@@ -625,7 +625,9 @@
         "stocksExportSummary": "Stock exported: {updated}, skipped: {skipped}",
         "selectProductsToExport": "Select products to export",
         "selectMappingForAll": "Select a mapping for all products (remaining: {count})",
-        "saveMappingSelectionsError": "Error saving mapping selections"
+        "saveMappingSelectionsError": "Error saving mapping selections",
+        "linksVerified": "Checked {total} links: {ok} ok, {broken} broken",
+        "linksVerifyError": "Failed to verify links"
       },
       "confirm": {
         "unlinkTitle": "Unlink product?",
@@ -646,6 +648,7 @@
         "notSynced": "Not synced",
         "syncError": "Error",
         "modified": "Modified",
+        "remoteMissing": "Link broken",
         "active": "Active",
         "inactive": "Inactive"
       },
@@ -653,7 +656,8 @@
         "subtitle": "Adapter connection: settings, category mappings, and product syncing.",
         "test": "Test",
         "moreActions": "More actions",
-        "clearCache": "Clear cache"
+        "clearCache": "Clear cache",
+        "verifyLinks": "Verify links"
       },
       "settings": {
         "connectionTitle": "Connection",
@@ -1615,6 +1619,11 @@
     "statusNotSynced": "Not synced",
     "statusError": "Error",
     "statusModified": "Modified",
+    "statusBroken": "Link broken",
+    "menuVerify": "Verify link",
+    "verifySuccess": "Link is valid",
+    "verifyBroken": "Remote product is missing — link marked as broken",
+    "verifyError": "Could not verify link",
     "justNow": "just now",
     "minutesAgo": "{count} min ago",
     "hoursAgo": "{count} h ago",

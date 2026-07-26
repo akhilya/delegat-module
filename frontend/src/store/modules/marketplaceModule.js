@@ -947,6 +947,28 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async verifyLink(ctx, { linkId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/verify`,
+        { method: "POST", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async verifyConnectionLinks(ctx, { connectionId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/connections/${connectionId}/links/verify`,
+        { method: "POST", cache: false, timeout: 5 * 60 * 1000 },
+        http,
+        { immediate: true, abortPrevious: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     /**
      * Bulk exports multiple products to a marketplace via a connection.
      * @param {Object} ctx - Vuex action context.

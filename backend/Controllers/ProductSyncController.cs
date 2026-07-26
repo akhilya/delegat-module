@@ -346,6 +346,77 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
+    /// Verify that marketplace links still point at existing remote products.
+    /// Missing remotes are marked as RemoteMissing.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/links/verify")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> VerifyConnectionLinks(int connectionId, CancellationToken ct)
+    {
+        var connection = await GetConnectionAsync(connectionId);
+        try
+        {
+            var result = await _productSyncService.VerifyLinksAsync(connection.Id, linkId: null, ct);
+            return Ok(new
+            {
+                success = true,
+                checkedCount = result.Checked,
+                confirmed = result.Confirmed,
+                broken = result.Broken,
+                recovered = result.Recovered
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Verify a single marketplace link against the remote product.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/verify")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> VerifyLink(int linkId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var link = await _context.productMarketplaceLinks
+            .Include(l => l.connection)
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.connection.storeId == selectedStoreId.Value, ct);
+
+        if (link == null)
+            throw ApiException.NotFound("Marketplace link not found");
+
+        try
+        {
+            var result = await _productSyncService.VerifyLinksAsync(link.connectionId, linkId, ct);
+            var refreshed = await _context.productMarketplaceLinks.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.Id == linkId, ct);
+
+            return Ok(new
+            {
+                success = true,
+                linkId,
+                status = refreshed?.status.ToString(),
+                lastErrorMessage = refreshed?.lastErrorMessage,
+                checkedCount = result.Checked,
+                confirmed = result.Confirmed,
+                broken = result.Broken,
+                recovered = result.Recovered
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Re-link a product to a different external marketplace product.
     /// </summary>
     [HttpPost]
@@ -1784,7 +1855,13 @@ public class ProductSyncController : ControllerBase
         // Get up-to-date data from the marketplace
         var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
         if (externalProduct == null)
-            throw ApiException.BadRequest($"Product with ID '{link.externalProductId}' not found on the marketplace");
+        {
+            var missingMsg = $"Product with ID '{link.externalProductId}' not found on the marketplace";
+            await _productSyncService.MarkLinkRemoteMissingAsync(link.Id, missingMsg, ct);
+            await _operationLogger.LogAsync(operationId, storeId, "error", missingMsg);
+            await _operationLogger.FinishAsync(operationId, storeId, "failed", missingMsg);
+            throw ApiException.BadRequest(missingMsg, code: "remote_product_missing");
+        }
 
         await _operationLogger.LogAsync(operationId, storeId, "info", "Data received, comparing fields...");
 
@@ -1933,7 +2010,11 @@ public class ProductSyncController : ControllerBase
 
         var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
         if (externalProduct == null)
-            throw ApiException.BadRequest($"Product with ID '{link.externalProductId}' not found on the marketplace");
+        {
+            var missingMsg = $"Product with ID '{link.externalProductId}' not found on the marketplace";
+            await _productSyncService.MarkLinkRemoteMissingAsync(link.Id, missingMsg, ct);
+            throw ApiException.BadRequest(missingMsg, code: "remote_product_missing");
+        }
 
         var updatedFields = new List<string>();
         var oldValues = new Dictionary<string, object?>();

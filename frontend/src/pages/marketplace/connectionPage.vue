@@ -59,6 +59,7 @@ import {
   Settings2,
   ArrowRightLeft,
   Unlink,
+  SearchCheck,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -228,6 +229,7 @@ export default {
     Settings2,
     ArrowRightLeft,
     Unlink,
+    SearchCheck,
     FieldChangesPreviewDialog,
     PasswordInput,
     SettingsFormField,
@@ -390,6 +392,7 @@ export default {
       limitsRefreshTimer: null,
       showLimitsDialog: false,
       isClearingCache: false,
+      isVerifyingLinks: false,
       aiEnabled: false,
     };
   },
@@ -735,6 +738,7 @@ export default {
       "importFromLinkPreview",
       "exportFromLink",
       "unlinkProduct",
+      "verifyConnectionLinks",
       "importSelectedProducts",
       "getImportBatchStatus",
       "exportPrices",
@@ -1120,6 +1124,32 @@ export default {
         },
       });
       this.isClearingCache = false;
+    },
+
+    async handleVerifyLinks() {
+      if (this.isVerifyingLinks || !this.connectionId) return;
+      this.isVerifyingLinks = true;
+      await this.verifyConnectionLinks({
+        connectionId: this.connectionId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          displaySonnerSuccess(
+            this.$t("marketplace.connectionPage.notifications.linksVerified", {
+              total: result.checkedCount ?? 0,
+              ok: result.confirmed ?? 0,
+              broken: result.broken ?? 0,
+            }),
+          );
+          this.fetchProducts(true);
+          this.fetchLocalProducts();
+        },
+        onError: (error) => {
+          displaySonnerError(
+            error || this.$t("marketplace.connectionPage.notifications.linksVerifyError"),
+          );
+        },
+      });
+      this.isVerifyingLinks = false;
     },
 
     async handleCreateMapping() {
@@ -2693,6 +2723,13 @@ export default {
             label: this.$t("marketplace.connectionPage.status.modified"),
             color: "text-warning",
           };
+        case "RemoteMissing":
+          return {
+            variant: "destructive",
+            icon: Unlink,
+            label: this.$t("marketplace.connectionPage.status.remoteMissing"),
+            color: "text-error",
+          };
         default:
           return {
             variant: "secondary",
@@ -2864,6 +2901,14 @@ export default {
                   <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
                   <TestTube v-else class="size-4 mr-2" />
                   {{ $t("marketplace.connectionPage.header.test") }}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  :disabled="isVerifyingLinks"
+                  @click="handleVerifyLinks"
+                >
+                  <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
+                  <SearchCheck v-else class="size-4 mr-2" />
+                  {{ $t("marketplace.connectionPage.header.verifyLinks") }}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   :disabled="limitsData != null && limitsData.supported === false"
