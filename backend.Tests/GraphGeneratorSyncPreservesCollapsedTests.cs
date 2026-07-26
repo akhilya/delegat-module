@@ -69,6 +69,78 @@ public class GraphGeneratorSyncPreservesCollapsedTests
     }
 
     [Fact]
+    public void SyncPriceFields_MigratesLegacyPriceKeysFromAdapterFields()
+    {
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "adapter-fields",
+                  "type": "adapterFields",
+                  "data": {
+                    "fields": [
+                      { "fieldKey": "sku", "label": "SKU", "outputType": "string", "isRequired": true },
+                      {
+                        "fieldKey": "sale_price",
+                        "label": "Sale price",
+                        "outputType": "number",
+                        "isRequired": false,
+                        "source": { "type": "productField", "field": "discountedPrice" }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "edges": []
+            }
+            """;
+
+        var result = GraphGenerator.SyncPriceFields(
+            graph,
+            [
+                new FieldSpec
+                {
+                    externalFieldKey = "price",
+                    externalFieldName = "Price",
+                    externalFieldType = "number",
+                    isRequired = true,
+                    isEnabled = true,
+                    sortOrder = 0,
+                    sourceType = FieldMappingSourceType.ProductField,
+                    sourceField = "price",
+                },
+                new FieldSpec
+                {
+                    externalFieldKey = "sale_price",
+                    externalFieldName = "Sale price",
+                    externalFieldType = "number",
+                    isRequired = false,
+                    isEnabled = true,
+                    sortOrder = 1,
+                    sourceType = FieldMappingSourceType.ProductField,
+                    sourceField = "discountedPrice",
+                },
+            ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var nodes = doc.RootElement.GetProperty("nodes").EnumerateArray().ToList();
+
+        var adapterFields = nodes.First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .Select(f => f.GetProperty("fieldKey").GetString())
+            .ToList();
+        Assert.Contains("sku", adapterFields);
+        Assert.DoesNotContain("sale_price", adapterFields);
+
+        var priceFields = nodes.First(n => n.GetProperty("type").GetString() == "adapterPriceFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray().ToList();
+        Assert.Contains(priceFields, f => f.GetProperty("fieldKey").GetString() == "price");
+        var sale = priceFields.First(f => f.GetProperty("fieldKey").GetString() == "sale_price");
+        Assert.Equal("productField", sale.GetProperty("source").GetProperty("type").GetString());
+        Assert.Equal("discountedPrice", sale.GetProperty("source").GetProperty("field").GetString());
+    }
+
+    [Fact]
     public void SyncAdapterFields_PreservesCollapsedOnSourceNodes()
     {
         var result = GraphGenerator.SyncAdapterFields(

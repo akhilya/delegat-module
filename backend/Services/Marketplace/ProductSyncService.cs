@@ -213,6 +213,7 @@ public class ProductSyncService
                 .ToList();
 
             var missingFields = new List<string>();
+            var missingDetails = new List<string>();
             foreach (var mapping in requiredMappings)
             {
                 if (!exportData.TryGetValue(mapping.fieldKey!, out var value) ||
@@ -221,6 +222,7 @@ public class ProductSyncService
                 {
                     var fieldName = mapping.label ?? mapping.fieldKey!;
                     missingFields.Add(fieldName);
+                    missingDetails.Add($"{fieldName} [key={mapping.fieldKey}]");
                     _logger.LogWarning(
                         "Required field '{FieldKey}' ({FieldName}) is empty for product {ProductId}.",
                         mapping.fieldKey, fieldName, productId);
@@ -230,10 +232,22 @@ public class ProductSyncService
             if (missingFields.Count > 0)
             {
                 var fieldsStr = string.Join(", ", missingFields);
-                await Log("error", $"Required fields are not filled: {fieldsStr}");
+                var detailsStr = string.Join(", ", missingDetails);
+                var mappingHint =
+                    $"mapping #{categoryMapping.Id}" +
+                    (string.IsNullOrWhiteSpace(categoryMapping.name)
+                        ? ""
+                        : $" «{categoryMapping.name}»");
+                await Log(
+                    "error",
+                    $"Required fields are not filled ({mappingHint}): {detailsStr}. " +
+                    "Export was blocked before calling the adapter (no HTTP request). " +
+                    "Open field mapping and turn off Required for unused attributes, or fill values on the product. " +
+                    "Attributes like clothing size/gender often come from another marketplace template.");
                 return ProductExportResult.Failure(
                     $"Required fields are not filled: {fieldsStr}. " +
-                    $"Check the product data and mapping settings.");
+                    $"Check the product data and mapping settings ({mappingHint}). " +
+                    "Disable Required on unused mapping fields or recreate the WooCommerce category mapping.");
             }
 
             await Log("info", $"Prepared fields: {exportData.Count(kv => kv.Value != null)}, required: {requiredMappings.Count}");
@@ -644,20 +658,30 @@ public class ProductSyncService
                     .ToList();
 
                 var missingFields = new List<string>();
+                var missingDetails = new List<string>();
                 foreach (var mapping in requiredMappings)
                 {
                     if (!exportData.TryGetValue(mapping.fieldKey!, out var value) ||
                         value == null ||
                         (value is string strValue && string.IsNullOrWhiteSpace(strValue)))
                     {
-                        missingFields.Add(mapping.label ?? mapping.fieldKey!);
+                        var fieldName = mapping.label ?? mapping.fieldKey!;
+                        missingFields.Add(fieldName);
+                        missingDetails.Add($"{fieldName} [key={mapping.fieldKey}]");
                     }
                 }
 
                 if (missingFields.Count > 0)
                 {
+                    var mappingHint =
+                        $"mapping #{categoryMapping.Id}" +
+                        (string.IsNullOrWhiteSpace(categoryMapping.name)
+                            ? ""
+                            : $" «{categoryMapping.name}»");
                     itemResults.Add(new BulkProductExportItemResult(productId, false,
-                        ErrorMessage: $"Required fields are not filled: {string.Join(", ", missingFields)}"));
+                        ErrorMessage:
+                            $"Required fields are not filled ({mappingHint}): {string.Join(", ", missingDetails)}. " +
+                            "Blocked before adapter HTTP call. Disable Required on unused mapping fields or recreate WooCommerce mapping."));
                     failedProductIds.Add(productId);
                     continue;
                 }

@@ -58,6 +58,7 @@ export default {
   data() {
     return {
       connection: null,
+      capabilities: null,
       localCategories: [],
       externalCategories: [],
       isLoading: false,
@@ -125,10 +126,21 @@ export default {
         label: `${c.name} (${this.$t("marketplace.categoryImportPage.attrsAbbrCount", { count: c.attributesCount })})`,
       }));
     },
+    canCreateCategory() {
+      return !!this.capabilities?.capabilities?.createCategory;
+    },
+    isEmptyRemoteRoot() {
+      return (
+        !this.externalCategorySearch &&
+        !this.currentParentId &&
+        this.externalCategories.length === 0
+      );
+    },
   },
   methods: {
     ...mapActions([
       "getConnection",
+      "getCapabilities",
       "getLocalCategories",
       "getExternalCategories",
       "getExternalCategoryFields",
@@ -137,7 +149,11 @@ export default {
 
     async fetchInitialData() {
       this.isLoading = true;
-      await Promise.all([this.fetchConnection(), this.fetchLocalCategories()]);
+      await Promise.all([
+        this.fetchConnection(),
+        this.fetchCapabilities(),
+        this.fetchLocalCategories(),
+      ]);
       await this.loadRootCategories();
       this.isLoading = false;
     },
@@ -152,6 +168,18 @@ export default {
         onError: (error) => {
           displaySonnerError(error);
           this.$router.push(PAGE_MARKETPLACE);
+        },
+      });
+    },
+
+    async fetchCapabilities() {
+      await this.getCapabilities({
+        connectionId: this.connectionId,
+        onSuccess: (response) => {
+          this.capabilities = extractResponseData(response);
+        },
+        onError: () => {
+          this.capabilities = null;
         },
       });
     },
@@ -443,13 +471,29 @@ export default {
                 class="flex min-h-0 flex-1 items-center justify-center p-4"
               >
                 <EmptyState
-                  size="sm"
+                  class="w-full py-12"
                   :title="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
-                  :description="$t('marketplace.categoryImportPage.categoriesNotFoundDescription')"
+                  :description="
+                    isEmptyRemoteRoot && canCreateCategory
+                      ? $t('marketplace.categoryImportPage.categoriesNotFoundCreateHint', { adapter: adapterLabel })
+                      : $t('marketplace.categoryImportPage.categoriesNotFoundDescription')
+                  "
                 >
                   <template #icon>
                     <Search />
                   </template>
+                  <Button
+                    v-if="isEmptyRemoteRoot && canCreateCategory"
+                    @click="
+                      $router.push({
+                        path: `/adapter/${connectionId}`,
+                        query: { tab: 'mappings', createFromLocal: '1' },
+                      })
+                    "
+                  >
+                    <FolderTree class="size-4 mr-2" />
+                    {{ $t('marketplace.categoryImportPage.createFromLocalCta', { adapter: adapterLabel }) }}
+                  </Button>
                 </EmptyState>
               </div>
               <div v-else class="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -504,7 +548,7 @@ export default {
               class="flex min-h-48 items-center justify-center rounded-lg border border-dashed py-8"
             >
               <EmptyState
-                size="sm"
+                class="flex-1 py-12"
                 :title="$t('marketplace.categoryImportPage.selectCategoryTitle')"
                 :description="$t('marketplace.categoryImportPage.selectCategoryDescription')"
               >

@@ -228,7 +228,8 @@ public static class GraphGenerator
     }
 
     /// <summary>
-    /// Append price-API fields added since the graph was generated (additive, never prunes user config).
+    /// Append price-API fields added since the graph was generated.
+    /// If the same keys still sit on adapterFields (legacy), migrate their bindings into the price node and remove the duplicates.
     /// </summary>
     public static string SyncPriceFields(string? existingGraphJson, IEnumerable<FieldSpec> specs)
     {
@@ -259,19 +260,66 @@ public static class GraphGenerator
         priceNode.data.fields ??= new List<AdapterField>();
         var have = new HashSet<string>(priceNode.data.fields
             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
-            .Select(f => f.fieldKey!));
+            .Select(f => f.fieldKey!), StringComparer.OrdinalIgnoreCase);
+
+        var adapter = graph.nodes.FirstOrDefault(n => n.type == "adapterFields");
+        if (adapter != null)
+        {
+            adapter.data ??= new GraphNodeData();
+            adapter.data.fields ??= new List<AdapterField>();
+        }
 
         foreach (var fm in specs.Where(f => f.isEnabled).OrderBy(f => f.sortOrder))
         {
-            if (string.IsNullOrEmpty(fm.externalFieldKey) || have.Contains(fm.externalFieldKey))
+            if (string.IsNullOrEmpty(fm.externalFieldKey))
                 continue;
+
+            AdapterFieldSource? migratedSource = null;
+            string? migratedLabel = null;
+            string? migratedType = null;
+            bool? migratedRequired = null;
+
+            if (adapter?.data?.fields is { Count: > 0 })
+            {
+                var legacy = adapter.data.fields.FirstOrDefault(f =>
+                    string.Equals(f.fieldKey, fm.externalFieldKey, StringComparison.OrdinalIgnoreCase));
+                if (legacy != null)
+                {
+                    migratedSource = legacy.source;
+                    migratedLabel = legacy.label;
+                    migratedType = legacy.outputType;
+                    migratedRequired = legacy.isRequired;
+                    adapter.data.fields.Remove(legacy);
+
+                    // Drop edges that targeted the card-field sink for this key
+                    var sinkId = adapter.id ?? "adapter-fields";
+                    var handle = $"f:{fm.externalFieldKey}";
+                    graph.edges.RemoveAll(e =>
+                        string.Equals(e.target, sinkId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(e.targetHandle, handle, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+
+            if (have.Contains(fm.externalFieldKey))
+            {
+                // Prefer a migrated binding when the price field is still unbound
+                if (migratedSource != null)
+                {
+                    var existing = priceNode.data.fields.FirstOrDefault(f =>
+                        string.Equals(f.fieldKey, fm.externalFieldKey, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null && existing.source == null)
+                        existing.source = migratedSource;
+                }
+                continue;
+            }
+
             priceNode.data.fields.Add(new AdapterField
             {
                 fieldKey = fm.externalFieldKey,
-                label = fm.externalFieldName ?? fm.externalFieldKey,
-                outputType = fm.externalFieldType ?? "string",
-                isRequired = fm.isRequired,
-                source = ParseActiveModifiers(fm.modifiersJson).Count == 0 ? DirectBinding(fm) : null,
+                label = migratedLabel ?? fm.externalFieldName ?? fm.externalFieldKey,
+                outputType = migratedType ?? fm.externalFieldType ?? "string",
+                isRequired = migratedRequired ?? fm.isRequired,
+                source = migratedSource ?? (ParseActiveModifiers(fm.modifiersJson).Count == 0 ? DirectBinding(fm) : null),
             });
             have.Add(fm.externalFieldKey);
         }

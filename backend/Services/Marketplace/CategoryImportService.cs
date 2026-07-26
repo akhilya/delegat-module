@@ -435,7 +435,9 @@ public class CategoryImportService
             || key.Equals("minPrice", StringComparison.OrdinalIgnoreCase)
             || key.Equals("netPrice", StringComparison.OrdinalIgnoreCase)
             || key.Equals("discount", StringComparison.OrdinalIgnoreCase)
-            || key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase);
+            || key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("sale_price", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("salePrice", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
@@ -445,6 +447,9 @@ public class CategoryImportService
 
         if (keyLower == "price")
             return (FieldMappingSourceType.ProductField, "price", null);
+
+        if (keyLower is "sale_price" or "saleprice" or "discountedprice")
+            return (FieldMappingSourceType.ProductField, "discountedPrice", null);
 
         if (extendedPriceParameters)
         {

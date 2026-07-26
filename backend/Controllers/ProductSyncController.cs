@@ -141,7 +141,7 @@ public class ProductSyncController : ControllerBase
             .ToListAsync();
 
         if (mappedLocalCategoryIds.Count == 0)
-            return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
+            return Ok(new { items = Array.Empty<object>(), totalCount = 0, reason = "no_mappings" });
 
         // Get product IDs already successfully linked to this connection
         // (exclude NotSynced/SyncError - those need to be re-exported)

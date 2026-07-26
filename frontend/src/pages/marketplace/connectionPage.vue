@@ -114,6 +114,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
@@ -227,6 +233,10 @@ export default {
     SettingsFormField,
     SettingsFormSection,
     Progress,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
@@ -255,6 +265,10 @@ export default {
       isTesting: false,
       testResult: null,
       showCreateMappingDialog: false,
+      showBulkCreateCategoriesDialog: false,
+      bulkCreateSelectedIds: {},
+      isBulkCreatingCategories: false,
+      bulkCreateProgress: null, // { done, total, success, failed, errors: [{ name, error }] }
       isCreatingMapping: false,
       isCreatingExternalCategory: false,
       newMapping: {
@@ -277,6 +291,7 @@ export default {
       products: [],
       productsListUnsupported: false,
       productsListUnsupportedMessage: "",
+      localExportReason: null, // "no_mappings" | null
       selectedItems: [],
       lastSelectedExternalId: null,
       isShiftSelecting: false,
@@ -511,6 +526,27 @@ export default {
         (a) => a.key === this.connection.adapterKey,
       );
       return adapter?.displayName || this.connection.adapterKey;
+    },
+    canCreateCategory() {
+      return !!this.capabilities?.capabilities?.createCategory;
+    },
+    unmappedLocalCategories() {
+      const mappedIds = new Set(
+        this.categoryMappings.map((m) => m.localCategoryId),
+      );
+      return this.localCategories.filter((c) => !mappedIds.has(c.id));
+    },
+    bulkCreateSelectedCount() {
+      return Object.keys(this.bulkCreateSelectedIds).filter(
+        (id) => this.bulkCreateSelectedIds[id],
+      ).length;
+    },
+    allBulkCreateSelected() {
+      const cats = this.unmappedLocalCategories;
+      return (
+        cats.length > 0 &&
+        cats.every((c) => this.bulkCreateSelectedIds[c.id])
+      );
     },
     rpsUsagePercent() {
       const limits = this.limitsData;
@@ -1158,13 +1194,31 @@ export default {
       this.isCreatingExternalCategory = false;
     },
 
-    handleDeleteMapping(mapping) {
+    async handleDeleteMapping(mapping) {
       const target =
         typeof mapping === "object"
           ? mapping
           : this.categoryMappings.find((m) => m.id === mapping);
 
       if (!target) return;
+
+      const linkedCount = target.linkedProductsCount || 0;
+
+      // No linked products — plain confirmation, no reassign/force UI
+      if (linkedCount === 0) {
+        const ok = await confirm({
+          title: this.$t("marketplace.connectionPage.dialogs.deleteMappingTitle", {
+            name: target.name || target.localCategoryName,
+          }),
+          description: this.$t(
+            "marketplace.connectionPage.dialogs.deleteMappingSimpleDescription",
+          ),
+          confirmLabel: this.$t("common.delete"),
+        });
+        if (!ok) return;
+        await this.confirmDeleteMapping(target.id);
+        return;
+      }
 
       this.deleteMappingTarget = target;
       const replacements = this.categoryMappings.filter(
@@ -1173,7 +1227,7 @@ export default {
           m.localCategoryId === target.localCategoryId,
       );
       this.deleteMappingImpact = {
-        linkedProductsCount: target.linkedProductsCount || 0,
+        linkedProductsCount: linkedCount,
         replacementMappings: replacements,
       };
       this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
@@ -2231,12 +2285,124 @@ export default {
           this.localProducts = data.items || [];
           this.lastSelectedLocalId = null;
           this.localTotalCount = data.totalCount || 0;
+          this.localExportReason = data.reason || null;
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isLoadingLocalProducts = false;
+    },
+
+    openBulkCreateCategoriesDialog() {
+      if (!this.canCreateCategory) {
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.createCategoryUnsupported"),
+        );
+        return;
+      }
+      const selected = {};
+      for (const cat of this.unmappedLocalCategories) {
+        selected[cat.id] = true;
+      }
+      this.bulkCreateSelectedIds = selected;
+      this.bulkCreateProgress = null;
+      this.showBulkCreateCategoriesDialog = true;
+    },
+
+    toggleBulkCreateSelectAll() {
+      if (this.allBulkCreateSelected) {
+        this.bulkCreateSelectedIds = {};
+        return;
+      }
+      const selected = {};
+      for (const cat of this.unmappedLocalCategories) {
+        selected[cat.id] = true;
+      }
+      this.bulkCreateSelectedIds = selected;
+    },
+
+    toggleBulkCreateCategory(id, checked) {
+      const next = { ...this.bulkCreateSelectedIds };
+      if (checked === true) {
+        next[id] = true;
+      } else {
+        delete next[id];
+      }
+      this.bulkCreateSelectedIds = next;
+    },
+
+    goToMappingsForCreate() {
+      this.activeTab = "mappings";
+      this.$nextTick(() => {
+        if (this.canCreateCategory) {
+          this.openBulkCreateCategoriesDialog();
+        } else {
+          this.showCreateMappingDialog = true;
+        }
+      });
+    },
+
+    async handleBulkCreateCategories() {
+      const selected = this.unmappedLocalCategories.filter(
+        (c) => this.bulkCreateSelectedIds[c.id],
+      );
+      if (selected.length === 0) return;
+
+      this.isBulkCreatingCategories = true;
+      const progress = {
+        done: 0,
+        total: selected.length,
+        success: 0,
+        failed: 0,
+        errors: [],
+      };
+      this.bulkCreateProgress = progress;
+
+      for (const cat of selected) {
+        try {
+          await http.post(
+            `/marketplace/connections/${this.connectionId}/create-external-category`,
+            {
+              localCategoryId: cat.id,
+              externalCategoryName: cat.name,
+            },
+            { timeout: 5 * 60 * 1000 },
+          );
+          progress.success += 1;
+        } catch (error) {
+          progress.failed += 1;
+          const payload = error?.response?.data;
+          progress.errors.push({
+            name: cat.name,
+            error:
+              (typeof payload === "string" ? payload : null) ||
+              payload?.message ||
+              payload?.title ||
+              error?.message ||
+              String(error),
+          });
+        }
+        progress.done += 1;
+        this.bulkCreateProgress = { ...progress, errors: [...progress.errors] };
+      }
+
+      this.isBulkCreatingCategories = false;
+      await this.fetchMappings();
+      await this.fetchLocalCategories();
+
+      displaySonnerSuccess(
+        this.$t("marketplace.connectionPage.mappings.categoriesCreatedSuccess", {
+          success: progress.success,
+          failed: progress.failed,
+        }),
+      );
+
+      if (progress.failed === 0) {
+        this.showBulkCreateCategoriesDialog = false;
+        this.bulkCreateSelectedIds = {};
+        this.bulkCreateProgress = null;
+      }
     },
 
     toggleSelectAllLocal() {
@@ -2564,6 +2730,7 @@ export default {
       ePage,
       lPage,
       createMapping,
+      createFromLocal,
       localCategoryId,
       localCategoryName,
     } = this.$route.query;
@@ -2573,6 +2740,23 @@ export default {
     }
     if (lPage) {
       this.localPage = parseInt(lPage) || 1;
+    }
+
+    if (createFromLocal === "1" || createFromLocal === "true") {
+      this.activeTab = "mappings";
+      const waitForBulk = setInterval(() => {
+        if (!this.isLoading && this.capabilities) {
+          clearInterval(waitForBulk);
+          this.openBulkCreateCategoriesDialog();
+          this.$router.replace({
+            query: {
+              ...this.$route.query,
+              createFromLocal: undefined,
+            },
+          });
+        }
+      }, 100);
+      setTimeout(() => clearInterval(waitForBulk), 5000);
     }
 
     if (createMapping === "true" && localCategoryId) {
@@ -2717,8 +2901,7 @@ export default {
 
                       <EmptyState
                         v-else-if="limitsData && !limitsData.supported"
-                        size="sm"
-                        class="py-6"
+                        class="flex-1 py-12"
                         :title="$t('marketplace.connectionPage.limits.unavailableTitle')"
                         :description="$t('marketplace.connectionPage.limits.unavailableDescription')"
                       >
@@ -2962,6 +3145,29 @@ export default {
                   </span>
                 </p>
                 <div class="flex shrink-0 flex-wrap gap-2">
+                <TooltipProvider v-if="canCreateCategory" :delay-duration="200">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="outline"
+                        @click="openBulkCreateCategoriesDialog"
+                      >
+                        <Upload class="size-4 mr-2" />
+                        {{ $t("marketplace.connectionPage.mappings.createShort") }}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" class="max-w-xs">
+                      <p>
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
+                            { adapter: adapterDisplayName },
+                          )
+                        }}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Dialog
                   v-model:open="showCreateMappingDialog"
                   @update:open="$event && onCategoryDialogOpen()"
@@ -3113,10 +3319,10 @@ export default {
                           </div>
                           <div
                             v-else-if="externalCategories.length === 0"
-                            class="flex flex-1 items-center justify-center p-4"
+                            class="flex min-h-[16rem] flex-1 items-center justify-center p-4"
                           >
                             <EmptyState
-                              size="sm"
+                              class="w-full py-12"
                               :title="$t('marketplace.connectionPage.mappings.categoriesNotFoundTitle')"
                               :description="
                                 capabilities?.capabilities?.createCategory && selectedLocalCategory
@@ -3222,26 +3428,209 @@ export default {
 
             <EmptyState
               v-if="categoryMappings.length === 0"
-              class="py-10"
-                :title="$t('marketplace.connectionPage.mappings.noMappingsYetTitle')"
-              :description="$t('marketplace.connectionPage.mappings.noMappingsYetDescription', { adapter: adapterDisplayName })"
+              class="flex-1 py-12"
+              :title="
+                canCreateCategory
+                  ? $t('marketplace.connectionPage.mappings.noMappingsYetCreateTitle', { adapter: adapterDisplayName })
+                  : $t('marketplace.connectionPage.mappings.noMappingsYetTitle')
+              "
+              :description="
+                canCreateCategory
+                  ? $t('marketplace.connectionPage.mappings.noMappingsYetCreateDescription', { adapter: adapterDisplayName })
+                  : $t('marketplace.connectionPage.mappings.noMappingsYetDescription', { adapter: adapterDisplayName })
+              "
             >
               <template #icon>
                 <FolderTree />
               </template>
-              <Button
-                @click="$router.push(`/adapter/${connectionId}/categories/import`)"
-              >
-                <Download class="size-4 mr-2" />
-                {{ $t("marketplace.connectionPage.mappings.importCategory") }}
-              </Button>
-              <Button variant="outline" @click="showCreateMappingDialog = true">
-                <Plus class="size-4 mr-2" />
-                {{ $t("marketplace.connectionPage.mappings.createMapping") }}
-              </Button>
+              <TooltipProvider :delay-duration="200">
+                <div class="inline-flex">
+                  <Tooltip v-if="canCreateCategory">
+                    <TooltipTrigger as-child>
+                      <Button
+                        class="rounded-r-none border-r-0"
+                        @click="openBulkCreateCategoriesDialog"
+                      >
+                        <Upload class="size-4 mr-1.5" />
+                        {{ $t("marketplace.connectionPage.mappings.createShort") }}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" class="max-w-xs">
+                      <p>
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
+                            { adapter: adapterDisplayName },
+                          )
+                        }}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        :variant="canCreateCategory ? 'outline' : 'default'"
+                        :class="
+                          canCreateCategory
+                            ? 'rounded-none border-r-0'
+                            : 'rounded-r-none border-r-0'
+                        "
+                        @click="showCreateMappingDialog = true"
+                      >
+                        <Link class="size-4 mr-1.5" />
+                        {{ $t("marketplace.connectionPage.mappings.linkShort") }}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" class="max-w-xs">
+                      <p>{{ $t("marketplace.connectionPage.mappings.createMapping") }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="outline"
+                        class="rounded-l-none"
+                        @click="
+                          $router.push(`/adapter/${connectionId}/categories/import`)
+                        "
+                      >
+                        <Download class="size-4 mr-1.5" />
+                        {{ $t("marketplace.connectionPage.mappings.importShort") }}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" class="max-w-xs">
+                      <p>{{ $t("marketplace.connectionPage.mappings.importCategory") }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
             </EmptyState>
 
-            <div v-else class="border rounded-xl overflow-hidden">
+            <Dialog
+              v-model:open="showBulkCreateCategoriesDialog"
+            >
+              <DialogContent class="sm:max-w-lg flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
+                <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
+                  <DialogTitle class="flex items-center gap-2">
+                    <Upload class="size-5" />
+                    {{ $t("marketplace.connectionPage.mappings.createCategoriesFromLocal", { adapter: adapterDisplayName }) }}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {{ $t("marketplace.connectionPage.mappings.createCategoriesFromLocalDescription", { adapter: adapterDisplayName }) }}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto border-y px-6 py-4">
+                  <div
+                    v-if="unmappedLocalCategories.length === 0"
+                    class="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    {{ $t("marketplace.connectionPage.mappings.noUnmappedCategories") }}
+                  </div>
+                  <template v-else>
+                    <div class="flex items-center justify-between gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 px-2"
+                        :disabled="isBulkCreatingCategories"
+                        @click="toggleBulkCreateSelectAll"
+                      >
+                        {{
+                          allBulkCreateSelected
+                            ? $t("marketplace.connectionPage.mappings.deselectAllCategories")
+                            : $t("marketplace.connectionPage.mappings.selectAllCategories")
+                        }}
+                      </Button>
+                      <span class="text-xs text-muted-foreground tabular-nums">
+                        {{ bulkCreateSelectedCount }} / {{ unmappedLocalCategories.length }}
+                      </span>
+                    </div>
+                    <div class="space-y-1 rounded-lg border p-1.5">
+                      <label
+                        v-for="cat in unmappedLocalCategories"
+                        :key="cat.id"
+                        class="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-accent"
+                      >
+                        <Checkbox
+                          :model-value="!!bulkCreateSelectedIds[cat.id]"
+                          :disabled="isBulkCreatingCategories"
+                          @update:model-value="(checked) => toggleBulkCreateCategory(cat.id, checked)"
+                        />
+                        <span class="min-w-0 flex-1 truncate font-medium">{{ cat.name }}</span>
+                        <Badge
+                          v-if="cat.attributesCount"
+                          variant="secondary"
+                          class="shrink-0 font-normal tabular-nums"
+                        >
+                          {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: cat.attributesCount }) }}
+                        </Badge>
+                      </label>
+                    </div>
+                  </template>
+
+                  <div v-if="bulkCreateProgress" class="space-y-2 pt-2">
+                    <p class="text-sm text-muted-foreground">
+                      {{
+                        $t("marketplace.connectionPage.mappings.creatingCategoriesProgress", {
+                          done: bulkCreateProgress.done,
+                          total: bulkCreateProgress.total,
+                        })
+                      }}
+                    </p>
+                    <Progress
+                      :model-value="
+                        bulkCreateProgress.total
+                          ? (bulkCreateProgress.done / bulkCreateProgress.total) * 100
+                          : 0
+                      "
+                    />
+                    <ul
+                      v-if="bulkCreateProgress.errors.length"
+                      class="max-h-28 space-y-1 overflow-y-auto text-xs text-destructive"
+                    >
+                      <li
+                        v-for="(err, idx) in bulkCreateProgress.errors"
+                        :key="idx"
+                      >
+                        {{ err.name }}: {{ err.error }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <DialogFooter class="gap-2 px-6 py-4">
+                  <DialogClose as-child>
+                    <Button variant="outline" :disabled="isBulkCreatingCategories">
+                      {{ $t("common.cancel") }}
+                    </Button>
+                  </DialogClose>
+                  <Button
+                    :disabled="
+                      isBulkCreatingCategories ||
+                      bulkCreateSelectedCount === 0 ||
+                      unmappedLocalCategories.length === 0
+                    "
+                    @click="handleBulkCreateCategories"
+                  >
+                    <Loader2
+                      v-if="isBulkCreatingCategories"
+                      class="size-4 mr-2 animate-spin"
+                    />
+                    <Upload v-else class="size-4 mr-2" />
+                    {{
+                      isBulkCreatingCategories
+                        ? $t("marketplace.connectionPage.mappings.creating")
+                        : $t("marketplace.connectionPage.mappings.createSelectedCategories", {
+                            count: bulkCreateSelectedCount,
+                          })
+                    }}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div v-if="categoryMappings.length > 0" class="border rounded-xl overflow-hidden">
               <div class="overflow-x-auto">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader>
@@ -3386,6 +3775,17 @@ export default {
               >
                 <template #icon>
                   <AlertTriangle />
+                </template>
+              </EmptyState>
+
+              <EmptyState
+                v-else-if="filteredProducts.length === 0"
+                class="flex-1 py-12"
+                :title="$t('marketplace.connectionPage.products.noProductsTitle')"
+                :description="$t('marketplace.connectionPage.products.noProductsDescription')"
+              >
+                <template #icon>
+                  <Package />
                 </template>
               </EmptyState>
 
@@ -3575,20 +3975,6 @@ export default {
                         <span v-else class="text-muted-foreground">-</span>
                       </TableCell>
                     </TableRow>
-
-                    <TableRow v-if="filteredProducts.length === 0">
-                      <TableCell colspan="8">
-                        <EmptyState
-                          size="sm"
-                          :title="$t('marketplace.connectionPage.products.noProductsTitle')"
-                          :description="$t('marketplace.connectionPage.products.noProductsDescription')"
-                        >
-                          <template #icon>
-                            <Package />
-                          </template>
-                        </EmptyState>
-                      </TableCell>
-                    </TableRow>
                   </TableBody>
                 </table>
 
@@ -3714,6 +4100,46 @@ export default {
                 <Loader2 class="size-8 animate-spin text-muted-foreground" />
               </div>
 
+              <EmptyState
+                v-else-if="
+                  localProducts.length === 0 &&
+                  (localExportReason === 'no_mappings' || categoryMappings.length === 0)
+                "
+                class="flex-1 py-12"
+                :title="$t('marketplace.connectionPage.products.needMappingsTitle')"
+                :description="
+                  $t('marketplace.connectionPage.products.needMappingsDescription', {
+                    adapter: adapterDisplayName,
+                  })
+                "
+              >
+                <template #icon>
+                  <FolderTree />
+                </template>
+                <Button @click="goToMappingsForCreate">
+                  <Upload v-if="canCreateCategory" class="size-4 mr-2" />
+                  <FolderTree v-else class="size-4 mr-2" />
+                  {{
+                    canCreateCategory
+                      ? $t("marketplace.connectionPage.mappings.createCategoriesFromLocal", {
+                          adapter: adapterDisplayName,
+                        })
+                      : $t("marketplace.connectionPage.products.goToMappings")
+                  }}
+                </Button>
+              </EmptyState>
+
+              <EmptyState
+                v-else-if="localProducts.length === 0"
+                class="flex-1 py-12"
+                :title="$t('marketplace.connectionPage.products.noProductsToExportTitle')"
+                :description="$t('marketplace.connectionPage.products.noProductsToExportDescription')"
+              >
+                <template #icon>
+                  <Package />
+                </template>
+              </EmptyState>
+
               <!-- Local products table -->
               <div v-else class="min-h-0 flex-1 overflow-auto">
                 <table class="w-full caption-bottom text-sm">
@@ -3771,20 +4197,6 @@ export default {
                         <span class="text-sm text-muted-foreground">{{
                           product.categoryName || "-"
                         }}</span>
-                      </TableCell>
-                    </TableRow>
-
-                    <TableRow v-if="localProducts.length === 0">
-                      <TableCell colspan="6">
-                        <EmptyState
-                          size="sm"
-                          :title="$t('marketplace.connectionPage.products.noProductsToExportTitle')"
-                          :description="$t('marketplace.connectionPage.products.noProductsToExportDescription')"
-                        >
-                          <template #icon>
-                            <Package />
-                          </template>
-                        </EmptyState>
                       </TableCell>
                     </TableRow>
                   </TableBody>

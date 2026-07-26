@@ -381,20 +381,46 @@ public class CategoryMappingController : ControllerBase
         if (!string.IsNullOrWhiteSpace(graphJson))
         {
             var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
-            if (adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) == true)
+            if (adapter != null)
             {
                 try
                 {
-                    var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
-                    var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
-                        priceFields,
-                        new Dictionary<string, int>(),
-                        skipAutoMapping: true);
-                    graphJson = GraphGenerator.SyncPriceFields(graphJson, priceSpecs);
+                    if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
+                    {
+                        var cardFields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
+                        var cardSpecs = cardFields.OrderBy(f => f.SortOrder).Select((field, index) =>
+                        {
+                            var (sourceType, sourceField, sourceAttributeId) =
+                                CategoryImportService.DetermineAutoMapping(field, new Dictionary<string, int>());
+                            return new FieldSpec
+                            {
+                                externalFieldKey = field.Key,
+                                externalFieldName = field.Name,
+                                externalFieldType = field.Type,
+                                isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
+                                isEnabled = true,
+                                sortOrder = index,
+                                sourceType = sourceType,
+                                sourceField = sourceField,
+                                sourceAttributeId = sourceAttributeId,
+                            };
+                        }).ToList();
+                        graphJson = GraphGenerator.SyncAdapterFields(graphJson, cardSpecs);
+                    }
+
+                    if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+                    {
+                        var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+                        var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
+                            priceFields,
+                            new Dictionary<string, int>(),
+                            skipAutoMapping: false);
+                        graphJson = GraphGenerator.SyncPriceFields(graphJson, priceSpecs);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to sync price fields in graph for mapping {MappingId}", mappingId);
+                    _logger.LogWarning(ex, "Failed to sync fields in graph for mapping {MappingId}", mappingId);
                 }
             }
 

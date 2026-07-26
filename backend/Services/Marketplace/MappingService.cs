@@ -8,6 +8,7 @@ using Delegat.Models.Products;
 using Delegat.Services;
 using Delegat.Services.Marketplace.Graph;
 using Delegat.Services.Marketplace.Modifiers;
+using System.Collections;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -140,15 +141,156 @@ public class MappingService
                 result[kv.Key] = kv.Value;
         }
 
-        if (!result.ContainsKey("images"))
+        // Always ensure product image URLs when the graph left images empty.
+        // Common with DirectBinding on adapterFields: Prefetch may miss inline sources,
+        // or the Images field is unbound — without this, Woo/OpenCart get no image_urls.
+        if (!HasNonEmptyImageUrls(result.GetValueOrDefault("images")) &&
+            !HasNonEmptyImageUrls(result.GetValueOrDefault("_imageUrls")))
         {
             var imageUrls = await GetProductImageUrlsAsync(product);
             if (imageUrls.Count > 0)
-                result["_imageUrls"] = imageUrls;
+            {
+                if (cardKeys.Contains("images"))
+                    result["images"] = imageUrls;
+                else
+                    result["_imageUrls"] = imageUrls;
+            }
         }
 
         result["_fieldTypes"] = eval.FieldTypes;
+        result["_fieldLabels"] = SchemaFields(categoryMapping.graphJson)
+            .Where(f => !string.IsNullOrWhiteSpace(f.fieldKey))
+            .GroupBy(f => f.fieldKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => string.IsNullOrWhiteSpace(g.First().label) ? g.Key : g.First().label!,
+                StringComparer.OrdinalIgnoreCase);
+        // Option value→label maps for adapters that need human-readable attribute values (e.g. WooCommerce)
+        result["_fieldOptions"] = BuildAttributeOptionLookups(product);
         return result;
+    }
+
+    /// <summary>
+    /// Build fieldKey/attributeKey → (optionValue → optionLabel) lookups from category and store attributes.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>> BuildAttributeOptionLookups(Product product)
+    {
+        var lookups = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+        void AddLookup(string? id, string? key, string? name, string? optionsJson)
+        {
+            var map = BuildOptionValueLabelMap(optionsJson);
+            if (map.Count == 0)
+                return;
+
+            if (!string.IsNullOrWhiteSpace(id))
+                lookups[id] = map;
+            if (!string.IsNullOrWhiteSpace(key))
+                lookups[key] = map;
+            if (!string.IsNullOrWhiteSpace(name))
+                lookups[name] = map;
+        }
+
+        var categoryAttrs = (product.attributeValues ?? Enumerable.Empty<ProductAttributeValue>())
+            .Select(av => av.attribute)
+            .Where(a => a != null)
+            .GroupBy(a => a!.Id)
+            .Select(g => g.First()!);
+
+        foreach (var attr in categoryAttrs)
+            AddLookup(attr.Id.ToString(), attr.key, attr.name, attr.options);
+
+        var storeAttrs = (product.storeAttributeValues ?? Enumerable.Empty<StoreProductAttributeValue>())
+            .Select(sav => sav.storeAttribute)
+            .Where(a => a != null)
+            .GroupBy(a => a!.Id)
+            .Select(g => g.First()!);
+
+        foreach (var attr in storeAttrs)
+            AddLookup(attr.Id.ToString(), attr.key, attr.name, attr.options);
+
+        return lookups;
+    }
+
+    /// <summary>
+    /// Parse attribute options into value→label map. Tolerates numeric JSON values (common for marketplace ids).
+    /// </summary>
+    private static Dictionary<string, string> BuildOptionValueLabelMap(string? optionsJson)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(optionsJson))
+            return map;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(optionsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return map;
+
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String)
+                {
+                    var s = el.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        map[s] = s;
+                    continue;
+                }
+
+                if (el.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var value = CoerceJsonToString(el, "value")
+                    ?? CoerceJsonToString(el, "Value")
+                    ?? CoerceJsonToString(el, "id")
+                    ?? CoerceJsonToString(el, "Id");
+                var label = CoerceJsonToString(el, "label")
+                    ?? CoerceJsonToString(el, "Label")
+                    ?? CoerceJsonToString(el, "name")
+                    ?? CoerceJsonToString(el, "Name")
+                    ?? value;
+
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                map[value] = string.IsNullOrWhiteSpace(label) ? value : label;
+            }
+
+            if (map.Count > 0)
+                return map;
+        }
+        catch (JsonException)
+        {
+            // fall through to legacy parsers
+        }
+
+        var options = ParseOptions(optionsJson);
+        if (options == null)
+            return map;
+
+        foreach (var opt in options)
+        {
+            if (string.IsNullOrWhiteSpace(opt.value))
+                continue;
+            map[opt.value] = string.IsNullOrWhiteSpace(opt.label) ? opt.value : opt.label!;
+        }
+
+        return map;
+    }
+
+    private static string? CoerceJsonToString(JsonElement obj, string propertyName)
+    {
+        if (!obj.TryGetProperty(propertyName, out var prop))
+            return null;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.String => prop.GetString(),
+            JsonValueKind.Number => prop.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
     }
 
     [Obsolete("Use BuildExportDataFromGraphAsync.")]
@@ -462,6 +604,17 @@ public class MappingService
             var data = node.data;
             if (data == null) continue;
 
+            // Inline DirectBinding on adapter field sinks (no separate source node)
+            if (type is "adapterFields" or "adapterPriceFields")
+            {
+                foreach (var field in data.fields ?? [])
+                {
+                    if (field.source?.type == "productField" &&
+                        string.Equals(field.source.field, "images", StringComparison.OrdinalIgnoreCase))
+                        needsImages = true;
+                }
+            }
+
             switch (type)
             {
                 case "storeFileUrl":
@@ -547,6 +700,23 @@ public class MappingService
 
         if (needsImages)
             caches.ImageUrls = await GetProductImageUrlsAsync(product);
+    }
+
+    private static bool HasNonEmptyImageUrls(object? value)
+    {
+        if (value is null) return false;
+        if (value is string s) return !string.IsNullOrWhiteSpace(s);
+        if (value is IEnumerable enumerable and not string)
+        {
+            foreach (var item in enumerable)
+            {
+                if (item is null) continue;
+                var str = item.ToString();
+                if (!string.IsNullOrWhiteSpace(str))
+                    return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>

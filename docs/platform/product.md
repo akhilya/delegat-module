@@ -1,5 +1,7 @@
 # Product
 
+> **Agent / design canon:** root [`PRODUCT.md`](../../PRODUCT.md) and [`DESIGN.md`](../../DESIGN.md) (impeccable). This file remains the longer instance UX brief; keep principles aligned with the root PRODUCT.md.
+
 ## Users
 
 E-commerce managers and small business owners who manage product listings across Russian marketplaces (Ozon, Wildberries). Their context is operational - they work through product lists, edit attribute details, map attributes, and monitor sync/integration status. Speed and clarity are paramount; they are in the interface for sustained, repetitive catalog work, not casual visits.
