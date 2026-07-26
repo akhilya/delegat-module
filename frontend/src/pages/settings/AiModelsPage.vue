@@ -261,7 +261,7 @@ export default {
       try {
         await store.dispatch("aiModels/toggleAiModelEnabled", { id: model.id });
         await load();
-        store.dispatch("aiModels/getPickerModels", { onError: () => {} });
+        store.dispatch("aiModels/getPickerModels", { force: true, onError: () => {} });
       } catch {
         model.isEnabled = prev;
         displaySonnerError(t("pages.aiModelsPage.toggleEnabledError"));

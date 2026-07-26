@@ -29,6 +29,7 @@ using Delegat.Marketplace.SDK;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Delegat.Infrastructure.Security;
@@ -401,20 +402,56 @@ builder.Services.AddHealthChecks()
     .AddMySql(connectionString, name: "mysql")
     .AddCheck<Delegat.Infrastructure.Health.MinIOHealthCheck>("minio");
 
+// Trust X-Forwarded-* from the in-compose nginx reverse proxy so rate limits
+// key off the real client IP (without this, every user shares nginx's Docker IP).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Rate limiting
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    {
+        var path = httpContext.Request.Path;
+
+        // Probes and SignalR must not share the SPA bucket — 429 here causes reconnect storms.
+        if (path.StartsWithSegments("/api/health") || path.StartsWithSegments("/hubs"))
+            return RateLimitPartition.GetNoLimiter("exempt-infra");
+
+        // Instance owners (User.isAdmin) are not rate-limited on the SPA API.
+        if (httpContext.User?.HasClaim("is_admin", "true") == true)
+            return RateLimitPartition.GetNoLimiter("exempt-admin");
+
+        var userId = httpContext.User?.FindFirst("userId")?.Value;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            // Authenticated SPA: partition per user; generous window for catalog work
+            // (exports, navigation, parallel list loads).
+            return RateLimitPartition.GetFixedWindowLimiter(
+                $"user:{userId}",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 1200,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                });
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 300,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
-            }));
+            });
+    });
 
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -573,6 +610,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Middleware pipeline
+app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 // Before Swagger so /swagger is also gated by the Public API instance toggle.
@@ -596,7 +634,7 @@ app.UseMiddleware<CsrfHeaderMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<OperationHub>("/hubs/operations");
+app.MapHub<OperationHub>("/hubs/operations").DisableRateLimiting();
 app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>
@@ -615,7 +653,7 @@ app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthCh
             })
         });
     }
-});
+}).DisableRateLimiting();
 
 await app.RunAsync("http://0.0.0.0:5000");
 return 0;

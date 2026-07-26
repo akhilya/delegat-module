@@ -1,6 +1,11 @@
 import { useAxios } from "@vueuse/integrations/useAxios";
 import { http } from "@/main";
 
+/** Deduplicate concurrent picker fetches (e.g. many OperationItem mounts). */
+let pickerInFlight = null;
+let pickerFetchedAt = 0;
+const PICKER_TTL_MS = 60_000;
+
 export default {
   namespaced: true,
 
@@ -26,13 +31,47 @@ export default {
         .catch((e) => onError(e));
     },
 
-    async getPickerModels(ctx, { onSuccess, onError } = {}) {
-      return await useAxios("/ai/models/picker", { method: "GET", cache: false }, http, { immediate: true })
+    async getPickerModels(ctx, { onSuccess, onError, force } = {}) {
+      const fresh =
+        !force &&
+        ctx.state.pickerModels.length > 0 &&
+        Date.now() - pickerFetchedAt < PICKER_TTL_MS;
+
+      if (fresh) {
+        onSuccess?.({ data: { value: ctx.state.pickerModels } });
+        return ctx.state.pickerModels;
+      }
+
+      if (pickerInFlight) {
+        try {
+          const models = await pickerInFlight;
+          onSuccess?.({ data: { value: models } });
+          return models;
+        } catch (e) {
+          onError?.(e);
+          throw e;
+        }
+      }
+
+      pickerInFlight = useAxios("/ai/models/picker", { method: "GET", cache: false }, http, {
+        immediate: true,
+      })
         .then((r) => {
-          ctx.commit("setPickerModels", r.data.value ?? []);
+          const models = r.data.value ?? [];
+          ctx.commit("setPickerModels", models);
+          pickerFetchedAt = Date.now();
           onSuccess?.(r);
+          return models;
         })
-        .catch((e) => onError?.(e));
+        .catch((e) => {
+          onError?.(e);
+          throw e;
+        })
+        .finally(() => {
+          pickerInFlight = null;
+        });
+
+      return await pickerInFlight;
     },
 
     async discoverModels(ctx, { data, onSuccess, onError }) {
