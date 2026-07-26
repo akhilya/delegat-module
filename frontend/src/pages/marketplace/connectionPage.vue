@@ -275,6 +275,8 @@ export default {
 
       // === Products tab state ===
       products: [],
+      productsListUnsupported: false,
+      productsListUnsupportedMessage: "",
       selectedItems: [],
       lastSelectedExternalId: null,
       isShiftSelecting: false,
@@ -1384,6 +1386,23 @@ export default {
       }
 
       this.isLoadingProducts = true;
+      this.productsListUnsupported = false;
+      this.productsListUnsupportedMessage = "";
+
+      // Skip the request when the adapter cannot list remote products.
+      if (this.capabilities?.capabilities?.importAllProducts === false) {
+        this.products = [];
+        this.totalCount = 0;
+        this.linkedCount = 0;
+        this.hasMoreProducts = false;
+        this.nextCursor = null;
+        this.productsListUnsupported = true;
+        this.productsListUnsupportedMessage = this.$t(
+          "marketplace.connectionPage.products.fetchUnsupportedTitle",
+        );
+        this.isLoadingProducts = false;
+        return;
+      }
 
       await this.getExternalProducts({
         connectionId: this.connectionId,
@@ -1392,6 +1411,18 @@ export default {
         offerIdSearch: this.searchQuery || null,
         onSuccess: (response) => {
           const data = extractResponseData(response, {});
+          if (data.supported === false) {
+            this.products = [];
+            this.totalCount = 0;
+            this.linkedCount = 0;
+            this.hasMoreProducts = false;
+            this.nextCursor = null;
+            this.productsListUnsupported = true;
+            this.productsListUnsupportedMessage =
+              data.message ||
+              this.$t("marketplace.connectionPage.products.fetchUnsupportedTitle");
+            return;
+          }
           this.products = data.items || [];
           this.lastSelectedExternalId = null;
           this.totalCount = data.total || 0;
@@ -1400,6 +1431,24 @@ export default {
           this.nextCursor = data.nextCursor || null;
         },
         onError: (error) => {
+          const message =
+            error?.response?.data?.title ||
+            error?.response?.data?.message ||
+            "";
+          if (
+            error?.response?.status === 400 &&
+            typeof message === "string" &&
+            message.includes("does not support fetching the product list")
+          ) {
+            this.products = [];
+            this.totalCount = 0;
+            this.linkedCount = 0;
+            this.hasMoreProducts = false;
+            this.nextCursor = null;
+            this.productsListUnsupported = true;
+            this.productsListUnsupportedMessage = message;
+            return;
+          }
           displaySonnerError(error);
         },
       });
@@ -3323,6 +3372,22 @@ export default {
               <div v-if="isLoadingProducts" class="flex flex-1 items-center justify-center py-12">
                 <Loader2 class="size-8 animate-spin text-muted-foreground" />
               </div>
+
+              <EmptyState
+                v-else-if="productsListUnsupported"
+                class="flex-1 py-12"
+                :title="
+                  productsListUnsupportedMessage ||
+                  $t('marketplace.connectionPage.products.fetchUnsupportedTitle')
+                "
+                :description="
+                  $t('marketplace.connectionPage.products.fetchUnsupportedDescription')
+                "
+              >
+                <template #icon>
+                  <AlertTriangle />
+                </template>
+              </EmptyState>
 
               <!-- Products table -->
               <div v-else class="min-h-0 flex-1 overflow-auto">

@@ -609,7 +609,18 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
-            throw ApiException.BadRequest("Adapter does not support fetching the product list");
+        {
+            return Ok(new
+            {
+                items = Array.Empty<object>(),
+                total = 0,
+                linkedCount = 0,
+                hasMore = false,
+                nextCursor = (string?)null,
+                supported = false,
+                message = "Adapter does not support fetching the product list"
+            });
+        }
 
         Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct> pagedResult;
         try

@@ -705,6 +705,8 @@
         "unlinkProduct": "Отвязать товар",
         "noProductsTitle": "Нет товаров",
         "noProductsDescription": "Товары появятся здесь после экспорта или привязки к адаптеру.",
+        "fetchUnsupportedTitle": "Adapter does not support fetching the product list",
+        "fetchUnsupportedDescription": "Этот адаптер умеет выгружать товары в магазин, но не умеет загружать список товаров с площадки. Используйте «Локальные для экспорта».",
         "loadMore": "Загрузить ещё",
         "selectedLabel": "Выбрано:",
         "linkedCount": "{count} связанных",

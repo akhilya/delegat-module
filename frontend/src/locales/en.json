@@ -705,6 +705,8 @@
         "unlinkProduct": "Unlink product",
         "noProductsTitle": "No products",
         "noProductsDescription": "Products will appear here after export or linking to the adapter.",
+        "fetchUnsupportedTitle": "Adapter does not support fetching the product list",
+        "fetchUnsupportedDescription": "This adapter can export products to the store, but it cannot load a remote product list. Use Local for export to push products.",
         "loadMore": "Load more",
         "selectedLabel": "Selected:",
         "linkedCount": "{count} linked",
