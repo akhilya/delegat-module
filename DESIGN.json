@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T15:26:00.000Z",
+  "title": "Design System: Delegat.Module Instance",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.5 0 0)",
+          "oklch(0.7 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)",
+          "oklch(1 0 0)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Ink Primary",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.3 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.6 0 0)",
+          "oklch(0.75 0 0)",
+          "oklch(0.9 0 0)",
+          "oklch(0.985 0 0)"
+        ]
+      },
+      "destructive": {
+        "role": "semantic",
+        "displayName": "Alert Red",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(0.28 0.06 27)",
+          "oklch(0.4 0.12 27)",
+          "oklch(0.5 0.155 27)",
+          "oklch(0.577 0.245 27.325)",
+          "oklch(0.7 0.18 27)",
+          "oklch(0.82 0.1 27)",
+          "oklch(0.92 0.08 27)",
+          "oklch(0.97 0.03 27)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Caution Amber",
+        "canonical": "oklch(0.769 0.188 70.08)",
+        "tonalRamp": [
+          "oklch(0.3 0.06 70)",
+          "oklch(0.425 0.111 55)",
+          "oklch(0.55 0.14 55)",
+          "oklch(0.65 0.16 70)",
+          "oklch(0.769 0.188 70.08)",
+          "oklch(0.85 0.12 70)",
+          "oklch(0.92 0.08 70)",
+          "oklch(0.97 0.04 70)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Confirm Green",
+        "canonical": "oklch(0.62924 0.13932 161.221)",
+        "tonalRamp": [
+          "oklch(0.28 0.06 161)",
+          "oklch(0.36 0.1 161)",
+          "oklch(0.5 0.12 161)",
+          "oklch(0.62924 0.13932 161.221)",
+          "oklch(0.696 0.17 162.48)",
+          "oklch(0.8 0.1 161)",
+          "oklch(0.92 0.06 161)",
+          "oklch(0.97 0.03 161)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page and section headings (h1–h6)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI copy; 14px mobile / 16px desktop."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Buttons, field labels, compact chrome."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hairline-lift",
+        "value": "shadow-xs (Tailwind)",
+        "purpose": "Outline button separation only; not card stacks."
+      }
+    ],
+    "motion": [
+      {
+        "name": "reduced-motion",
+        "value": "animation/transition → 0.01ms under prefers-reduced-motion",
+        "purpose": "Collapse motion to near-instant crossfade for a11y."
+      },
+      {
+        "name": "control-transition",
+        "value": "transition-all on buttons (default shadcn)",
+        "purpose": "State feedback only; no choreographed entrances in product UI."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink fill primary action; default height 36px.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\">Сохранить</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; background: oklch(0.205 0 0); color: oklch(0.985 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-primary:hover { background: color-mix(in oklch, oklch(0.205 0 0) 90%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Stroked secondary action on paper.",
+      "html": "<button type=\"button\" class=\"ds-btn-outline\">Отмена</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0.5rem 1rem; border: 1px solid oklch(0.76676 0.00009 271.152); border-radius: 0.375rem; background: oklch(1 0 0); color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-outline:hover { background: oklch(0.97 0 0); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis toolbar/action chrome.",
+      "html": "<button type=\"button\" class=\"ds-btn-ghost\">Ещё</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; background: transparent; color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-btn-ghost:hover { background: oklch(0.97 0 0); } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Default form control; h-9, border input token.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Название товара\" />",
+      "css": ".ds-input { box-sizing: border-box; width: 100%; height: 2.25rem; padding: 0.5rem 0.75rem; border: 1px solid oklch(0.76676 0.00009 271.152); border-radius: 0.375rem; background: oklch(1 0 0); color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; } .ds-input::placeholder { color: oklch(0.556 0 0); } .ds-input:focus-visible { outline: none; border-color: oklch(0.708 0 0); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Quiet sidebar row; active uses restrained primary weight.",
+      "html": "<a class=\"ds-nav-item ds-nav-item-active\" href=\"#\">Товары</a>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 0.375rem; color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; text-decoration: none; } .ds-nav-item:hover { background: oklch(0.97 0 0); } .ds-nav-item-active { background: oklch(0.97 0 0); } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Status Badge Success",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Semantic success chip for sync/marketplace state.",
+      "html": "<span class=\"ds-badge-success\">Синхронизировано</span>",
+      "css": ".ds-badge-success { display: inline-flex; align-items: center; padding: 0.125rem 0.5rem; border-radius: 0.25rem; background: oklch(0.92 0.06 161); color: oklch(0.36 0.1 161); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.75rem; font-weight: 500; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": null,
+      "description": "Flat bordered container for grouped form content.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Атрибуты</h3><p class=\"ds-card-body\">Основные поля карточки товара.</p></div>",
+      "css": ".ds-card { padding: 1.5rem; border: 1px solid oklch(0.76676 0.00009 271.152); border-radius: 0.5rem; background: oklch(1 0 0); } .ds-card-title { margin: 0 0 0.5rem; font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: -0.018em; color: oklch(0.145 0 0); } .ds-card-body { margin: 0; font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; line-height: 1.55; color: oklch(0.556 0 0); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Catalog Workbench",
+    "overview": "This is an operational tool, not a brochure. The visual system behaves like a well-lit workbench: neutral surfaces, sharp type hierarchy, and status color only where the job demands attention. Density serves long sessions of list/edit/sync work; breathing room prevents fatigue without drifting into marketing whitespace.\n\nThe system rejects playful chrome, gradient-glass SaaS theater, and any decoration that competes with catalog data. Structure comes from type weight, whitespace, and consistent shadcn-vue (new-york / neutral) patterns — not from ornamental cards or glow.",
+    "keyCharacteristics": [
+      "Single family: Onest (Cyrillic-safe), no system-ui",
+      "Restrained OKLCH neutrals; semantic color for status only",
+      "Flat-by-default elevation; borders and tonal layers over heavy shadows",
+      "Light default + full .dark token swap",
+      "shadcn-vue primitives only; no parallel custom control kits"
+    ],
+    "rules": [
+      {
+        "name": "The Semantic-Only Rule",
+        "body": "Hue is reserved for status and irreversible actions. Never paint marketing gradients, brand purple, or decorative accent washes across operational chrome.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Voice Rule",
+        "body": "Filled primary occupies ≤10% of a given screen. If every control shouts primary, none of them do.",
+        "section": "colors"
+      },
+      {
+        "name": "The Single-Family Rule",
+        "body": "Never introduce a second display face for marketing polish inside the instance. Onest is the source of truth.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Digits Rule",
+        "body": "Prices, IDs, and quantities use tabular numerals so columns align.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces rest flat. Shadows appear only as light state affordances, never as decorative hierarchy.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Portal Stack Rule",
+        "body": "Overlays follow the z-index scale in style.css. Popovers above dialogs; toasts above popovers; blocking alerts at the ceiling.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep neutrals dominant; use semantic color only for status and irreversible actions.",
+      "Do reuse shadcn-vue patterns with the same spacing and visual weight across pages.",
+      "Do load Onest and keep the Cyrillic-safe fallback stack; avoid system-ui.",
+      "Do honor WCAG AA, visible focus, keyboard paths, and prefers-reduced-motion.",
+      "Do favor tables, forms, and dialogs that optimize for sustained catalog work."
+    ],
+    "donts": [
+      "Don't apply playful, colorful, or marketing-heavy aesthetics to operational tooling.",
+      "Don't build decorative dashboards that prioritize wow over legibility.",
+      "Don't use gradient-and-glass SaaS landing-page styling inside the instance.",
+      "Don't introduce purple-on-white / purple-to-indigo themes, neon glow, or emoji chrome.",
+      "Don't use side-stripe borders as colored accents.",
+      "Don't use gradient text.",
+      "Don't invent a second component kit beside components/ui."
+    ]
+  }
+}

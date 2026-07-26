@@ -25,7 +25,6 @@ import {
   EllipsisVertical,
   Ruler,
   Layers,
-  Ban,
   Unlink,
   SearchCheck,
 } from "lucide-vue-next";
@@ -74,7 +73,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuSub,
@@ -135,7 +136,9 @@ export default {
     SelectValue,
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuGroup,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
     DropdownMenuSub,
@@ -146,7 +149,6 @@ export default {
     EllipsisVertical,
     Ruler,
     Layers,
-    Ban,
     Unlink,
     SearchCheck,
     Tooltip,
@@ -1008,76 +1010,127 @@ export default {
         </TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon" class="size-8 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8 shrink-0"
+              :aria-label="$t('common.actions')"
+            >
               <EllipsisVertical class="size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              @click="handleExportToConnection(conn)"
-              :disabled="exportingConnectionId === conn.connectionId || conn.mappingMissing"
-            >
-              <Upload class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuExport") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-if="conn.canImport"
-              @click="handleImportFromLink(conn)"
-              :disabled="importingLinkId === conn.linkId"
-            >
-              <Download class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuImport") }}
-            </DropdownMenuItem>
-            <DropdownMenuSub v-if="conn.availableMappings?.length > 1 || (conn.mappingMissing && conn.availableMappings?.length > 0)">
-              <DropdownMenuSubTrigger>
-                <Layers class="size-4 mr-2" />
-                {{ $t("productMarketplaceIntegrations.menuMapping") }}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  :model-value="String(mappingSelections[conn.connectionId] ?? '')"
-                  @update:model-value="handleMappingChange(conn, Number($event))"
-                >
-                  <DropdownMenuRadioItem
-                    v-for="m in conn.availableMappings"
-                    :key="m.id"
-                    :value="String(m.id)"
-                  >
-                    {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+          <DropdownMenuContent align="end" class="w-56">
+            <DropdownMenuLabel class="font-normal">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-sm font-medium text-foreground truncate">{{ conn.adapterName }}</span>
+                <span class="text-xs text-muted-foreground font-normal truncate tabular-nums">
+                  {{ conn.externalProductId }}
+                  <template v-if="conn.connectionName"> · {{ conn.connectionName }}</template>
+                </span>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              @click="handleVerifyLink(conn)"
-              :disabled="verifyingLinkId === conn.linkId || !conn.canImport"
-            >
-              <Loader2 v-if="verifyingLinkId === conn.linkId" class="size-4 mr-2 animate-spin" />
-              <SearchCheck v-else class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuVerify") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @click="openLinkDialog(conn, true)">
-              <Link2 class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuRelink") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              class="text-destructive focus:text-destructive"
-              @click="handleUnlink(conn)"
-              :disabled="unlinkingLinkId === conn.linkId"
-            >
-              <Loader2 v-if="unlinkingLinkId === conn.linkId" class="size-4 mr-2 animate-spin" />
-              <Ban v-else class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuUnlink") }}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator v-if="conn.canArchive && conn.canExport" />
-            <DropdownMenuItem
-              v-if="conn.canArchive && conn.canExport"
-              @click="openRecreateDialog(conn)"
-            >
-              <RefreshCw class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.menuRecreate") }}
-            </DropdownMenuItem>
+
+            <DropdownMenuGroup>
+              <DropdownMenuLabel class="text-xs text-muted-foreground font-medium">
+                {{ $t("productMarketplaceIntegrations.menuSectionSync") }}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                @click="handleExportToConnection(conn)"
+                :disabled="exportingConnectionId === conn.connectionId || conn.mappingMissing"
+              >
+                <Upload />
+                {{ $t("productMarketplaceIntegrations.menuExport") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                v-if="conn.canImport"
+                @click="handleImportFromLink(conn)"
+                :disabled="importingLinkId === conn.linkId"
+              >
+                <Download />
+                {{ $t("productMarketplaceIntegrations.menuImport") }}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuGroup>
+              <DropdownMenuLabel class="text-xs text-muted-foreground font-medium">
+                {{ $t("productMarketplaceIntegrations.menuSectionLink") }}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                @click="handleVerifyLink(conn)"
+                :disabled="verifyingLinkId === conn.linkId || !conn.canImport"
+              >
+                <Loader2 v-if="verifyingLinkId === conn.linkId" class="animate-spin" />
+                <SearchCheck v-else />
+                {{ $t("productMarketplaceIntegrations.menuVerify") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="openLinkDialog(conn, true)">
+                <Link2 />
+                {{ $t("productMarketplaceIntegrations.menuRelink") }}
+              </DropdownMenuItem>
+              <DropdownMenuSub
+                v-if="conn.availableMappings?.length > 1 || (conn.mappingMissing && conn.availableMappings?.length > 0)"
+              >
+                <DropdownMenuSubTrigger>
+                  <Layers />
+                  {{ $t("productMarketplaceIntegrations.menuMapping") }}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent class="w-52">
+                  <DropdownMenuRadioGroup
+                    :model-value="String(mappingSelections[conn.connectionId] ?? '')"
+                    @update:model-value="handleMappingChange(conn, Number($event))"
+                  >
+                    <DropdownMenuRadioItem
+                      v-for="m in conn.availableMappings"
+                      :key="m.id"
+                      :value="String(m.id)"
+                      class="truncate"
+                    >
+                      {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem
+                v-if="getMarketplaceProductUrl(conn)"
+                as-child
+              >
+                <a
+                  :href="getMarketplaceProductUrl(conn)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink />
+                  {{ $t("productMarketplaceIntegrations.openOnAdapter") }}
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuGroup>
+              <DropdownMenuLabel class="text-xs text-muted-foreground font-medium">
+                {{ $t("productMarketplaceIntegrations.menuSectionDanger") }}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                variant="destructive"
+                @click="handleUnlink(conn)"
+                :disabled="unlinkingLinkId === conn.linkId"
+              >
+                <Loader2 v-if="unlinkingLinkId === conn.linkId" class="animate-spin" />
+                <Unlink v-else />
+                {{ $t("productMarketplaceIntegrations.menuUnlink") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                v-if="conn.canArchive && conn.canExport"
+                @click="openRecreateDialog(conn)"
+              >
+                <RefreshCw />
+                {{ $t("productMarketplaceIntegrations.menuRecreate") }}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
         </div>
@@ -1151,42 +1204,59 @@ export default {
         </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon" class="size-8 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8 shrink-0"
+              :aria-label="$t('common.actions')"
+            >
               <EllipsisVertical class="size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              @click="handleExportToConnection(conn)"
-              :disabled="exportingConnectionId === conn.connectionId"
-            >
-              <Upload class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.export") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @click="openLinkDialog(conn)">
-              <Link2 class="size-4 mr-2" />
-              {{ $t("productMarketplaceIntegrations.linkManually") }}
-            </DropdownMenuItem>
-            <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
-              <DropdownMenuSubTrigger>
-                <Layers class="size-4 mr-2" />
-                {{ $t("productMarketplaceIntegrations.menuMapping") }}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  :model-value="String(mappingSelections[conn.connectionId] ?? '')"
-                  @update:model-value="handleMappingChange(conn, Number($event))"
-                >
-                  <DropdownMenuRadioItem
-                    v-for="m in conn.availableMappings"
-                    :key="m.id"
-                    :value="String(m.id)"
+          <DropdownMenuContent align="end" class="w-56">
+            <DropdownMenuLabel class="font-normal">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-sm font-medium text-foreground truncate">{{ conn.adapterName }}</span>
+                <span class="text-xs text-muted-foreground font-normal truncate">
+                  {{ conn.connectionName }}
+                </span>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                @click="handleExportToConnection(conn)"
+                :disabled="exportingConnectionId === conn.connectionId"
+              >
+                <Upload />
+                {{ $t("productMarketplaceIntegrations.export") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="openLinkDialog(conn)">
+                <Link2 />
+                {{ $t("productMarketplaceIntegrations.linkManually") }}
+              </DropdownMenuItem>
+              <DropdownMenuSub v-if="conn.availableMappings?.length > 1">
+                <DropdownMenuSubTrigger>
+                  <Layers />
+                  {{ $t("productMarketplaceIntegrations.menuMapping") }}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent class="w-52">
+                  <DropdownMenuRadioGroup
+                    :model-value="String(mappingSelections[conn.connectionId] ?? '')"
+                    @update:model-value="handleMappingChange(conn, Number($event))"
                   >
-                    {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+                    <DropdownMenuRadioItem
+                      v-for="m in conn.availableMappings"
+                      :key="m.id"
+                      :value="String(m.id)"
+                      class="truncate"
+                    >
+                      {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

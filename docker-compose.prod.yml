@@ -49,6 +49,8 @@ services:
     restart: unless-stopped
 
   # Frontend (Nginx + Vue SPA)
+  # No depends_on api: SPA stays routable and shows /unavailable when API is down.
+  # Healthcheck is nginx-only (/health). Do not point Traefik/Dokploy at /api/health.
   frontend:
     image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
     pull_policy: always
