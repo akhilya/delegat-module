@@ -105,6 +105,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 "opencart" =>
                     _metadataCache.RemoveByPrefix($"opencart:cats:{connection.Id}:")
                     + _metadataCache.RemoveByPrefix($"opencart:fields:{connection.Id}:"),
+                "woocommerce" =>
+                    _metadataCache.RemoveByPrefix($"woocommerce:"),
                 _ => _metadataCache.RemoveByPrefix($"{connection.adapterKey}:")
             };
         }

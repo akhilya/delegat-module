@@ -13,3 +13,6 @@
 [submodule "plugins/Delegat.Marketplace.YandexMarket"]
 	path = plugins/Delegat.Marketplace.YandexMarket
 	url = https://github.com/akhilya/delegat-adapter-yandex-market.git
+[submodule "plugins/Delegat.Marketplace.WooCommerce"]
+	path = plugins/Delegat.Marketplace.WooCommerce
+	url = git@github.com:akhilya/delegat-adapter-woocommerce.git

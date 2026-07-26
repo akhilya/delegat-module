@@ -7,11 +7,17 @@
 - [**ai-assistant.md**](architecture/ai-assistant.md) - AI assistant: architecture, prompts, tools, rollback, tariff access
 - [**ai-system.md**](architecture/ai-system.md) - Full AI system reference (RAG-oriented)
 
+## Design canon (impeccable)
+
+- [**PRODUCT.md**](../PRODUCT.md) - Strategic product context for agents (`register: product`)
+- [**DESIGN.md**](../DESIGN.md) - Visual system tokens and Do/Don't (OKLCH, Onest, shadcn)
+- [**DESIGN.json**](../DESIGN.json) - Sidecar for live panel / tooling
+
 ## Platform
 
 - [**capabilities.md**](platform/capabilities.md) - Current instance features and roadmap
 - [**platform-link.md**](platform/platform-link.md) - Instance ↔ Control Plane m2m + Reference Catalog contract (переезжает в CP-репо)
-- [**product.md**](platform/product.md) - Instance product brief: users, goals, design principles, brand
+- [**product.md**](platform/product.md) - Instance UX brief (points to root PRODUCT/DESIGN as agent canon)
 - [**releasing.md**](platform/releasing.md) - SemVer / `VERSION` / `CHANGELOG.md` process for commits and releases
 
 ## API
@@ -21,6 +27,7 @@
 ## Adapters
 
 - [**opencart.md**](adapters/opencart.md) - OpenCart bridge: credentials, actions, payload format
+- [**woocommerce.md**](adapters/woocommerce.md) - WooCommerce bridge: credentials, endpoints, PRINTO notes
 
 ## Security
 

@@ -33,6 +33,12 @@ $Adapters = @(
         RepoName   = "delegat-adapter-yandex-market"
         Version    = "1.0.0"
         Key        = "yandex"
+    },
+    @{
+        FolderName = "Delegat.Marketplace.WooCommerce"
+        RepoName   = "delegat-adapter-woocommerce"
+        Version    = "1.0.0"
+        Key        = "woocommerce"
     }
 )
 

@@ -1,6 +1,6 @@
 # Delegat.Module
 
-Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart, Yandex Market).
+Product catalog and marketplace synchronization tool (Ozon, Wildberries, OpenCart, Yandex Market, WooCommerce).
 
 Each customer runs an **isolated instance** (Docker stack). Selling, provisioning, billing, fleet updates, and ops control belong to a separate **Control Plane** (design docs in this repo; implementation will live in a **separate monorepo**).
 
@@ -28,10 +28,11 @@ docker compose -f docker-compose.prod.yml up -d
 backend/          — ASP.NET Core API
 frontend/         — Vue 3 SPA
 plugins/          — Marketplace adapter submodules (DLL)
-  Delegat.Marketplace.Ozon/        → delegat-adapter-ozon
-  Delegat.Marketplace.Wildberries/ → delegat-adapter-wildberries
-  Delegat.Marketplace.OpenCart/    → delegat-adapter-opencart
-  Delegat.Marketplace.YandexMarket/→ delegat-adapter-yandex-market
+  Delegat.Marketplace.Ozon/         → delegat-adapter-ozon
+  Delegat.Marketplace.Wildberries/  → delegat-adapter-wildberries
+  Delegat.Marketplace.OpenCart/     → delegat-adapter-opencart
+  Delegat.Marketplace.YandexMarket/ → delegat-adapter-yandex-market
+  Delegat.Marketplace.WooCommerce/  → delegat-adapter-woocommerce
 sdk/              — SDK submodule → delegat-marketplace-sdk
 docs/             — Documentation
 ```

@@ -78,6 +78,7 @@
       <PluginProjects Include="..\plugins\Delegat.Marketplace.Wildberries\Delegat.Marketplace.Wildberries.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.OpenCart\Delegat.Marketplace.OpenCart.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj" />
+      <PluginProjects Include="..\plugins\Delegat.Marketplace.WooCommerce\Delegat.Marketplace.WooCommerce.csproj" />
     </ItemGroup>
     <!-- SDK is already built via ProjectReference. Nested BuildProjectReferences=true races on deps.json. -->
     <MSBuild Projects="@(PluginProjects)"
