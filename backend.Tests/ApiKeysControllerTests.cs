@@ -19,6 +19,9 @@ public class ApiKeysControllerTests
 
         public Task<string?> GetStoredBodyAsync(int userId, int id, bool response, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
+
+        public Task<int> DeleteManyAsync(int userId, IReadOnlyList<int> ids, CancellationToken ct = default)
+            => Task.FromResult(0);
     }
 
     private static ApiKeysController CreateController(FakeCurrentUserService current, UserApiKeyService keys)
