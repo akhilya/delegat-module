@@ -261,7 +261,7 @@ public class MarketplaceConnectionController : ControllerBase
     }
 
     /// <summary>
-    /// Delete a connection
+    /// Delete a connection (related rows cascade in the database).
     /// </summary>
     [HttpDelete]
     [Route("/marketplace/connections/{connectionId}")]
@@ -272,32 +272,14 @@ public class MarketplaceConnectionController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
-        var repo = _unitOfWork.Repository<MarketplaceConnection>();
+        // Single DELETE + DB cascades. Avoids N SaveChanges and races when the UI retries
+        // while a slow per-child delete is still running.
+        var deleted = await _db.marketplaceConnections
+            .Where(c => c.Id == connectionId && c.storeId == selectedStoreId.Value)
+            .ExecuteDeleteAsync();
 
-        var connection = await repo.FindAsync(
-            c => c.Id == connectionId && c.storeId == selectedStoreId.Value,
-            query => query
-                .Include(c => c.categoryMappings)
-                .Include(c => c.productLinks));
-
-        if (connection == null)
+        if (deleted == 0)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
-
-        // Delete related entities
-        var categoryMappingRepo = _unitOfWork.Repository<CategoryMapping>();
-        var productLinkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
-
-        foreach (var mapping in connection.categoryMappings.ToList())
-        {
-            await categoryMappingRepo.DeleteAsync(mapping);
-        }
-
-        foreach (var link in connection.productLinks.ToList())
-        {
-            await productLinkRepo.DeleteAsync(link);
-        }
-
-        await repo.DeleteAsync(connection);
 
         return Ok(new { success = true });
     }

@@ -33,6 +33,8 @@ import {
 } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { ScrollText } from "lucide-vue-next";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PAGE_SETTINGS } from "@/router";
 
 export default {
   components: {
@@ -58,6 +60,8 @@ export default {
     LogCodeBlock,
     LogMetaGrid,
     ScrollText,
+    Alert,
+    AlertDescription,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -66,6 +70,7 @@ export default {
   },
   data() {
     return {
+      PAGE_SETTINGS,
       items: [],
       total: 0,
       errorCount: 0,
@@ -228,6 +233,15 @@ export default {
     >
       <LogRefreshButton :loading="isLoading" @click="refresh" />
     </PageHeader>
+
+    <Alert class="mb-4">
+      <AlertDescription class="text-sm text-muted-foreground">
+        {{ $t("marketplace.adapterLogsPage.loggingHint") }}
+        <RouterLink :to="PAGE_SETTINGS" class="underline underline-offset-2 hover:text-foreground">
+          {{ $t("marketplace.adapterLogsPage.loggingHintLink") }}
+        </RouterLink>
+      </AlertDescription>
+    </Alert>
 
     <LogToolbar :summary="summaryLabel" :summary-alert="errorCount > 0">
       <LogFilterSelect

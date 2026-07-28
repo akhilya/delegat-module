@@ -189,10 +189,29 @@ public class ProductExportBackgroundService : BackgroundService
 
         var productIds = pendingItems.Select(p => p.productId).ToList();
         var pendingByProductId = pendingItems.ToDictionary(p => p.productId, p => p);
+        var firstItem = pendingItems.First();
 
         _logger.LogInformation(
             "Starting bulk export of {Count} products for connectionId={ConnectionId}",
             productIds.Count, connectionId);
+
+        // Surface activity immediately — otherwise UI stays at 0/pending for the whole
+        // adapter HTTP call (Woo products/bulk alone can take minutes).
+        if (firstItem.batchId != null)
+        {
+            await _operationLogger.LogAsync(firstItem.batchId, firstItem.storeId, "info",
+                $"Processing {pendingItems.Count} products…");
+
+            var snapshot = await context.pendingProductExports
+                .AsNoTracking()
+                .Where(p => p.batchId == firstItem.batchId)
+                .Select(p => p.status)
+                .ToListAsync(ct);
+            var total = snapshot.Count;
+            var completed = snapshot.Count(s => s == ProductExportStatus.Completed);
+            var failed = snapshot.Count(s => s == ProductExportStatus.Failed);
+            await _operationLogger.ProgressAsync(firstItem.batchId, firstItem.storeId, total, completed, failed);
+        }
 
         try
         {
@@ -261,7 +280,6 @@ public class ProductExportBackgroundService : BackgroundService
         await context.SaveChangesAsync(ct);
 
         // Emit progress/finish via SignalR for bulk export
-        var firstItem = pendingItems.First();
         if (firstItem.batchId != null)
         {
             var batchItems = await context.pendingProductExports

@@ -10,12 +10,23 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- WooCommerce: transfer product images as ZIP archives (`POST /images/import-archive`) — Delegat downloads MinIO files, bridge attaches without GD resize on the hot path (thumbs via Action Scheduler); mappings unchanged; bridge ≥ 1.2.0
 - Download full request/response bodies from adapter HTTP and Public API logs when the UI preview is truncated (stored up to 2 MB)
 - Admin toggle to enable/disable Public API (`/api/v1`) without restart; API request logging switch is disabled while API is off; API sidebar page and Swagger are hidden/blocked when off
 - Connection settings: ⋮ menu with Test, API limits, and Clear cache (refresh dictionaries without waiting for TTL)
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
+### Changed
+- WooCommerce adapter/plugin **1.2.0** + bridge **1.2.0**: bulk/single export prefer archive image transfer (48 MB zip chunks); legacy URL drain is fallback only
+- WooCommerce bulk export: default `bulkChunkSize` 50 → 20
+- WooCommerce single-product background image drain: one kick only (was up to 40 sequential `images/drain` calls)
+- Adapter logs empty state clarifies that only completed HTTP exchanges are stored (mapping failures before the call need batch `lastError`)
+- Bulk product export loads related entities with `AsSplitQuery` to reduce DB cartesian load during large queues
+- Export queue emits an info log + progress snapshot when a bulk chunk starts (UI no longer stays silent during long adapter HTTP)
+
 ### Fixed
+- Operation duration no longer inflated by ~timezone offset (UTC timestamps without `Z` were parsed as local time in the operations panel)
+- Stopping an export/import/image-download operation no longer rewrites Failed queue rows to Cancelled (summary and retry-failed stay accurate; progress counters sync on stop)
 - Marketplace connection settings return non-secret credentials (e.g. Yandex businessId, Ozon clientId); product edit URLs substitute all template placeholders; saving empty API key no longer wipes the stored secret
 - Pre-export mapping resolve uses POST body instead of query string (fix 414 Request-URI Too Large on large bulk selections)
 - Yandex bulk export: split offer-mappings/cards requests by JSON body size to stay under Partner API ~500 KB limit

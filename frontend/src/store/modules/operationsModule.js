@@ -1,6 +1,7 @@
 import { HubConnectionBuilder, LogLevel, HttpTransportType } from "@microsoft/signalr";
 import { http } from "@/main";
 import { t } from "@/i18n";
+import { parseServerUtc } from "@/utils/dateTime";
 
 let connection = null;
 
@@ -510,9 +511,9 @@ const getters = {
     state.operations
       .filter((o) => o.status !== "running" && o.status !== "paused")
       .sort((a, b) => {
-        const aTime = a.finishedAt || a.startedAt;
-        const bTime = b.finishedAt || b.startedAt;
-        return new Date(bTime) - new Date(aTime);
+        const aTime = parseServerUtc(a.finishedAt || a.startedAt)?.getTime() ?? 0;
+        const bTime = parseServerUtc(b.finishedAt || b.startedAt)?.getTime() ?? 0;
+        return bTime - aTime;
       }),
 
   activeCount: (_state, getters) => getters.activeOperations.length,

@@ -154,6 +154,11 @@ public class ProductSyncService
             await Log("info", "Preparing export data");
             var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
 
+            // Adapter plumbing (not a mapping field): Woo archive import keys attachments by this id.
+            exportData["_localProductId"] = product.Id;
+            if (!exportData.ContainsKey("delegat_product_id") && !exportData.ContainsKey("delegatProductId"))
+                exportData["delegat_product_id"] = product.Id.ToString();
+
             // Add externalCategoryId
             exportData["_categoryId"] = categoryMapping.externalCategoryId;
 
@@ -526,8 +531,9 @@ public class ProductSyncService
             return new BulkProductExportResult(0, 0, productIds.Count,
                 productIds.Select(id => new BulkProductExportItemResult(id, false, ErrorMessage: $"Adapter '{connection.adapterKey}' not found")).ToList());
 
-        // One query: load all products with includes
+        // One query: load all products with includes (split to avoid cartesian explosion)
         var products = await _context.products
+            .AsSplitQuery()
             .Include(p => p.category)
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.attribute)
@@ -648,6 +654,9 @@ public class ProductSyncService
             try
             {
                 var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
+                exportData["_localProductId"] = product.Id;
+                if (!exportData.ContainsKey("delegat_product_id") && !exportData.ContainsKey("delegatProductId"))
+                    exportData["delegat_product_id"] = product.Id.ToString();
                 exportData["_categoryId"] = categoryMapping.externalCategoryId;
 
                 // Add group_id for field-based grouping

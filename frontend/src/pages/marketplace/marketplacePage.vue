@@ -112,7 +112,7 @@ export default {
       adapters: [],
       isLoading: false,
       isCreating: false,
-      isDeleting: false,
+      deletingConnectionId: null,
       showCreateDialog: false,
       newConnection: {
         name: "",
@@ -219,18 +219,30 @@ export default {
     },
 
     async handleDeleteConnection(connectionId) {
-      this.isDeleting = true;
+      if (this.deletingConnectionId != null) return;
+
+      this.deletingConnectionId = connectionId;
+      const previous = this.connections;
+      // Remove immediately so a second click cannot race the in-flight DELETE.
+      this.connections = this.connections.filter((c) => c.id !== connectionId);
+
+      let failed = false;
       await this.deleteConnection({
         connectionId,
         onSuccess: () => {
           displaySonnerSuccess(this.$t("marketplace.marketplacePage.connectionDeleted"));
-          this.fetchConnections();
         },
         onError: (error) => {
+          failed = true;
+          this.connections = previous;
           displaySonnerError(error);
         },
       });
-      this.isDeleting = false;
+
+      if (!failed) {
+        await this.fetchConnections();
+      }
+      this.deletingConnectionId = null;
     },
 
     resetForm() {
@@ -450,9 +462,11 @@ export default {
                           variant="ghost"
                           size="icon"
                           class="size-8"
+                          :disabled="deletingConnectionId === conn.id"
                           @click.stop
                         >
-                          <Trash2 class="size-4 text-destructive" />
+                          <Loader2 v-if="deletingConnectionId === conn.id" class="size-4 animate-spin text-destructive" />
+                          <Trash2 v-else class="size-4 text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -466,9 +480,9 @@ export default {
                           <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                           <AlertDialogAction
                             @click="handleDeleteConnection(conn.id)"
-                            :disabled="isDeleting"
+                            :disabled="deletingConnectionId != null"
                           >
-                            <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
+                            <Loader2 v-if="deletingConnectionId === conn.id" class="size-4 mr-2 animate-spin" />
                             {{ $t("common.delete") }}
                           </AlertDialogAction>
                         </AlertDialogFooter>

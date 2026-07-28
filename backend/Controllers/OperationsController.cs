@@ -330,14 +330,13 @@ public class OperationsController : ControllerBase
         int cancelledCount = 0;
         if (op.batchId != null)
         {
+            // Only cancel work still in flight. Keep Failed rows so summary/retry stay accurate.
             if (op.batchType == "import")
             {
                 cancelledCount = await _context.pendingProductImports
                     .Where(p => p.batchId == op.batchId &&
                         (p.status == ProductImportStatus.Pending
-                         || p.status == ProductImportStatus.InProgress
-                         || p.status == ProductImportStatus.Failed
-                         || p.status == ProductImportStatus.Cancelled))
+                         || p.status == ProductImportStatus.InProgress))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
             }
             else if (op.batchType == "export")
@@ -345,9 +344,7 @@ public class OperationsController : ControllerBase
                 cancelledCount = await _context.pendingProductExports
                     .Where(p => p.batchId == op.batchId &&
                         (p.status == ProductExportStatus.Pending
-                         || p.status == ProductExportStatus.InProgress
-                         || p.status == ProductExportStatus.Failed
-                         || p.status == ProductExportStatus.Cancelled))
+                         || p.status == ProductExportStatus.InProgress))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
             }
             else if (op.batchType == "image-download")
@@ -355,9 +352,7 @@ public class OperationsController : ControllerBase
                 cancelledCount = await _context.pendingImageDownloads
                     .Where(p => p.batchId == op.batchId &&
                         (p.status == ImageDownloadStatus.Pending
-                         || p.status == ImageDownloadStatus.InProgress
-                         || p.status == ImageDownloadStatus.Failed
-                         || p.status == ImageDownloadStatus.Cancelled))
+                         || p.status == ImageDownloadStatus.InProgress))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
             }
             else if (op.batchType == "folder-job")
@@ -403,6 +398,9 @@ public class OperationsController : ControllerBase
 
         var summary = $"Stopped. Completed: {completed}, errors: {failed}, cancelled: {cancelledCount}";
         await _operationLogger.LogAsync(operationId, op.storeId, "warning", summary);
+        // Sync progress counters with final queue statuses (Failed rows are preserved above).
+        if (total > 0)
+            await _operationLogger.ProgressAsync(operationId, op.storeId, total, completed, failed);
         await _operationLogger.FinishAsync(operationId, op.storeId, "cancelled", summary);
 
         // Cascade stop to child operations

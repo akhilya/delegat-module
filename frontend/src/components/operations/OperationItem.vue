@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import OperationLogTimeline from "./OperationLogTimeline.vue";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { parseServerUtc } from "@/utils/dateTime";
 import { t } from "@/i18n";
 import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -220,10 +221,12 @@ function formatDuration(ms) {
 }
 
 const elapsed = computed(() => {
-  const start = new Date(props.operation.startedAt).getTime();
+  const start = parseServerUtc(props.operation.startedAt)?.getTime();
+  if (start == null) return formatDuration(0);
   const end = props.operation.finishedAt
-    ? new Date(props.operation.finishedAt).getTime()
+    ? parseServerUtc(props.operation.finishedAt)?.getTime()
     : now.value;
+  if (end == null) return formatDuration(0);
   return formatDuration(Math.max(0, end - start));
 });
 
