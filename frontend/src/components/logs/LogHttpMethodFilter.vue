@@ -10,7 +10,7 @@ const props = defineProps({
   placeholder: { type: String, default: "" },
   /** Extra methods beyond the default set */
   extraMethods: { type: Array, default: () => [] },
-  triggerClass: { type: String, default: "h-9 w-full sm:w-32" },
+  triggerClass: { type: String, default: "h-9 w-full min-w-0 sm:w-32" },
 });
 
 defineEmits(["update:modelValue"]);

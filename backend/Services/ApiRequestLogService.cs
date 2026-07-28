@@ -14,6 +14,8 @@ public sealed class ApiRequestLogQuery
     public string? Method { get; set; }
     public string? StatusClass { get; set; }
     public string? Q { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortDir { get; set; }
     public int Limit { get; set; } = 50;
     public int Offset { get; set; }
 }
@@ -66,6 +68,9 @@ public interface IApiRequestLogQueryService
     Task<ApiRequestLogDetailDto?> GetDetailAsync(int userId, int id, CancellationToken ct = default);
 
     Task<string?> GetStoredBodyAsync(int userId, int id, bool response, CancellationToken ct = default);
+
+    /// <summary>Delete log rows owned by the user (via userId or their API keys). Cap applied by caller.</summary>
+    Task<int> DeleteManyAsync(int userId, IReadOnlyList<int> ids, CancellationToken ct = default);
 }
 
 public sealed class ApiRequestLogEntry
@@ -203,8 +208,7 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
         var limit = Math.Clamp(query.Limit, 1, 200);
         var offset = Math.Max(0, query.Offset);
 
-        var items = await q
-            .OrderByDescending(l => l.createdAt)
+        var items = await ApplySort(q, query.SortBy, query.SortDir)
             .Skip(offset)
             .Take(limit)
             .Select(l => new ApiRequestLogSummaryDto(
@@ -221,6 +225,33 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
             .ToListAsync(ct);
 
         return (items, total, errorCount);
+    }
+
+    private static IOrderedQueryable<ApiRequestLog> ApplySort(
+        IQueryable<ApiRequestLog> q,
+        string? sortBy,
+        string? sortDir)
+    {
+        var asc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+        IOrderedQueryable<ApiRequestLog> ordered = (sortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "method" => asc ? q.OrderBy(l => l.method) : q.OrderByDescending(l => l.method),
+            "path" => asc ? q.OrderBy(l => l.path) : q.OrderByDescending(l => l.path),
+            "keydisplayhint" or "key" => asc
+                ? q.OrderBy(l => l.keyDisplayHint)
+                : q.OrderByDescending(l => l.keyDisplayHint),
+            "durationms" or "duration" => asc
+                ? q.OrderBy(l => l.durationMs)
+                : q.OrderByDescending(l => l.durationMs),
+            "statuscode" or "status" or "code" => asc
+                ? q.OrderBy(l => l.statusCode)
+                : q.OrderByDescending(l => l.statusCode),
+            _ => asc
+                ? q.OrderBy(l => l.createdAt)
+                : q.OrderByDescending(l => l.createdAt),
+        };
+        // Stable tie-break so Skip/Take pages stay deterministic.
+        return ordered.ThenByDescending(l => l.Id);
     }
 
     public async Task<ApiRequestLogDetailDto?> GetDetailAsync(int userId, int id, CancellationToken ct = default)
@@ -284,6 +315,25 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
 
         if (l == null) return null;
         return response ? l.responseBody : l.requestBody;
+    }
+
+    public async Task<int> DeleteManyAsync(int userId, IReadOnlyList<int> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0) return 0;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+
+        var keyIds = await db.userApiKeys.AsNoTracking()
+            .Where(k => k.userId == userId)
+            .Select(k => k.Id)
+            .ToListAsync(ct);
+
+        return await db.apiRequestLogs
+            .Where(x =>
+                ids.Contains(x.Id) &&
+                (x.userId == userId || (x.apiKeyId != null && keyIds.Contains(x.apiKeyId.Value))))
+            .ExecuteDeleteAsync(ct);
     }
 
     private async Task ProcessQueueAsync()

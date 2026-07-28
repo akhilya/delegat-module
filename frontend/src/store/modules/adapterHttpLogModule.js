@@ -34,6 +34,19 @@ export default {
         .then((response) => onSuccess?.(response))
         .catch((error) => onError?.(error));
     },
+
+    async deleteAdapterHttpLogs(ctx, { ids, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          "/adapter-http-logs/delete",
+          { ids },
+          { cache: false },
+        );
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
+      }
+    },
   },
   mutations: {},
   state: {},

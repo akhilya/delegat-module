@@ -122,3 +122,28 @@ export function addCalendarDays(dayKey, deltaDays) {
   const dd = String(utc.getUTCDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
 }
+
+/**
+ * Human relative age from a server UTC timestamp.
+ * Returns null when older than 7 days (caller should show absolute date).
+ * @param {*} value
+ * @param {number} [nowMs]
+ * @param {(key: string, params?: object) => string} [translate]
+ */
+export function formatRelativeAgo(value, nowMs = Date.now(), translate) {
+  const d = parseServerUtc(value);
+  if (!d) return "-";
+  const diffMs = Math.max(0, nowMs - d.getTime());
+  const sec = Math.floor(diffMs / 1000);
+  const tr = typeof translate === "function" ? translate : (k, p) => k;
+
+  if (sec < 5) return tr("components.logs.justNow");
+  if (sec < 60) return tr("components.logs.secondsAgo", { n: sec });
+  const min = Math.floor(sec / 60);
+  if (min < 60) return tr("components.logs.minutesAgo", { n: min });
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return tr("components.logs.hoursAgo", { n: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 7) return tr("components.logs.daysAgo", { n: days });
+  return null;
+}

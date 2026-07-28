@@ -41,6 +41,8 @@ public class AdapterHttpLogController : ControllerBase
         [FromQuery] int? statusCode,
         [FromQuery] string? statusClass,
         [FromQuery] string? q,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
         CancellationToken ct = default)
@@ -65,6 +67,8 @@ public class AdapterHttpLogController : ControllerBase
             StatusCode = statusCode,
             StatusClass = statusClass,
             Q = q,
+            SortBy = sortBy,
+            SortDir = sortDir,
             Limit = limit,
             Offset = offset
         }, ct);
@@ -106,6 +110,28 @@ public class AdapterHttpLogController : ControllerBase
     [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> DownloadResponseBody(int id, CancellationToken ct = default)
         => await DownloadBodyAsync(id, response: true, ct);
+
+    /// <summary>Delete selected adapter HTTP log rows for the current store (max 200).</summary>
+    [HttpPost]
+    [Route("/adapter-http-logs/delete")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> DeleteMany([FromBody] DeleteLogIdsRequest? body, CancellationToken ct = default)
+    {
+        var storeId = await RequireStoreIdAsync();
+        var ids = (body?.Ids ?? [])
+            .Where(id => id > 0)
+            .Distinct()
+            .Take(200)
+            .ToList();
+        if (ids.Count == 0)
+            return Ok(new { deleted = 0 });
+
+        var deleted = await _db.adapterHttpLogs
+            .Where(l => l.storeId == storeId && ids.Contains(l.Id))
+            .ExecuteDeleteAsync(ct);
+
+        return Ok(new { deleted });
+    }
 
     private async Task<IActionResult> DownloadBodyAsync(int id, bool response, CancellationToken ct)
     {

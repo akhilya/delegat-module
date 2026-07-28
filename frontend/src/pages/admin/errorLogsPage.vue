@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -20,7 +19,13 @@ import {
   LogCodeBlock,
   LogMetaGrid,
   LogDetailSheet,
+  LogSelectCheckbox,
+  LogSortHeader,
   formatLogDate as formatLogDateRaw,
+  downloadJsonFile,
+  stampFilename,
+  cycleLogSort,
+  LOG_SORT_DEFAULT,
 } from "@/components/logs";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -39,7 +44,6 @@ export default {
     Button,
     PageHeader,
     Input,
-    Table,
     TableBody,
     TableCell,
     TableHead,
@@ -54,6 +58,8 @@ export default {
     LogCodeBlock,
     LogMetaGrid,
     LogDetailSheet,
+    LogSelectCheckbox,
+    LogSortHeader,
     AlertTriangle,
     Check,
     Copy,
@@ -74,12 +80,18 @@ export default {
       copiedLogId: null,
       detailOpen: false,
       selected: null,
+      selectedIds: [],
+      downloading: false,
+      deleting: false,
+      sortBy: LOG_SORT_DEFAULT.sortBy,
+      sortDir: LOG_SORT_DEFAULT.sortDir,
     };
   },
   computed: {
     filteredLogs() {
       const q = this.query.trim().toLowerCase();
       if (!q) return this.logs;
+      // Filter only — order stays as returned by the backend.
       return this.logs.filter((log) => {
         const hay = [
           log.message,
@@ -128,17 +140,63 @@ export default {
       if (!this.query.trim()) return String(n);
       return `${n}${this.$t("pages.errorLogsPage.ofTotal", { total: this.logs.length })}`;
     },
+    pageIds() {
+      return this.filteredLogs.map((r) => r.id).filter((id) => id != null);
+    },
+    allPageSelected() {
+      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+    },
+    somePageSelected() {
+      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+    },
   },
   methods: {
-    ...mapActions(["getErrorLogs", "deleteErrorLog"]),
+    ...mapActions(["getErrorLogs", "deleteErrorLog", "deleteErrorLogs"]),
     formatLogDate(value) {
       return formatLogDateRaw(value, this.storeTimezone);
     },
 
+    toggleSort(column) {
+      const next = cycleLogSort(this.sortBy, this.sortDir, column);
+      this.sortBy = next.sortBy;
+      this.sortDir = next.sortDir;
+      this.fetchLogs();
+    },
+
+    isSelected(id) {
+      return this.selectedIds.includes(id);
+    },
+
+    clearSelection() {
+      this.selectedIds = [];
+    },
+
+    toggleSelect(id, checked) {
+      if (checked === true) {
+        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+      } else {
+        this.selectedIds = this.selectedIds.filter((x) => x !== id);
+      }
+    },
+
+    toggleSelectAll(checked) {
+      if (checked === true) {
+        const set = new Set(this.selectedIds);
+        this.pageIds.forEach((id) => set.add(id));
+        this.selectedIds = [...set];
+      } else {
+        const page = new Set(this.pageIds);
+        this.selectedIds = this.selectedIds.filter((id) => !page.has(id));
+      }
+    },
+
     async fetchLogs() {
       this.isLoading = true;
+      this.clearSelection();
       await this.getErrorLogs({
         limit: 200,
+        sortBy: this.sortBy,
+        sortDir: this.sortDir,
         onSuccess: (response) => {
           this.logs = response.data.value;
         },
@@ -199,6 +257,7 @@ export default {
         id: log.id,
         onSuccess: () => {
           this.logs = this.logs.filter((item) => item.id !== log.id);
+          this.selectedIds = this.selectedIds.filter((id) => id !== log.id);
           if (this.selected?.id === log.id) {
             this.detailOpen = false;
             this.selected = null;
@@ -211,6 +270,47 @@ export default {
       });
       this.deletingLogId = null;
     },
+
+    downloadSelected() {
+      if (this.selectedIds.length === 0) return;
+      this.downloading = true;
+      try {
+        const idSet = new Set(this.selectedIds);
+        const details = this.logs.filter((log) => idSet.has(log.id));
+        downloadJsonFile(details, stampFilename("logs-error"));
+      } finally {
+        this.downloading = false;
+      }
+    },
+
+    async deleteSelected() {
+      if (this.selectedIds.length === 0) return;
+      const ok = await confirm({
+        title: this.$t("components.logs.deleteConfirmTitle"),
+        description: this.$t("components.logs.deleteConfirmDescription", {
+          count: this.selectedIds.length,
+        }),
+      });
+      if (!ok) return;
+
+      this.deleting = true;
+      const ids = [...this.selectedIds];
+      await this.deleteErrorLogs({
+        ids,
+        onSuccess: () => {
+          const removed = new Set(ids);
+          this.logs = this.logs.filter((item) => !removed.has(item.id));
+          if (this.selected && removed.has(this.selected.id)) {
+            this.detailOpen = false;
+            this.selected = null;
+          }
+          this.clearSelection();
+          displaySonnerSuccess(this.$t("components.logs.deleteSuccess"));
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+      this.deleting = false;
+    },
   },
   mounted() {
     this.fetchLogs();
@@ -218,8 +318,9 @@ export default {
 };
 </script>
 
+
 <template>
-  <div>
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
     <PageHeader
       :title="$t('routes.errorLogs')"
       :description="$t('pages.errorLogsPage.description')"
@@ -227,15 +328,16 @@ export default {
       <LogRefreshButton :loading="isLoading" @click="fetchLogs" />
     </PageHeader>
 
-    <LogToolbar :summary="summaryLabel" :summary-alert="logs.length > 0">
+    <LogToolbar class="mb-3 shrink-0" :summary="summaryLabel" :summary-alert="logs.length > 0">
       <Input
         v-model="query"
-        class="h-9 w-full sm:max-w-sm"
+        class="h-9 w-full min-w-0 sm:max-w-sm"
         :placeholder="$t('pages.errorLogsPage.searchPlaceholder')"
       />
     </LogToolbar>
 
     <LogListPanel
+      class="min-h-0 flex-1"
       :loading="isLoading"
       :empty="!isLoading && filteredLogs.length === 0"
       :empty-icon="AlertTriangle"
@@ -249,17 +351,66 @@ export default {
           ? $t('pages.errorLogsPage.emptyNotFoundDescription')
           : $t('pages.errorLogsPage.emptyNoErrorsDescription')
       "
-      :show-footer="filteredLogs.length > 0"
+      :show-footer="filteredLogs.length > 0 || selectedIds.length > 0"
       :footer-label="footerLabel"
+      :selected-count="selectedIds.length"
+      :downloading="downloading"
+      :deleting="deleting"
+      @download="downloadSelected"
+      @delete="deleteSelected"
+      @clear-selection="clearSelection"
     >
-      <Table class="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-40">{{ $t("pages.errorLogsPage.columnDate") }}</TableHead>
-            <TableHead class="w-20">{{ $t("pages.errorLogsPage.columnMethod") }}</TableHead>
-            <TableHead class="min-w-0">{{ $t("pages.errorLogsPage.columnError") }}</TableHead>
-            <TableHead class="w-36">{{ $t("pages.errorLogsPage.columnUser") }}</TableHead>
-            <TableHead class="w-20 text-right">{{ $t("pages.errorLogsPage.columnCode") }}</TableHead>
+      <table class="w-full table-fixed caption-bottom text-sm">
+        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+          <TableRow class="hover:bg-transparent">
+            <TableHead class="w-10">
+              <LogSelectCheckbox
+                :model-value="allPageSelected"
+                :indeterminate="somePageSelected"
+                @update:model-value="toggleSelectAll"
+              />
+            </TableHead>
+            <LogSortHeader
+              class="w-36"
+              column="createdAt"
+              :label="$t('components.logs.columnTime')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="method"
+              :label="$t('components.logs.columnMethod')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-auto"
+              column="message"
+              :label="$t('components.logs.columnError')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-32"
+              column="userName"
+              :label="$t('components.logs.columnUser')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="statusCode"
+              align="right"
+              :label="$t('components.logs.columnStatus')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -269,13 +420,19 @@ export default {
             class="cursor-pointer hover:bg-muted/40"
             @click="openDetail(log)"
           >
-            <TableCell>
+            <TableCell class="overflow-hidden">
+              <LogSelectCheckbox
+                :model-value="isSelected(log.id)"
+                @update:model-value="(v) => toggleSelect(log.id, v)"
+              />
+            </TableCell>
+            <TableCell class="overflow-hidden">
               <LogDateCell :value="log.createdAt" :timezone="storeTimezone" />
             </TableCell>
-            <TableCell>
+            <TableCell class="overflow-hidden">
               <LogMethodCell :method="log.method" />
             </TableCell>
-            <TableCell class="max-w-0">
+            <TableCell class="max-w-0 overflow-hidden">
               <div class="min-w-0 overflow-hidden">
                 <div class="truncate font-medium" :title="log.message">
                   {{ log.message }}
@@ -288,15 +445,17 @@ export default {
                 </div>
               </div>
             </TableCell>
-            <TableCell class="truncate text-sm">
-              {{ log.userName || log.userId || "-" }}
+            <TableCell class="overflow-hidden text-sm">
+              <div class="truncate" :title="String(log.userName || log.userId || '')">
+                {{ log.userName || log.userId || "-" }}
+              </div>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="overflow-hidden text-right">
               <LogStatusBadge :status-code="log.statusCode" />
             </TableCell>
           </TableRow>
         </TableBody>
-      </Table>
+      </table>
     </LogListPanel>
 
     <LogDetailSheet

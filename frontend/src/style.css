@@ -102,11 +102,11 @@ button {
 }
 
 .adaptive-padding {
-  /* Right side gets extra clearance for fixed FAB buttons (size-12 + 24px gap = 72px) */
+  /* Right side: FAB clearance (~5rem). ≤2000px (incl. Full HD): tight gutters. */
   @apply pl-[8vw] pr-[max(8vw,5rem)]
-    max-[2000px]:px-28
-    max-2xl:pl-16 max-2xl:pr-20
-    max-[1281px]:pl-10 max-[1281px]:pr-20
+    max-[2000px]:pl-6 max-[2000px]:pr-20
+    max-2xl:pl-6 max-2xl:pr-20
+    max-[1281px]:pl-5 max-[1281px]:pr-20
     max-lg:pl-5 max-lg:pr-20
     max-sm:pl-3 max-sm:pr-20;
 }

@@ -1,4 +1,5 @@
-import { formatDateTimeCombined } from "@/utils/dateTime";
+import { formatDateTimeCombined, formatRelativeAgo as formatRelativeAgoRaw } from "@/utils/dateTime";
+import { t } from "@/i18n";
 
 /**
  * Format a log timestamp in the store timezone.
@@ -9,6 +10,18 @@ export function formatLogDate(value, timezone = "UTC") {
   return formatDateTimeCombined(value, timezone || "UTC", {
     withSeconds: true,
   });
+}
+
+/**
+ * Relative age for log tables ("5 sec ago"). Falls back to absolute when older than 7 days.
+ * @param {*} value
+ * @param {number} [nowMs]
+ * @param {string} [timezone] used when falling back to absolute
+ */
+export function formatLogRelative(value, nowMs = Date.now(), timezone = "UTC") {
+  const relative = formatRelativeAgoRaw(value, nowMs, t);
+  if (relative != null) return relative;
+  return formatLogDate(value, timezone);
 }
 
 /** Badge variant for HTTP status codes. */

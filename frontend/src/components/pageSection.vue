@@ -14,11 +14,11 @@ const props = defineProps({
 </script>
 
 <template>
-  <section :class="cn('w-full min-h-[calc(100vh-8.5rem)] mb-4', props.class)">
-    <div v-if="loading" class="flex min-h-[inherit] grow items-center justify-center">
+  <section :class="cn('w-full mb-4', props.class)">
+    <div v-if="loading" class="flex min-h-60 items-center justify-center">
       <EmptyState loading />
     </div>
-    <div v-else-if="empty" class="flex min-h-[inherit] grow items-center justify-center">
+    <div v-else-if="empty" class="flex min-h-60 items-center justify-center">
       <EmptyState :title="emptyTitle" :description="emptyDescription">
         <template v-if="emptyIcon" #icon>
           <component :is="emptyIcon" :class="emptyIconClass" />

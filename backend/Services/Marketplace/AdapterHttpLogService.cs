@@ -32,6 +32,8 @@ public sealed class AdapterHttpLogQuery
     public int? StatusCode { get; set; }
     public string? StatusClass { get; set; } // 2xx, 4xx, 5xx
     public string? Q { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortDir { get; set; }
     public int Limit { get; set; } = 50;
     public int Offset { get; set; }
 }
@@ -156,8 +158,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         var limit = Math.Clamp(query.Limit, 1, 200);
         var offset = Math.Max(0, query.Offset);
 
-        var items = await q
-            .OrderByDescending(l => l.createdAt)
+        var items = await ApplySort(q, query.SortBy, query.SortDir)
             .Skip(offset)
             .Take(limit)
             .Select(l => new AdapterHttpLogSummaryDto(
@@ -174,6 +175,33 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             .ToListAsync(ct);
 
         return (items, total, errorCount);
+    }
+
+    private static IOrderedQueryable<AdapterHttpLog> ApplySort(
+        IQueryable<AdapterHttpLog> q,
+        string? sortBy,
+        string? sortDir)
+    {
+        var asc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+        IOrderedQueryable<AdapterHttpLog> ordered = (sortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "method" => asc ? q.OrderBy(l => l.method) : q.OrderByDescending(l => l.method),
+            "path" => asc ? q.OrderBy(l => l.path) : q.OrderByDescending(l => l.path),
+            "adapterkey" or "adapter" => asc
+                ? q.OrderBy(l => l.adapterKey)
+                : q.OrderByDescending(l => l.adapterKey),
+            "durationms" or "duration" => asc
+                ? q.OrderBy(l => l.durationMs)
+                : q.OrderByDescending(l => l.durationMs),
+            "statuscode" or "status" or "code" => asc
+                ? q.OrderBy(l => l.statusCode)
+                : q.OrderByDescending(l => l.statusCode),
+            _ => asc
+                ? q.OrderBy(l => l.createdAt)
+                : q.OrderByDescending(l => l.createdAt),
+        };
+        // Stable tie-break so Skip/Take pages stay deterministic.
+        return ordered.ThenByDescending(l => l.Id);
     }
 
     public async Task<AdapterHttpLogDetailDto?> GetDetailAsync(int storeId, int id, CancellationToken ct = default)

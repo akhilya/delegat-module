@@ -3,9 +3,13 @@ import { http } from "@/main";
 
 export default {
   actions: {
-    async getErrorLogs(ctx, { limit = 100, onSuccess, onError }) {
+    async getErrorLogs(ctx, { limit = 100, sortBy = "createdAt", sortDir = "desc", onSuccess, onError }) {
+      const q = new URLSearchParams();
+      q.set("limit", String(limit));
+      q.set("sortBy", sortBy);
+      q.set("sortDir", sortDir);
       return await useAxios(
-        `/error-logs?limit=${limit}`,
+        `/error-logs?${q}`,
         { method: "GET", cache: false },
         http,
         {
@@ -23,6 +27,19 @@ export default {
         onSuccess(response);
       } catch (error) {
         onError(error);
+      }
+    },
+
+    async deleteErrorLogs(ctx, { ids, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          "/error-logs/delete",
+          { ids },
+          { cache: false },
+        );
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
       }
     },
   },

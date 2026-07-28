@@ -192,8 +192,12 @@ export default {
 </script>
 
 <template>
-  <div>
+  <div
+    class="flex min-h-0 flex-col pb-4"
+    :class="tab === 'logs' && showLogsTab ? 'flex-1 overflow-hidden' : ''"
+  >
     <PageHeader
+      class="shrink-0"
       :title="$t('routes.api')"
       :description="$t('pages.apiPage.description')"
     >
@@ -218,10 +222,11 @@ export default {
     <Tabs
       v-if="showLogsTab"
       :model-value="tab"
-      class="mt-2"
+      class="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden"
+      :class="tab === 'logs' ? 'min-h-0' : ''"
       @update:model-value="onTabChange"
     >
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <TabsList>
           <TabsTrigger value="keys" class="gap-1.5">
             <KeyRound class="size-3.5" />
@@ -352,9 +357,13 @@ export default {
         </div>
       </TabsContent>
 
-      <TabsContent value="logs" class="mt-0 outline-none">
+      <TabsContent
+        value="logs"
+        class="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden outline-none data-[state=inactive]:hidden"
+      >
         <ApiRequestLogsPanel
           ref="logsPanel"
+          class="mb-4 min-h-0 flex-1"
           :api-keys="apiKeys"
           @loading="(v) => (logsLoading = v)"
         />

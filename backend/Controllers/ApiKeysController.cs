@@ -65,6 +65,8 @@ public class ApiKeysController : ControllerBase
         [FromQuery] string? method = null,
         [FromQuery] string? statusClass = null,
         [FromQuery] string? q = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
         CancellationToken ct = default)
@@ -78,6 +80,8 @@ public class ApiKeysController : ControllerBase
             Method = method,
             StatusClass = statusClass,
             Q = q,
+            SortBy = sortBy,
+            SortDir = sortDir,
             Limit = limit,
             Offset = offset,
         }, ct);
@@ -97,6 +101,26 @@ public class ApiKeysController : ControllerBase
             throw ApiException.NotFound("Log entry not found");
 
         return Ok(detail);
+    }
+
+    /// <summary>Delete selected Public API request logs for the current user (max 200).</summary>
+    [HttpPost]
+    [Route("/api-keys/logs/delete")]
+    public async Task<IActionResult> DeleteLogs([FromBody] DeleteLogIdsRequest? body, CancellationToken ct)
+    {
+        var userId = _currentUser.GetUserId()
+            ?? throw ApiException.Unauthorized();
+
+        var ids = (body?.Ids ?? [])
+            .Where(id => id > 0)
+            .Distinct()
+            .Take(200)
+            .ToList();
+        if (ids.Count == 0)
+            return Ok(new { deleted = 0 });
+
+        var deleted = await _logs.DeleteManyAsync(userId, ids, ct);
+        return Ok(new { deleted });
     }
 
     [HttpGet]

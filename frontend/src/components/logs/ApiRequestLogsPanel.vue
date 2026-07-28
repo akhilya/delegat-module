@@ -1,7 +1,6 @@
 <script>
 import Input from "@/components/ui/input/Input.vue";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -20,14 +19,23 @@ import {
   LogHttpStatusFilter,
   LogExchangeDetail,
   LogCodeBlock,
+  LogSelectCheckbox,
+  LogSortHeader,
   LOG_FILTER_ALL,
   formatLogDate as formatLogDateRaw,
+  downloadJsonFile,
+  mapPool,
+  stampFilename,
+  cycleLogSort,
+  LOG_SORT_DEFAULT,
 } from "@/components/logs";
 import { http } from "@/main";
 import {
   displaySonnerError,
+  displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
+import { confirm } from "@/composables/useConfirm";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { ScrollText } from "lucide-vue-next";
 
@@ -36,7 +44,6 @@ export default {
   emits: ["loading"],
   components: {
     Input,
-    Table,
     TableBody,
     TableCell,
     TableHead,
@@ -53,6 +60,8 @@ export default {
     LogHttpStatusFilter,
     LogExchangeDetail,
     LogCodeBlock,
+    LogSelectCheckbox,
+    LogSortHeader,
     ScrollText,
   },
   props: {
@@ -75,6 +84,11 @@ export default {
       detailOpen: false,
       detail: null,
       loadedOnce: false,
+      selectedIds: [],
+      downloading: false,
+      deleting: false,
+      sortBy: LOG_SORT_DEFAULT.sortBy,
+      sortDir: LOG_SORT_DEFAULT.sortDir,
       filters: {
         apiKeyId: LOG_FILTER_ALL,
         method: LOG_FILTER_ALL,
@@ -99,6 +113,15 @@ export default {
     hasMore() {
       return this.filters.offset + this.items.length < this.total;
     },
+    pageIds() {
+      return this.items.map((r) => r.id ?? r.Id).filter((id) => id != null);
+    },
+    allPageSelected() {
+      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+    },
+    somePageSelected() {
+      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+    },
     detailMeta() {
       if (!this.detail) return [];
       return [
@@ -122,6 +145,37 @@ export default {
     },
   },
   methods: {
+    rowId(row) {
+      return row.id ?? row.Id;
+    },
+
+    isSelected(id) {
+      return this.selectedIds.includes(id);
+    },
+
+    clearSelection() {
+      this.selectedIds = [];
+    },
+
+    toggleSelect(id, checked) {
+      if (checked === true) {
+        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+      } else {
+        this.selectedIds = this.selectedIds.filter((x) => x !== id);
+      }
+    },
+
+    toggleSelectAll(checked) {
+      if (checked === true) {
+        const set = new Set(this.selectedIds);
+        this.pageIds.forEach((id) => set.add(id));
+        this.selectedIds = [...set];
+      } else {
+        const page = new Set(this.pageIds);
+        this.selectedIds = this.selectedIds.filter((id) => !page.has(id));
+      }
+    },
+
     buildParams() {
       const f = this.filters;
       return {
@@ -129,15 +183,27 @@ export default {
         method: f.method === LOG_FILTER_ALL ? undefined : f.method,
         statusClass: f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
         q: f.q || undefined,
+        sortBy: this.sortBy,
+        sortDir: this.sortDir,
         limit: f.limit,
         offset: f.offset,
       };
     },
 
+    toggleSort(column) {
+      const next = cycleLogSort(this.sortBy, this.sortDir, column);
+      this.sortBy = next.sortBy;
+      this.sortDir = next.sortDir;
+      this.refresh();
+    },
+
     async fetchLogs({ append = false } = {}) {
       this.isLoading = true;
       this.$emit("loading", true);
-      if (!append) this.filters.offset = 0;
+      if (!append) {
+        this.filters.offset = 0;
+        this.clearSelection();
+      }
       try {
         const response = await http.get("/api-keys/logs", {
           params: this.buildParams(),
@@ -180,13 +246,63 @@ export default {
       this.detail = null;
       this.isDetailLoading = true;
       try {
-        const response = await http.get(`/api-keys/logs/${row.id ?? row.Id}`, { cache: false });
+        const response = await http.get(`/api-keys/logs/${this.rowId(row)}`, { cache: false });
         this.detail = extractResponseData(response, null) || response.data?.value || response.data;
       } catch (error) {
         displaySonnerError(error);
         this.detailOpen = false;
       } finally {
         this.isDetailLoading = false;
+      }
+    },
+
+    async downloadSelected() {
+      if (this.selectedIds.length === 0) return;
+      this.downloading = true;
+      try {
+        const details = await mapPool(this.selectedIds, async (id) => {
+          try {
+            const response = await http.get(`/api-keys/logs/${id}`, { cache: false });
+            return extractResponseData(response, null) || response.data?.value || response.data;
+          } catch {
+            return null;
+          }
+        });
+        downloadJsonFile(details, stampFilename("logs-api"));
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.downloading = false;
+      }
+    },
+
+    async deleteSelected() {
+      if (this.selectedIds.length === 0) return;
+      const ok = await confirm({
+        title: this.$t("components.logs.deleteConfirmTitle"),
+        description: this.$t("components.logs.deleteConfirmDescription", {
+          count: this.selectedIds.length,
+        }),
+      });
+      if (!ok) return;
+
+      this.deleting = true;
+      const ids = [...this.selectedIds];
+      try {
+        await http.post("/api-keys/logs/delete", { ids }, { cache: false });
+        const removed = new Set(ids);
+        this.items = this.items.filter((r) => !removed.has(this.rowId(r)));
+        this.total = Math.max(0, this.total - ids.length);
+        if (this.detail && removed.has(this.detail.id ?? this.detail.Id)) {
+          this.detailOpen = false;
+          this.detail = null;
+        }
+        this.clearSelection();
+        displaySonnerSuccess(this.$t("components.logs.deleteSuccess"));
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.deleting = false;
       }
     },
   },
@@ -197,15 +313,15 @@ export default {
 </script>
 
 <template>
-  <div>
-    <LogToolbar :summary="summaryLabel" :summary-alert="errorCount > 0">
+  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+    <LogToolbar class="shrink-0" :summary="summaryLabel" :summary-alert="errorCount > 0">
       <LogFilterSelect
         :model-value="filters.apiKeyId"
         :all-value="LOG_FILTER_ALL"
         :all-label="$t('pages.apiPage.logs.allKeys')"
         :placeholder="$t('pages.apiPage.logs.filterKey')"
         :options="keyOptions"
-        trigger-class="h-9 w-full sm:w-52"
+        trigger-class="h-9 w-full min-w-0 sm:w-52"
         @update:model-value="(v) => setFilter('apiKeyId', v)"
       />
 
@@ -223,34 +339,92 @@ export default {
 
       <Input
         v-model="filters.q"
-        class="h-9 w-full sm:max-w-xs"
+        class="h-9 w-full min-w-0 sm:max-w-xs"
         :placeholder="$t('pages.apiPage.logs.searchPlaceholder')"
         @keydown.enter="refresh"
       />
     </LogToolbar>
 
     <LogListPanel
+      class="mb-0"
       :loading="isLoading && items.length === 0"
       :empty="!isLoading && items.length === 0"
       :empty-icon="ScrollText"
       :empty-title="$t('pages.apiPage.logs.emptyTitle')"
       :empty-description="$t('pages.apiPage.logs.emptyDescription')"
-      :show-footer="items.length > 0"
+      :show-footer="items.length > 0 || selectedIds.length > 0"
       :footer-count="items.length"
       :footer-total="total"
       :has-more="hasMore"
       :more-loading="isLoading"
+      :selected-count="selectedIds.length"
+      :downloading="downloading"
+      :deleting="deleting"
       @load-more="loadMore"
+      @download="downloadSelected"
+      @delete="deleteSelected"
+      @clear-selection="clearSelection"
     >
-      <Table class="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-40">{{ $t("pages.apiPage.logs.columnDate") }}</TableHead>
-            <TableHead class="w-20">{{ $t("pages.apiPage.logs.columnMethod") }}</TableHead>
-            <TableHead class="min-w-0">{{ $t("pages.apiPage.logs.columnPath") }}</TableHead>
-            <TableHead class="w-36">{{ $t("pages.apiPage.logs.columnKey") }}</TableHead>
-            <TableHead class="w-24 text-right">{{ $t("pages.apiPage.logs.columnDuration") }}</TableHead>
-            <TableHead class="w-20 text-right">{{ $t("pages.apiPage.logs.columnCode") }}</TableHead>
+      <table class="w-full table-fixed caption-bottom text-sm">
+        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+          <TableRow class="hover:bg-transparent">
+            <TableHead class="w-10">
+              <LogSelectCheckbox
+                :model-value="allPageSelected"
+                :indeterminate="somePageSelected"
+                @update:model-value="toggleSelectAll"
+              />
+            </TableHead>
+            <LogSortHeader
+              class="w-36"
+              column="createdAt"
+              :label="$t('components.logs.columnTime')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="method"
+              :label="$t('components.logs.columnMethod')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-auto"
+              column="path"
+              :label="$t('components.logs.columnPath')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-32"
+              column="key"
+              :label="$t('components.logs.columnKey')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-24"
+              column="durationMs"
+              align="right"
+              :label="$t('components.logs.columnDuration')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="statusCode"
+              align="right"
+              :label="$t('components.logs.columnStatus')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -260,27 +434,35 @@ export default {
             class="cursor-pointer hover:bg-muted/40"
             @click="openDetail(row)"
           >
-            <TableCell>
+            <TableCell class="overflow-hidden">
+              <LogSelectCheckbox
+                :model-value="isSelected(rowId(row))"
+                @update:model-value="(v) => toggleSelect(rowId(row), v)"
+              />
+            </TableCell>
+            <TableCell class="overflow-hidden">
               <LogDateCell :value="row.createdAt" :timezone="storeTimezone" />
             </TableCell>
-            <TableCell>
+            <TableCell class="overflow-hidden">
               <LogMethodCell :method="row.method" />
             </TableCell>
-            <TableCell class="max-w-0">
+            <TableCell class="max-w-0 overflow-hidden">
               <LogPathCell :path="row.path" />
             </TableCell>
-            <TableCell class="text-sm">
-              <code class="text-xs text-muted-foreground">{{ row.keyDisplayHint || "-" }}</code>
+            <TableCell class="overflow-hidden text-sm">
+              <code class="block truncate text-xs text-muted-foreground" :title="row.keyDisplayHint || ''">
+                {{ row.keyDisplayHint || "-" }}
+              </code>
             </TableCell>
-            <TableCell class="text-right text-sm text-muted-foreground tabular-nums">
+            <TableCell class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums">
               {{ $t("components.logs.durationMs", { ms: row.durationMs }) }}
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="overflow-hidden text-right">
               <LogStatusBadge :status-code="row.statusCode" />
             </TableCell>
           </TableRow>
         </TableBody>
-      </Table>
+      </table>
     </LogListPanel>
 
     <LogExchangeDetail

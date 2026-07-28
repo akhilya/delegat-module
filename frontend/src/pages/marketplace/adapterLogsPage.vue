@@ -2,7 +2,6 @@
 import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -23,24 +22,30 @@ import {
   LogExchangeDetail,
   LogCodeBlock,
   LogMetaGrid,
+  LogSelectCheckbox,
+  LogSortHeader,
   LOG_FILTER_ALL,
   formatLogDate as formatLogDateRaw,
+  downloadJsonFile,
+  mapPool,
+  stampFilename,
+  cycleLogSort,
+  LOG_SORT_DEFAULT,
 } from "@/components/logs";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
+  displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
+import { confirm } from "@/composables/useConfirm";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { ScrollText } from "lucide-vue-next";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PAGE_SETTINGS } from "@/router";
 
 export default {
   components: {
     PageHeader,
     Input,
-    Table,
     TableBody,
     TableCell,
     TableHead,
@@ -59,9 +64,9 @@ export default {
     LogExchangeDetail,
     LogCodeBlock,
     LogMetaGrid,
+    LogSelectCheckbox,
+    LogSortHeader,
     ScrollText,
-    Alert,
-    AlertDescription,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -70,7 +75,6 @@ export default {
   },
   data() {
     return {
-      PAGE_SETTINGS,
       items: [],
       total: 0,
       errorCount: 0,
@@ -79,6 +83,11 @@ export default {
       detailOpen: false,
       detail: null,
       connections: [],
+      selectedIds: [],
+      downloading: false,
+      deleting: false,
+      sortBy: LOG_SORT_DEFAULT.sortBy,
+      sortDir: LOG_SORT_DEFAULT.sortDir,
       filters: {
         connectionId: LOG_FILTER_ALL,
         adapterKey: LOG_FILTER_ALL,
@@ -110,6 +119,15 @@ export default {
     hasMore() {
       return this.filters.offset + this.items.length < this.total;
     },
+    pageIds() {
+      return this.items.map((r) => r.id ?? r.Id).filter((id) => id != null);
+    },
+    allPageSelected() {
+      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+    },
+    somePageSelected() {
+      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+    },
     detailMeta() {
       if (!this.detail) return [];
       return [
@@ -130,10 +148,42 @@ export default {
     ...mapActions([
       "getAdapterHttpLogs",
       "getAdapterHttpLogDetail",
+      "deleteAdapterHttpLogs",
       "getConnections",
     ]),
     formatLogDate(value) {
       return formatLogDateRaw(value, this.storeTimezone);
+    },
+
+    rowId(row) {
+      return row.id ?? row.Id;
+    },
+
+    isSelected(id) {
+      return this.selectedIds.includes(id);
+    },
+
+    clearSelection() {
+      this.selectedIds = [];
+    },
+
+    toggleSelect(id, checked) {
+      if (checked === true) {
+        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+      } else {
+        this.selectedIds = this.selectedIds.filter((x) => x !== id);
+      }
+    },
+
+    toggleSelectAll(checked) {
+      if (checked === true) {
+        const set = new Set(this.selectedIds);
+        this.pageIds.forEach((id) => set.add(id));
+        this.selectedIds = [...set];
+      } else {
+        const page = new Set(this.pageIds);
+        this.selectedIds = this.selectedIds.filter((id) => !page.has(id));
+      }
     },
 
     async fetchConnections() {
@@ -155,14 +205,26 @@ export default {
         method: f.method === LOG_FILTER_ALL ? undefined : f.method,
         statusClass: f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
         q: f.q || undefined,
+        sortBy: this.sortBy,
+        sortDir: this.sortDir,
         limit: f.limit,
         offset: f.offset,
       };
     },
 
+    toggleSort(column) {
+      const next = cycleLogSort(this.sortBy, this.sortDir, column);
+      this.sortBy = next.sortBy;
+      this.sortDir = next.sortDir;
+      this.refresh();
+    },
+
     async fetchLogs({ append = false } = {}) {
       this.isLoading = true;
-      if (!append) this.filters.offset = 0;
+      if (!append) {
+        this.filters.offset = 0;
+        this.clearSelection();
+      }
       await this.getAdapterHttpLogs({
         params: this.buildParams(),
         onSuccess: (response) => {
@@ -196,7 +258,7 @@ export default {
       this.detail = null;
       this.isDetailLoading = true;
       await this.getAdapterHttpLogDetail({
-        id: row.id ?? row.Id,
+        id: this.rowId(row),
         onSuccess: (response) => {
           this.detail = extractResponseData(response, null);
         },
@@ -217,6 +279,57 @@ export default {
         ? `${c.adapterKey} · ${c.name}`
         : c.adapterKey || `#${connectionId}`;
     },
+
+    async downloadSelected() {
+      if (this.selectedIds.length === 0) return;
+      this.downloading = true;
+      try {
+        const details = await mapPool(this.selectedIds, (id) =>
+          new Promise((resolve) => {
+            this.getAdapterHttpLogDetail({
+              id,
+              onSuccess: (response) => resolve(extractResponseData(response, null)),
+              onError: () => resolve(null),
+            });
+          }),
+        );
+        downloadJsonFile(details, stampFilename("logs-adapter"));
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.downloading = false;
+      }
+    },
+
+    async deleteSelected() {
+      if (this.selectedIds.length === 0) return;
+      const ok = await confirm({
+        title: this.$t("components.logs.deleteConfirmTitle"),
+        description: this.$t("components.logs.deleteConfirmDescription", {
+          count: this.selectedIds.length,
+        }),
+      });
+      if (!ok) return;
+
+      this.deleting = true;
+      const ids = [...this.selectedIds];
+      await this.deleteAdapterHttpLogs({
+        ids,
+        onSuccess: () => {
+          const removed = new Set(ids);
+          this.items = this.items.filter((r) => !removed.has(this.rowId(r)));
+          this.total = Math.max(0, this.total - ids.length);
+          if (this.detail && removed.has(this.detail.id ?? this.detail.Id)) {
+            this.detailOpen = false;
+            this.detail = null;
+          }
+          this.clearSelection();
+          displaySonnerSuccess(this.$t("components.logs.deleteSuccess"));
+        },
+        onError: (error) => displaySonnerError(error),
+      });
+      this.deleting = false;
+    },
   },
   async mounted() {
     await this.fetchConnections();
@@ -226,31 +339,23 @@ export default {
 </script>
 
 <template>
-  <div>
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
     <PageHeader
+      class="shrink-0"
       :title="$t('marketplace.adapterLogsPage.title')"
       :description="$t('marketplace.adapterLogsPage.description')"
     >
       <LogRefreshButton :loading="isLoading" @click="refresh" />
     </PageHeader>
 
-    <Alert class="mb-4">
-      <AlertDescription class="text-sm text-muted-foreground">
-        {{ $t("marketplace.adapterLogsPage.loggingHint") }}
-        <RouterLink :to="PAGE_SETTINGS" class="underline underline-offset-2 hover:text-foreground">
-          {{ $t("marketplace.adapterLogsPage.loggingHintLink") }}
-        </RouterLink>
-      </AlertDescription>
-    </Alert>
-
-    <LogToolbar :summary="summaryLabel" :summary-alert="errorCount > 0">
+    <LogToolbar class="mb-3 shrink-0" :summary="summaryLabel" :summary-alert="errorCount > 0">
       <LogFilterSelect
         :model-value="filters.connectionId"
         :all-value="LOG_FILTER_ALL"
         :all-label="$t('marketplace.adapterLogsPage.allConnections')"
         :placeholder="$t('marketplace.adapterLogsPage.connection')"
         :options="connectionOptions"
-        trigger-class="h-9 w-full sm:w-52"
+        trigger-class="h-9 w-full min-w-0 sm:w-52"
         @update:model-value="(v) => setFilter('connectionId', v)"
       />
 
@@ -260,7 +365,7 @@ export default {
         :all-label="$t('marketplace.adapterLogsPage.allAdapters')"
         :placeholder="$t('marketplace.adapterLogsPage.adapter')"
         :options="adapterKeyOptions"
-        trigger-class="h-9 w-full sm:w-40"
+        trigger-class="h-9 w-full min-w-0 sm:w-40"
         @update:model-value="(v) => setFilter('adapterKey', v)"
       />
 
@@ -278,34 +383,92 @@ export default {
 
       <Input
         v-model="filters.q"
-        class="h-9 w-full sm:max-w-xs"
+        class="h-9 w-full min-w-0 sm:max-w-xs"
         :placeholder="$t('marketplace.adapterLogsPage.searchByPath')"
         @keydown.enter="refresh"
       />
     </LogToolbar>
 
     <LogListPanel
+      class="min-h-0 flex-1"
       :loading="isLoading && items.length === 0"
       :empty="!isLoading && items.length === 0"
       :empty-icon="ScrollText"
       :empty-title="$t('marketplace.adapterLogsPage.emptyTitle')"
       :empty-description="$t('marketplace.adapterLogsPage.emptyDescription')"
-      :show-footer="items.length > 0"
+      :show-footer="items.length > 0 || selectedIds.length > 0"
       :footer-count="items.length"
       :footer-total="total"
       :has-more="hasMore"
       :more-loading="isLoading"
+      :selected-count="selectedIds.length"
+      :downloading="downloading"
+      :deleting="deleting"
       @load-more="loadMore"
+      @download="downloadSelected"
+      @delete="deleteSelected"
+      @clear-selection="clearSelection"
     >
-      <Table class="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-40">{{ $t("marketplace.adapterLogsPage.dateTime") }}</TableHead>
-            <TableHead class="w-20">{{ $t("marketplace.adapterLogsPage.method") }}</TableHead>
-            <TableHead class="min-w-0">{{ $t("marketplace.adapterLogsPage.resource") }}</TableHead>
-            <TableHead class="w-36">{{ $t("marketplace.adapterLogsPage.adapter") }}</TableHead>
-            <TableHead class="w-24 text-right">{{ $t("marketplace.adapterLogsPage.response") }}</TableHead>
-            <TableHead class="w-20 text-right">{{ $t("marketplace.adapterLogsPage.code") }}</TableHead>
+      <table class="w-full table-fixed caption-bottom text-sm">
+        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+          <TableRow class="hover:bg-transparent">
+            <TableHead class="w-10">
+              <LogSelectCheckbox
+                :model-value="allPageSelected"
+                :indeterminate="somePageSelected"
+                @update:model-value="toggleSelectAll"
+              />
+            </TableHead>
+            <LogSortHeader
+              class="w-36"
+              column="createdAt"
+              :label="$t('components.logs.columnTime')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="method"
+              :label="$t('components.logs.columnMethod')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-auto"
+              column="path"
+              :label="$t('components.logs.columnPath')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-32"
+              column="adapterKey"
+              :label="$t('components.logs.columnAdapter')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-24"
+              column="durationMs"
+              align="right"
+              :label="$t('components.logs.columnDuration')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
+            <LogSortHeader
+              class="w-20"
+              column="statusCode"
+              align="right"
+              :label="$t('components.logs.columnStatus')"
+              :sort-by="sortBy"
+              :sort-dir="sortDir"
+              @sort="toggleSort"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -315,29 +478,35 @@ export default {
             class="cursor-pointer hover:bg-muted/40"
             @click="openDetail(row)"
           >
-            <TableCell>
+            <TableCell class="overflow-hidden">
+              <LogSelectCheckbox
+                :model-value="isSelected(rowId(row))"
+                @update:model-value="(v) => toggleSelect(rowId(row), v)"
+              />
+            </TableCell>
+            <TableCell class="overflow-hidden">
               <LogDateCell :value="row.createdAt" :timezone="storeTimezone" />
             </TableCell>
-            <TableCell>
+            <TableCell class="overflow-hidden">
               <LogMethodCell :method="row.method" />
             </TableCell>
-            <TableCell class="max-w-0">
+            <TableCell class="max-w-0 overflow-hidden">
               <LogPathCell :path="row.path || row.url" />
             </TableCell>
-            <TableCell class="text-sm">
+            <TableCell class="overflow-hidden text-sm">
               <div class="truncate" :title="connectionLabel(row.connectionId)">
                 {{ row.adapterKey }}
               </div>
             </TableCell>
-            <TableCell class="text-right text-sm text-muted-foreground tabular-nums">
+            <TableCell class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums">
               {{ $t("components.logs.durationMs", { ms: row.durationMs }) }}
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="overflow-hidden text-right">
               <LogStatusBadge :status-code="row.statusCode" />
             </TableCell>
           </TableRow>
         </TableBody>
-      </Table>
+      </table>
     </LogListPanel>
 
     <LogExchangeDetail

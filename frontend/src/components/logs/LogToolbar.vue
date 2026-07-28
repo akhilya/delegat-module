@@ -16,7 +16,7 @@ defineProps({
   <div
     :class="
       cn(
-        'mb-4 flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center',
+        'mb-0 flex min-w-0 w-full flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center shrink-0',
         $props.class,
       )
     "
@@ -27,7 +27,7 @@ defineProps({
     <Badge
       v-if="summary"
       :variant="summaryAlert ? 'destructive' : 'secondary'"
-      class="h-8 shrink-0 gap-1.5 px-3"
+      class="h-8 w-fit shrink-0 gap-1.5 px-3"
     >
       <Activity v-if="summaryAlert" class="size-3.5" />
       <Check v-else class="size-3.5" />

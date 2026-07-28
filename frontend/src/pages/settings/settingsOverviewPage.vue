@@ -17,25 +17,27 @@ const loggingLoading = ref(true);
 const loggingSaving = ref(false);
 const publicApiLoading = ref(true);
 const publicApiSaving = ref(false);
+/** Mount switches only after both fetches so they never animate into the saved state. */
+const settingsLoaded = ref(false);
 
 const savedLogging = reactive({
-  logErrorsEnabled: true,
+  logErrorsEnabled: false,
   logApiRequestsEnabled: false,
   logAdapterHttpEnabled: false,
 });
 
 const logging = reactive({
-  logErrorsEnabled: true,
+  logErrorsEnabled: false,
   logApiRequestsEnabled: false,
   logAdapterHttpEnabled: false,
 });
 
 const savedPublicApi = reactive({
-  publicApiEnabled: true,
+  publicApiEnabled: false,
 });
 
 const publicApi = reactive({
-  publicApiEnabled: true,
+  publicApiEnabled: false,
 });
 
 const loggingDirty = computed(
@@ -212,6 +214,7 @@ async function savePublicApiSettings() {
 
 onMounted(async () => {
   await Promise.all([loadPublicApiSettings(), loadLoggingSettings()]);
+  settingsLoaded.value = true;
 });
 </script>
 
@@ -230,15 +233,21 @@ onMounted(async () => {
             <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.publicApiEnabledHint") }}</div>
           </div>
           <Switch
+            v-if="settingsLoaded"
             :model-value="publicApi.publicApiEnabled"
             :disabled="publicApiLoading || publicApiSaving"
             @update:model-value="(v) => (publicApi.publicApiEnabled = v)"
+          />
+          <div
+            v-else
+            class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
+            aria-hidden="true"
           />
         </div>
 
         <div class="mt-4 flex justify-end">
           <Button
-            :disabled="publicApiLoading || publicApiSaving || !publicApiDirty"
+            :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
             @click="savePublicApiSettings"
           >
             <Loader2 v-if="publicApiSaving" class="mr-2 size-4 animate-spin" />
@@ -258,9 +267,15 @@ onMounted(async () => {
               <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.logErrorsHint") }}</div>
             </div>
             <Switch
+              v-if="settingsLoaded"
               :model-value="logging.logErrorsEnabled"
               :disabled="loggingLoading || loggingSaving"
               @update:model-value="(v) => (logging.logErrorsEnabled = v)"
+            />
+            <div
+              v-else
+              class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
+              aria-hidden="true"
             />
           </div>
           <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
@@ -275,9 +290,15 @@ onMounted(async () => {
               </div>
             </div>
             <Switch
+              v-if="settingsLoaded"
               :model-value="logging.logApiRequestsEnabled"
               :disabled="apiLoggingDisabled"
               @update:model-value="(v) => (logging.logApiRequestsEnabled = v)"
+            />
+            <div
+              v-else
+              class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
+              aria-hidden="true"
             />
           </div>
           <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
@@ -286,16 +307,22 @@ onMounted(async () => {
               <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.logAdapterHttpHint") }}</div>
             </div>
             <Switch
+              v-if="settingsLoaded"
               :model-value="logging.logAdapterHttpEnabled"
               :disabled="loggingLoading || loggingSaving"
               @update:model-value="(v) => (logging.logAdapterHttpEnabled = v)"
+            />
+            <div
+              v-else
+              class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
+              aria-hidden="true"
             />
           </div>
         </div>
 
         <div class="mt-4 flex justify-end">
           <Button
-            :disabled="loggingLoading || loggingSaving || !loggingDirty"
+            :disabled="!settingsLoaded || loggingLoading || loggingSaving || !loggingDirty"
             @click="saveLoggingSettings"
           >
             <Loader2 v-if="loggingSaving" class="mr-2 size-4 animate-spin" />

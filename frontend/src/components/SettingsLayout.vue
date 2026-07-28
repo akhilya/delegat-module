@@ -9,6 +9,11 @@ import { PAGE_SETTINGS, PAGE_SETTINGS_USER } from "@/router";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
+
+defineProps({
+  class: { type: null, required: false },
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -54,8 +59,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col">
-    <Breadcrumbs :items="breadcrumbs" />
-    <slot />
+  <div :class="cn('flex min-h-0 flex-1 flex-col overflow-hidden', $props.class)">
+    <Breadcrumbs class="shrink-0" :items="breadcrumbs" />
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <slot />
+    </div>
   </div>
 </template>
