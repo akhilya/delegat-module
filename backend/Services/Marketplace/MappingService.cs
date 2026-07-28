@@ -157,6 +157,10 @@ public class MappingService
             }
         }
 
+        var imageStoragePaths = GetProductImageStoragePaths(product);
+        if (imageStoragePaths.Count > 0)
+            result["_imageStoragePaths"] = imageStoragePaths;
+
         result["_fieldTypes"] = eval.FieldTypes;
         result["_fieldLabels"] = SchemaFields(categoryMapping.graphJson)
             .Where(f => !string.IsNullOrWhiteSpace(f.fieldKey))
@@ -869,6 +873,26 @@ public class MappingService
         }
 
         return urls;
+    }
+
+    /// <summary>
+    /// MinIO object keys for product images (host blob reader / Woo ZIP path).
+    /// </summary>
+    private static List<string> GetProductImageStoragePaths(Product product)
+    {
+        var paths = new List<string>();
+        if (product.images == null || !product.images.Any())
+            return paths;
+
+        foreach (var imageRef in product.images.OrderBy(i => i.index))
+        {
+            var file = imageRef.file ?? product.files?.FirstOrDefault(f => f.Id == imageRef.fileId);
+            if (file == null || string.IsNullOrWhiteSpace(file.filePath))
+                continue;
+            paths.Add(file.filePath);
+        }
+
+        return paths;
     }
 
     /// <summary>

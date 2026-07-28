@@ -16,7 +16,7 @@ Also vendored in the PRINTO store repo for Dokploy image builds:
 ../printo-store/wp-content/plugins/delegat-bridge
 ```
 
-Requires **bridge ≥ 1.2.0** for archive image transfer (`images.import_archive`).
+Requires **bridge ≥ 1.2.1** for archive image transfer (`images.import_archive`) with zip-bomb guards.
 
 ## Connection credentials
 
@@ -26,13 +26,17 @@ Requires **bridge ≥ 1.2.0** for archive image transfer (`images.import_archive
 
 ## Image transfer (no mapping changes)
 
-Mappings still export image URLs (presigned MinIO). The Woo adapter:
+Mappings still export image URLs (presigned MinIO) for adapters that need them. For Woo ZIP import the host also passes `_imageStoragePaths` (MinIO object keys). The Woo adapter:
 
 1. Upserts products **without** `image_urls` (avoids slow WP→MinIO URL drain).
-2. Downloads images itself (parallel), packs ZIP chunks (**≤ 48 MB** each; store PHP upload limit is 64M).
-3. `POST /images/import-archive` — bridge attaches files and schedules thumbnail regen via Action Scheduler (GD resize is **not** on the export hot path).
+2. Reads image bytes via host `IMediaBlobReader` (internal MinIO) — **not** by re-downloading public URLs. Falls back to HTTP only when storage paths / reader are missing.
+3. Packs ZIP chunks (**≤ 48 MB** each; per-file **≤ 16 MB**; max **30** images/product; image extensions only). Store PHP upload limit is 64M.
+4. Reads from storage **in parallel** with `products/bulk`.
+5. `POST /images/import-archive` — bridge attaches files and schedules thumbnail regen via Action Scheduler (GD resize is **not** on the export hot path).
 
 ZIP layout: `manifest.json` + `products/{local_product_id}/{index}.ext`.
+
+Bridge `import-archive` rejects zip bombs: max upload 64 MiB, ≤500 entries, ≤16 MiB/entry, ≤64 MiB total uncompressed, path traversal / nested `.zip` blocked.
 
 If the bridge returns 404/405 for `import-archive`, the adapter falls back to the legacy URL-queue + `images/drain` path.
 

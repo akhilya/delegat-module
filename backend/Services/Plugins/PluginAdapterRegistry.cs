@@ -16,6 +16,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
     private readonly EncryptionService? _encryptionService;
     private readonly IAdapterHttpLogger? _httpLogger;
     private readonly IMarketplaceMetadataCache? _metadataCache;
+    private readonly IMediaBlobReader? _mediaBlobReader;
     private readonly Dictionary<string, PluginAdapterWrapper> _wrapperCache = new();
     private readonly object _cacheLock = new();
 
@@ -24,13 +25,15 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
         ILoggerFactory loggerFactory,
         EncryptionService? encryptionService = null,
         IAdapterHttpLogger? httpLogger = null,
-        IMarketplaceMetadataCache? metadataCache = null)
+        IMarketplaceMetadataCache? metadataCache = null,
+        IMediaBlobReader? mediaBlobReader = null)
     {
         _pluginManager = pluginManager;
         _loggerFactory = loggerFactory;
         _encryptionService = encryptionService;
         _httpLogger = httpLogger;
         _metadataCache = metadataCache;
+        _mediaBlobReader = mediaBlobReader;
     }
 
     public IReadOnlyList<IMarketplaceAdapter> GetAll()
@@ -99,7 +102,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
             }
 
             var wrapper = new PluginAdapterWrapper(
-                currentPlugin, _loggerFactory, _encryptionService, _httpLogger, _metadataCache);
+                currentPlugin, _loggerFactory, _encryptionService, _httpLogger, _metadataCache, _mediaBlobReader);
             _wrapperCache[key] = wrapper;
             return wrapper;
         }

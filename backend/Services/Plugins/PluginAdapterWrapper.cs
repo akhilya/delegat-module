@@ -20,19 +20,22 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     private readonly EncryptionService? _encryptionService;
     private readonly IAdapterHttpLogger? _httpLogger;
     private readonly IMarketplaceMetadataCache? _metadataCache;
+    private readonly IMediaBlobReader? _mediaBlobReader;
 
     public PluginAdapterWrapper(
         IMarketplacePlugin plugin,
         ILoggerFactory loggerFactory,
         EncryptionService? encryptionService = null,
         IAdapterHttpLogger? httpLogger = null,
-        IMarketplaceMetadataCache? metadataCache = null)
+        IMarketplaceMetadataCache? metadataCache = null,
+        IMediaBlobReader? mediaBlobReader = null)
     {
         _plugin = plugin;
         _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
         _encryptionService = encryptionService;
         _httpLogger = httpLogger;
         _metadataCache = metadataCache;
+        _mediaBlobReader = mediaBlobReader;
     }
 
     #region Metadata
@@ -724,7 +727,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             Settings = settings,
             Logger = _logger,
             HttpLogger = _httpLogger,
-            MetadataCache = _metadataCache
+            MetadataCache = _metadataCache,
+            MediaBlobReader = _mediaBlobReader
         };
     }
 

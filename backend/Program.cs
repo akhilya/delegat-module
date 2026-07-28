@@ -233,6 +233,9 @@ builder.Services.AddSingleton<IMarketplaceMetadataCache, MarketplaceMetadataCach
 // Plugin Manager (manages loading/unloading of DLL plugins)
 builder.Services.AddSingleton<PluginManager>();
 
+// Host storage reader for marketplace plugins (Woo ZIP images, etc.)
+builder.Services.AddSingleton<IMediaBlobReader, StorageMediaBlobReader>();
+
 // Plugin Adapter Registry (implements IMarketplaceAdapterRegistry using plugins)
 builder.Services.AddSingleton<PluginAdapterRegistry>();
 builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredService<PluginAdapterRegistry>());
