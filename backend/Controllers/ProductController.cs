@@ -79,7 +79,7 @@ public class ProductController : ControllerBase
     {
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 12;
-        if (pageSize > 100) pageSize = 100;
+        if (pageSize > 250) pageSize = 250;
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -855,6 +855,7 @@ public class ProductController : ControllerBase
     {
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 25;
+        if (pageSize > 250) pageSize = 250;
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)

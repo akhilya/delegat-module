@@ -39,6 +39,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Product list page size 250 returns 250 items (API was capping at 100); next/last page controls no longer advance past the last page
 - Category mapping and import only allow terminal (leaf) marketplace categories with fields; parent/folder ids (e.g. Ozon without `desc:type`) no longer create empty mappings
 - Settings overview toggles no longer animate from off→on while loading saved Public API / logging flags
 - Operation duration no longer inflated by ~timezone offset (UTC timestamps without `Z` were parsed as local time in the operations panel)

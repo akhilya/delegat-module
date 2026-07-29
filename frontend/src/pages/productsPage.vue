@@ -221,6 +221,9 @@ export default {
               this.selectedProductsMap[p.id] = p;
             }
           }
+          if (this.page > this.lastPossiblePage) {
+            this.page = this.lastPossiblePage;
+          }
         },
         onError: (error) => {
           if (generation !== this.fetchGeneration) return;
@@ -358,6 +361,9 @@ export default {
           this.trashProducts = response.data.value.items;
           this.trashLastPage = response.data.value.lastPage;
           this.trashTotalCount = response.data.value.totalCount;
+          if (this.trashPage > this.trashLastPossiblePage) {
+            this.trashPage = this.trashLastPossiblePage;
+          }
         },
         onError: (error) => displaySonnerError(error),
       });
@@ -731,7 +737,9 @@ export default {
         return this.trashStartIndex / this.pageSize + 1;
       },
       set(value) {
-        this.trashStartIndex = (value - 1) * this.pageSize;
+        const max = this.trashLastPossiblePage;
+        const next = Math.min(Math.max(1, Number(value) || 1), max);
+        this.trashStartIndex = (next - 1) * this.pageSize;
       },
     },
     trashLastPossiblePage() {
@@ -742,10 +750,12 @@ export default {
         return this.startIndex / this.pageSize + 1;
       },
       set(value) {
+        const max = this.lastPossiblePage;
+        const next = Math.min(Math.max(1, Number(value) || 1), max);
         this.$router.replace({
-          query: { ...this.$route.query, page: value },
+          query: { ...this.$route.query, page: next },
         });
-        this.startIndex = (value - 1) * this.pageSize;
+        this.startIndex = (next - 1) * this.pageSize;
       },
     },
     // Selected products
@@ -997,12 +1007,12 @@ export default {
             <ChevronLeft class="size-4" />
           </Button>
           <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="isTrashMode ? trashLastPage : lastPage"
+            :disabled="(isTrashMode ? trashPage : page) >= (isTrashMode ? trashLastPossiblePage : lastPossiblePage)"
             @click="isTrashMode ? trashPage++ : page++">
             <ChevronRight class="size-4" />
           </Button>
           <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="isTrashMode ? trashLastPage : lastPage"
+            :disabled="(isTrashMode ? trashPage : page) >= (isTrashMode ? trashLastPossiblePage : lastPossiblePage)"
             @click="isTrashMode ? (trashPage = trashLastPossiblePage) : (page = lastPossiblePage)">
             <ChevronsRight class="size-4" />
           </Button>
