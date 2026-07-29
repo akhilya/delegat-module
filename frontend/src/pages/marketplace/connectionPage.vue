@@ -5,6 +5,7 @@ import PageSection from "@/components/pageSection.vue";
 import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -143,6 +144,7 @@ export default {
     Input,
     Label,
     Badge,
+    ButtonGroup,
     Checkbox,
     EmptyState,
     Plus,
@@ -2767,8 +2769,27 @@ export default {
       if (price === null || price === undefined) return this.$t("common.emDash");
       return formatMoney(price, this.storeBaseCurrency);
     },
+
+    onSettingsHotkey(e) {
+      if (this.activeTab !== "settings") return;
+      const t = e.target;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyS") {
+        e.preventDefault();
+        if (!this.isSaving) this.handleSave();
+      }
+    },
   },
   mounted() {
+    window.addEventListener("keydown", this.onSettingsHotkey);
     this.fetchData();
 
     // Handle query params
@@ -2841,6 +2862,7 @@ export default {
     }
   },
   beforeUnmount() {
+    window.removeEventListener("keydown", this.onSettingsHotkey);
     this.stopLimitsAutoRefresh();
     this.$store.commit("aiChat/clearPageContext");
   },
@@ -2891,50 +2913,51 @@ export default {
             </p>
           </div>
           <div v-if="activeTab === 'settings'" class="flex flex-wrap gap-2 shrink-0">
-            <Button @click="handleSave" :disabled="isSaving">
-              <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-              <Save v-else class="size-4 mr-2" />
-              {{ $t("common.save") }}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  :aria-label="$t('marketplace.connectionPage.header.moreActions')"
-                >
-                  <EllipsisVertical class="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem :disabled="isTesting" @click="handleTest">
-                  <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
-                  <TestTube v-else class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.header.test") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  :disabled="isVerifyingLinks"
-                  @click="handleVerifyLinks"
-                >
-                  <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
-                  <SearchCheck v-else class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.header.verifyLinks") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  :disabled="limitsData != null && limitsData.supported === false"
-                  @click="showLimitsDialog = true"
-                >
-                  <Activity class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.limits.title") }}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
-                  <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
-                  <Trash2 v-else class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.header.clearCache") }}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ButtonGroup>
+              <Button @click="handleSave" :disabled="isSaving">
+                <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+                <Save v-else class="size-4 mr-2" />
+                {{ $t("common.save") }}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    size="icon"
+                    :aria-label="$t('marketplace.connectionPage.header.moreActions')"
+                  >
+                    <EllipsisVertical class="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-56">
+                  <DropdownMenuItem :disabled="isTesting" @click="handleTest">
+                    <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
+                    <TestTube v-else class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.header.test") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    :disabled="isVerifyingLinks"
+                    @click="handleVerifyLinks"
+                  >
+                    <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
+                    <SearchCheck v-else class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.header.verifyLinks") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    :disabled="limitsData != null && limitsData.supported === false"
+                    @click="showLimitsDialog = true"
+                  >
+                    <Activity class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.limits.title") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
+                    <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
+                    <Trash2 v-else class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.header.clearCache") }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
             <Dialog v-model:open="showLimitsDialog">
                     <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
@@ -3643,7 +3666,7 @@ export default {
                         {{ mapping.name || $t("common.emDash") }}
                       </TableCell>
                       <TableCell class="text-right tabular-nums text-muted-foreground">
-                        {{ mapping.linkedProductsCount || 0 }}
+                        {{ mapping.productsCount ?? mapping.linkedProductsCount ?? 0 }}
                       </TableCell>
                       <TableCell class="px-2">
                         <DropdownMenu>

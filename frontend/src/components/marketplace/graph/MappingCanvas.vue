@@ -14,13 +14,45 @@ import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import Badge from "@/components/ui/badge/Badge.vue";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import HelperLinesOverlay from "./HelperLinesOverlay.vue";
+import { applyHelperLineChanges } from "./helperLines.js";
 import {
   Save,
   AlertTriangle,
   EyeOff,
   Loader2,
   Activity,
+  ChevronDown,
+  Download,
+  LayoutGrid,
+  RefreshCw,
+  Upload,
 } from "lucide-vue-next";
 import {
   SplitterGroup,
@@ -91,12 +123,14 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   previewProductId: { type: [Number, String], default: null },
   previewProducts: { type: Array, default: () => [] },
+  previewProductsLoading: { type: Boolean, default: false },
 });
 const emit = defineEmits([
   "preview-result",
   "clear-preview",
   "select-preview",
   "fields-synced",
+  "search-preview",
 ]);
 
 const store = useStore();
@@ -116,6 +150,8 @@ const {
   updateNodeInternals,
   toObject,
   fitView,
+  zoomIn,
+  zoomOut,
   onNodeClick,
   onPaneClick,
   onNodesChange,
@@ -134,6 +170,15 @@ const flowPaneReady = ref(false);
 let pendingLoadOptions = null;
 let loadGeneration = 0;
 let previewGeneration = 0;
+
+/** Snap node moves to a fixed grid (toggle in bottom-left Controls). */
+const snapToGrid = ref(false);
+const SNAP_GRID = [16, 16];
+/** Alignment guidelines while dragging (toggle in bottom-left Controls). */
+const showGuidelines = ref(true);
+const helperLineHorizontal = ref(undefined);
+const helperLineVertical = ref(undefined);
+const showAutoArrangeConfirm = ref(false);
 
 const loading = ref(true);
 const saving = ref(false);
@@ -1083,6 +1128,22 @@ watch(
 // to avoid a feedback loop with preview's own updateNodeData() calls.
 onNodesChange((changes) => {
   const cs = changes || [];
+
+  if (showGuidelines.value) {
+    const lines = applyHelperLineChanges(cs, nodes.value, true);
+    helperLineHorizontal.value = lines.horizontal;
+    helperLineVertical.value = lines.vertical;
+  } else {
+    helperLineHorizontal.value = undefined;
+    helperLineVertical.value = undefined;
+  }
+
+  // Clear guidelines when drag ends.
+  if (cs.some((c) => c.type === "position" && c.dragging === false)) {
+    helperLineHorizontal.value = undefined;
+    helperLineVertical.value = undefined;
+  }
+
   const structural = cs.some((c) => c.type === "remove" || c.type === "add");
   if (structural) {
     refreshAnalysis();
@@ -1324,14 +1385,10 @@ async function syncAdapterFieldSchema() {
   }
 }
 
-defineExpose({
-  reload: requestLoad,
-  reloadAfterFieldSync: () => requestLoad({ preserveLayout: true }),
-  autoArrange,
-  syncAdapterFieldSchema,
-  exportMappingFile,
-  triggerImportFile,
-});
+function confirmAutoArrange() {
+  showAutoArrangeConfirm.value = false;
+  autoArrange();
+}
 
 // ---- Context menu (right-click / Tab) ----
 
@@ -1807,6 +1864,15 @@ function triggerImportFile() {
   importFileInput.value?.click();
 }
 
+defineExpose({
+  reload: requestLoad,
+  reloadAfterFieldSync: () => requestLoad({ preserveLayout: true }),
+  autoArrange,
+  syncAdapterFieldSchema,
+  exportMappingFile,
+  triggerImportFile,
+});
+
 async function importMappingFile(event) {
   const file = event.target?.files?.[0];
   if (event.target) event.target.value = "";
@@ -1868,17 +1934,63 @@ async function importMappingFile(event) {
       <div
         class="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border bg-card/95 p-1 shadow-sm backdrop-blur"
       >
-        <Button size="sm" :disabled="saving || errorCount > 0" @click="save">
-          <Loader2 v-if="saving" class="mr-1.5 size-4 animate-spin" />
-          <Save v-else class="mr-1.5 size-4" />
-          {{ t("marketplace.canvas.save") }}
-        </Button>
+        <DropdownMenu>
+          <ButtonGroup>
+            <DropdownMenuTrigger as-child>
+              <Button size="sm">
+                {{ t("marketplace.canvas.actions") }}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuTrigger as-child>
+              <Button
+                size="sm"
+                class="px-2"
+                :aria-label="t('marketplace.canvas.actions')"
+              >
+                <ChevronDown class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+          </ButtonGroup>
+          <DropdownMenuContent align="start" class="w-56">
+            <DropdownMenuItem
+              :disabled="saving || errorCount > 0"
+              @select="save"
+            >
+              <Loader2 v-if="saving" class="size-4 mr-2 animate-spin" />
+              <Save v-else class="size-4 mr-2" />
+              {{ t("marketplace.canvas.save") }}
+              <DropdownMenuShortcut :keys="['mod', 'S']" />
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @select="showAutoArrangeConfirm = true">
+              <LayoutGrid class="size-4 mr-2" />
+              {{ t("marketplace.fieldMappingPage.autoArrange") }}
+            </DropdownMenuItem>
+            <DropdownMenuItem :disabled="syncingFields" @select="syncAdapterFieldSchema">
+              <Loader2 v-if="syncingFields" class="size-4 mr-2 animate-spin" />
+              <RefreshCw v-else class="size-4 mr-2" />
+              {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @select="exportMappingFile">
+              <Download class="size-4 mr-2" />
+              {{ t("marketplace.fieldMappingPage.export") }}
+            </DropdownMenuItem>
+            <DropdownMenuItem @select="triggerImportFile">
+              <Upload class="size-4 mr-2" />
+              {{ t("marketplace.fieldMappingPage.import") }}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <span class="mx-0.5 h-5 w-px bg-border" />
         <SearchableSelect
-          class="w-64"
+          class="w-72"
+          remote
+          :loading="previewProductsLoading"
           :options="previewProducts"
           :model-value="previewProductId ? String(previewProductId) : ''"
           @update:modelValue="emit('select-preview', $event)"
+          @search="emit('search-preview', $event)"
           :placeholder="t('marketplace.canvas.previewPlaceholder')"
         />
         <span
@@ -1946,40 +2058,142 @@ async function importMappingFile(event) {
         :only-render-visible-elements="false"
         :elevate-edges-on-select="true"
         :is-valid-connection="isValidConnection"
+        :snap-to-grid="snapToGrid"
+        :snap-grid="SNAP_GRID"
         class="vf-canvas"
       >
-        <Background />
+        <Background
+          :variant="snapToGrid ? 'lines' : 'dots'"
+          :gap="snapToGrid ? SNAP_GRID[0] : 16"
+          :size="snapToGrid ? 1 : 1"
+          :line-width="1"
+          color="var(--vf-grid-color)"
+        />
+        <HelperLinesOverlay
+          v-if="showGuidelines"
+          :horizontal="helperLineHorizontal"
+          :vertical="helperLineVertical"
+        />
         <MiniMap pannable zoomable node-color="var(--muted-foreground)" mask-color="var(--muted)" />
-        <Controls :show-interactive="false">
-          <button
-            class="vue-flow__controls-button"
-            :title="animateWires ? t('marketplace.canvas.disableWireAnimation') : t('marketplace.canvas.enableWireAnimation')"
-            :style="animateWires ? {} : { opacity: 0.4 }"
-            @click="animateWires = !animateWires"
-          >
-            <Activity class="size-3.5" />
-          </button>
-          <template #control-fit-view>
-            <button
-              class="vue-flow__controls-button"
-              :title="maximized ? t('marketplace.canvas.collapse') : t('marketplace.canvas.fullscreen')"
-              @click="toggleMaximize"
-            >
-              <svg v-if="maximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
-                <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
-                <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
-                <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
-                <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
-                <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
-                <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
-              </svg>
-            </button>
-          </template>
-        </Controls>
+        <TooltipProvider :delay-duration="300">
+          <Controls position="bottom-left" :show-interactive="false">
+            <template #control-zoom-in>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    type="button"
+                    class="vue-flow__controls-button vue-flow__controls-zoomin"
+                    @click="zoomIn()"
+                  >
+                    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M32 18.133H18.133V32h-4.266V18.133H0v-4.266h13.867V0h4.266v13.867H32z" /></svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {{ t("marketplace.canvas.zoomIn") }}
+                </TooltipContent>
+              </Tooltip>
+            </template>
+            <template #control-zoom-out>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    type="button"
+                    class="vue-flow__controls-button vue-flow__controls-zoomout"
+                    @click="zoomOut()"
+                  >
+                    <svg viewBox="0 0 32 5" aria-hidden="true"><path d="M0 0h32v4.2H0z" /></svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {{ t("marketplace.canvas.zoomOut") }}
+                </TooltipContent>
+              </Tooltip>
+            </template>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="vue-flow__controls-button"
+                  type="button"
+                  :aria-pressed="snapToGrid"
+                  :style="snapToGrid ? {} : { opacity: 0.4 }"
+                  @click="snapToGrid = !snapToGrid"
+                >
+                  <!-- Snap-to-grid: cell grid + block on an intersection -->
+                  <svg class="vf-ctrl-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="vf-ctrl-icon__soft" d="M4 9h16M4 15h16M9 4v16M15 4v16" />
+                    <rect class="vf-ctrl-icon__solid" x="9" y="9" width="6" height="6" rx="1" />
+                  </svg>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {{ snapToGrid ? t("marketplace.canvas.disableSnapToGrid") : t("marketplace.canvas.enableSnapToGrid") }}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="vue-flow__controls-button"
+                  type="button"
+                  :aria-pressed="showGuidelines"
+                  :style="showGuidelines ? {} : { opacity: 0.4 }"
+                  @click="showGuidelines = !showGuidelines"
+                >
+                  <!-- Alignment guides: two blocks + shared center guide -->
+                  <svg class="vf-ctrl-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="vf-ctrl-icon__soft vf-ctrl-icon__dash" d="M12 3v18" />
+                    <rect x="4" y="6" width="7" height="5" rx="1" />
+                    <rect x="13" y="13" width="7" height="5" rx="1" />
+                  </svg>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {{ showGuidelines ? t("marketplace.canvas.disableGuidelines") : t("marketplace.canvas.enableGuidelines") }}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="vue-flow__controls-button"
+                  type="button"
+                  :style="animateWires ? {} : { opacity: 0.4 }"
+                  @click="animateWires = !animateWires"
+                >
+                  <Activity class="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {{ animateWires ? t("marketplace.canvas.disableWireAnimation") : t("marketplace.canvas.enableWireAnimation") }}
+              </TooltipContent>
+            </Tooltip>
+            <template #control-fit-view>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    class="vue-flow__controls-button"
+                    type="button"
+                    @click="toggleMaximize"
+                  >
+                    <svg v-if="maximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+                      <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                      <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+                      <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                      <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {{ maximized ? t("marketplace.canvas.collapse") : t("marketplace.canvas.fullscreen") }}
+                </TooltipContent>
+              </Tooltip>
+            </template>
+          </Controls>
+        </TooltipProvider>
 
         <template #edge-vf-import="p"><ImportableEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
         <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
@@ -2081,6 +2295,29 @@ async function importMappingFile(event) {
       </SplitterPanel>
     </template>
   </SplitterGroup>
+
+  <AlertDialog
+    :open="showAutoArrangeConfirm"
+    @update:open="showAutoArrangeConfirm = $event"
+  >
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{{ t("marketplace.fieldMappingPage.rearrangeBlocksTitle") }}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {{ t("marketplace.fieldMappingPage.rearrangeBlocksDescription") }}
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
+        <AlertDialogAction
+          class="bg-primary text-primary-foreground hover:bg-primary/90"
+          @click="confirmAutoArrange"
+        >
+          {{ t("marketplace.fieldMappingPage.rearrange") }}
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>
 
 <!-- Global (non-scoped) styles: node cards render into the Vue Flow tree via slots, so scoped
@@ -2089,6 +2326,12 @@ async function importMappingFile(event) {
 .vf-canvas {
   height: 100%;
   width: 100%;
+  /* Soft grid / guide strokes — keep below node chrome contrast */
+  --vf-grid-color: var(--border);
+  --vf-helper-line: var(--muted-foreground);
+}
+.vf-canvas .vue-flow__background {
+  opacity: 0.55;
 }
 
 /* Let a drag that starts over a wire pan the canvas: disable only the wide invisible interaction
@@ -2410,6 +2653,10 @@ async function importMappingFile(event) {
   display: flex;
   flex-direction: column;
 }
+/* Keep control buttons as flex children when wrapped in shadcn Tooltip */
+.vf-canvas .vue-flow__controls [data-slot="tooltip"] {
+  display: contents;
+}
 .vf-canvas .vue-flow__controls-button {
   background: var(--card);
   border: none;
@@ -2431,6 +2678,28 @@ async function importMappingFile(event) {
   height: 14px;
   max-height: 14px;
   fill: currentColor;
+}
+.vf-canvas .vue-flow__controls-button svg.lucide {
+  fill: none;
+  stroke: currentColor;
+}
+.vf-canvas .vue-flow__controls-button svg.vf-ctrl-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vf-canvas .vue-flow__controls-button svg.vf-ctrl-icon .vf-ctrl-icon__soft {
+  opacity: 0.45;
+}
+.vf-canvas .vue-flow__controls-button svg.vf-ctrl-icon .vf-ctrl-icon__dash {
+  stroke-dasharray: 2.5 2.5;
+}
+.vf-canvas .vue-flow__controls-button svg.vf-ctrl-icon .vf-ctrl-icon__solid {
+  fill: currentColor;
+  stroke: none;
+  opacity: 1;
 }
 /* Bottom two buttons: larger icons */
 .vf-canvas .vue-flow__controls-button:nth-last-child(-n+2) {

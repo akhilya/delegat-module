@@ -104,9 +104,7 @@ public class CategoryMappingController : ControllerBase
     {
         var connection = await GetConnectionAsync(connectionId);
 
-        var repo = _unitOfWork.Repository<CategoryMapping>();
-
-        var result = await repo.Query()
+        var mappings = await _context.categoryMappings.AsNoTracking()
             .Where(m => m.connectionId == connectionId)
             .Select(m => new
             {
@@ -117,12 +115,39 @@ public class CategoryMappingController : ControllerBase
                 externalCategoryId = m.externalCategoryId,
                 externalCategoryName = m.externalCategoryName,
                 graphJson = m.graphJson,
-                linkedProductsCount = _context.productMarketplaceLinks.Count(l => l.categoryMappingId == m.Id)
             })
             .ToListAsync();
 
-        // Field count now comes from the graph's adapter schema (parsed in memory, not in SQL).
-        var shaped = result.Select(m => new
+        var categoryIds = mappings.Select(m => m.localCategoryId).Distinct().ToList();
+        var mappingIds = mappings.Select(m => m.id).ToList();
+
+        // Products in the mapped local category (what the list column "Products" means).
+        var productsByCategory = categoryIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await _context.products.AsNoTracking()
+                .Where(p =>
+                    p.storeId == connection.storeId &&
+                    p.deletedAt == null &&
+                    p.categoryId != null &&
+                    categoryIds.Contains(p.categoryId.Value))
+                .GroupBy(p => p.categoryId!.Value)
+                .Select(g => new { CategoryId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CategoryId, x => x.Count);
+
+        // Synced marketplace links still using this mapping (delete / reassign impact).
+        var linkedByMapping = mappingIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await _context.productMarketplaceLinks.AsNoTracking()
+                .Where(l =>
+                    l.categoryMappingId != null &&
+                    mappingIds.Contains(l.categoryMappingId.Value) &&
+                    l.product.deletedAt == null)
+                .GroupBy(l => l.categoryMappingId!.Value)
+                .Select(g => new { MappingId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.MappingId, x => x.Count);
+
+        // Field count comes from the graph's adapter schema (parsed in memory, not in SQL).
+        var shaped = mappings.Select(m => new
         {
             m.id,
             m.name,
@@ -131,7 +156,8 @@ public class CategoryMappingController : ControllerBase
             m.externalCategoryId,
             m.externalCategoryName,
             fieldMappingsCount = MappingService.SchemaFields(m.graphJson).Count,
-            m.linkedProductsCount,
+            productsCount = productsByCategory.GetValueOrDefault(m.localCategoryId, 0),
+            linkedProductsCount = linkedByMapping.GetValueOrDefault(m.id, 0),
         });
 
         return Ok(shaped);

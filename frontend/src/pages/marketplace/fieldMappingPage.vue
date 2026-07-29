@@ -18,31 +18,9 @@ import {
 import { setPageTitle } from "@/router";
 import {
   ArrowLeft,
-  Download,
-  LayoutGrid,
   Loader2,
-  MoreVertical,
   Plus,
-  RefreshCw,
-  Upload,
 } from "lucide-vue-next";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
@@ -103,24 +81,6 @@ export default {
     SheetHeader,
     SheetTitle,
     SheetDescription,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    MoreVertical,
-    LayoutGrid,
-    RefreshCw,
-    Download,
-    Upload,
   },
   data() {
     return {
@@ -143,6 +103,9 @@ export default {
       // Preview
       previewProductId: null,
       previewProducts: [],
+      previewProductsLoading: false,
+      previewProductSearchTimer: null,
+      previewSelectedOption: null,
       previewData: {}, // keyed by externalFieldKey
       isLoadingPreview: false,
       previewDebounceTimer: null,
@@ -160,7 +123,6 @@ export default {
       // Preview summary sheet
       showPreviewSheet: false,
       previewVisualMode: false,
-      showAutoArrangeConfirm: false,
       // Mapping settings dialog
       showMappingSettings: false,
       settingsName: "",
@@ -275,6 +237,7 @@ export default {
       "getPriceFields",
       "previewFieldMappings",
       "getAllProducts",
+      "getProduct",
       "updateCategoryMapping",
       "getAttributeOptions",
     ]),
@@ -290,6 +253,7 @@ export default {
       ]);
       // fetchPreviewProducts needs localCategoryId from mappingInfo, so run after fetchFieldMappings
       await this.fetchPreviewProducts();
+      await this.ensureSelectedPreviewInOptions();
       this.isLoading = false;
     },
 
@@ -755,18 +719,74 @@ export default {
 
     // === Preview ===
 
-    async fetchPreviewProducts() {
+    mapPreviewProductOption(p) {
+      return {
+        value: String(p.id),
+        label: `${p.name || p.sku || this.$t("marketplace.fieldMappingPage.untitled")}${p.sku ? ` · ${p.sku}` : ""} (ID: ${p.id})`,
+      };
+    },
+
+    async fetchPreviewProducts(searchQuery = "") {
+      const requestId = (this._previewSearchRequestId =
+        (this._previewSearchRequestId || 0) + 1);
+      this.previewProductsLoading = true;
       await this.getAllProducts({
-        searchQuery: "",
+        searchQuery: searchQuery || "",
         startIndex: 0,
         pageSize: 50,
         categoryId: this.mappingInfo?.localCategoryId || null,
         onSuccess: (response) => {
+          if (requestId !== this._previewSearchRequestId) return;
           const data = extractResponseData(response, {});
-          this.previewProducts = (data.items || []).map((p) => ({
-            value: String(p.id),
-            label: `${p.name || p.sku || this.$t("marketplace.fieldMappingPage.untitled")} (ID: ${p.id})`,
-          }));
+          const items = (data.items || []).map((p) =>
+            this.mapPreviewProductOption(p),
+          );
+          const selected = this.previewSelectedOption;
+          if (
+            selected &&
+            !items.some((o) => o.value === selected.value)
+          ) {
+            this.previewProducts = [selected, ...items];
+          } else {
+            this.previewProducts = items;
+          }
+          this.previewProductsLoading = false;
+        },
+        onError: () => {
+          if (requestId !== this._previewSearchRequestId) return;
+          this.previewProductsLoading = false;
+        },
+      });
+    },
+
+    onPreviewProductSearch(query) {
+      if (this.previewProductSearchTimer) {
+        clearTimeout(this.previewProductSearchTimer);
+      }
+      this.previewProductSearchTimer = setTimeout(() => {
+        this.fetchPreviewProducts(query || "");
+      }, 250);
+    },
+
+    async ensureSelectedPreviewInOptions() {
+      if (!this.previewProductId) return;
+      const id = String(this.previewProductId);
+      const existing = this.previewProducts.find((o) => o.value === id);
+      if (existing) {
+        this.previewSelectedOption = existing;
+        return;
+      }
+      await this.getProduct({
+        productId: this.previewProductId,
+        onSuccess: (response) => {
+          const p = extractResponseData(response, null);
+          if (!p?.id) return;
+          const opt = this.mapPreviewProductOption(p);
+          this.previewSelectedOption = opt;
+          this.previewProducts = [
+            opt,
+            ...this.previewProducts.filter((o) => o.value !== opt.value),
+          ];
         },
         onError: () => {},
       });
@@ -792,25 +812,16 @@ export default {
       await this.$refs.mappingCanvas?.reloadAfterFieldSync?.();
     },
 
-    onSyncAdapterFields() {
-      this.$refs.mappingCanvas?.syncAdapterFieldSchema?.();
-    },
-
-    onExportMapping() {
-      this.$refs.mappingCanvas?.exportMappingFile?.();
-    },
-
-    onImportMapping() {
-      this.$refs.mappingCanvas?.triggerImportFile?.();
-    },
-
-    confirmAutoArrange() {
-      this.showAutoArrangeConfirm = false;
-      this.$refs.mappingCanvas?.autoArrange?.();
-    },
-
     onPreviewProductChange(productId) {
       this.previewProductId = productId ? parseInt(productId) : null;
+      if (this.previewProductId) {
+        const found = this.previewProducts.find(
+          (o) => o.value === String(this.previewProductId),
+        );
+        if (found) this.previewSelectedOption = found;
+      } else {
+        this.previewSelectedOption = null;
+      }
       const query = { ...this.$route.query };
       if (this.previewProductId) {
         query.previewProduct = String(this.previewProductId);
@@ -1070,6 +1081,9 @@ export default {
     });
   },
   beforeUnmount() {
+    if (this.previewProductSearchTimer) {
+      clearTimeout(this.previewProductSearchTimer);
+    }
     this.$store.commit("aiChat/clearPageContext");
   },
 };
@@ -1081,62 +1095,7 @@ export default {
 
     <div class="mb-4 flex items-center gap-3">
       <Breadcrumbs :items="breadcrumbs" class="mb-0 min-w-0 flex-1" />
-
-      <DropdownMenu v-if="connectionId && mappingId && !isLoading">
-        <DropdownMenuTrigger as-child>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="size-8 shrink-0"
-            :aria-label="$t('marketplace.fieldMappingPage.moreActions')"
-          >
-            <MoreVertical class="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-56">
-          <DropdownMenuItem @select="showAutoArrangeConfirm = true">
-            <LayoutGrid class="size-4 mr-2" />
-            {{ $t("marketplace.fieldMappingPage.autoArrange") }}
-          </DropdownMenuItem>
-          <DropdownMenuItem @select="onSyncAdapterFields">
-            <RefreshCw class="size-4 mr-2" />
-            {{ $t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem @select="onExportMapping">
-            <Download class="size-4 mr-2" />
-            {{ $t("marketplace.fieldMappingPage.export") }}
-          </DropdownMenuItem>
-          <DropdownMenuItem @select="onImportMapping">
-            <Upload class="size-4 mr-2" />
-            {{ $t("marketplace.fieldMappingPage.import") }}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
-
-    <AlertDialog
-      :open="showAutoArrangeConfirm"
-      @update:open="showAutoArrangeConfirm = $event"
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ $t("marketplace.fieldMappingPage.rearrangeBlocksTitle") }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ $t("marketplace.fieldMappingPage.rearrangeBlocksDescription") }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-          <AlertDialogAction
-            class="bg-primary text-primary-foreground hover:bg-primary/90"
-            @click="confirmAutoArrange"
-          >
-            {{ $t("marketplace.fieldMappingPage.rearrange") }}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
 
     <PageSection :loading="isLoading">
       <template v-if="!isLoading">
@@ -1157,9 +1116,11 @@ export default {
             :available-sources="{ ...availableSources, storeFiles }"
             :preview-product-id="previewProductId"
             :preview-products="previewProducts"
+            :preview-products-loading="previewProductsLoading"
             @preview-result="onGraphPreview"
             @select-preview="onPreviewProductChange"
             @clear-preview="onPreviewProductChange(null)"
+            @search-preview="onPreviewProductSearch"
             @fields-synced="onFieldsSynced"
           />
         </div>

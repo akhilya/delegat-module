@@ -196,7 +196,8 @@
       "noOptions": "Нет доступных вариантов",
       "nothingFound": "Ничего не найдено",
       "moreResultsHint": "Показано {shown} из {total} результатов. Уточните запрос.",
-      "remainingOptionsHint": "Ещё {count} вариантов. Используйте поиск."
+      "remainingOptionsHint": "Ещё {count} вариантов. Используйте поиск.",
+      "searching": "Поиск…"
     },
     "settingsFormField": {
       "descriptionAriaLabel": "Описание: {label}"
@@ -916,9 +917,9 @@
       "invalidFileFormat": "Неверный формат файла",
       "importedFieldsCount": "Импортировано: {count} полей",
       "fileReadError": "Ошибка чтения файла",
-      "moreActions": "Дополнительные действия",
+      "moreActions": "Действия",
       "autoArrange": "Авторасстановка",
-      "checkFieldsUpToDate": "Проверить актуальность полей",
+      "checkFieldsUpToDate": "Обновить поля",
       "export": "Экспорт",
       "import": "Импорт",
       "rearrangeBlocksTitle": "Переставить блоки?",
@@ -1356,12 +1357,19 @@
     },
     "canvas": {
       "save": "Сохранить",
+      "actions": "Действие",
       "previewPlaceholder": "Товар для предпросмотра…",
       "previewing": "предпросмотр…",
       "resetPreview": "Сбросить",
       "resetPreviewTitle": "Сбросить товар предпросмотра",
       "disableWireAnimation": "Выключить анимацию проводов",
       "enableWireAnimation": "Включить анимацию проводов",
+      "enableSnapToGrid": "Привязка к сетке",
+      "disableSnapToGrid": "Свободное перемещение (без сетки)",
+      "enableGuidelines": "Направляющие выравнивания",
+      "disableGuidelines": "Скрыть направляющие",
+      "zoomIn": "Увеличить",
+      "zoomOut": "Уменьшить",
       "collapse": "Свернуть (F)",
       "fullscreen": "На весь экран (F)",
       "fieldsAnalysis": "Анализ полей",

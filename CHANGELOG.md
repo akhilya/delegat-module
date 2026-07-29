@@ -10,6 +10,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Mapping canvas: snap-to-grid and alignment guidelines toggles in the bottom-left controls
 - Mapping graph: Subtract modifier («Вычесть») for number/integer lanes
 - Adapter field modes in the inspector: Don't send / From graph / Bind… with a searchable source dialog (including “same as another adapter field”)
 - Product bulk edit runs as a background operation (`product-bulk-update`) with live progress and detailed logs in the operations panel
@@ -22,6 +23,13 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- Connection settings: Save + actions use a Button Group (Save keeps ⌘/Ctrl+S hotkey; Kbd shown only in menus)
+- Platform menus use shadcn `Kbd` / `MenuKbd` for shortcuts via `DropdownMenuShortcut` / `ContextMenuShortcut` `:keys` (not on buttons)
+- Mapping canvas: primary control is «Действие» / Action (Button Group); Save is the first menu item with Kbd shortcut
+- Mapping editor preview product picker searches the catalog dynamically (was capped at the first 50 with local-only filter)
+- Product bulk update persists in chunks of 50 (one DB round-trip per chunk) and logs progress summaries instead of one line per product
+- Product file manager context menu shows F2 / Del shortcuts with Kbd
+
 - `PATCH /products/bulk` queues the job and returns `{ queued, operationId, totalItems }` instead of applying updates synchronously
 - Export operation logs serialize marketplace error details as readable UTF-8 JSON (no `\uXXXX` escapes for Cyrillic)
 - Page shell (`Page`) fills at least the viewport (`min-h-svh`) but does not lock max-height or own the scroll — the main inset scrolls
@@ -44,6 +52,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Product edit: leaving with unsaved changes shows the discard confirmation dialog again (was blocked with no dialog)
+- Mappings list product count uses products in the local category (not only marketplace links)
 - Mapping canvas no longer freezes for ~1–2s after moving a block (undo history used `JSON.stringify` through Vue proxies on the full graph)
 - Product bulk edit: overwriting existing select/multiselect (and other) attribute values now persists — load was `AsNoTracking`, so in-place updates were silent no-ops
 - Dialog no longer dismisses when clicking portaled Select / MultiSelect / Popover menus (broke bulk-edit color and other choice fields)

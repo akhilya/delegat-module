@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/popover";
 import { Tag } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MenuKbd } from "@/components/ui/kbd";
 import { t } from "@/i18n";
 
 const props = defineProps({
@@ -1771,6 +1772,7 @@ watch(() => props.productId, () => {
             >
               <Pencil class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.renameAction") }}
+              <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
             <Button
@@ -1780,6 +1782,7 @@ watch(() => props.productId, () => {
             >
               <Trash2 class="size-4" />
               {{ t("common.delete") }}
+              <MenuKbd class="ml-auto" :keys="['del']" />
             </Button>
           </template>
 
@@ -1809,6 +1812,7 @@ watch(() => props.productId, () => {
             >
               <Pencil class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.renameAction") }}
+              <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
             <Button
@@ -1818,6 +1822,7 @@ watch(() => props.productId, () => {
             >
               <Trash2 class="size-4" />
               {{ t("common.delete") }}
+              <MenuKbd class="ml-auto" :keys="['del']" />
             </Button>
           </template>
 

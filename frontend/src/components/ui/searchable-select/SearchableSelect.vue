@@ -42,9 +42,18 @@ const props = defineProps({
     type: Number,
     default: 100, // Maximum options to display at once for performance
   },
+  /** When true, search is driven by the parent (emit `search`); local filter is skipped. */
+  remote: {
+    type: Boolean,
+    default: false,
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["update:modelValue", "open"]);
+const emit = defineEmits(["update:modelValue", "open", "search"]);
 
 const open = ref(false);
 const searchQuery = ref("");
@@ -56,13 +65,17 @@ watch(open, (isOpen) => {
     searchQuery.value = "";
   } else {
     emit("open");
+    if (props.remote) emit("search", "");
   }
-  if (isOpen && isLargeList.value) {
-    // Auto-focus search input for large lists
+  if (isOpen && (isLargeList.value || props.remote)) {
     nextTick(() => {
       searchInputRef.value?.focus();
     });
   }
+});
+
+watch(searchQuery, (query) => {
+  if (props.remote && open.value) emit("search", query);
 });
 
 // Check if this is a large list that needs special handling
@@ -70,10 +83,12 @@ const isLargeList = computed(
   () => props.options.length > props.maxDisplayOptions,
 );
 
-const showSearch = computed(() => props.options.length > props.searchThreshold);
+const showSearch = computed(
+  () => props.remote || props.options.length > props.searchThreshold,
+);
 
 const filteredOptions = computed(() => {
-  if (!searchQuery.value) {
+  if (props.remote || !searchQuery.value) {
     return props.options;
   }
   const query = searchQuery.value.toLowerCase();
@@ -87,7 +102,7 @@ const displayedOptions = computed(() => {
   const filtered = filteredOptions.value;
 
   // If large list and no search query, only show first N options
-  if (isLargeList.value && !searchQuery.value) {
+  if (!props.remote && isLargeList.value && !searchQuery.value) {
     return filtered.slice(0, props.maxDisplayOptions);
   }
 
@@ -97,6 +112,7 @@ const displayedOptions = computed(() => {
 
 // Show hint when there are more options than displayed
 const hasMoreOptions = computed(() => {
+  if (props.remote) return false;
   return filteredOptions.value.length > displayedOptions.value.length;
 });
 
@@ -163,7 +179,7 @@ const clearSelection = () => {
         :collision-padding="8"
         class="w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col"
       >
-        <!-- Search input (only shown if many options) -->
+        <!-- Search input (only shown if many options / remote) -->
         <div v-if="showSearch" class="p-2 border-b">
           <div class="relative">
             <Search
@@ -174,7 +190,7 @@ const clearSelection = () => {
               v-model="searchQuery"
               type="text"
               :placeholder="
-                isLargeList
+                remote || isLargeList
                   ? t('components.searchableSelect.searchPlaceholderLarge')
                   : t('components.searchableSelect.searchPlaceholder')
               "
@@ -182,28 +198,47 @@ const clearSelection = () => {
               @click.stop
             />
           </div>
-          <!-- Info for large lists without search -->
           <div
-            v-if="isLargeList && !searchQuery"
+            v-if="remote && loading"
             class="mt-1.5 text-xs text-muted-foreground"
           >
-            {{ t('components.searchableSelect.largeListHint', { count: options.length.toLocaleString() }) }}
+            {{ t("components.searchableSelect.searching") }}
+          </div>
+          <div
+            v-else-if="isLargeList && !searchQuery && !remote"
+            class="mt-1.5 text-xs text-muted-foreground"
+          >
+            {{
+              t("components.searchableSelect.largeListHint", {
+                count: options.length.toLocaleString(),
+              })
+            }}
           </div>
         </div>
 
         <!-- Options list -->
         <div class="overflow-auto flex-1">
           <div
-            v-if="options.length === 0"
+            v-if="loading && options.length === 0"
             class="p-3 text-sm text-muted-foreground text-center"
           >
-            {{ t('components.searchableSelect.noOptions') }}
+            {{ t("components.searchableSelect.searching") }}
+          </div>
+          <div
+            v-else-if="options.length === 0"
+            class="p-3 text-sm text-muted-foreground text-center"
+          >
+            {{
+              remote && searchQuery
+                ? t("components.searchableSelect.nothingFound")
+                : t("components.searchableSelect.noOptions")
+            }}
           </div>
           <div
             v-else-if="filteredOptions.length === 0"
             class="p-3 text-sm text-muted-foreground text-center"
           >
-            {{ t('components.searchableSelect.nothingFound') }}
+            {{ t("components.searchableSelect.nothingFound") }}
           </div>
           <div v-else class="p-1">
             <div
@@ -231,10 +266,19 @@ const clearSelection = () => {
               class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1"
             >
               <template v-if="searchQuery">
-                {{ t('components.searchableSelect.moreResultsHint', { shown: displayedOptions.length, total: filteredOptions.length }) }}
+                {{
+                  t("components.searchableSelect.moreResultsHint", {
+                    shown: displayedOptions.length,
+                    total: filteredOptions.length,
+                  })
+                }}
               </template>
               <template v-else>
-                {{ t('components.searchableSelect.remainingOptionsHint', { count: remainingCount.toLocaleString() }) }}
+                {{
+                  t("components.searchableSelect.remainingOptionsHint", {
+                    count: remainingCount.toLocaleString(),
+                  })
+                }}
               </template>
             </div>
           </div>

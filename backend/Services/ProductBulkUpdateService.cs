@@ -42,6 +42,9 @@ public sealed class ProductBulkUpdateResult
 /// </summary>
 public class ProductBulkUpdateService
 {
+    /// <summary>How many products to persist per SaveChanges round-trip.</summary>
+    private const int SaveChunkSize = 50;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -137,6 +140,22 @@ public class ProductBulkUpdateService
         var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
         var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
 
+        // Unique-attribute collision check once (multi-select already forbids unique attrs).
+        if (productIds.Count == 1
+            && (updates.attributeValues != null || updates.storeAttributeValues != null)
+            && byId.TryGetValue(productIds[0], out var soleProduct))
+        {
+            await _attributeUniqueness.EnsureUniqueAsync(
+                storeId,
+                soleProduct.categoryId,
+                updates.attributeValues,
+                updates.storeAttributeValues,
+                excludeProductIds: productIds,
+                ct: ct);
+        }
+
+        var pendingSinceSave = 0;
+
         foreach (var productId in productIds)
         {
             ct.ThrowIfCancellationRequested();
@@ -154,16 +173,6 @@ public class ProductBulkUpdateService
 
             try
             {
-                if (updates.attributeValues != null || updates.storeAttributeValues != null)
-                {
-                    await _attributeUniqueness.EnsureUniqueAsync(
-                        storeId,
-                        product.categoryId,
-                        updates.attributeValues,
-                        updates.storeAttributeValues,
-                        excludeProductIds: productIds);
-                }
-
                 ApplyProductFields(product, updates);
 
                 if (updates.attributeValues != null)
@@ -214,13 +223,18 @@ public class ProductBulkUpdateService
                     }
                 }
 
-                await _unitOfWork.SaveChangesAsync();
                 result.updatedCount++;
+                pendingSinceSave++;
 
-                if (operationLogger != null && operationId != null)
+                if (pendingSinceSave >= SaveChunkSize)
                 {
-                    await operationLogger.LogAsync(operationId, storeId, "info",
-                        $"Updated product #{product.Id} ({product.sku})");
+                    await _unitOfWork.SaveChangesAsync();
+                    pendingSinceSave = 0;
+                    if (operationLogger != null && operationId != null)
+                    {
+                        await operationLogger.LogAsync(operationId, storeId, "info",
+                            $"Persisted {result.updatedCount}/{total} product(s)");
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -229,6 +243,7 @@ public class ProductBulkUpdateService
             }
             catch (ApiException ex)
             {
+                await DiscardProductChangesAsync(product);
                 result.failedCount++;
                 var msg = $"Product #{product.Id} ({product.sku}): {ex.Message}";
                 result.errors.Add(msg);
@@ -237,6 +252,7 @@ public class ProductBulkUpdateService
             }
             catch (Exception ex)
             {
+                await DiscardProductChangesAsync(product);
                 result.failedCount++;
                 var msg = $"Product #{product.Id} ({product.sku}): {ex.Message}";
                 result.errors.Add(msg);
@@ -247,6 +263,9 @@ public class ProductBulkUpdateService
             await ReportProgressAsync(operationLogger, operationId, storeId, total, result);
         }
 
+        if (pendingSinceSave > 0)
+            await _unitOfWork.SaveChangesAsync();
+
         if (operationLogger != null && operationId != null)
         {
             await operationLogger.LogAsync(operationId, storeId, "info",
@@ -254,6 +273,37 @@ public class ProductBulkUpdateService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Drop in-memory mutations for a product that failed mid-apply so a later chunk save
+    /// does not persist partial changes.
+    /// </summary>
+    private async Task DiscardProductChangesAsync(Product product)
+    {
+        foreach (var entry in _db.ChangeTracker.Entries<ProductAttributeValue>()
+                     .Where(e => e.Entity.productId == product.Id)
+                     .ToList())
+        {
+            if (entry.State == EntityState.Added)
+                entry.State = EntityState.Detached;
+            else if (entry.State != EntityState.Detached)
+                await entry.ReloadAsync();
+        }
+
+        foreach (var entry in _db.ChangeTracker.Entries<StoreProductAttributeValue>()
+                     .Where(e => e.Entity.productId == product.Id)
+                     .ToList())
+        {
+            if (entry.State == EntityState.Added)
+                entry.State = EntityState.Detached;
+            else if (entry.State != EntityState.Detached)
+                await entry.ReloadAsync();
+        }
+
+        var productEntry = _db.Entry(product);
+        if (productEntry.State is EntityState.Modified or EntityState.Unchanged)
+            await productEntry.ReloadAsync();
     }
 
     private static async Task ReportProgressAsync(

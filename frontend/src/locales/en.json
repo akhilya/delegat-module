@@ -196,7 +196,8 @@
       "noOptions": "No options available",
       "nothingFound": "Nothing found",
       "moreResultsHint": "Showing {shown} of {total} results. Refine your query.",
-      "remainingOptionsHint": "{count} more options. Use search."
+      "remainingOptionsHint": "{count} more options. Use search.",
+      "searching": "Searching…"
     },
     "settingsFormField": {
       "descriptionAriaLabel": "Description: {label}"
@@ -916,9 +917,9 @@
       "invalidFileFormat": "Invalid file format",
       "importedFieldsCount": "Imported: {count} fields",
       "fileReadError": "File read error",
-      "moreActions": "More actions",
+      "moreActions": "Actions",
       "autoArrange": "Auto-arrange",
-      "checkFieldsUpToDate": "Check fields are up to date",
+      "checkFieldsUpToDate": "Refresh fields",
       "export": "Export",
       "import": "Import",
       "rearrangeBlocksTitle": "Rearrange blocks?",
@@ -1356,12 +1357,19 @@
     },
     "canvas": {
       "save": "Save",
+      "actions": "Action",
       "previewPlaceholder": "Product for preview…",
       "previewing": "previewing…",
       "resetPreview": "Reset",
       "resetPreviewTitle": "Reset the preview product",
       "disableWireAnimation": "Disable wire animation",
       "enableWireAnimation": "Enable wire animation",
+      "enableSnapToGrid": "Snap to grid",
+      "disableSnapToGrid": "Free move (grid off)",
+      "enableGuidelines": "Alignment guidelines",
+      "disableGuidelines": "Hide alignment guidelines",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
       "collapse": "Collapse (F)",
       "fullscreen": "Fullscreen (F)",
       "fieldsAnalysis": "Field analysis",
