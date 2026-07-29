@@ -1489,12 +1489,20 @@ public class AiChatService
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
         if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
+        var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
+        if (adapter == null) return (new { error = $"Unknown adapter: {conn.adapterKey}" }, "Bad request");
+
+        var eligibility = await ExternalCategoryEligibility.EnsureMappableAsync(
+            adapter, conn, p.ExternalCategoryId, ct);
+        if (!eligibility.IsSuccess)
+            return (new { error = eligibility.ErrorMessage }, "Category not mappable");
+
         var mapping = new CategoryMapping
         {
             connectionId = p.ConnectionId,
             localCategoryId = p.LocalCategoryId,
             externalCategoryId = p.ExternalCategoryId,
-            externalCategoryName = p.ExternalCategoryName,
+            externalCategoryName = p.ExternalCategoryName ?? eligibility.Category?.Name,
             name = p.Name
         };
         _context.categoryMappings.Add(mapping);
@@ -3108,10 +3116,10 @@ public class AiChatService
         Prop("get_option_alignment_hints", "Precomputed optionMap hints: local attribute option values (from import source) → target adapter allowedValues. Essential when mapping Ozon-imported category to WB/Ozon/other.", Req(["id"]),
             ("id", Int("Mapping ID")),
             ("productId", Int("Optional preview product ID"))),
-        Prop("create_mapping", "Create a new category mapping (empty). Does NOT auto-generate fields. After creation call get_mapping and connect fields via connect_field / set_field_static_value.", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
+        Prop("create_mapping", "Create a new category mapping (empty) for a LEAF marketplace category only (hasChildren=false, has fields). Rejects parent/folder categories. Does NOT auto-generate fields. After creation call get_mapping and connect fields via connect_field / set_field_static_value.", Req(["connectionId", "localCategoryId", "externalCategoryId"]),
             ("connectionId", Int("Connection ID")),
             ("localCategoryId", Int("Local category ID")),
-            ("externalCategoryId", Str("External marketplace category ID (from list_external_categories)")),
+            ("externalCategoryId", Str("Leaf external marketplace category ID from list_external_categories (not a parent/folder)")),
             ("externalCategoryName", Str("External category display name (recommended for UI)")),
             ("name", Str("Custom mapping name (optional)"))
         ),

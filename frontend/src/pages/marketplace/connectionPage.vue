@@ -126,6 +126,7 @@ import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
@@ -234,6 +235,7 @@ export default {
     PasswordInput,
     SettingsFormField,
     SettingsFormSection,
+    ExternalCategoryBrowser,
     Progress,
     Tooltip,
     TooltipContent,
@@ -279,6 +281,8 @@ export default {
         externalCategoryName: "",
         name: "",
       },
+      /** True when a folder was somehow selected; leaf-only linking is required. */
+      selectedExternalIsFolder: false,
       externalCategorySearch: "",
       credentialValues: {},
       /** Secret field keys currently unlocked for re-entry (mask hidden). */
@@ -961,17 +965,6 @@ export default {
       await this.searchExternalCategories();
     },
 
-    async navigateBack() {
-      if (this.categoryPath.length === 0) return;
-      this.externalCategorySearch = "";
-      this.categoryPath.pop();
-      this.currentParentId =
-        this.categoryPath.length > 0
-          ? this.categoryPath[this.categoryPath.length - 1].id
-          : null;
-      await this.searchExternalCategories();
-    },
-
     onCategoryDialogOpen() {
       this.externalCategories = [];
       this.externalCategorySearch = "";
@@ -987,6 +980,7 @@ export default {
         externalCategoryName: "",
         name: "",
       };
+      this.selectedExternalIsFolder = false;
     },
 
     parseCredentials() {
@@ -1163,17 +1157,31 @@ export default {
         return;
       }
 
+      if (this.selectedExternalIsFolder) {
+        displaySonnerError(
+          this.$t("marketplace.connectionPage.notifications.selectLeafCategory"),
+        );
+        return;
+      }
+
       this.isCreatingMapping = true;
       await this.createCategoryMapping({
         connectionId: this.connectionId,
         data: this.newMapping,
-        onSuccess: () => {
+        onSuccess: (response) => {
+          const data = extractResponseData(response, {});
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
           this.fetchMappings();
-          displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.mappingCreated"),
-          );
+          if (data.fieldsCreated === 0) {
+            displaySonnerError(
+              this.$t("marketplace.connectionPage.notifications.mappingCreatedWithoutFields"),
+            );
+          } else {
+            displaySonnerSuccess(
+              this.$t("marketplace.connectionPage.notifications.mappingCreated"),
+            );
+          }
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1433,23 +1441,29 @@ export default {
     },
 
     selectExternalCategory(category) {
+      if (category.hasChildren) {
+        this.navigateToCategory(category);
+        return;
+      }
       this.newMapping.externalCategoryId = category.id;
       this.newMapping.externalCategoryName = category.name;
+      this.selectedExternalIsFolder = false;
     },
 
     autoSelectExternalCategory(categoryName) {
       if (!categoryName || this.externalCategories.length === 0) return;
 
       const normalizedName = categoryName.toLowerCase().trim();
+      const leaves = this.externalCategories.filter((cat) => !cat.hasChildren);
 
       // Try exact match first
-      let match = this.externalCategories.find(
+      let match = leaves.find(
         (cat) => cat.name?.toLowerCase().trim() === normalizedName,
       );
 
       // If no exact match, try partial match (category name contains search or vice versa)
       if (!match) {
-        match = this.externalCategories.find(
+        match = leaves.find(
           (cat) =>
             cat.name?.toLowerCase().includes(normalizedName) ||
             normalizedName.includes(cat.name?.toLowerCase()),
@@ -3220,8 +3234,8 @@ export default {
                     </Button>
                   </DialogTrigger>
                   <DialogContent
-                    size="4xl"
-                    class="flex min-h-[36rem] max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                    size="6xl"
+                    class="flex min-h-[36rem] max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl"
                   >
                     <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
                       <DialogTitle class="flex items-center gap-2">
@@ -3290,131 +3304,43 @@ export default {
                         </p>
                       </div>
 
-                      <div class="flex min-h-0 flex-col gap-2 py-4">
+                      <div class="flex min-h-0 flex-1 flex-col gap-2 py-4">
                         <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.categoryOf", { adapter: adapterDisplayName }) }}</p>
 
-                        <div class="flex gap-2">
-                          <div class="relative min-w-0 flex-1">
-                            <Search
-                              class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                            />
-                            <Input
-                              v-model="externalCategorySearch"
-                              :placeholder="$t('marketplace.connectionPage.mappings.searchByNamePlaceholder')"
-                              class="pl-9"
-                              @keyup.enter="searchExternalCategories"
-                            />
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            :aria-label="$t('marketplace.connectionPage.mappings.findCategoriesAria')"
-                            @click="searchExternalCategories"
-                          >
-                            <Search class="size-4" />
-                          </Button>
-                        </div>
-
-                        <div
-                          v-if="categoryPath.length > 0 && !externalCategorySearch"
-                          class="flex flex-wrap items-center gap-1 text-sm"
+                        <ExternalCategoryBrowser
+                          v-model:search="externalCategorySearch"
+                          class="min-h-0 flex-1"
+                          :categories="externalCategories"
+                          :path="categoryPath"
+                          :loading="isLoadingCategories"
+                          :selected-id="newMapping.externalCategoryId"
+                          :search-placeholder="$t('marketplace.connectionPage.mappings.searchByNamePlaceholder')"
+                          :search-aria-label="$t('marketplace.connectionPage.mappings.findCategoriesAria')"
+                          :empty-title="$t('marketplace.connectionPage.mappings.categoriesNotFoundTitle')"
+                          :empty-description="
+                            capabilities?.capabilities?.createCategory && selectedLocalCategory
+                              ? $t('marketplace.connectionPage.mappings.categoriesNotFoundHintWithCreate', { adapter: adapterDisplayName })
+                              : $t('marketplace.connectionPage.mappings.categoriesNotFoundHint')
+                          "
+                          @search="searchExternalCategories"
+                          @select="selectExternalCategory"
+                          @navigate="navigateToCategory"
+                          @path-index="navigateToPathIndex"
                         >
-                          <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
-                            <Home class="size-3" />
-                          </Button>
-                          <ChevronRight class="size-3 text-muted-foreground" />
-                          <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
+                          <template #empty-action>
                             <Button
-                              variant="ghost"
+                              v-if="capabilities?.capabilities?.createCategory"
                               size="sm"
-                              class="h-7 px-2 text-xs"
-                              :disabled="index === categoryPath.length - 1"
-                              @click="navigateToPathIndex(index)"
+                              variant="outline"
+                              :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                              @click="handleCreateExternalCategoryMapping"
                             >
-                              {{ pathItem.name }}
+                              <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                              <FolderTree v-else class="size-4 mr-2" />
+                              {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
                             </Button>
-                            <ChevronRight
-                              v-if="index < categoryPath.length - 1"
-                              class="size-3 text-muted-foreground"
-                            />
                           </template>
-                        </div>
-
-                        <Button
-                          v-if="categoryPath.length > 0 && !externalCategorySearch"
-                          variant="outline"
-                          size="sm"
-                          class="justify-start"
-                          @click="navigateBack"
-                        >
-                          <ChevronLeft class="size-4 mr-2" />
-                          {{ $t("common.back") }}
-                        </Button>
-
-                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
-                          <div
-                            v-if="isLoadingCategories"
-                            class="flex flex-1 items-center justify-center py-10"
-                          >
-                            <Loader2 class="size-6 animate-spin text-muted-foreground" />
-                          </div>
-                          <div
-                            v-else-if="externalCategories.length === 0"
-                            class="flex min-h-[16rem] flex-1 items-center justify-center p-4"
-                          >
-                            <EmptyState
-                              class="w-full py-12"
-                              :title="$t('marketplace.connectionPage.mappings.categoriesNotFoundTitle')"
-                              :description="
-                                capabilities?.capabilities?.createCategory && selectedLocalCategory
-                                  ? $t('marketplace.connectionPage.mappings.categoriesNotFoundHintWithCreate', { adapter: adapterDisplayName })
-                                  : $t('marketplace.connectionPage.mappings.categoriesNotFoundHint')
-                              "
-                            >
-                              <template #icon>
-                                <Search />
-                              </template>
-                              <Button
-                                v-if="capabilities?.capabilities?.createCategory"
-                                size="sm"
-                                variant="outline"
-                                :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
-                                @click="handleCreateExternalCategoryMapping"
-                              >
-                                <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
-                                <FolderTree v-else class="size-4 mr-2" />
-                                {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
-                              </Button>
-                            </EmptyState>
-                          </div>
-                          <div
-                            v-else
-                            class="min-h-0 flex-1 overflow-y-auto p-1.5"
-                          >
-                            <button
-                              v-for="cat in externalCategories"
-                              :key="cat.id"
-                              type="button"
-                              class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
-                              :class="{ 'bg-accent': newMapping.externalCategoryId === cat.id }"
-                              @click="cat.hasChildren && !externalCategorySearch ? navigateToCategory(cat) : selectExternalCategory(cat)"
-                            >
-                              <div class="min-w-0 flex-1">
-                                <div class="truncate text-sm font-medium">{{ cat.name }}</div>
-                                <div
-                                  v-if="cat.fullPath"
-                                  class="truncate text-xs text-muted-foreground"
-                                >
-                                  {{ cat.fullPath }}
-                                </div>
-                              </div>
-                              <ChevronRight
-                                v-if="cat.hasChildren && !externalCategorySearch"
-                                class="ml-2 size-4 shrink-0 text-muted-foreground"
-                              />
-                            </button>
-                          </div>
-                        </div>
+                        </ExternalCategoryBrowser>
 
                         <p
                           v-if="newMapping.externalCategoryId"
@@ -3444,7 +3370,13 @@ export default {
                       </Button>
                       <Button
                         @click="handleCreateMapping"
-                        :disabled="isCreatingMapping || isCreatingExternalCategory"
+                        :disabled="
+                          isCreatingMapping ||
+                          isCreatingExternalCategory ||
+                          !newMapping.localCategoryId ||
+                          !newMapping.externalCategoryId ||
+                          selectedExternalIsFolder
+                        "
                       >
                         <Loader2
                           v-if="isCreatingMapping"

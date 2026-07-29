@@ -5,9 +5,10 @@ import SettingsLayout from "@/components/SettingsLayout.vue";
 </script>
 
 <template>
-  <Page class="flex h-svh flex-col overflow-hidden">
+  <!-- No h-svh / overflow lock: SidebarInset scrolls the page. Fill-height routes use meta.fillHeight. -->
+  <Page class="flex flex-col">
     <NavigationBar class="shrink-0" />
-    <SettingsLayout class="min-h-0 flex-1">
+    <SettingsLayout>
       <RouterView />
     </SettingsLayout>
   </Page>

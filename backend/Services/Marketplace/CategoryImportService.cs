@@ -60,23 +60,18 @@ public class CategoryImportService
             return CategoryImportResult.Failure("Adapter does not support retrieving category fields");
         }
 
-        // Get category fields from the marketplace
-        List<ExternalField> fields;
+        var eligibility = await ExternalCategoryEligibility.EnsureMappableAsync(
+            adapter, connection, externalCategoryId, ct);
+        if (!eligibility.IsSuccess)
+            return CategoryImportResult.Failure(eligibility.ErrorMessage!);
 
-        try
-        {
-            // Get category fields
-            fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId, ct);
+        // Leaf-validated fields from the marketplace (meta keys already stripped)
+        var fields = eligibility.Fields.ToList();
 
-            // Use the provided local category name or fall back to the marketplace name
-            localCategoryName ??= externalCategoryName ?? $"Category {externalCategoryId}";
-            // External category name comes from the provided parameter or falls back to local name
-            externalCategoryName ??= localCategoryName;
-        }
-        catch (Exception ex)
-        {
-            return CategoryImportResult.Failure($"Error retrieving data from marketplace: {ex.Message}");
-        }
+        // Use the provided local category name or fall back to the marketplace name
+        localCategoryName ??= externalCategoryName ?? eligibility.Category?.Name ?? $"Category {externalCategoryId}";
+        // External category name comes from the provided parameter or falls back to local name
+        externalCategoryName ??= eligibility.Category?.Name ?? localCategoryName;
 
         // Filter fields - exclude base product fields (sku, name, description, price, stock, images)
         // and grouping fields (e.g. Ozon 9048), since they don't need attribute creation

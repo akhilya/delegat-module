@@ -105,12 +105,20 @@ public class MappingToolHandlers : ToolHandlerBase
             .FirstOrDefaultAsync(c => c.Id == p.ConnectionId && c.storeId == storeId, ct);
         if (conn == null) return (new { error = "Connection not found" }, "Not found");
 
+        var adapter = _adapterRegistry.GetByKey(conn.adapterKey);
+        if (adapter == null) return (new { error = $"Unknown adapter: {conn.adapterKey}" }, "Bad request");
+
+        var eligibility = await ExternalCategoryEligibility.EnsureMappableAsync(
+            adapter, conn, p.ExternalCategoryId, ct);
+        if (!eligibility.IsSuccess)
+            return (new { error = eligibility.ErrorMessage }, "Category not mappable");
+
         var mapping = new CategoryMapping
         {
             connectionId = p.ConnectionId,
             localCategoryId = p.LocalCategoryId,
             externalCategoryId = p.ExternalCategoryId,
-            externalCategoryName = p.ExternalCategoryName,
+            externalCategoryName = p.ExternalCategoryName ?? eligibility.Category?.Name,
             name = p.Name
         };
         _context.categoryMappings.Add(mapping);

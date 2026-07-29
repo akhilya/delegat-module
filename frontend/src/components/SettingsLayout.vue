@@ -21,6 +21,8 @@ const me = ref(null);
 
 const canPlatformSettings = computed(() => hasPermission(me.value, PERMS.SettingsPlatform));
 
+const fillHeight = computed(() => route.meta.fillHeight === true);
+
 const breadcrumbs = computed(() => {
   const path = route.path;
   const label = resolveSettingsBreadcrumb(path);
@@ -59,9 +61,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="cn('flex min-h-0 flex-1 flex-col overflow-hidden', $props.class)">
+  <div :class="cn('flex flex-col', fillHeight && 'min-h-0', $props.class)">
     <Breadcrumbs class="shrink-0" :items="breadcrumbs" />
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div
+      :class="
+        cn(
+          'flex flex-col',
+          fillHeight
+            ? 'h-[calc(100svh-var(--app-navbar-height)-var(--app-breadcrumbs-height))] min-h-0 overflow-hidden'
+            : 'pb-4',
+        )
+      "
+    >
       <slot />
     </div>
   </div>

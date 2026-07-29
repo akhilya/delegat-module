@@ -19,6 +19,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- Page shell (`Page`) fills at least the viewport (`min-h-svh`) but does not lock max-height or own the scroll — the main inset scrolls
+- Settings pages scroll with the main inset (no nested pane after breadcrumbs); log/API log views opt into fill-height via route meta
+- Category import lists fill the page height; adapter category picker matches the create-mapping dialog (shared shadcn path breadcrumbs)
 - WooCommerce bulk/single export reads product images from MinIO via host storage (no public HTTP self-download); overlaps storage reads with `products/bulk`
 - Page horizontal padding is tighter on Full HD and similar widths (less empty side gutter)
 - Log tables share unified column labels (Time, Method, Path, Duration, Status) and support click-to-sort
@@ -36,6 +39,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Category mapping and import only allow terminal (leaf) marketplace categories with fields; parent/folder ids (e.g. Ozon without `desc:type`) no longer create empty mappings
 - Settings overview toggles no longer animate from off→on while loading saved Public API / logging flags
 - Operation duration no longer inflated by ~timezone offset (UTC timestamps without `Z` were parsed as local time in the operations panel)
 - Stopping an export/import/image-download operation no longer rewrites Failed queue rows to Cancelled (summary and retry-failed stay accurate; progress counters sync on stop)

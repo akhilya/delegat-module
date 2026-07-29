@@ -223,7 +223,7 @@ public static class AiPrompts
           Static "default value" ONLY when truly constant for ALL products.
           preview productId is optional sanity-check only - never build optionMap from a single product value.
         - Do NOT call list_external_categories when working with field connections - only for browsing category trees.
-        - To fill a mapping: create_mapping → get_mapping → connect fields one by one via connect_field / set_field_static_value / add_field_modifier.
+        - To fill a mapping: create_mapping (leaf category only) → get_mapping → connect fields one by one via connect_field / set_field_static_value / add_field_modifier.
 
         === SEARCH: RETRY WITH SPELLING VARIANTS ===
         Product names in the catalog mix Cyrillic and Latin. When a text search returns 0 results,

@@ -21,6 +21,12 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Sticky page NavigationBar (h-14). Use when sizing fill layouts below the bar. */
+  --app-navbar-height: 3.5rem;
+  /* SettingsLayout breadcrumbs row + margin — fill-height panes subtract this too. */
+  --app-breadcrumbs-height: 3.5rem;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

@@ -158,6 +158,15 @@ public class CategoryMappingController : ControllerBase
         if (category == null)
             throw ApiException.NotFound("Local category not found", code: "category_not_found");
 
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+
+        var eligibility = await ExternalCategoryEligibility.EnsureMappableAsync(
+            adapter, connection, input.externalCategoryId, ct);
+        if (!eligibility.IsSuccess)
+            throw ApiException.BadRequest(eligibility.ErrorMessage!, code: "category_not_mappable");
+
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
 
         var mapping = new CategoryMapping();
@@ -166,26 +175,18 @@ public class CategoryMappingController : ControllerBase
             connectionId = connectionId,
             localCategoryId = input.localCategoryId,
             externalCategoryId = input.externalCategoryId,
-            externalCategoryName = input.externalCategoryName,
+            externalCategoryName = input.externalCategoryName ?? eligibility.Category?.Name,
             name = input.name
         });
 
         await mappingRepo.AddAsync(mapping);
 
         var fieldsCreated = 0;
-        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
-        if (adapter != null && adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
+        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
         {
-            try
-            {
-                var fields = await adapter.GetCategoryFieldsAsync(connection, input.externalCategoryId, ct);
-                fieldsCreated = await CreateFieldMappingsAsync(mapping, connection, input.localCategoryId, fields, adapter,
-                    skipAutoMapping: input.useAiMapping == true, ct: ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch fields for category mapping {MappingId}", mapping.Id);
-            }
+            fieldsCreated = await CreateFieldMappingsAsync(
+                mapping, connection, input.localCategoryId, eligibility.Fields, adapter,
+                skipAutoMapping: input.useAiMapping == true, ct: ct);
         }
 
         return Ok(new { id = mapping.Id, fieldsCreated });

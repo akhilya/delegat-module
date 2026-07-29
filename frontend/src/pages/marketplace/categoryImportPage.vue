@@ -5,6 +5,7 @@ import NavigationBar from "@/components/navigationBar.vue";
 import Breadcrumbs from "@/components/breadcrumbs.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -13,15 +14,10 @@ import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
   Loader2,
-  ChevronRight,
-  ChevronLeft,
-  Home,
-  Search,
   Sparkles,
   Link2,
   Download,
   FolderTree,
-  ArrowRight,
 } from "lucide-vue-next";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -36,20 +32,16 @@ export default {
     Breadcrumbs,
     SettingsFormField,
     SettingsFormSection,
+    ExternalCategoryBrowser,
     Button,
     Input,
     Badge,
     Checkbox,
     Loader2,
-    ChevronRight,
-    ChevronLeft,
-    Home,
-    Search,
     Sparkles,
     Link2,
     Download,
     FolderTree,
-    ArrowRight,
     RadioGroup,
     RadioGroupItem,
     EmptyState,
@@ -116,9 +108,6 @@ export default {
     },
     hasImportConfig() {
       return this.importExternalFields.length > 0 && !this.isLoadingFields;
-    },
-    selectedCategoryLabel() {
-      return this.importCategoryExternalName || this.importCategoryId || null;
     },
     localCategoryOptions() {
       return this.localCategories.map((c) => ({
@@ -239,31 +228,13 @@ export default {
       await this.searchExternalCategories();
     },
 
-    async navigateBack() {
-      if (this.categoryPath.length === 0) return;
-      this.externalCategorySearch = "";
-      this.categoryPath.pop();
-      this.currentParentId =
-        this.categoryPath.length > 0
-          ? this.categoryPath[this.categoryPath.length - 1].id
-          : null;
-      await this.searchExternalCategories();
-    },
-
     selectExternalCategory(category) {
-      this.importCategoryId = category.id;
-      this.importCategoryExternalName = category.name;
-      this.fetchExternalCategoryFields();
-    },
-
-    onManualCategoryIdChange() {
-      if (!this.importCategoryId) {
-        this.importCategoryExternalName = "";
-        this.importExternalFields = [];
-        this.importSelectedFieldKeys = [];
+      if (category.hasChildren) {
+        this.navigateToCategory(category);
         return;
       }
-      this.importCategoryExternalName = "";
+      this.importCategoryId = category.id;
+      this.importCategoryExternalName = category.name;
       this.fetchExternalCategoryFields();
     },
 
@@ -311,6 +282,11 @@ export default {
         return;
       }
 
+      if (!this.hasImportConfig) {
+        displaySonnerError(this.$t("marketplace.categoryImportPage.selectLeafCategory"));
+        return;
+      }
+
       if (this.importMode === "existing" && !this.importTargetCategoryId) {
         displaySonnerError(this.$t("marketplace.categoryImportPage.selectExistingCategory"));
         return;
@@ -352,14 +328,17 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
+  <Page class="flex flex-col pb-4">
+    <NavigationBar class="shrink-0" />
+    <Breadcrumbs :items="breadcrumbs" class="shrink-0 !mb-3" />
 
-    <PageSection :loading="isLoading" class="!min-h-0 flex flex-col">
-      <div v-if="connection" class="flex flex-col gap-6">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="min-w-0 space-y-2">
+    <PageSection
+      :loading="isLoading"
+      class="!mb-0 flex flex-1 flex-col"
+    >
+      <div v-if="connection" class="flex flex-1 flex-col gap-4">
+        <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0 space-y-1.5">
             <div class="flex flex-wrap items-center gap-2">
               <h1 class="text-lg font-semibold">{{ $t("marketplace.categoryImportPage.importCategory") }}</h1>
               <Badge variant="outline">{{ connection.name }}</Badge>
@@ -383,169 +362,57 @@ export default {
         </div>
 
         <div
-          v-if="selectedCategoryLabel"
-          class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+          class="grid h-[max(22rem,calc(100svh-var(--app-navbar-height)-12rem))] min-h-[22rem] gap-5 overflow-hidden xl:grid-cols-2"
         >
-          <FolderTree class="size-4 shrink-0 text-muted-foreground" />
-          <span class="text-muted-foreground">{{ $t("marketplace.categoryImportPage.source") }}</span>
-          <span class="font-medium">{{ selectedCategoryLabel }}</span>
-          <ArrowRight class="size-4 text-muted-foreground" />
-          <span class="text-muted-foreground">{{ $t("marketplace.categoryImportPage.localCatalog") }}</span>
-        </div>
-
-        <div class="grid gap-4 xl:grid-cols-2 xl:gap-5">
-          <SettingsFormSection
-            class="!max-w-none min-w-0"
-            :title="$t('marketplace.categoryImportPage.adapterCategory')"
-            :description="$t('marketplace.categoryImportPage.adapterCategoryDescription')"
-          >
-            <div class="flex gap-2">
-              <div class="relative min-w-0 flex-1">
-                <Search
-                  class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  v-model="externalCategorySearch"
-                  :placeholder="$t('marketplace.categoryImportPage.searchByNamePlaceholder')"
-                  class="pl-9"
-                  @keyup.enter="searchExternalCategories"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                :aria-label="$t('marketplace.categoryImportPage.findCategories')"
-                @click="searchExternalCategories"
-              >
-                <Search class="size-4" />
-              </Button>
+          <div class="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
+            <div class="shrink-0">
+              <h2 class="text-lg font-semibold">{{ $t("marketplace.categoryImportPage.adapterCategory") }}</h2>
+              <p class="text-sm text-muted-foreground">
+                {{ $t("marketplace.categoryImportPage.adapterCategoryDescription") }}
+              </p>
             </div>
 
-            <div
-              v-if="categoryPath.length > 0 && !externalCategorySearch"
-              class="flex flex-wrap items-center gap-1 text-sm"
+            <ExternalCategoryBrowser
+              v-model:search="externalCategorySearch"
+              class="min-h-0 flex-1"
+              :categories="externalCategories"
+              :path="categoryPath"
+              :loading="isLoadingCategories"
+              :selected-id="importCategoryId"
+              :search-placeholder="$t('marketplace.categoryImportPage.searchByNamePlaceholder')"
+              :search-aria-label="$t('marketplace.categoryImportPage.findCategories')"
+              :empty-title="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
+              :empty-description="
+                isEmptyRemoteRoot && canCreateCategory
+                  ? $t('marketplace.categoryImportPage.categoriesNotFoundCreateHint', { adapter: adapterLabel })
+                  : $t('marketplace.categoryImportPage.categoriesNotFoundDescription')
+              "
+              @search="searchExternalCategories"
+              @select="selectExternalCategory"
+              @navigate="navigateToCategory"
+              @path-index="navigateToPathIndex"
             >
-              <Button variant="ghost" size="sm" class="h-7 px-2" @click="navigateToPathIndex(-1)">
-                <Home class="size-3" />
-              </Button>
-              <ChevronRight class="size-3 text-muted-foreground" />
-              <template v-for="(pathItem, index) in categoryPath" :key="pathItem.id">
+              <template #empty-action>
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7 px-2 text-xs"
-                  :disabled="index === categoryPath.length - 1"
-                  @click="navigateToPathIndex(index)"
-                >
-                  {{ pathItem.name }}
-                </Button>
-                <ChevronRight
-                  v-if="index < categoryPath.length - 1"
-                  class="size-3 text-muted-foreground"
-                />
-              </template>
-            </div>
-
-            <Button
-              v-if="categoryPath.length > 0 && !externalCategorySearch"
-              variant="outline"
-              size="sm"
-              class="justify-start"
-              @click="navigateBack"
-            >
-              <ChevronLeft class="size-4 mr-2" />
-              {{ $t("common.back") }}
-            </Button>
-
-            <div
-              class="flex h-[min(20rem,calc(100vh-18rem))] max-h-80 min-h-48 flex-col overflow-hidden rounded-lg border"
-            >
-              <div
-                v-if="isLoadingCategories"
-                class="flex min-h-0 flex-1 items-center justify-center"
-              >
-                <Loader2 class="size-6 animate-spin text-muted-foreground" />
-              </div>
-              <div
-                v-else-if="externalCategories.length === 0"
-                class="flex min-h-0 flex-1 items-center justify-center p-4"
-              >
-                <EmptyState
-                  class="w-full py-12"
-                  :title="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
-                  :description="
-                    isEmptyRemoteRoot && canCreateCategory
-                      ? $t('marketplace.categoryImportPage.categoriesNotFoundCreateHint', { adapter: adapterLabel })
-                      : $t('marketplace.categoryImportPage.categoriesNotFoundDescription')
-                  "
-                >
-                  <template #icon>
-                    <Search />
-                  </template>
-                  <Button
-                    v-if="isEmptyRemoteRoot && canCreateCategory"
-                    @click="
-                      $router.push({
-                        path: `/adapter/${connectionId}`,
-                        query: { tab: 'mappings', createFromLocal: '1' },
-                      })
-                    "
-                  >
-                    <FolderTree class="size-4 mr-2" />
-                    {{ $t('marketplace.categoryImportPage.createFromLocalCta', { adapter: adapterLabel }) }}
-                  </Button>
-                </EmptyState>
-              </div>
-              <div v-else class="min-h-0 flex-1 overflow-y-auto p-1.5">
-                <button
-                  v-for="cat in externalCategories"
-                  :key="cat.id"
-                  type="button"
-                  class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
-                  :class="{ 'bg-accent': importCategoryId === cat.id }"
+                  v-if="isEmptyRemoteRoot && canCreateCategory"
                   @click="
-                    cat.hasChildren && !externalCategorySearch
-                      ? navigateToCategory(cat)
-                      : selectExternalCategory(cat)
+                    $router.push({
+                      path: `/adapter/${connectionId}`,
+                      query: { tab: 'mappings', createFromLocal: '1' },
+                    })
                   "
                 >
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-sm font-medium">{{ cat.name }}</div>
-                    <div
-                      v-if="cat.fullPath"
-                      class="truncate text-xs text-muted-foreground"
-                    >
-                      {{ cat.fullPath }}
-                    </div>
-                  </div>
-                  <ChevronRight
-                    v-if="cat.hasChildren && !externalCategorySearch"
-                    class="ml-2 size-4 shrink-0 text-muted-foreground"
-                  />
-                </button>
-              </div>
-            </div>
-
-            <SettingsFormField
-              :label="$t('marketplace.categoryImportPage.categoryIdLabel')"
-              label-for="import-category-id"
-            >
-              <Input
-                id="import-category-id"
-                v-model="importCategoryId"
-                :placeholder="$t('marketplace.categoryImportPage.categoryIdPlaceholder')"
-                @change="onManualCategoryIdChange"
-              />
-              <template #description>
-                {{ $t("marketplace.categoryImportPage.categoryIdDescription") }}
+                  <FolderTree class="size-4 mr-2" />
+                  {{ $t("marketplace.categoryImportPage.createFromLocalCta", { adapter: adapterLabel }) }}
+                </Button>
               </template>
-            </SettingsFormField>
-          </SettingsFormSection>
+            </ExternalCategoryBrowser>
+          </div>
 
-          <div class="flex min-w-0 flex-col gap-5">
+          <div class="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
             <div
               v-if="!importCategoryId"
-              class="flex min-h-48 items-center justify-center rounded-lg border border-dashed py-8"
+              class="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed"
             >
               <EmptyState
                 class="flex-1 py-12"
@@ -560,7 +427,7 @@ export default {
 
             <div
               v-else-if="isLoadingFields"
-              class="flex min-h-48 flex-col items-center justify-center gap-2 rounded-lg border py-8 text-muted-foreground"
+              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border text-muted-foreground"
             >
               <Loader2 class="size-6 animate-spin" />
               <span class="text-sm">{{ $t("marketplace.categoryImportPage.loadingCategoryFields") }}</span>
@@ -568,7 +435,7 @@ export default {
 
             <template v-else-if="hasImportConfig">
               <SettingsFormSection
-                class="!max-w-none"
+                class="!max-w-none shrink-0"
                 :title="$t('marketplace.categoryImportPage.whereToImportTitle')"
                 :description="$t('marketplace.categoryImportPage.whereToImportDescription')"
               >
@@ -631,27 +498,46 @@ export default {
                 </p>
               </SettingsFormSection>
 
-              <SettingsFormSection
-                class="!max-w-none"
-                :title="$t('marketplace.categoryImportPage.attributesForImportTitle', { selected: importSelectedFieldKeys.length, total: importAttributeFields.length })"
-                :description="$t('marketplace.categoryImportPage.attributesForImportDescription')"
-              >
-                <div class="flex justify-end">
-                  <Button variant="ghost" size="sm" @click="toggleAllFields">
-                    {{ allAttributeFieldsSelected ? $t("marketplace.categoryImportPage.deselectAll") : $t("marketplace.categoryImportPage.selectAll") }}
+              <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+                <div class="flex shrink-0 items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <h2 class="text-lg font-semibold">
+                      {{
+                        $t("marketplace.categoryImportPage.attributesForImportTitle", {
+                          selected: importSelectedFieldKeys.length,
+                          total: importAttributeFields.length,
+                        })
+                      }}
+                    </h2>
+                    <p class="text-sm text-muted-foreground">
+                      {{ $t("marketplace.categoryImportPage.attributesForImportDescription") }}
+                    </p>
+                  </div>
+                  <Button
+                    v-if="importAttributeFields.length > 0"
+                    variant="ghost"
+                    size="sm"
+                    class="shrink-0"
+                    @click="toggleAllFields"
+                  >
+                    {{
+                      allAttributeFieldsSelected
+                        ? $t("marketplace.categoryImportPage.deselectAll")
+                        : $t("marketplace.categoryImportPage.selectAll")
+                    }}
                   </Button>
                 </div>
 
                 <div
                   v-if="importAttributeFields.length === 0"
-                  class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground"
+                  class="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed px-4 text-center text-sm text-muted-foreground"
                 >
                   {{ $t("marketplace.categoryImportPage.noAdditionalAttributes") }}
                 </div>
 
                 <div
                   v-else
-                  class="max-h-80 overflow-y-auto rounded-lg border p-1.5"
+                  class="min-h-0 flex-1 overflow-y-auto rounded-lg border p-1.5"
                 >
                   <button
                     v-for="field in importAttributeFields"
@@ -690,12 +576,16 @@ export default {
                         v-if="field.optionsCount > 0"
                         class="text-xs tabular-nums text-muted-foreground"
                       >
-                        {{ $t("marketplace.categoryImportPage.optionsAbbrCount", { count: field.optionsCount }) }}
+                        {{
+                          $t("marketplace.categoryImportPage.optionsAbbrCount", {
+                            count: field.optionsCount,
+                          })
+                        }}
                       </span>
                     </div>
                   </button>
                 </div>
-              </SettingsFormSection>
+              </div>
             </template>
           </div>
         </div>

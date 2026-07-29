@@ -167,12 +167,12 @@ export const routes = [
       {
         path: "admin/api",
         component: AdminApiPage,
-        meta: { titleKey: "routes.api", permissions: [PERMS.ApiAccess] },
+        meta: { titleKey: "routes.api", permissions: [PERMS.ApiAccess], fillHeight: true },
       },
       {
         path: "admin/error-logs",
         component: AdminErrorLogsPage,
-        meta: { titleKey: "routes.errorLogs", permissions: [PERMS.SettingsPlatform] },
+        meta: { titleKey: "routes.errorLogs", permissions: [PERMS.SettingsPlatform], fillHeight: true },
       },
       {
         path: "admin/plugins",
@@ -187,7 +187,7 @@ export const routes = [
       {
         path: "adapter-logs",
         component: AdapterLogsPage,
-        meta: { titleKey: "routes.adapterLogs", permissions: [PERMS.SettingsPlatform] },
+        meta: { titleKey: "routes.adapterLogs", permissions: [PERMS.SettingsPlatform], fillHeight: true },
       },
     ],
   },
