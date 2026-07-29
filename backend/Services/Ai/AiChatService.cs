@@ -3219,11 +3219,11 @@ public class AiChatService
             ("sink", Enum("card", "price")),
             ("modifierType", Enum(
                 "truncate", "replace", "append", "prepend", "trim", "uppercase", "lowercase", "template", "split",
-                "multiply", "divide", "add", "round", "floor", "ceiling", "clamp",
+                "multiply", "divide", "add", "subtract", "round", "floor", "ceiling", "clamp",
                 "valueMap", "optionMap", "llmGenerate", "defaultValue", "toText", "forceType",
                 "limit", "join", "takeFirst", "skip", "reverse", "sort", "addItems", "removeItems",
                 "randomInt", "randomFloat", "randomPick", "randomUuid")),
-            ("params", new AiToolProperty { type = "object", description = "Modifier parameters: truncate→{maxLength:int}, multiply→{factor:number}, optionMap→{mappings:[{from,to}],default} PREFERRED for select fields, valueMap→{mappings:[{from,valueId}],default} fallback, llmGenerate→{prompt,modelId,seed?,cacheEnabled?,perProduct?}, template→{template:'...{{value}}...'}, randomInt→{min,max,seed?}, join→{delimiter}, limit→{count}" })
+            ("params", new AiToolProperty { type = "object", description = "Modifier parameters: truncate→{maxLength:int}, multiply→{factor:number}, divide→{divisor:number}, add→{addend:number}, subtract→{subtrahend:number}, optionMap→{mappings:[{from,to}],default} PREFERRED for select fields, valueMap→{mappings:[{from,valueId}],default} fallback, llmGenerate→{prompt,modelId,seed?,cacheEnabled?,perProduct?}, template→{template:'...{{value}}...'}, randomInt→{min,max,seed?}, join→{delimiter}, limit→{count}" })
         ),
         Prop("merge_adapter_fields", "Merge duplicate adapter fields: aliases receive the primary's exported value under their own key; import reverses only the primary. Use for semantically identical fields (e.g. 'Name' and 'Product name').", Req(["mappingId", "primaryFieldKey", "aliasFieldKeys"]),
             ("mappingId", Int("Mapping ID")),

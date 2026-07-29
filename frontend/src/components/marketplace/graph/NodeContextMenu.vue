@@ -31,6 +31,7 @@ import {
   typeCompatible,
   opLabel,
 } from "./graphModel.js";
+import { localizeStandardSourceName } from "./fieldLabels.js";
 
 const { t } = useI18n();
 
@@ -88,25 +89,25 @@ const sourceItems = computed(() => {
     if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
   };
   (s.productFields || []).forEach((f) =>
-    push(Database, f.displayName || f.key, {
+    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "product"),
+    }, "product", f.key, f.displayName),
   );
   (s.stockFields || []).forEach((f) =>
-    push(Database, f.displayName || f.key, {
+    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "stock"),
+    }, "stock", f.key, f.displayName),
   );
   (s.priceFields || []).forEach((f) =>
-    push(Database, f.displayName || f.key, {
+    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
       group: "source",
       kind: "productField",
       payload: f,
-    }, "price"),
+    }, "price", f.key, f.displayName),
   );
   (s.categoryAttributes || []).forEach((a) =>
     push(Tag, a.name, { group: "source", kind: "attribute", payload: a }),

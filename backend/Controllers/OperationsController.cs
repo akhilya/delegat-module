@@ -364,6 +364,14 @@ public class OperationsController : ControllerBase
                          || p.status == FolderJobStatus.Failed))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
             }
+            else if (op.batchType == "product-bulk-update")
+            {
+                cancelledCount = await _context.pendingProductBulkUpdates
+                    .Where(p => p.batchId == op.batchId &&
+                        (p.status == ProductBulkUpdateStatus.Pending
+                         || p.status == ProductBulkUpdateStatus.InProgress))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Cancelled), ct);
+            }
         }
 
         // Calculate final stats
@@ -482,7 +490,8 @@ public class OperationsController : ControllerBase
                 await BuildExportQueueSummary(storeId.Value, ct),
                 await BuildImportQueueSummary(storeId.Value, ct),
                 await BuildImageQueueSummary(storeId.Value, ct),
-                await BuildTransferQueueSummary(storeId.Value, ct)
+                await BuildTransferQueueSummary(storeId.Value, ct),
+                await BuildBulkUpdateQueueSummary(storeId.Value, ct)
             }
         });
     }
@@ -506,10 +515,12 @@ public class OperationsController : ControllerBase
             "imports" => await ClearImports(storeId.Value, status, ct),
             "images" => await ClearImages(storeId.Value, status, ct),
             "transfers" => await ClearTransfers(storeId.Value, status, ct),
+            "bulk-updates" => await ClearBulkUpdates(storeId.Value, status, ct),
             "all-queues" => await ClearExports(storeId.Value, status, ct)
                 + await ClearImports(storeId.Value, status, ct)
                 + await ClearImages(storeId.Value, status, ct)
-                + await ClearTransfers(storeId.Value, status, ct),
+                + await ClearTransfers(storeId.Value, status, ct)
+                + await ClearBulkUpdates(storeId.Value, status, ct),
             _ => throw ApiException.BadRequest("Unknown queue")
         };
 
@@ -578,6 +589,21 @@ public class OperationsController : ControllerBase
             .ToList();
 
         return new QueueSummary("transfers", "Product transfers", statuses.Sum(x => x.count), statuses);
+    }
+
+    private async Task<QueueSummary> BuildBulkUpdateQueueSummary(int storeId, CancellationToken ct)
+    {
+        var grouped = await _context.pendingProductBulkUpdates
+            .AsNoTracking()
+            .Where(x => x.storeId == storeId)
+            .GroupBy(x => x.status)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var statuses = grouped
+            .Select(g => new QueueStatusCount(g.status.ToString(), g.count))
+            .ToList();
+
+        return new QueueSummary("bulk-updates", "Product bulk updates", statuses.Sum(x => x.count), statuses);
     }
 
     private static bool IsInactiveStatus(string status) =>
@@ -653,6 +679,25 @@ public class OperationsController : ControllerBase
             _ => throw ApiException.BadRequest("Unknown cleanup status")
         };
 
+    private static IQueryable<PendingProductBulkUpdate> FilterBulkUpdatesByStatus(
+        IQueryable<PendingProductBulkUpdate> query, string status) =>
+        status switch
+        {
+            "all" => query,
+            "pending" => query.Where(x => x.status == ProductBulkUpdateStatus.Pending),
+            "in-progress" => query.Where(x => x.status == ProductBulkUpdateStatus.InProgress),
+            "completed" => query.Where(x => x.status == ProductBulkUpdateStatus.Completed),
+            "failed" => query.Where(x => x.status == ProductBulkUpdateStatus.Failed),
+            "cancelled" => query.Where(x => x.status == ProductBulkUpdateStatus.Cancelled),
+            "partial" => query.Where(x => x.status == ProductBulkUpdateStatus.Partial),
+            _ when IsInactiveStatus(status) => query.Where(x =>
+                x.status == ProductBulkUpdateStatus.Completed ||
+                x.status == ProductBulkUpdateStatus.Failed ||
+                x.status == ProductBulkUpdateStatus.Cancelled ||
+                x.status == ProductBulkUpdateStatus.Partial),
+            _ => throw ApiException.BadRequest("Unknown cleanup status")
+        };
+
     private async Task<int> ClearOperationsHistory(int storeId, string status, CancellationToken ct)
     {
         var operationIds = await FilterOperationsByStatus(
@@ -686,6 +731,10 @@ public class OperationsController : ControllerBase
 
     private Task<int> ClearTransfers(int storeId, string status, CancellationToken ct) =>
         FilterTransfersByStatus(_context.pendingProductTransfers.Where(x => x.sourceStoreId == storeId || x.targetStoreId == storeId), status)
+            .ExecuteDeleteAsync(ct);
+
+    private Task<int> ClearBulkUpdates(int storeId, string status, CancellationToken ct) =>
+        FilterBulkUpdatesByStatus(_context.pendingProductBulkUpdates.Where(x => x.storeId == storeId), status)
             .ExecuteDeleteAsync(ct);
 
     [HttpGet]

@@ -6,6 +6,7 @@ import {
   onBeforeUnmount,
   watch,
   nextTick,
+  toRaw,
 } from "vue";
 import { useStore } from "vuex";
 import { VueFlow, useVueFlow } from "@vue-flow/core";
@@ -68,6 +69,11 @@ import {
   mergeProductFieldSources,
 } from "./graphModel.js";
 import { layoutGraph } from "./graphLayout.js";
+import {
+  localizeExternalFieldDescription,
+  localizeExternalFieldName,
+  localizeStandardSourceName,
+} from "./fieldLabels.js";
 
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
@@ -161,28 +167,106 @@ const histIdx = ref(-1);
 let isRestoring = false;
 let historyPending = false;
 
+// Transient adapter/UI fields — never persist in undo/clipboard (and avoid walking them).
+const TRANSIENT_NODE_DATA_KEYS = new Set([
+  "preview",
+  "previewValue",
+  "analysis",
+  "fieldOptionsMap",
+  "sources",
+  "availableSources",
+  "setFieldSource",
+  "setFieldMode",
+  "openField",
+]);
+
+/**
+ * Deep-clone plain data without JSON.stringify through Vue proxies.
+ * Proxy enumeration on a large mapping graph was freezing the UI for ~1–2s after node drag.
+ */
+function clonePlain(value, seen = new WeakMap()) {
+  if (value === null || typeof value !== "object") return value;
+  const raw = toRaw(value);
+  if (raw === null || typeof raw !== "object") return raw;
+  if (typeof raw === "function") return undefined;
+  if (seen.has(raw)) return seen.get(raw);
+  if (Array.isArray(raw)) {
+    const arr = new Array(raw.length);
+    seen.set(raw, arr);
+    for (let i = 0; i < raw.length; i++) {
+      const v = raw[i];
+      arr[i] = typeof v === "function" ? null : clonePlain(v, seen);
+    }
+    return arr;
+  }
+  if (raw instanceof Date) return new Date(raw.getTime());
+  const out = {};
+  seen.set(raw, out);
+  for (const key of Object.keys(raw)) {
+    const v = raw[key];
+    if (typeof v === "function") continue;
+    out[key] = clonePlain(v, seen);
+  }
+  return out;
+}
+
+function snapshotNodeData(data) {
+  const src = toRaw(data);
+  if (!src || typeof src !== "object") return {};
+  const out = {};
+  for (const key of Object.keys(src)) {
+    if (TRANSIENT_NODE_DATA_KEYS.has(key)) continue;
+    const v = src[key];
+    if (typeof v === "function") continue;
+    out[key] = clonePlain(v);
+  }
+  return out;
+}
+
+/** Lean graph snapshot for undo — only fields needed to restore, not full Vue Flow node objects. */
 function makeSnapshot() {
   return {
     nodes: nodes.value.map((n) => {
-      if (n.id === ADAPTER_NODE_ID || n.id === ADAPTER_PRICE_NODE_ID) {
-        const { analysis, sources, setFieldSource, availableSources, openField, fieldOptionsMap, ...rest } = n.data || {};
-        return JSON.parse(JSON.stringify({ ...n, data: rest }));
-      }
-      return JSON.parse(JSON.stringify(n));
+      const raw = toRaw(n);
+      const pos = raw.position;
+      return {
+        id: raw.id,
+        type: raw.type,
+        position: { x: pos?.x ?? 0, y: pos?.y ?? 0 },
+        deletable: raw.deletable,
+        data: snapshotNodeData(raw.data),
+      };
     }),
-    edges: JSON.parse(JSON.stringify(edges.value)),
+    edges: edges.value.map((e) => {
+      const raw = toRaw(e);
+      return {
+        id: raw.id,
+        source: raw.source,
+        target: raw.target,
+        sourceHandle: raw.sourceHandle,
+        targetHandle: raw.targetHandle,
+      };
+    }),
   };
 }
 
 function scheduleHistory() {
   if (isRestoring || historyPending) return;
   historyPending = true;
+  // Defer past Vue's DOM flush + the browser's input/a11y turn so drag-end
+  // does not compete with Accessibility notifications on the same long task.
   nextTick(() => {
-    history.value = history.value.slice(0, histIdx.value + 1);
-    history.value.push(makeSnapshot());
-    if (history.value.length > 60) history.value.shift();
-    else histIdx.value++;
-    historyPending = false;
+    requestAnimationFrame(() => {
+      try {
+        if (isRestoring) return;
+        history.value = history.value.slice(0, histIdx.value + 1);
+        history.value.push(makeSnapshot());
+        if (history.value.length > 60) history.value.shift();
+        else histIdx.value++;
+      } finally {
+        historyPending = false;
+      }
+    });
   });
 }
 
@@ -201,7 +285,7 @@ function restoreAt(idx) {
 }
 
 const canUndo = computed(() => histIdx.value > 0);
-const canRedo = computed(() => histIdx.value < history.value.length - 1);;
+const canRedo = computed(() => histIdx.value < history.value.length - 1);
 
 const debugInfo = computed(() => {
   const { analysis } = analyzeFields(nodes.value, edges.value);
@@ -253,15 +337,16 @@ function enrichFieldsWithDefs(fields, defs) {
   if (!fields?.length) return fields || [];
   return fields.map((f) => {
     const def = defs?.[f.fieldKey];
-    if (!def) return f;
+    const apiName = def?.name || f.label;
+    const apiDesc = def?.description ?? f.description ?? null;
     return {
       ...f,
-      label: def.name || f.label,
-      outputType: def.type || f.outputType,
-      description: def.description ?? f.description ?? null,
-      unit: def.unit ?? f.unit ?? null,
-      minValue: def.minValue ?? f.minValue ?? null,
-      maxValue: def.maxValue ?? f.maxValue ?? null,
+      label: localizeExternalFieldName(f.fieldKey, apiName),
+      outputType: def?.type || f.outputType,
+      description: localizeExternalFieldDescription(f.fieldKey, apiDesc),
+      unit: def?.unit ?? f.unit ?? null,
+      minValue: def?.minValue ?? f.minValue ?? null,
+      maxValue: def?.maxValue ?? f.maxValue ?? null,
     };
   });
 }
@@ -295,6 +380,7 @@ function refreshAnalysis(options = {}) {
     sources: adapterSourceLabels(nodes.value, edges.value),
     availableSources: props.availableSources,
     setFieldSource,
+    setFieldMode,
     openField: openAdapterField,
   });
 
@@ -321,6 +407,7 @@ function refreshAnalysis(options = {}) {
       sources: adapterSourceLabels(nodes.value, edges.value),
       availableSources: props.availableSources,
       setFieldSource: setPriceFieldSource,
+      setFieldMode: setPriceFieldMode,
       openField: openPriceField,
     });
   }
@@ -336,7 +423,7 @@ function pruneSourceBoundEdges() {
     if (!sink) continue;
     const boundHandles = new Set(
       (sink.data?.fields || [])
-        .filter((f) => f.source || f.aliasOf)
+        .filter((f) => f.source || f.aliasOf || f.omit)
         .map((f) => `f:${f.fieldKey}`),
     );
     for (const e of edges.value) {
@@ -399,6 +486,44 @@ function parseSourceValue(v) {
     return { type: "storeAttribute", attributeId: Number(rest) };
   return null;
 }
+
+/** Field binding mode: omit | wire | bind (source or aliasOf). */
+function setSinkFieldMode(sinkId, fieldKey, mode) {
+  const adapter = findNode(sinkId);
+  if (!adapter) return;
+  const current = (adapter.data?.fields || []).find((f) => f.fieldKey === fieldKey);
+  // Required marketplace fields must be sent — omit is not allowed.
+  if (mode === "omit" && current?.isRequired) return;
+  const fields = (adapter.data?.fields || []).map((f) => {
+    if (f.fieldKey !== fieldKey) return f;
+    const nf = { ...f };
+    if (mode === "omit") {
+      nf.omit = true;
+      delete nf.source;
+      delete nf.aliasOf;
+    } else if (mode === "wire") {
+      delete nf.omit;
+      delete nf.source;
+      delete nf.aliasOf;
+    } else {
+      // bind — keep existing source/aliasOf if any; clear omit so pin stays hidden
+      delete nf.omit;
+    }
+    return nf;
+  });
+  updateNodeData(sinkId, { fields });
+  if (mode === "omit" || mode === "bind") {
+    const dead = edges.value.filter(
+      (e) => e.target === sinkId && e.targetHandle === `f:${fieldKey}`,
+    );
+    if (dead.length) removeEdges(dead.map((e) => e.id));
+  }
+  dirty.value = true;
+  refreshAnalysis();
+  schedulePreview();
+  scheduleHistory();
+}
+
 function setSinkFieldSource(sinkId, fieldKey, value) {
   const adapter = findNode(sinkId);
   if (!adapter) return;
@@ -410,6 +535,7 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
   const fields = (adapter.data?.fields || []).map((f) => {
     if (f.fieldKey !== fieldKey) return f;
     const nf = { ...f };
+    delete nf.omit;
     if (mergeWith) {
       nf.aliasOf = mergeWith;
       delete nf.source;
@@ -430,6 +556,7 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
   dirty.value = true;
   refreshAnalysis();
   schedulePreview();
+  scheduleHistory();
 }
 
 function setFieldSource(fieldKey, value) {
@@ -438,6 +565,14 @@ function setFieldSource(fieldKey, value) {
 
 function setPriceFieldSource(fieldKey, value) {
   setSinkFieldSource(ADAPTER_PRICE_NODE_ID, fieldKey, value);
+}
+
+function setFieldMode(fieldKey, mode) {
+  setSinkFieldMode(ADAPTER_NODE_ID, fieldKey, mode);
+}
+
+function setPriceFieldMode(fieldKey, mode) {
+  setSinkFieldMode(ADAPTER_PRICE_NODE_ID, fieldKey, mode);
 }
 
 // ---- Option resolution for valueMap/optionMap editors ----
@@ -1441,15 +1576,15 @@ function buildGraph() {
   };
 }
 function cleanData(d) {
-  const rest = { ...(d || {}) };
-  delete rest.preview;
-  delete rest.previewValue;
-  delete rest.analysis;
-  delete rest.fieldOptionsMap; // adapter: transient, rebuilt from props on every refresh
-  delete rest.sources; // adapter: transient traced-source labels
-  delete rest.availableSources; // adapter: transient dropdown options
-  delete rest.setFieldSource; // adapter: transient callback
-  delete rest.openField; // adapter: transient callback
+  const src = toRaw(d);
+  if (!src || typeof src !== "object") return {};
+  const rest = {};
+  for (const key of Object.keys(src)) {
+    if (TRANSIENT_NODE_DATA_KEYS.has(key)) continue;
+    const v = src[key];
+    if (typeof v === "function") continue;
+    rest[key] = v;
+  }
   return rest;
 }
 
@@ -1475,20 +1610,27 @@ function copySelection() {
   if (!sel.length) return false;
   const ids = new Set(sel.map((n) => n.id));
   clipboard.value = {
-    nodes: sel.map((n) => ({
-      id: n.id,
-      type: n.type,
-      position: { ...n.position },
-      data: JSON.parse(JSON.stringify(cleanData(n.data))),
-    })),
+    nodes: sel.map((n) => {
+      const raw = toRaw(n);
+      const pos = raw.position;
+      return {
+        id: raw.id,
+        type: raw.type,
+        position: { x: pos?.x ?? 0, y: pos?.y ?? 0 },
+        data: snapshotNodeData(raw.data),
+      };
+    }),
     edges: edges.value
       .filter((e) => ids.has(e.source) && ids.has(e.target))
-      .map((e) => ({
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle,
-        targetHandle: e.targetHandle,
-      })),
+      .map((e) => {
+        const raw = toRaw(e);
+        return {
+          source: raw.source,
+          target: raw.target,
+          sourceHandle: raw.sourceHandle,
+          targetHandle: raw.targetHandle,
+        };
+      }),
   };
   return true;
 }
@@ -1504,7 +1646,7 @@ function spawnCopies(clip, offset) {
       id,
       type: n.type,
       position: { x: n.position.x + offset.x, y: n.position.y + offset.y },
-      data: JSON.parse(JSON.stringify(n.data)),
+      data: clonePlain(n.data),
       selected: true,
     };
   });
@@ -2155,6 +2297,13 @@ async function importMappingFile(event) {
   border-color: hsl(var(--border));
   border-style: dashed;
   color: hsl(var(--muted-foreground));
+}
+.vf-adapter__pill--omit {
+  background: transparent;
+  border-color: hsl(var(--border));
+  border-style: dotted;
+  color: hsl(var(--muted-foreground));
+  opacity: 0.85;
 }
 .vf-adapter__dir {
   flex-shrink: 0;

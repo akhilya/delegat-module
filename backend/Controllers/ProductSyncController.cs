@@ -2916,6 +2916,12 @@ public class ProductSyncController : ControllerBase
         return connection;
     }
 
+    private static readonly JsonSerializerOptions ExportDetailsJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private static string? FormatExportDetails(Dictionary<string, object>? details)
     {
         if (details == null || details.Count == 0)
@@ -2924,9 +2930,9 @@ public class ProductSyncController : ControllerBase
         try
         {
             if (details.TryGetValue("images", out var images))
-                return $"Image export details: {JsonSerializer.Serialize(images)}";
+                return $"Image export details: {JsonSerializer.Serialize(images, ExportDetailsJsonOptions)}";
 
-            return $"Export details: {JsonSerializer.Serialize(details)}";
+            return $"Export details: {JsonSerializer.Serialize(details, ExportDetailsJsonOptions)}";
         }
         catch
         {

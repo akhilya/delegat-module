@@ -309,6 +309,8 @@ builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
 builder.Services.AddHostedService<ProductTransferBackgroundService>();
+builder.Services.AddHostedService<ProductBulkUpdateBackgroundService>();
+builder.Services.AddScoped<ProductBulkUpdateService>();
 builder.Services.AddScoped<Delegat.Services.FolderJobs.FolderJobService>();
 builder.Services.AddHostedService<FolderJobBackgroundService>();
 builder.Services.AddHostedService<QueueCleanupBackgroundService>();

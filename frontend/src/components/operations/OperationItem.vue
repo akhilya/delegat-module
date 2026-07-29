@@ -25,6 +25,7 @@ import {
   ArrowRightLeft,
   Trash2,
   Sparkles,
+  Pencil,
   User,
   Cable,
   Copy,
@@ -124,6 +125,8 @@ const typeIcon = computed(() => {
       return ImageDown;
     case "product-transfer":
       return ArrowRightLeft;
+    case "product-bulk-update":
+      return Pencil;
     case "file-upload":
       return Upload;
     case "file-delete":

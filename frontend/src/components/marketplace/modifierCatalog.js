@@ -140,6 +140,18 @@ export const MODIFIER_CATALOG = {
     ],
     summary: (p) => `+ ${p.addend ?? "?"}`,
   },
+  subtract: {
+    type: "subtract",
+    get displayName() { return t("marketplace.modifiers.subtract.name"); },
+    aliases: ["subtract", "minus", "-", "sub", "decrement"],
+    category: "number",
+    reversible: true,
+    applicableTypes: ["number", "integer"],
+    params: [
+      { key: "subtrahend", get label() { return t("marketplace.modifiers.subtract.subtrahend"); }, type: "number", required: true, default: 0 },
+    ],
+    summary: (p) => `− ${p.subtrahend ?? "?"}`,
+  },
   round: {
     type: "round",
     get displayName() { return t("marketplace.modifiers.round.name"); },

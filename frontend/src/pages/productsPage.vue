@@ -303,6 +303,13 @@ export default {
     },
 
     openBulkEditDialog() {
+      // Rebuild cache from the current page so IDs always resolve to product objects.
+      for (const p of this.products) {
+        if (this.rowSelection[String(p.id)]) {
+          this.selectedProductsMap[p.id] = p;
+        }
+      }
+      if (this.selectedProductIds.length === 0) return;
       this.isBulkEditDialogOpen = true;
     },
 
@@ -766,7 +773,11 @@ export default {
     },
     selectedProducts() {
       return this.selectedProductIds
-        .map((id) => this.selectedProductsMap[id])
+        .map((id) => {
+          const cached = this.selectedProductsMap[id];
+          if (cached) return cached;
+          return this.products.find((p) => p.id === id) || null;
+        })
         .filter(Boolean);
     },
     hasSelection() {
@@ -1024,6 +1035,7 @@ export default {
     <BulkEditDialog
       v-model="isBulkEditDialogOpen"
       :selected-products="selectedProducts"
+      :product-ids="selectedProductIds"
       :category-attributes="categoryAttributes"
       :store-attributes="storeAttributes"
       @saved="handleBulkEditSaved"

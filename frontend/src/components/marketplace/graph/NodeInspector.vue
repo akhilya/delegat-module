@@ -18,10 +18,13 @@ import ValueMapEditor from "../ValueMapEditor.vue";
 import OptionMapEditor from "../OptionMapEditor.vue";
 import TemplateEditor from "../TemplateEditor.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
-import { Trash2, X, ChevronDown, Plus } from "lucide-vue-next";
+import { Trash2, X, Plus } from "lucide-vue-next";
 import { fieldPinsFor, mergeProductFieldSources, opLabel, opParamLabel } from "./graphModel.js";
+import { localizeExternalFieldName, localizeStandardSourceName } from "./fieldLabels.js";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import AdapterFieldBindingDialog from "./AdapterFieldBindingDialog.vue";
 
 const { t } = useI18n();
 
@@ -155,7 +158,7 @@ const requiredCount = computed(
 );
 
 function adapterFieldLabel(f) {
-  const base = f.label || f.fieldKey;
+  const base = localizeExternalFieldName(f.fieldKey, f.label || f.fieldKey);
   // Avoid "Name (kg), kg" when label already contains unit
   if (f.unit && !String(base).includes(f.unit)) return `${base}, ${f.unit}`;
   return base;
@@ -173,6 +176,22 @@ function adapterFieldTooltip(f) {
 const adapterFields = computed(() => data.value.fields || []);
 const adapterAvail = computed(() => data.value.availableSources || {});
 const adapterPreview = computed(() => data.value.preview || {});
+const adapterFieldFilter = ref("");
+const bindingDialogOpen = ref(false);
+const bindingDialogField = ref(null);
+/** While the binding dialog is open for a field that has no source yet, keep "bind" radio selected. */
+const pendingBindKey = ref(null);
+
+const filteredAdapterFields = computed(() => {
+  const q = adapterFieldFilter.value.trim().toLowerCase();
+  const list = adapterFields.value;
+  if (!q) return list;
+  return list.filter((f) => {
+    const hay = `${f.label || ""} ${f.fieldKey || ""} ${f.description || ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+});
+
 const adapterSourceValue = (f) => {
   if (f.aliasOf) return `m:${f.aliasOf}`;
   const s = f.source;
@@ -184,29 +203,65 @@ const adapterSourceValue = (f) => {
   return "";
 };
 
-// Merge candidates: other non-alias fields (a field can't alias itself or another alias)
-const mergeCandidates = (f) =>
-  adapterFields.value.filter((x) => x.fieldKey !== f.fieldKey && !x.aliasOf);
+const fieldMode = (f) => {
+  if (pendingBindKey.value === f.fieldKey) return "bind";
+  if (f.omit) return "omit";
+  if (f.source || f.aliasOf) return "bind";
+  return "wire";
+};
+
 const setAdapterSource = (fieldKey, value) =>
   data.value.setFieldSource?.(fieldKey, value === NONE ? "" : value);
 
-// Render at most one real <Select> at a time (a category can have dozens of fields - mounting a
-// Select per field freezes the UI). Resting rows are cheap buttons; clicking one opens its editor.
-const editingField = ref(null);
+const setAdapterMode = (fieldKey, mode) =>
+  data.value.setFieldMode?.(fieldKey, mode);
+
+function onFieldModeChange(f, mode) {
+  if (mode === "bind") {
+    pendingBindKey.value = f.fieldKey;
+    openBindingDialog(f);
+    return;
+  }
+  pendingBindKey.value = null;
+  setAdapterMode(f.fieldKey, mode);
+}
+
+function openBindingDialog(f) {
+  bindingDialogField.value = f;
+  pendingBindKey.value = f.fieldKey;
+  bindingDialogOpen.value = true;
+}
+
+function onBindingDialogOpen(open) {
+  bindingDialogOpen.value = open;
+  if (!open) pendingBindKey.value = null;
+}
+
+function onBindingSelect(value) {
+  const f = bindingDialogField.value;
+  if (!f) return;
+  pendingBindKey.value = null;
+  setAdapterSource(f.fieldKey, value);
+}
+
 const currentSourceLabel = (f) => {
+  if (f.omit) return t("marketplace.graph.inspector.modeOmit");
   if (f.aliasOf) {
     const primary = adapterFields.value.find((x) => x.fieldKey === f.aliasOf);
-    return `= ${primary?.label || f.aliasOf}`;
+    return t("marketplace.graph.inspector.aliasEquals", {
+      primary: primary?.label || f.aliasOf,
+    });
   }
   const s = f.source;
   if (!s) return t("marketplace.graph.inspector.byWire");
   if (s.type === "groupName") return t("marketplace.graph.groupNameLabel");
   if (s.type === "productField")
-    return (
+    return localizeStandardSourceName(
+      s.field,
       mergeProductFieldSources(adapterAvail.value).find((x) => x.key === s.field)
         ?.displayName ||
-      s.field ||
-      t("marketplace.graph.inspector.productField")
+        s.field ||
+        t("marketplace.graph.inspector.productField"),
     );
   if (s.type === "attribute")
     return (
@@ -581,9 +636,9 @@ function resolvePreview(fieldKey, raw) {
         </div>
       </template>
 
-      <!-- Adapter fields (read-only summary) -->
+      <!-- Adapter fields: mode radios + binding dialog -->
       <template v-else-if="type === 'adapterFields' || type === 'adapterPriceFields'">
-        <div class="space-y-2">
+        <div class="space-y-3">
           <div
             class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground"
           >
@@ -593,120 +648,78 @@ function resolvePreview(fieldKey, raw) {
           <p class="text-xs text-muted-foreground">
             {{ t("marketplace.graph.inspector.adapterFieldsHint") }}
           </p>
+          <Input
+            v-model="adapterFieldFilter"
+            type="search"
+            :placeholder="t('marketplace.graph.inspector.fieldSearchPlaceholder')"
+            class="h-8"
+          />
 
-          <div class="space-y-2">
+          <div class="space-y-3">
             <div
-              v-for="f in adapterFields"
+              v-for="f in filteredAdapterFields"
               :key="f.fieldKey"
               :data-fk="f.fieldKey"
-              :class="['space-y-1 px-1', highlightedField === f.fieldKey && 'vf-field-flash']"
+              :class="['space-y-1.5 rounded-md border border-transparent px-1 py-1', highlightedField === f.fieldKey && 'vf-field-flash']"
             >
-              <Label class="text-xs" :title="adapterFieldTooltip(f)">
-                {{ adapterFieldLabel(f)
-                }}<span v-if="f.isRequired" class="text-destructive"> *</span>
-              </Label>
-              <p
-                v-if="f.description || f.unit"
-                class="text-[11px] leading-snug text-muted-foreground line-clamp-2"
-                :title="adapterFieldTooltip(f)"
-              >
-                <span v-if="f.unit" class="font-medium text-foreground/70">{{ f.unit }}</span>
-                <span v-if="f.unit && f.description"> · </span>
-                <span v-if="f.description">{{ f.description }}</span>
-              </p>
-              <!-- Resting: a cheap button. Only the row being edited mounts a real <Select>. -->
-              <button
-                v-if="editingField !== f.fieldKey"
-                type="button"
-                class="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm hover:bg-accent"
-                @click="editingField = f.fieldKey"
-              >
-                <span
-                  class="truncate"
-                  :class="!f.source && 'text-muted-foreground'"
+              <div class="min-w-0">
+                <Label class="text-xs" :title="adapterFieldTooltip(f)">
+                  {{ adapterFieldLabel(f)
+                  }}<span v-if="f.isRequired" class="text-destructive"> *</span>
+                </Label>
+                <p
+                  v-if="f.description"
+                  class="text-[11px] leading-snug text-muted-foreground line-clamp-1"
+                  :title="adapterFieldTooltip(f)"
                 >
-                  {{ currentSourceLabel(f) }}
-                </span>
-                <ChevronDown class="size-4 shrink-0 opacity-50" />
-              </button>
-              <Select
-                v-else
-                :default-open="true"
-                :model-value="adapterSourceValue(f) || undefined"
-                @update:model-value="
-                  setAdapterSource(f.fieldKey, $event);
-                  editingField = null;
-                "
-                @update:open="(o) => !o && (editingField = null)"
+                  {{ f.description }}
+                </p>
+              </div>
+
+              <RadioGroup
+                :model-value="fieldMode(f)"
+                class="grid gap-1"
+                @update:model-value="onFieldModeChange(f, $event)"
               >
-                <SelectTrigger class="h-9 w-full">
-                  <SelectValue :placeholder="t('marketplace.graph.inspector.byWire')" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="NONE">{{ t("marketplace.graph.inspector.byWireOption") }}</SelectItem>
-                  <SelectGroup v-if="adapterAvail.productFields?.length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.productGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="pf in adapterAvail.productFields"
-                      :key="pf.key"
-                      :value="`p:${pf.key}`"
-                    >
-                      {{ pf.displayName || pf.key }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.stockFields?.length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.stockGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="pf in adapterAvail.stockFields"
-                      :key="'stock-' + pf.key"
-                      :value="`p:${pf.key}`"
-                    >
-                      {{ pf.displayName || pf.key }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.priceFields?.length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.priceGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="pf in adapterAvail.priceFields"
-                      :key="'price-' + pf.key"
-                      :value="`p:${pf.key}`"
-                    >
-                      {{ pf.displayName || pf.key }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.categoryAttributes?.length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.categoryAttributeGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="a in adapterAvail.categoryAttributes"
-                      :key="a.id"
-                      :value="`a:${a.id}`"
-                    >
-                      {{ a.name }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectGroup v-if="adapterAvail.storeAttributes?.length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.storeAttributeGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="a in adapterAvail.storeAttributes"
-                      :key="a.id"
-                      :value="`s:${a.id}`"
-                    >
-                      {{ a.name }}
-                    </SelectItem>
-                  </SelectGroup>
-                  <SelectItem value="g">{{ t("marketplace.graph.inspector.groupNameOption") }}</SelectItem>
-                  <SelectGroup v-if="mergeCandidates(f).length">
-                    <SelectLabel>{{ t("marketplace.graph.inspector.mergeWithFieldGroup") }}</SelectLabel>
-                    <SelectItem
-                      v-for="mf in mergeCandidates(f)"
-                      :key="mf.fieldKey"
-                      :value="`m:${mf.fieldKey}`"
-                    >
-                      = {{ mf.label || mf.fieldKey }}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                <label
+                  v-if="!f.isRequired || f.omit"
+                  class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
+                  :for="`af-mode-omit-${f.fieldKey}`"
+                >
+                  <RadioGroupItem :id="`af-mode-omit-${f.fieldKey}`" value="omit" />
+                  <span>{{ t("marketplace.graph.inspector.modeOmit") }}</span>
+                </label>
+                <label
+                  class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
+                  :for="`af-mode-wire-${f.fieldKey}`"
+                >
+                  <RadioGroupItem :id="`af-mode-wire-${f.fieldKey}`" value="wire" />
+                  <span>{{ t("marketplace.graph.inspector.modeWire") }}</span>
+                </label>
+                <label
+                  class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
+                  :for="`af-mode-bind-${f.fieldKey}`"
+                >
+                  <RadioGroupItem :id="`af-mode-bind-${f.fieldKey}`" value="bind" />
+                  <span>{{ t("marketplace.graph.inspector.modeBind") }}</span>
+                </label>
+              </RadioGroup>
+
+              <div v-if="fieldMode(f) === 'bind'" class="pl-1 text-xs">
+                <span class="text-muted-foreground">{{ currentSourceLabel(f) }}</span>
+                <button
+                  type="button"
+                  class="ml-1.5 text-primary underline-offset-2 hover:underline"
+                  @click="openBindingDialog(f)"
+                >
+                  {{
+                    f.source || f.aliasOf
+                      ? t("marketplace.graph.inspector.changeBinding")
+                      : t("marketplace.graph.inspector.chooseBinding")
+                  }}
+                </button>
+              </div>
+
               <div
                 v-if="adapterPreview[f.fieldKey] != null"
                 class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
@@ -715,7 +728,24 @@ function resolvePreview(fieldKey, raw) {
                 {{ resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]) }}
               </div>
             </div>
+
+            <p
+              v-if="!filteredAdapterFields.length"
+              class="py-4 text-center text-xs text-muted-foreground"
+            >
+              {{ t("marketplace.graph.inspector.fieldSearchEmpty") }}
+            </p>
           </div>
+
+          <AdapterFieldBindingDialog
+            :open="bindingDialogOpen"
+            :field="bindingDialogField"
+            :available-sources="adapterAvail"
+            :adapter-fields="adapterFields"
+            :current-value="bindingDialogField ? adapterSourceValue(bindingDialogField) : ''"
+            @update:open="onBindingDialogOpen"
+            @select="onBindingSelect"
+          />
         </div>
       </template>
 

@@ -151,6 +151,14 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                         && p.createdAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
+        var deletedBulkUpdates = await db.pendingProductBulkUpdates
+            .Where(p => (p.status == ProductBulkUpdateStatus.Completed
+                         || p.status == ProductBulkUpdateStatus.Failed
+                         || p.status == ProductBulkUpdateStatus.Cancelled
+                         || p.status == ProductBulkUpdateStatus.Partial)
+                        && p.createdAt < cutoff)
+            .ExecuteDeleteAsync(ct);
+
         var deletedFolderJobs = await db.pendingFolderJobs
             .Where(p => (p.status == FolderJobStatus.Completed
                          || p.status == FolderJobStatus.Failed
@@ -167,12 +175,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                         && (o.finishedAt ?? o.createdAt) < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedFolderJobs + deletedOps;
+        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedBulkUpdates + deletedFolderJobs + deletedOps;
         if (total > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, folderJobs={FolderJobs}, operations={Ops} older than {Days}d",
-                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedFolderJobs, deletedOps, retentionDays);
+                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, bulkUpdates={BulkUpdates}, folderJobs={FolderJobs}, operations={Ops} older than {Days}d",
+                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedBulkUpdates, deletedFolderJobs, deletedOps, retentionDays);
         }
     }
 

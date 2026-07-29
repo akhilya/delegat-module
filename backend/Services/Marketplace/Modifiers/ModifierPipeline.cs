@@ -27,6 +27,7 @@ public static class ModifierPipeline
             new MultiplyModifier(),
             new DivideModifier(),
             new AddModifier(),
+            new SubtractModifier(),
             new RoundModifier(),
             new FloorModifier(),
             new CeilingModifier(),

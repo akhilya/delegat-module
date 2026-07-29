@@ -152,6 +152,9 @@ public class AdapterField
     /// Export copies the primary's evaluated value into this key; import reverses only the primary.
     /// Alias fields have no input pin and own connections are ignored.</summary>
     public string? aliasOf { get; set; }
+    /// <summary>When true the field is excluded from export outputs and import projections.
+    /// Mutually exclusive with <see cref="source"/> / <see cref="aliasOf"/> and graph wires.</summary>
+    public bool omit { get; set; }
 }
 
 /// <summary>A standard source bound directly to an adapter field (no node/wire).</summary>

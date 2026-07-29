@@ -29,6 +29,7 @@ public class ProductController : ControllerBase
     private readonly QuotaService _quotaService;
     private readonly IOperationLogger _operationLogger;
     private readonly AttributeUniquenessService _attributeUniqueness;
+    private readonly ProductBulkUpdateService _bulkUpdateService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
@@ -42,7 +43,8 @@ public class ProductController : ControllerBase
         ExcelProductService excelService,
         QuotaService quotaService,
         IOperationLogger operationLogger,
-        AttributeUniquenessService attributeUniqueness)
+        AttributeUniquenessService attributeUniqueness,
+        ProductBulkUpdateService bulkUpdateService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -53,6 +55,7 @@ public class ProductController : ControllerBase
         _quotaService = quotaService;
         _operationLogger = operationLogger;
         _attributeUniqueness = attributeUniqueness;
+        _bulkUpdateService = bulkUpdateService;
     }
 
     /// <summary>
@@ -582,175 +585,84 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
-    /// Bulk updates multiple products at once within a transaction.
+    /// Enqueues a bulk product update. Returns immediately with an operationId —
+    /// <see cref="ProductBulkUpdateBackgroundService"/> applies changes and streams
+    /// progress/logs through the operations side panel.
     /// </summary>
     /// <param name="request">The list of product IDs and the fields to update.</param>
-    /// <returns>A success indicator with the count of updated products.</returns>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Queued indicator with operationId and product count.</returns>
     [HttpPatch]
     [Route("/products/bulk")]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
-    public async Task<IActionResult> BulkUpdateProducts([FromBody] BulkUpdateRequest request)
+    public async Task<IActionResult> BulkUpdateProducts([FromBody] BulkUpdateRequest request, CancellationToken ct = default)
     {
-        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var userId = _currentUserService.GetUserId();
+        if (userId == null)
+            throw ApiException.Unauthorized();
 
         if (request.productIds == null || request.productIds.Count == 0)
             throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
 
-        var productRepo = _unitOfWork.Repository<Product>();
-        var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-        var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
+        var updates = ToBulkUpdateFields(request.updates);
+        await _bulkUpdateService.ValidateBeforeEnqueueAsync(
+            selectedStoreId.Value, request.productIds, updates, ct);
 
-        // Find all products and verify they belong to the current store
-        var products = await productRepo.FindAllAsync(
-            p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value,
-            query => query
-                .Include(p => p.attributeValues)
-                .Include(p => p.storeAttributeValues));
-
-        var foundIds = products.Select(p => p.Id).ToList();
-        var notFoundIds = request.productIds.Except(foundIds).ToList();
-        if (notFoundIds.Any())
-            throw ApiException.NotFound($"Products not found: {string.Join(", ", notFoundIds)}", code: "product_not_found");
-
-        if (request.updates.attributeValues != null || request.updates.storeAttributeValues != null)
+        var operationId = Guid.NewGuid().ToString("N");
+        var pending = new PendingProductBulkUpdate
         {
-            foreach (var product in products)
-            {
-                await _attributeUniqueness.EnsureUniqueAsync(
-                    selectedStoreId.Value,
-                    product.categoryId,
-                    request.updates.attributeValues,
-                    request.updates.storeAttributeValues,
-                    excludeProductId: product.Id);
-            }
-        }
+            storeId = selectedStoreId.Value,
+            authorUserId = userId.Value,
+            batchId = operationId,
+            productIdsJson = ProductBulkUpdateService.SerializeProductIds(request.productIds),
+            updatesJson = ProductBulkUpdateService.SerializeUpdates(updates),
+            status = ProductBulkUpdateStatus.Pending,
+            createdAt = DateTime.UtcNow
+        };
+        _context.pendingProductBulkUpdates.Add(pending);
+        await _context.SaveChangesAsync(ct);
 
-        var updatedCount = 0;
+        var title = $"Bulk edit {request.productIds.Count} product(s)";
+        await _operationLogger.StartAsync(
+            operationId,
+            selectedStoreId.Value,
+            userId.Value,
+            "product-bulk-update",
+            title,
+            batchId: operationId,
+            batchType: "product-bulk-update",
+            totalItems: request.productIds.Count);
 
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        return Ok(new
         {
-            foreach (var product in products)
-            {
-                var hasChanges = false;
-
-                if (request.updates.name != null)
-                {
-                    product.name = request.updates.name;
-                    hasChanges = true;
-                }
-
-                if (request.updates.description != null)
-                {
-                    product.description = request.updates.description;
-                    hasChanges = true;
-                }
-
-                if (request.updates.storageQuantity.HasValue)
-                {
-                    product.storageQuantity = request.updates.storageQuantity.Value;
-                    hasChanges = true;
-                }
-
-                if (request.updates.price.HasValue)
-                {
-                    product.price = request.updates.price.Value;
-                    hasChanges = true;
-                }
-
-                if (request.updates.oldPrice.HasValue) { product.oldPrice = request.updates.oldPrice; hasChanges = true; }
-                if (request.updates.minPrice.HasValue) { product.minPrice = request.updates.minPrice; hasChanges = true; }
-                if (request.updates.netPrice.HasValue) { product.netPrice = request.updates.netPrice; hasChanges = true; }
-                if (request.updates.currency != null) { product.currency = request.updates.currency == "" ? null : request.updates.currency; hasChanges = true; }
-
-                if (request.updates.price.HasValue || request.updates.oldPrice.HasValue)
-                {
-                    if (product.price.HasValue)
-                        product.discountedPrice = product.price;
-                    product.discount = Delegat.Infrastructure.ProductPriceHelper.ComputeDiscountPercent(
-                        product.oldPrice, product.price);
-                    hasChanges = true;
-                }
-
-                if (request.updates.barcode != null)
-                {
-                    var newBarcode = request.updates.barcode == "" ? null : request.updates.barcode;
-                    if (newBarcode != null && !IsValidEanBarcode(newBarcode))
-                        throw ApiException.BadRequest($"Invalid barcode: {newBarcode}");
-                    product.barcode = newBarcode;
-                    hasChanges = true;
-                }
-
-                if (request.updates.generateBarcodes == true && string.IsNullOrEmpty(product.barcode))
-                {
-                    product.barcode = GenerateEan13();
-                    hasChanges = true;
-                }
-
-                if (hasChanges)
-                {
-                    productRepo.UpdateWithoutSave(product);
-                }
-
-                if (request.updates.attributeValues != null)
-                {
-                    foreach (var av in request.updates.attributeValues)
-                    {
-                        var existing = product.attributeValues
-                            .FirstOrDefault(a => a.attributeId == av.attributeId);
-                        if (existing != null)
-                        {
-                            existing.value = av.value;
-                        }
-                        else
-                        {
-                            var attrValue = new ProductAttributeValue();
-                            attrValue.AddFill(new ProductAttributeValue.AddForm
-                            {
-                                productId = product.Id,
-                                attributeId = av.attributeId,
-                                value = av.value
-                            });
-                            await attrValueRepo.AddWithoutSaveAsync(attrValue);
-                        }
-                    }
-                    hasChanges = true;
-                }
-
-                if (request.updates.storeAttributeValues != null)
-                {
-                    foreach (var sav in request.updates.storeAttributeValues)
-                    {
-                        var existing = product.storeAttributeValues
-                            .FirstOrDefault(a => a.storeAttributeId == sav.storeAttributeId);
-                        if (existing != null)
-                        {
-                            existing.value = sav.value;
-                        }
-                        else
-                        {
-                            var storeAttrValue = new StoreProductAttributeValue();
-                            storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
-                            {
-                                productId = product.Id,
-                                storeAttributeId = sav.storeAttributeId,
-                                value = sav.value
-                            });
-                            await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
-                        }
-                    }
-                    hasChanges = true;
-                }
-
-                updatedCount++;
-            }
-
-            await _unitOfWork.SaveChangesAsync();
+            queued = true,
+            operationId,
+            totalItems = request.productIds.Count
         });
-
-        return Ok(new { success = true, updatedCount });
     }
+
+    private static ProductBulkUpdateFields ToBulkUpdateFields(BulkUpdateFields updates) =>
+        new()
+        {
+            name = updates.name,
+            description = updates.description,
+            storageQuantity = updates.storageQuantity,
+            price = updates.price,
+            oldPrice = updates.oldPrice,
+            minPrice = updates.minPrice,
+            netPrice = updates.netPrice,
+            discountedPrice = updates.discountedPrice,
+            discount = updates.discount,
+            currency = updates.currency,
+            attributeValues = updates.attributeValues,
+            storeAttributeValues = updates.storeAttributeValues,
+            barcode = updates.barcode,
+            generateBarcodes = updates.generateBarcodes
+        };
 
     /// <summary>
     /// Request body for bulk-updating multiple products.
@@ -1380,9 +1292,6 @@ public class ProductController : ControllerBase
         public List<int> productIds { get; set; }
     }
 
-    /// <summary>
-    /// Validates an EAN-8 or EAN-13 barcode string (digits only, correct check digit).
-    /// </summary>
     private static readonly Random _random = new();
 
     /// <summary>Generates a random valid EAN-13 barcode with prefix 200-299 (internal use).</summary>
@@ -1402,6 +1311,9 @@ public class ProductController : ControllerBase
         return body + check;
     }
 
+    /// <summary>
+    /// Validates an EAN-8 or EAN-13 barcode string (digits only, correct check digit).
+    /// </summary>
     public static bool IsValidEanBarcode(string barcode)
     {
         if (string.IsNullOrEmpty(barcode))

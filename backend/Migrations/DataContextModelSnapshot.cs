@@ -1558,6 +1558,62 @@ namespace Delegat.Migrations
                     b.ToTable("pendingProductTransfers");
                 });
 
+            modelBuilder.Entity("Delegat.Models.PendingProductBulkUpdate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("completedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("failedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("productIdsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("startedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("updatesJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("batchId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.ToTable("pendingProductBulkUpdates");
+                });
+
             modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")

@@ -487,6 +487,9 @@ public class MappingService
             if (string.IsNullOrEmpty(field.fieldKey))
                 continue;
 
+            if (field.omit)
+                continue;
+
             // Merged duplicates: only the primary field participates in import -
             // reversing both fields into the same local source would be last-write-wins
             if (!string.IsNullOrEmpty(field.aliasOf))
@@ -1110,6 +1113,9 @@ public class MappingService
 
                 "add" when decimal.TryParse(argument, out var addend) =>
                     Convert.ToDecimal(value) + addend,
+
+                "subtract" when decimal.TryParse(argument, out var subtrahend) =>
+                    Convert.ToDecimal(value) - subtrahend,
 
                 "append" => value.ToString() + argument,
 

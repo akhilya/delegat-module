@@ -45,6 +45,55 @@ const sizeClasses = {
   "5xl": "sm:max-w-5xl",
   "6xl": "sm:max-w-6xl",
 };
+
+/**
+ * Select / MultiSelect / Combobox portal their menus to <body>. A click there is
+ * "outside" DialogContent and would dismiss the dialog mid-selection — exactly
+ * what broke bulk-edit for select & multiselect fields. Treat known overlay
+ * slots (and reka popper wrappers) as inside the dialog.
+ */
+function isPortaledOverlayTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest("[data-slot='popover-content']") ||
+      target.closest("[data-slot='select-content']") ||
+      target.closest("[data-slot='dropdown-menu-content']") ||
+      target.closest("[data-slot='combobox-list']") ||
+      target.closest("[data-reka-popper-content-wrapper]"),
+  );
+}
+
+function onPointerDownOutside(event) {
+  const originalEvent = event.detail?.originalEvent;
+  const target = originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+    return;
+  }
+  // Ignore scrollbar clicks on the overlay scroller (same pattern as DialogScrollContent).
+  if (originalEvent && target instanceof HTMLElement) {
+    if (
+      originalEvent.offsetX > target.clientWidth ||
+      originalEvent.offsetY > target.clientHeight
+    ) {
+      event.preventDefault();
+    }
+  }
+}
+
+function onFocusOutside(event) {
+  const target = event.detail?.originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+  }
+}
+
+function onInteractOutside(event) {
+  const target = event.detail?.originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+  }
+}
 </script>
 
 <template>
@@ -62,6 +111,9 @@ const sizeClasses = {
             props.class,
           )
         "
+        @pointer-down-outside="onPointerDownOutside"
+        @focus-outside="onFocusOutside"
+        @interact-outside="onInteractOutside"
       >
         <slot />
 

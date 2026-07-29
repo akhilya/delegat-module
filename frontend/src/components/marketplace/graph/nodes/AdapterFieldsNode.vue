@@ -3,6 +3,10 @@ import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
 import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
 import { mergeProductFieldSources, pinColor } from "../graphModel.js";
+import {
+  localizeExternalFieldName,
+  localizeStandardSourceName,
+} from "../fieldLabels.js";
 import { t } from "@/i18n";
 
 const props = defineProps({
@@ -29,7 +33,10 @@ function boundLabel(f) {
   if (!s) return "";
   if (s.type === "groupName") return t("marketplace.graph.groupNameLabel");
   if (s.type === "productField")
-    return productFields.value.find((x) => x.key === s.field)?.displayName || s.field;
+    return localizeStandardSourceName(
+      s.field,
+      productFields.value.find((x) => x.key === s.field)?.displayName || s.field,
+    );
   if (s.type === "attribute")
     return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
   if (s.type === "storeAttribute")
@@ -77,11 +84,15 @@ function fieldTooltip(f) {
 }
 
 function fieldLabel(f) {
-  const base = f.label || f.fieldKey;
+  const base = localizeExternalFieldName(f.fieldKey, f.label || f.fieldKey);
   if (f.unit && !String(base).toLowerCase().includes(String(f.unit).toLowerCase())) {
     return `${base}, ${f.unit}`;
   }
   return base;
+}
+
+function pinHidden(f) {
+  return !!(f.source || f.aliasOf || f.omit);
 }
 
 const HEADER = 30;
@@ -97,12 +108,12 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
       :id="`f:${f.fieldKey}`"
       type="target"
       :position="Position.Left"
-      :connectable="!f.source && !f.aliasOf"
+      :connectable="!pinHidden(f)"
       :style="{
         top: topFor(i),
         background: pinColor(f.outputType),
-        opacity: f.source || f.aliasOf ? 0 : 1,
-        pointerEvents: f.source || f.aliasOf ? 'none' : 'auto',
+        opacity: pinHidden(f) ? 0 : 1,
+        pointerEvents: pinHidden(f) ? 'none' : 'auto',
       }"
     />
 
@@ -123,6 +134,13 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         <span class="vf-adapter__label" :title="fieldTooltip(f)">
           {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
+
+        <span
+          v-if="f.omit"
+          class="vf-adapter__pill vf-adapter__pill--omit"
+          :title="t('marketplace.graph.omitFieldTitle')"
+          @click.stop="data.openField?.(f.fieldKey)"
+        >{{ t("marketplace.graph.omitFieldShort") }}</span>
 
         <span
           v-if="f.aliasOf"

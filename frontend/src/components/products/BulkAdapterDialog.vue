@@ -1,19 +1,39 @@
 <script setup>
+// BulkAdapterDialog — pick adapter + action for a product selection.
+// Shell matches bulkEditDialog / FieldChangesPreviewDialog (bordered header/footer, min-h-0 scroll).
 import { ref, watch, computed } from "vue";
 import { http } from "@/main";
 import { t } from "@/i18n";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import Label from "@/components/ui/label/Label.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
-import { Loader2, ArrowUpToLine, ArrowDownToLine, DollarSign, Package } from "lucide-vue-next";
+import {
+  Loader2,
+  Cable,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  DollarSign,
+  Package,
+  AlertTriangle,
+  Link2,
+} from "lucide-vue-next";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -21,7 +41,6 @@ const props = defineProps({
 });
 const emit = defineEmits(["update:modelValue"]);
 
-// All possible actions - filtered by adapter capabilities at runtime
 const ALL_ACTIONS = [
   {
     key: "export",
@@ -29,6 +48,7 @@ const ALL_ACTIONS = [
     description: t("products.bulkAdapterDialog.actions.export.description"),
     capabilityKey: "exportProductBulk",
     needsLinks: false,
+    icon: ArrowUpToLine,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/products/export-batch`,
     getBody: (productIds, _linkIds) => ({ productIds }),
   },
@@ -38,6 +58,7 @@ const ALL_ACTIONS = [
     description: t("products.bulkAdapterDialog.actions.import.description"),
     capabilityKey: "importProduct",
     needsLinks: true,
+    icon: ArrowDownToLine,
     getEndpoint: (_connId) => `/marketplace/links/import-bulk`,
     getBody: (_productIds, linkIds) => ({ linkIds }),
   },
@@ -47,6 +68,7 @@ const ALL_ACTIONS = [
     description: t("products.bulkAdapterDialog.actions.exportPrices.description"),
     capabilityKey: "exportPrices",
     needsLinks: true,
+    icon: DollarSign,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/prices/export`,
     getBody: (_productIds, linkIds) => ({ linkIds }),
   },
@@ -56,6 +78,7 @@ const ALL_ACTIONS = [
     description: t("products.bulkAdapterDialog.actions.exportStocks.description"),
     capabilityKey: "exportStocks",
     needsLinks: true,
+    icon: Package,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/stocks/export`,
     getBody: (_productIds, linkIds) => ({ linkIds }),
   },
@@ -65,6 +88,7 @@ const ALL_ACTIONS = [
     description: t("products.bulkAdapterDialog.actions.importPrices.description"),
     capabilityKey: "importPrices",
     needsLinks: true,
+    icon: DollarSign,
     getEndpoint: (connId) => `/marketplace/connections/${connId}/prices/import`,
     getBody: (_productIds, linkIds) => ({ linkIds }),
   },
@@ -86,11 +110,23 @@ const resolvedUnlinked = ref([]);
 const isRunning = ref(false);
 
 const selectedProductIds = computed(() => props.selectedProducts.map((p) => p.id));
+const selectedCount = computed(() => selectedProductIds.value.length);
 
 const availableActions = computed(() => {
   if (!capabilities.value) return [];
   return ALL_ACTIONS.filter((a) => capabilities.value[a.capabilityKey]);
 });
+
+const showLinkStatus = computed(
+  () => !!selectedAction.value?.needsLinks && !!selectedConnectionId.value,
+);
+
+const showNoneLinkedWarning = computed(
+  () =>
+    showLinkStatus.value &&
+    !isResolving.value &&
+    resolvedLinked.value.length === 0,
+);
 
 watch(
   () => props.modelValue,
@@ -102,7 +138,7 @@ watch(
     resolvedLinked.value = [];
     resolvedUnlinked.value = [];
     await loadConnections();
-  }
+  },
 );
 
 watch(selectedConnectionId, async (connId) => {
@@ -136,7 +172,9 @@ async function loadConnections() {
 async function loadCapabilities(connectionId) {
   isLoadingCapabilities.value = true;
   try {
-    const res = await http.get(`/marketplace/connections/${connectionId}/capabilities`, { cache: false });
+    const res = await http.get(`/marketplace/connections/${connectionId}/capabilities`, {
+      cache: false,
+    });
     const full = res.data?.value ?? res.data;
     capabilities.value = full?.capabilities ?? full;
     if (availableActions.value.length > 0) {
@@ -155,7 +193,7 @@ async function resolveLinks(connectionId) {
     const res = await http.post(
       `/marketplace/connections/${connectionId}/resolve-product-links`,
       { productIds: selectedProductIds.value },
-      { cache: false }
+      { cache: false },
     );
     const data = res.data?.value ?? res.data;
     resolvedLinked.value = data.linked ?? [];
@@ -181,7 +219,9 @@ async function run() {
     const action = selectedAction.value;
     const linkIds = resolvedLinked.value.map((l) => l.linkId);
     const body = action.getBody(selectedProductIds.value, linkIds);
-    const res = await http.post(action.getEndpoint(selectedConnectionId.value), body, { cache: false });
+    const res = await http.post(action.getEndpoint(selectedConnectionId.value), body, {
+      cache: false,
+    });
     const data = res.data?.value ?? res.data;
     displaySonnerSuccess(data?.message ?? t("products.bulkAdapterDialog.operationStarted"));
     emit("update:modelValue", false);
@@ -191,24 +231,53 @@ async function run() {
     isRunning.value = false;
   }
 }
+
+function actionRowClass(action) {
+  const selected = selectedAction.value?.key === action.key;
+  return [
+    "flex w-full items-start gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+    selected
+      ? "border-primary bg-primary/5"
+      : "border-border hover:bg-muted/40",
+  ];
+}
 </script>
 
 <template>
   <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
-    <DialogContent size="md">
-      <DialogHeader>
-        <DialogTitle>{{ t("products.bulkAdapterDialog.title", { count: selectedProductIds.length }) }}</DialogTitle>
-        <DialogDescription>
-          {{ t("products.bulkAdapterDialog.description") }}
+    <DialogContent
+      size="2xl"
+      class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
+    >
+      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
+        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
+          <Cable class="size-4 text-muted-foreground" />
+          {{ t("products.bulkAdapterDialog.title") }}
+        </DialogTitle>
+        <DialogDescription class="text-sm text-muted-foreground">
+          {{ t("products.bulkAdapterDialog.selectedCount", { count: selectedCount }) }}
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-4 py-1">
-        <!-- Connection picker -->
-        <div class="space-y-1.5">
-          <Label>{{ t("products.bulkAdapterDialog.adapterLabel") }}</Label>
+      <div
+        v-if="showNoneLinkedWarning"
+        class="shrink-0 flex items-start gap-2 border-b border-destructive/20 bg-destructive/5 px-6 py-2.5 text-sm text-destructive"
+      >
+        <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+        <span>{{ t("products.bulkAdapterDialog.noneLinkedWarning") }}</span>
+      </div>
+
+      <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+        <p class="text-xs text-muted-foreground">
+          {{ t("products.bulkAdapterDialog.description") }}
+        </p>
+
+        <div class="w-full space-y-1.5">
+          <Label for="bulk-adapter-connection">
+            {{ t("products.bulkAdapterDialog.adapterLabel") }}
+          </Label>
           <Select v-model="selectedConnectionId" :disabled="isLoadingConnections">
-            <SelectTrigger>
+            <SelectTrigger id="bulk-adapter-connection" class="w-full min-w-0">
               <SelectValue :placeholder="t('products.bulkAdapterDialog.adapterPlaceholder')" />
             </SelectTrigger>
             <SelectContent>
@@ -219,62 +288,91 @@ async function run() {
           </Select>
         </div>
 
-        <!-- Loading capabilities -->
-        <div v-if="isLoadingCapabilities" class="flex items-center gap-2 text-sm text-muted-foreground py-1">
+        <div
+          v-if="isLoadingCapabilities"
+          class="flex items-center gap-2 py-1 text-sm text-muted-foreground"
+        >
           <Loader2 class="size-4 animate-spin" />
           {{ t("products.bulkAdapterDialog.loadingCapabilities") }}
         </div>
 
-        <!-- Action list -->
+        <div
+          v-else-if="selectedConnectionId && availableActions.length === 0"
+          class="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground"
+        >
+          {{ t("products.bulkAdapterDialog.noActions") }}
+        </div>
+
         <div v-else-if="availableActions.length > 0" class="space-y-1.5">
           <Label>{{ t("products.bulkAdapterDialog.actionLabel") }}</Label>
-          <div class="space-y-1.5">
-            <Button
+          <div class="space-y-1.5" role="listbox" :aria-label="t('products.bulkAdapterDialog.actionLabel')">
+            <button
               v-for="action in availableActions"
               :key="action.key"
               type="button"
-              variant="outline"
-              class="w-full h-auto text-left rounded-lg px-3 py-2.5 text-sm font-normal justify-start whitespace-normal transition-colors hover:bg-muted/50"
-              :class="selectedAction?.key === action.key
-                ? 'border-primary bg-primary/5'
-                : 'border-border'"
+              role="option"
+              :aria-selected="selectedAction?.key === action.key"
+              :class="actionRowClass(action)"
               @click="selectedAction = action"
             >
-              <div class="font-medium">{{ action.label }}</div>
-              <div class="text-xs text-muted-foreground mt-0.5">{{ action.description }}</div>
-            </Button>
+              <component
+                :is="action.icon"
+                class="mt-0.5 size-4 shrink-0 text-muted-foreground"
+              />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium leading-none">{{ action.label }}</div>
+                <div class="mt-1 text-xs text-muted-foreground">{{ action.description }}</div>
+              </div>
+            </button>
           </div>
         </div>
 
-        <!-- Link resolve status (for link-based actions) -->
         <div
-          v-if="selectedAction?.needsLinks && selectedConnectionId"
-          class="rounded-lg bg-muted/50 px-3 py-2.5 text-sm space-y-1"
+          v-if="showLinkStatus"
+          class="space-y-2 rounded-md border border-border px-3 py-2.5"
         >
-          <div v-if="isResolving" class="flex items-center gap-2 text-muted-foreground">
+          <div class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Link2 class="size-3.5" />
+            {{ t("products.bulkAdapterDialog.linksHeading") }}
+          </div>
+
+          <div v-if="isResolving" class="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 class="size-3.5 animate-spin" />
             {{ t("products.bulkAdapterDialog.checkingLinks") }}
           </div>
-          <template v-else>
-            <div class="flex items-center justify-between">
-              <span class="text-muted-foreground">{{ t("products.bulkAdapterDialog.linkedLabel") }}</span>
-              <Badge variant="secondary">{{ resolvedLinked.length }}</Badge>
+
+          <div v-else class="space-y-1.5 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-muted-foreground">
+                {{ t("products.bulkAdapterDialog.linkedLabel") }}
+              </span>
+              <Badge variant="secondary" class="tabular-nums">
+                {{ resolvedLinked.length }}
+              </Badge>
             </div>
-            <div v-if="resolvedUnlinked.length > 0" class="flex items-center justify-between">
-              <span class="text-muted-foreground">{{ t("products.bulkAdapterDialog.unlinkedLabel") }}</span>
-              <Badge variant="outline">{{ resolvedUnlinked.length }}</Badge>
+            <div
+              v-if="resolvedUnlinked.length > 0"
+              class="flex items-center justify-between gap-3"
+            >
+              <span class="text-muted-foreground">
+                {{ t("products.bulkAdapterDialog.unlinkedLabel") }}
+              </span>
+              <Badge variant="outline" class="tabular-nums">
+                {{ resolvedUnlinked.length }}
+              </Badge>
             </div>
-            <p v-if="resolvedLinked.length === 0" class="text-destructive text-xs mt-1">
-              {{ t("products.bulkAdapterDialog.noneLinkedWarning") }}
-            </p>
-          </template>
+          </div>
         </div>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" @click="emit('update:modelValue', false)">{{ t("common.cancel") }}</Button>
-        <Button :disabled="!canRun" @click="run">
-          <Loader2 v-if="isRunning" class="size-4 mr-2 animate-spin" />
+      <DialogFooter class="shrink-0 gap-2 border-t border-border px-6 py-4 sm:justify-between">
+        <DialogClose as-child>
+          <Button type="button" variant="outline" :disabled="isRunning">
+            {{ t("common.cancel") }}
+          </Button>
+        </DialogClose>
+        <Button type="button" :disabled="!canRun" @click="run">
+          <Loader2 v-if="isRunning" class="mr-2 size-4 animate-spin" />
           {{ selectedAction?.label ?? t("products.bulkAdapterDialog.runButton") }}
         </Button>
       </DialogFooter>

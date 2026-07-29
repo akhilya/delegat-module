@@ -38,6 +38,10 @@ export default {
       type: Boolean,
       default: true,
     },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["update:modelValue"],
   setup(props, { emit }) {
@@ -199,7 +203,7 @@ export default {
 </script>
 
 <template>
-  <div class="w-full min-w-0">
+  <div class="w-full min-w-0" :class="{ 'opacity-50 pointer-events-none': disabled }">
     <div class="flex min-w-0 items-center gap-1.5">
       <Input
         class="min-w-0 flex-1"
@@ -208,12 +212,13 @@ export default {
         pattern="\d*"
         maxlength="13"
         :model-value="modelValue"
+        :disabled="disabled"
         @update:model-value="onInput"
         placeholder="EAN-8 / EAN-13"
         :aria-label="t('components.barcodeInput.ariaLabel')"
         :class="{ 'border-destructive focus-visible:ring-destructive': modelValue && !isValid }"
       />
-      <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" :title="t('components.barcodeInput.generateTitle')" @click="generate">
+      <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" :title="t('components.barcodeInput.generateTitle')" :disabled="disabled" @click="generate">
         <Dices class="size-4" />
       </Button>
 

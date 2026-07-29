@@ -96,7 +96,9 @@ public sealed class TestDataBuilder
         AttributeType type = AttributeType.Text,
         bool isRequired = false,
         int sortOrder = 0,
-        bool isUnique = false)
+        bool isUnique = false,
+        string? options = null,
+        string? key = null)
     {
         var id = _attrSeq++;
         var attr = new CategoryAttribute
@@ -104,11 +106,12 @@ public sealed class TestDataBuilder
             Id = id,
             categoryId = categoryId,
             name = name ?? $"Attr {id}",
-            key = $"attr_{id}",
+            key = key ?? $"attr_{id}",
             type = type,
             isRequired = isRequired,
             isUnique = isUnique,
-            sortOrder = sortOrder
+            sortOrder = sortOrder,
+            options = options
         };
         _db.categoryAttributes.Add(attr);
         return attr;
@@ -119,7 +122,9 @@ public sealed class TestDataBuilder
         string? name = null,
         AttributeType type = AttributeType.Text,
         int sortOrder = 0,
-        bool isUnique = false)
+        bool isUnique = false,
+        string? options = null,
+        string? key = null)
     {
         var id = _attrSeq++;
         var attr = new StoreAttribute
@@ -127,10 +132,11 @@ public sealed class TestDataBuilder
             Id = id,
             storeId = storeId,
             name = name ?? $"StoreAttr {id}",
-            key = $"store_attr_{id}",
+            key = key ?? $"store_attr_{id}",
             type = type,
             isUnique = isUnique,
-            sortOrder = sortOrder
+            sortOrder = sortOrder,
+            options = options
         };
         _db.storeAttributes.Add(attr);
         return attr;

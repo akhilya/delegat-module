@@ -173,6 +173,28 @@ public class AddModifier : IFieldModifier
     }
 }
 
+public class SubtractModifier : IFieldModifier
+{
+    public string Type => "subtract";
+    public bool IsReversible => true;
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var subtrahend = GetDecimal(parameters, "subtrahend", 0);
+        return num.Value - subtrahend;
+    }
+
+    public object? ReverseApply(object? value, Dictionary<string, object> parameters)
+    {
+        var num = ToDecimal(value);
+        if (num == null) return value;
+        var subtrahend = GetDecimal(parameters, "subtrahend", 0);
+        return num.Value + subtrahend;
+    }
+}
+
 public class RoundModifier : IFieldModifier
 {
     public string Type => "round";

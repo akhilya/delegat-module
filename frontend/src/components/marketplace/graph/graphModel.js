@@ -864,17 +864,27 @@ export function validateGraph(nodes, edges) {
         ins.map((e) => (e.targetHandle || "").replace(/^f:/, "")),
       );
       (n.data?.fields || []).forEach((f) => {
-        if (f.isRequired && !f.source && !connected.has(f.fieldKey)) {
-          const key =
-            n.type === "adapterPriceFields"
-              ? "marketplace.graph.validation.fieldNotConnectedPrice"
-              : "marketplace.graph.validation.fieldNotConnectedAdapter";
+        if (!f.isRequired) return;
+        if (f.omit) {
           issues.push({
             level: "warning",
             nodeId: n.id,
-            message: t(key, { label: f.label || f.fieldKey }),
+            message: t("marketplace.graph.validation.requiredFieldOmitted", {
+              label: f.label || f.fieldKey,
+            }),
           });
+          return;
         }
+        if (f.source || f.aliasOf || connected.has(f.fieldKey)) return;
+        const key =
+          n.type === "adapterPriceFields"
+            ? "marketplace.graph.validation.fieldNotConnectedPrice"
+            : "marketplace.graph.validation.fieldNotConnectedAdapter";
+        issues.push({
+          level: "warning",
+          nodeId: n.id,
+          message: t(key, { label: f.label || f.fieldKey }),
+        });
       });
     }
 
@@ -1128,6 +1138,28 @@ export function analyzeFields(nodes, edges) {
   for (const adapter of sinks) {
   for (const f of adapter.data?.fields || []) {
     const key = f.fieldKey;
+
+    // Explicitly omitted from export/import — no projection, no pin analysis.
+    if (f.omit) {
+      putEntry(adapter.id, key, {
+        importable: false,
+        reversible: false,
+        connected: false,
+        omitted: true,
+      });
+      continue;
+    }
+
+    // Merged duplicate of another adapter field — value copied at eval time.
+    if (f.aliasOf) {
+      putEntry(adapter.id, key, {
+        importable: false,
+        reversible: false,
+        connected: true,
+        aliasOf: f.aliasOf,
+      });
+      continue;
+    }
 
     // A field bound directly to a standard source (dropdown in the adapter) has no pin/edge.
     if (f.source?.type) {

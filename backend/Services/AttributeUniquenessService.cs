@@ -24,20 +24,36 @@ public class AttributeUniquenessService
         IEnumerable<ProductAttributeValue.UserValueForm>? categoryValues,
         IEnumerable<StoreProductAttributeValue.UserValueForm>? storeValues,
         int? excludeProductId = null,
+        IEnumerable<int>? excludeProductIds = null,
         CancellationToken ct = default)
     {
+        var excluded = BuildExcludedIds(excludeProductId, excludeProductIds);
+
         if (categoryValues != null && categoryId.HasValue)
-            await EnsureCategoryValuesUniqueAsync(storeId, categoryId.Value, categoryValues, excludeProductId, ct);
+            await EnsureCategoryValuesUniqueAsync(storeId, categoryId.Value, categoryValues, excluded, ct);
 
         if (storeValues != null)
-            await EnsureStoreValuesUniqueAsync(storeId, storeValues, excludeProductId, ct);
+            await EnsureStoreValuesUniqueAsync(storeId, storeValues, excluded, ct);
+    }
+
+    private static HashSet<int> BuildExcludedIds(int? excludeProductId, IEnumerable<int>? excludeProductIds)
+    {
+        var excluded = new HashSet<int>();
+        if (excludeProductId.HasValue)
+            excluded.Add(excludeProductId.Value);
+        if (excludeProductIds != null)
+        {
+            foreach (var id in excludeProductIds)
+                excluded.Add(id);
+        }
+        return excluded;
     }
 
     private async Task EnsureCategoryValuesUniqueAsync(
         int storeId,
         int categoryId,
         IEnumerable<ProductAttributeValue.UserValueForm> values,
-        int? excludeProductId,
+        HashSet<int> excludeProductIds,
         CancellationToken ct)
     {
         var candidates = values
@@ -71,8 +87,8 @@ public class AttributeUniquenessService
                     av.product.categoryId == categoryId &&
                     av.product.deletedAt == null);
 
-            if (excludeProductId.HasValue)
-                query = query.Where(av => av.productId != excludeProductId.Value);
+            if (excludeProductIds.Count > 0)
+                query = query.Where(av => !excludeProductIds.Contains(av.productId));
 
             var conflicting = await query
                 .Select(av => new { av.productId, av.value })
@@ -99,7 +115,7 @@ public class AttributeUniquenessService
     private async Task EnsureStoreValuesUniqueAsync(
         int storeId,
         IEnumerable<StoreProductAttributeValue.UserValueForm> values,
-        int? excludeProductId,
+        HashSet<int> excludeProductIds,
         CancellationToken ct)
     {
         var candidates = values
@@ -132,8 +148,8 @@ public class AttributeUniquenessService
                     av.product.storeId == storeId &&
                     av.product.deletedAt == null);
 
-            if (excludeProductId.HasValue)
-                query = query.Where(av => av.productId != excludeProductId.Value);
+            if (excludeProductIds.Count > 0)
+                query = query.Where(av => !excludeProductIds.Contains(av.productId));
 
             var conflicting = await query
                 .Select(av => new { av.productId, av.value })

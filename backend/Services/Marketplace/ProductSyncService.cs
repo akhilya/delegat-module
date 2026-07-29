@@ -2135,6 +2135,12 @@ public class ProductSyncService
             variants.Count, productId, connectionId);
     }
 
+    private static readonly JsonSerializerOptions ExportDetailsJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private static string? FormatExportDetails(Dictionary<string, object>? details)
     {
         if (details == null || details.Count == 0)
@@ -2144,11 +2150,11 @@ public class ProductSyncService
         {
             if (details.TryGetValue("images", out var images))
             {
-                var json = JsonSerializer.Serialize(images);
+                var json = JsonSerializer.Serialize(images, ExportDetailsJsonOptions);
                 return $"Image export details: {json}";
             }
 
-            return $"Export details: {JsonSerializer.Serialize(details)}";
+            return $"Export details: {JsonSerializer.Serialize(details, ExportDetailsJsonOptions)}";
         }
         catch
         {

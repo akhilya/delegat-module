@@ -422,12 +422,17 @@ public static class GraphEvaluator
             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
             .GroupBy(f => f.fieldKey!)
             .ToDictionary(g => g.Key, g => g.First());
+        var omitted = new HashSet<string>(
+            adapterFields.Where(kv => kv.Value.omit).Select(kv => kv.Key));
         var aliases = adapterFields.Values
-            .Where(f => !string.IsNullOrEmpty(f.aliasOf))
+            .Where(f => !string.IsNullOrEmpty(f.aliasOf) && !f.omit)
             .ToList();
         var aliasKeys = new HashSet<string>(aliases.Select(f => f.fieldKey!));
         var bound = new HashSet<string>(
-            adapterFields.Where(kv => kv.Value.source?.type != null && !aliasKeys.Contains(kv.Key))
+            adapterFields.Where(kv =>
+                    kv.Value.source?.type != null
+                    && !aliasKeys.Contains(kv.Key)
+                    && !omitted.Contains(kv.Key))
                 .Select(kv => kv.Key));
 
         if (incoming.TryGetValue(nodeId, out var inEdges))
@@ -438,7 +443,7 @@ public static class GraphEvaluator
                 if (string.IsNullOrEmpty(handle) || !handle.StartsWith("f:"))
                     continue;
                 var key = handle.Substring(2);
-                if (aliasKeys.Contains(key) || bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
+                if (omitted.Contains(key) || aliasKeys.Contains(key) || bound.Contains(key) || !pins.TryGetValue(e.source, out var pv))
                     continue;
 
                 var declared = adapterFields.TryGetValue(key, out var fld) ? fld.outputType : null;
