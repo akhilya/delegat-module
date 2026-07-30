@@ -154,6 +154,12 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
     /// </summary>
     public virtual ICollection<ProductVariant> variants { get; set; } = new List<ProductVariant>();
 
+    /// <summary>
+    /// Preferred export mode for the "export to all adapters" action: full | price | stock.
+    /// </summary>
+    [StringLength(Marketplace.PreferredExportModes.MaxLength)]
+    public string preferredExportAllMode { get; set; } = Marketplace.PreferredExportModes.Full;
+
     public bool AddFill(AddForm form)
     {
         sku = form.userAddForm.sku;

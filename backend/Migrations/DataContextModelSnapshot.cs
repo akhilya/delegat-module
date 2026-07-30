@@ -1081,6 +1081,13 @@ namespace Delegat.Migrations
                     b.Property<DateTime?>("lastSyncAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("preferredExportMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("full");
+
                     b.Property<int>("productId")
                         .HasColumnType("int");
 
@@ -1790,6 +1797,13 @@ namespace Delegat.Migrations
 
                     b.Property<decimal?>("price")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("preferredExportAllMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("full");
 
                     b.Property<string>("sku")
                         .IsRequired()

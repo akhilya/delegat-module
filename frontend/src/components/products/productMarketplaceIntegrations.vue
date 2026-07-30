@@ -27,6 +27,7 @@ import {
   Layers,
   Unlink,
   SearchCheck,
+  ChevronRight,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
@@ -84,12 +85,17 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { t } from "@/i18n";
+
+const EXPORT_MODE_FULL = "full";
+const EXPORT_MODE_PRICE = "price";
+const EXPORT_MODE_STOCK = "stock";
 
 export default {
   components: {
@@ -151,6 +157,8 @@ export default {
     Layers,
     Unlink,
     SearchCheck,
+    ChevronRight,
+    ButtonGroup,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -174,7 +182,11 @@ export default {
       connections: null, // All connections with status info
       isLoading: false,
       isExportingAll: false,
+      isExportingPricesAll: false,
+      isExportingStocksAll: false,
       exportingConnectionId: null,
+      exportingPricesConnectionId: null,
+      exportingStocksConnectionId: null,
       importingLinkId: null,
       unlinkingLinkId: null,
       verifyingLinkId: null,
@@ -211,6 +223,15 @@ export default {
     };
   },
   computed: {
+    exportAllMode() {
+      return this.resolveExportMode("all");
+    },
+    exportAllModeLabel() {
+      return this.getExportModeLabel(this.exportAllMode);
+    },
+    isExportingAnyAll() {
+      return this.isExportingAll || this.isExportingPricesAll || this.isExportingStocksAll;
+    },
     // Connections with mapping (can be exported)
     connectionsWithMapping() {
       if (!this.connections?.allConnections) return [];
@@ -241,6 +262,12 @@ export default {
     canExportToAll() {
       return this.connectionsWithMapping.length > 0;
     },
+    linkedForPriceExport() {
+      return this.linkedConnections.filter((c) => c.canExportPrices && c.linkId);
+    },
+    linkedForStockExport() {
+      return this.linkedConnections.filter((c) => c.canExportStocks && c.linkId);
+    },
     importPreviewItems() {
       if (!this.importPreviewData?.updatedFields) return [];
       return [{
@@ -268,6 +295,10 @@ export default {
       "importFromLink",
       "importFromLinkPreview",
       "exportFromLink",
+      "exportPrices",
+      "exportStocks",
+      "setLinkPreferredExportMode",
+      "setProductPreferredExportAllMode",
       "recreateProductOnMarketplace",
       "saveMappingSelections",
       "getProductVariants",
@@ -426,6 +457,88 @@ export default {
       await this.fetchData();
     },
 
+    async handleExportPricesToAll() {
+      const targets = this.linkedForPriceExport;
+      if (targets.length === 0) {
+        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForPriceExport"));
+        return;
+      }
+
+      this.isExportingPricesAll = true;
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const conn of targets) {
+        try {
+          await this.exportPrices({
+            connectionId: conn.connectionId,
+            linkIds: [conn.linkId],
+            onSuccess: () => {
+              successCount++;
+            },
+            onError: () => {
+              errorCount++;
+            },
+          });
+        } catch {
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        displaySonnerSuccess(
+          t("productMarketplaceIntegrations.exportedPricesToAdapters", { count: successCount }),
+        );
+      }
+      if (errorCount > 0) {
+        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
+      }
+
+      this.isExportingPricesAll = false;
+      await this.fetchData();
+    },
+
+    async handleExportStocksToAll() {
+      const targets = this.linkedForStockExport;
+      if (targets.length === 0) {
+        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForStockExport"));
+        return;
+      }
+
+      this.isExportingStocksAll = true;
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const conn of targets) {
+        try {
+          await this.exportStocks({
+            connectionId: conn.connectionId,
+            linkIds: [conn.linkId],
+            onSuccess: () => {
+              successCount++;
+            },
+            onError: () => {
+              errorCount++;
+            },
+          });
+        } catch {
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        displaySonnerSuccess(
+          t("productMarketplaceIntegrations.exportedStocksToAdapters", { count: successCount }),
+        );
+      }
+      if (errorCount > 0) {
+        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
+      }
+
+      this.isExportingStocksAll = false;
+      await this.fetchData();
+    },
+
     allBulkMappingsSelected() {
       return this.bulkMappingConflicts.every(
         (c) => this.bulkMappingSelections[c.connectionId],
@@ -552,6 +665,115 @@ export default {
       return String(value);
     },
 
+    resolveExportMode(target) {
+      let mode;
+      if (target === "all") {
+        mode = this.connections?.preferredExportAllMode;
+      } else {
+        mode = target.preferredExportMode;
+      }
+      if (mode !== EXPORT_MODE_PRICE && mode !== EXPORT_MODE_STOCK && mode !== EXPORT_MODE_FULL) {
+        mode = EXPORT_MODE_FULL;
+      }
+
+      if (target === "all") {
+        if (mode === EXPORT_MODE_PRICE && this.linkedForPriceExport.length === 0) {
+          return EXPORT_MODE_FULL;
+        }
+        if (mode === EXPORT_MODE_STOCK && this.linkedForStockExport.length === 0) {
+          return EXPORT_MODE_FULL;
+        }
+        return mode;
+      }
+
+      if (mode === EXPORT_MODE_PRICE && !target.canExportPrices) return EXPORT_MODE_FULL;
+      if (mode === EXPORT_MODE_STOCK && !target.canExportStocks) return EXPORT_MODE_FULL;
+      return mode;
+    },
+
+    getExportModeLabel(mode) {
+      if (mode === EXPORT_MODE_PRICE) {
+        return t("productMarketplaceIntegrations.menuExportPrice");
+      }
+      if (mode === EXPORT_MODE_STOCK) {
+        return t("productMarketplaceIntegrations.menuExportStock");
+      }
+      return t("productMarketplaceIntegrations.menuExportFull");
+    },
+
+    async setExportMode(target, mode) {
+      if (target === "all") {
+        const prev = this.connections?.preferredExportAllMode;
+        if (this.connections) {
+          this.connections = { ...this.connections, preferredExportAllMode: mode };
+        }
+        await this.setProductPreferredExportAllMode({
+          productId: this.productId,
+          mode,
+          onSuccess: () => {},
+          onError: (error) => {
+            if (this.connections) {
+              this.connections = { ...this.connections, preferredExportAllMode: prev };
+            }
+            displaySonnerError(error);
+          },
+        });
+        return;
+      }
+
+      const prev = target.preferredExportMode;
+      const updated = (this.connections?.allConnections || []).map((c) =>
+        c.connectionId === target.connectionId ? { ...c, preferredExportMode: mode } : c,
+      );
+      this.connections = { ...this.connections, allConnections: updated };
+
+      await this.setLinkPreferredExportMode({
+        linkId: target.linkId,
+        mode,
+        onSuccess: () => {},
+        onError: (error) => {
+          const reverted = (this.connections?.allConnections || []).map((c) =>
+            c.connectionId === target.connectionId ? { ...c, preferredExportMode: prev } : c,
+          );
+          this.connections = { ...this.connections, allConnections: reverted };
+          displaySonnerError(error);
+        },
+      });
+    },
+
+    runSelectedExport(conn) {
+      const mode = this.resolveExportMode(conn);
+      if (mode === EXPORT_MODE_PRICE) {
+        return this.handleExportPricesToConnection(conn);
+      }
+      if (mode === EXPORT_MODE_STOCK) {
+        return this.handleExportStocksToConnection(conn);
+      }
+      return this.handleExportToConnection(conn);
+    },
+
+    runSelectedExportAll() {
+      const mode = this.resolveExportMode("all");
+      if (mode === EXPORT_MODE_PRICE) {
+        return this.handleExportPricesToAll();
+      }
+      if (mode === EXPORT_MODE_STOCK) {
+        return this.handleExportStocksToAll();
+      }
+      return this.handleExportToAll();
+    },
+
+    isSelectedExportBusy(conn) {
+      const mode = this.resolveExportMode(conn);
+      if (mode === EXPORT_MODE_PRICE) {
+        return this.exportingPricesConnectionId === conn.connectionId;
+      }
+      if (mode === EXPORT_MODE_STOCK) {
+        return this.exportingStocksConnectionId === conn.connectionId;
+      }
+      return this.exportingConnectionId === conn.connectionId;
+    },
+
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
       if (conn.mappingMissing) {
@@ -606,6 +828,52 @@ export default {
       }
 
       this.exportingConnectionId = null;
+    },
+
+    async handleExportPricesToConnection(conn) {
+      if (!conn?.linkId || !conn.canExportPrices) {
+        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForPriceExport"));
+        return;
+      }
+
+      this.exportingPricesConnectionId = conn.connectionId;
+      await this.exportPrices({
+        connectionId: conn.connectionId,
+        linkIds: [conn.linkId],
+        onSuccess: () => {
+          displaySonnerSuccess(
+            t("productMarketplaceIntegrations.priceExportedToAdapter", { adapter: conn.adapterName }),
+          );
+          this.fetchData();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.exportingPricesConnectionId = null;
+    },
+
+    async handleExportStocksToConnection(conn) {
+      if (!conn?.linkId || !conn.canExportStocks) {
+        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForStockExport"));
+        return;
+      }
+
+      this.exportingStocksConnectionId = conn.connectionId;
+      await this.exportStocks({
+        connectionId: conn.connectionId,
+        linkIds: [conn.linkId],
+        onSuccess: () => {
+          displaySonnerSuccess(
+            t("productMarketplaceIntegrations.stockExportedToAdapter", { adapter: conn.adapterName }),
+          );
+          this.fetchData();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.exportingStocksConnectionId = null;
     },
 
     openRecreateDialog(conn) {
@@ -757,7 +1025,11 @@ export default {
 
     isConnectionBusy(conn) {
       if (this.exportingConnectionId === conn.connectionId) return true;
+      if (this.exportingPricesConnectionId === conn.connectionId) return true;
+      if (this.exportingStocksConnectionId === conn.connectionId) return true;
       if (this.isExportingAll && conn.hasMapping && conn.canExport && !conn.mappingMissing) return true;
+      if (this.isExportingPricesAll && conn.isLinked && conn.canExportPrices) return true;
+      if (this.isExportingStocksAll && conn.isLinked && conn.canExportStocks) return true;
       if (conn.isLinked) {
         if (this.importingLinkId === conn.linkId) return true;
         if (this.unlinkingLinkId === conn.linkId) return true;
@@ -928,15 +1200,51 @@ export default {
             </div>
           </div>
         </div>
-        <Button
-          size="sm"
-          @click="handleExportToAll"
-          :disabled="isExportingAll || isLoading"
-        >
-          <Loader2 v-if="isExportingAll" class="size-4 mr-2 animate-spin" />
-          <Upload v-else class="size-4 mr-2" />
-          {{ $t("productMarketplaceIntegrations.export") }}
-        </Button>
+        <ButtonGroup class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none">
+          <Button
+            size="sm"
+            @click="runSelectedExportAll"
+            :disabled="isExportingAnyAll || isLoading"
+          >
+            <Loader2 v-if="isExportingAnyAll" class="size-4 mr-2 animate-spin" />
+            <Upload v-else class="size-4 mr-2" />
+            {{ exportAllModeLabel }}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button
+                size="sm"
+                class="px-2"
+                :disabled="isExportingAnyAll || isLoading"
+                :aria-label="$t('productMarketplaceIntegrations.menuExportMode')"
+              >
+                <ChevronRight class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="w-52">
+              <DropdownMenuRadioGroup
+                :model-value="exportAllMode"
+                @update:model-value="setExportMode('all', $event)"
+              >
+                <DropdownMenuRadioItem value="full">
+                  {{ $t("productMarketplaceIntegrations.menuExportFull") }}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="price"
+                  :disabled="linkedForPriceExport.length === 0"
+                >
+                  {{ $t("productMarketplaceIntegrations.menuExportPrice") }}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="stock"
+                  :disabled="linkedForStockExport.length === 0"
+                >
+                  {{ $t("productMarketplaceIntegrations.menuExportStock") }}
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ButtonGroup>
       </div>
 
       <!-- Linked connections (already exported) -->
@@ -1031,13 +1339,45 @@ export default {
               <DropdownMenuLabel class="text-xs text-muted-foreground font-medium">
                 {{ $t("productMarketplaceIntegrations.menuSectionSync") }}
               </DropdownMenuLabel>
-              <DropdownMenuItem
-                @click="handleExportToConnection(conn)"
-                :disabled="exportingConnectionId === conn.connectionId || conn.mappingMissing"
-              >
-                <Upload />
-                {{ $t("productMarketplaceIntegrations.menuExport") }}
-              </DropdownMenuItem>
+              <div class="flex items-stretch">
+                <DropdownMenuItem
+                  class="flex-1"
+                  @click="runSelectedExport(conn)"
+                  :disabled="isSelectedExportBusy(conn) || conn.mappingMissing"
+                >
+                  <Upload />
+                  {{ getExportModeLabel(resolveExportMode(conn)) }}
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    class="w-8 shrink-0 justify-center px-0 [&>svg:last-child]:ml-0"
+                    :disabled="conn.mappingMissing"
+                    :aria-label="$t('productMarketplaceIntegrations.menuExportMode')"
+                  />
+                  <DropdownMenuSubContent class="w-52">
+                    <DropdownMenuRadioGroup
+                      :model-value="resolveExportMode(conn)"
+                      @update:model-value="setExportMode(conn, $event)"
+                    >
+                      <DropdownMenuRadioItem value="full">
+                        {{ $t("productMarketplaceIntegrations.menuExportFull") }}
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem
+                        v-if="conn.canExportPrices"
+                        value="price"
+                      >
+                        {{ $t("productMarketplaceIntegrations.menuExportPrice") }}
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem
+                        v-if="conn.canExportStocks"
+                        value="stock"
+                      >
+                        {{ $t("productMarketplaceIntegrations.menuExportStock") }}
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </div>
               <DropdownMenuItem
                 v-if="conn.canImport"
                 @click="handleImportFromLink(conn)"

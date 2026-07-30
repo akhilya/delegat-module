@@ -10,6 +10,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Product Adapters tab: remembered Export mode (Entire product / Price only / Stock only) per product and adapter in the database; split control runs export on the main click and changes mode via ›
 - Mapping canvas: snap-to-grid and alignment guidelines toggles in the bottom-left controls
 - Mapping graph: Subtract modifier («Вычесть») for number/integer lanes
 - Adapter field modes in the inspector: Don't send / From graph / Bind… with a searchable source dialog (including “same as another adapter field”)

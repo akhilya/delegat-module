@@ -97,6 +97,12 @@ public class ProductMarketplaceLink : IEntity, IMapToDTO<ProductMarketplaceLink.
     /// </summary>
     public CategoryMapping? categoryMapping { get; set; }
 
+    /// <summary>
+    /// Preferred export mode on the product Adapters tab: full | price | stock.
+    /// </summary>
+    [StringLength(Marketplace.PreferredExportModes.MaxLength)]
+    public string preferredExportMode { get; set; } = PreferredExportModes.Full;
+
     #region IAddable / IUpdateable
 
     public bool AddFill(AddForm form)

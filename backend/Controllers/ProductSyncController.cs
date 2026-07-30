@@ -1787,7 +1787,12 @@ public class ProductSyncController : ControllerBase
                     // Capabilities
                     canExport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct) ?? false,
                     canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false,
-                    canArchive = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct) ?? false
+                    canArchive = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct) ?? false,
+                    canExportPrices = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) ?? false,
+                    canExportStocks = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks) ?? false,
+                    preferredExportMode = isLinked
+                        ? PreferredExportModes.Normalize(link?.preferredExportMode)
+                        : PreferredExportModes.Full
                 };
             })
             .ToList();
@@ -1799,8 +1804,111 @@ public class ProductSyncController : ControllerBase
             categoryId = product.categoryId,
             categoryName = product.category?.name,
             hasSizes = product.category?.hasSizes ?? false,
+            preferredExportAllMode = PreferredExportModes.Normalize(product.preferredExportAllMode),
             allConnections = result
         });
+    }
+
+    public record PreferredExportModeInput(string? Mode = null);
+
+    /// <summary>
+    /// Persist preferred export mode for a product↔adapter link (Adapters tab UI).
+    /// </summary>
+    [HttpPut]
+    [Route("/marketplace/links/{linkId}/preferred-export-mode")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> SetLinkPreferredExportMode(
+        int linkId,
+        [FromBody] PreferredExportModeInput? input,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var mode = input?.Mode;
+        if (!PreferredExportModes.IsValid(mode))
+            throw ApiException.BadRequest("Invalid export mode", code: "invalid_export_mode");
+
+        var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
+        var link = await linkRepo.GetByIdWithIncludesTrackingAsync(
+            linkId,
+            q => q.Include(l => l.connection));
+
+        if (link == null)
+            throw ApiException.NotFound("Marketplace link not found");
+
+        if (link.connection?.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
+
+        var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
+        if (mode == PreferredExportModes.Price &&
+            !(adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices) ?? false))
+            throw ApiException.BadRequest("Adapter does not support price export", code: "capability_missing");
+
+        if (mode == PreferredExportModes.Stock &&
+            !(adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks) ?? false))
+            throw ApiException.BadRequest("Adapter does not support stock export", code: "capability_missing");
+
+        link.preferredExportMode = mode!;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Ok(new { linkId, preferredExportMode = link.preferredExportMode });
+    }
+
+    /// <summary>
+    /// Persist preferred mode for "export to all adapters" on a product.
+    /// </summary>
+    [HttpPut]
+    [Route("/products/{productId}/preferred-export-all-mode")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> SetProductPreferredExportAllMode(
+        int productId,
+        [FromBody] PreferredExportModeInput? input,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var mode = input?.Mode;
+        if (!PreferredExportModes.IsValid(mode))
+            throw ApiException.BadRequest("Invalid export mode", code: "invalid_export_mode");
+
+        var productRepo = _unitOfWork.Repository<Product>();
+        var product = await productRepo.GetByIdTrackingAsync(productId, ct);
+
+        if (product == null || product.storeId != selectedStoreId.Value)
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
+
+        if (mode == PreferredExportModes.Price || mode == PreferredExportModes.Stock)
+        {
+            var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
+            var links = await linkRepo.FindAllAsync(
+                l => l.productId == productId,
+                q => q.Include(l => l.connection));
+
+            var hasCapability = links.Any(l =>
+            {
+                var adapter = _adapterRegistry.GetByKey(l.connection?.adapterKey ?? "");
+                if (adapter == null) return false;
+                return mode == PreferredExportModes.Price
+                    ? adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices)
+                    : adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks);
+            });
+
+            if (!hasCapability)
+                throw ApiException.BadRequest(
+                    mode == PreferredExportModes.Price
+                        ? "No linked adapters support price export"
+                        : "No linked adapters support stock export",
+                    code: "capability_missing");
+        }
+
+        product.preferredExportAllMode = mode!;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Ok(new { productId, preferredExportAllMode = product.preferredExportAllMode });
     }
 
     /// <summary>

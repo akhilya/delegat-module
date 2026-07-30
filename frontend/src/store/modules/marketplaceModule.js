@@ -1479,6 +1479,42 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async setLinkPreferredExportMode(ctx, { linkId, mode, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/preferred-export-mode`,
+        {
+          method: "PUT",
+          data: { mode },
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: false,
+        },
+      )
+        .then((response) => onSuccess?.(response))
+        .catch((error) => onError?.(error));
+    },
+
+    async setProductPreferredExportAllMode(ctx, { productId, mode, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/preferred-export-all-mode`,
+        {
+          method: "PUT",
+          data: { mode },
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: false,
+        },
+      )
+        .then((response) => onSuccess?.(response))
+        .catch((error) => onError?.(error));
+    },
+
     // === External Products (all marketplace products with link status) ===
 
     /**
