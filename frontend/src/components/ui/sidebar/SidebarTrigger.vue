@@ -1,15 +1,17 @@
-<script setup>
-import { PanelLeft } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { t } from "@/i18n";
-import { useSidebar } from "./utils";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
 
-const props = defineProps({
-  class: { type: null, required: false },
-});
+import { HugeiconsIcon } from '@hugeicons/vue'
+import { LayoutLeftIcon } from '@hugeicons/core-free-icons'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { useSidebar } from './utils'
 
-const { toggleSidebar } = useSidebar();
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+
+const { toggleSidebar } = useSidebar()
 </script>
 
 <template>
@@ -17,11 +19,11 @@ const { toggleSidebar } = useSidebar();
     data-sidebar="trigger"
     data-slot="sidebar-trigger"
     variant="ghost"
-    size="icon"
-    :class="cn('size-7', props.class)"
+    size="icon-sm"
+    :class="cn('', props.class)"
     @click="toggleSidebar"
   >
-    <PanelLeft />
-    <span class="sr-only">{{ t('components.sidebarTrigger.toggleSidebar') }}</span>
+    <HugeiconsIcon :icon="LayoutLeftIcon" class="cn-rtl-flip"  />
+    <span class="sr-only">Toggle Sidebar</span>
   </Button>
 </template>

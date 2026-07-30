@@ -1,17 +1,17 @@
-<script setup>
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  class: { type: null, required: false },
-});
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
 </script>
 
 <template>
   <kbd
     data-slot="kbd-group"
-    :class="cn('inline-flex items-center gap-1', props.class)"
+    :class="cn('gap-1 inline-flex items-center', props.class)"
   >
     <slot />
   </kbd>
 </template>
-

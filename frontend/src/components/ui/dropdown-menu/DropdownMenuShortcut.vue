@@ -1,22 +1,17 @@
-<script setup>
-import { cn } from "@/lib/utils";
-import { MenuKbd } from "@/components/ui/kbd";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  class: { type: null, required: false },
-  /** When set, renders MenuKbd (preferred). Otherwise use the default slot. */
-  keys: { type: Array, required: false },
-});
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
 </script>
 
 <template>
   <span
     data-slot="dropdown-menu-shortcut"
-    :class="
-      cn('text-muted-foreground ml-auto flex items-center text-xs tracking-widest', props.class)
-    "
+    :class="cn('text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground ml-auto text-xs tracking-widest', props.class)"
   >
-    <MenuKbd v-if="keys?.length" :keys="keys" />
-    <slot v-else />
+    <slot />
   </span>
 </template>

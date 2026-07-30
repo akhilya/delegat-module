@@ -1,45 +1,38 @@
-<script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { Circle } from "lucide-vue-next";
+<script setup lang="ts">
+import type { ContextMenuRadioItemEmits, ContextMenuRadioItemProps } from 'reka-ui'
+
+import type { HTMLAttributes } from 'vue'
+import { HugeiconsIcon } from '@hugeicons/vue'
+import { Tick02Icon } from '@hugeicons/core-free-icons'
+import { reactiveOmit } from '@vueuse/core'
 import {
   ContextMenuItemIndicator,
   ContextMenuRadioItem,
   useForwardPropsEmits,
-} from "reka-ui";
-import { cn } from "@/lib/utils";
+} from 'reka-ui'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  value: { type: null, required: true },
-  disabled: { type: Boolean, required: false },
-  textValue: { type: String, required: false },
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  class: { type: null, required: false },
-});
-const emits = defineEmits(["select"]);
+const props = defineProps<ContextMenuRadioItemProps & { class?: HTMLAttributes['class'] }>()
+const emits = defineEmits<ContextMenuRadioItemEmits>()
 
-const delegatedProps = reactiveOmit(props, "class");
+const delegatedProps = reactiveOmit(props, 'class')
 
-const forwarded = useForwardPropsEmits(delegatedProps, emits);
+const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
 
 <template>
   <ContextMenuRadioItem
     data-slot="context-menu-radio-item"
     v-bind="forwarded"
-    :class="
-      cn(
-        'focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=\'size-\'])]:size-4',
-        props.class,
-      )
-    "
+    :class="cn(
+      'focus:bg-accent focus:text-accent-foreground gap-2 rounded-xl py-2 pr-8 pl-3 text-sm data-inset:pl-9.5 [&_svg:not([class*=size-])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+      props.class,
+    )"
   >
-    <span
-      class="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center"
-    >
+    <span class="absolute right-2 pointer-events-none">
       <ContextMenuItemIndicator>
         <slot name="indicator-icon">
-          <Circle class="size-2 fill-current" />
+          <HugeiconsIcon :icon="Tick02Icon"  />
         </slot>
       </ContextMenuItemIndicator>
     </span>

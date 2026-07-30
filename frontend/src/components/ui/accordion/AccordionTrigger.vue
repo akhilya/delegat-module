@@ -1,16 +1,19 @@
-<script setup>
-import { ChevronDown } from "lucide-vue-next";
-import { reactiveOmit } from "@vueuse/core";
-import { AccordionHeader, AccordionTrigger } from "reka-ui";
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { AccordionTriggerProps } from 'reka-ui'
 
-const props = defineProps({
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  class: { type: null, required: false },
-});
+import type { HTMLAttributes } from 'vue'
+import { HugeiconsIcon } from '@hugeicons/vue'
+import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons'
+import { reactiveOmit } from '@vueuse/core'
+import {
+  AccordionHeader,
+  AccordionTrigger,
+} from 'reka-ui'
+import { cn } from '@/lib/utils'
 
-const delegatedProps = reactiveOmit(props, "class");
+const props = defineProps<AccordionTriggerProps & { class?: HTMLAttributes['class'] }>()
+
+const delegatedProps = reactiveOmit(props, 'class')
 </script>
 
 <template>
@@ -20,16 +23,15 @@ const delegatedProps = reactiveOmit(props, "class");
       v-bind="delegatedProps"
       :class="
         cn(
-          'focus-visible:border-ring focus-visible:ring-ring/50 flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:ring-3 disabled:pointer-events-none disabled:opacity-50 [&[data-state=open]>svg]:rotate-180',
+          '**:data-[slot=accordion-trigger-icon]:text-muted-foreground gap-6 p-4 text-left text-sm font-medium hover:underline **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 group/accordion-trigger relative flex flex-1 items-start justify-between border border-transparent transition-all outline-none disabled:pointer-events-none disabled:opacity-50',
           props.class,
         )
       "
     >
       <slot />
       <slot name="icon">
-        <ChevronDown
-          class="text-muted-foreground pointer-events-none size-4 shrink-0 translate-y-0.5 transition-transform duration-200"
-        />
+        <HugeiconsIcon :icon="ArrowDown01Icon" data-slot="accordion-trigger-icon" class="pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden"  />
+        <HugeiconsIcon :icon="ArrowUp01Icon" data-slot="accordion-trigger-icon" class="pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline"  />
       </slot>
     </AccordionTrigger>
   </AccordionHeader>

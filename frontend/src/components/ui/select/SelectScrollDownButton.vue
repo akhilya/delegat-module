@@ -1,30 +1,28 @@
-<script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { ChevronDown } from "lucide-vue-next";
-import { SelectScrollDownButton, useForwardProps } from "reka-ui";
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { SelectScrollDownButtonProps } from 'reka-ui'
 
-const props = defineProps({
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  class: { type: null, required: false },
-});
+import type { HTMLAttributes } from 'vue'
+import { HugeiconsIcon } from '@hugeicons/vue'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
+import { reactiveOmit } from '@vueuse/core'
+import { SelectScrollDownButton, useForwardProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
 
-const delegatedProps = reactiveOmit(props, "class");
+const props = defineProps<SelectScrollDownButtonProps & { class?: HTMLAttributes['class'] }>()
 
-const forwardedProps = useForwardProps(delegatedProps);
+const delegatedProps = reactiveOmit(props, 'class')
+
+const forwardedProps = useForwardProps(delegatedProps)
 </script>
 
 <template>
   <SelectScrollDownButton
     data-slot="select-scroll-down-button"
     v-bind="forwardedProps"
-    :class="
-      cn('flex cursor-default items-center justify-center py-1', props.class)
-    "
+    :class="cn('bg-popover z-10 flex cursor-default items-center justify-center py-1 [&_svg:not([class*=size-])]:size-4', props.class)"
   >
     <slot>
-      <ChevronDown class="size-4" />
+      <HugeiconsIcon :icon="ArrowDown01Icon"  />
     </slot>
   </SelectScrollDownButton>
 </template>

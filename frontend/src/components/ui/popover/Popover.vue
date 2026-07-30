@@ -1,20 +1,19 @@
-<script setup>
-import { PopoverRoot, useForwardPropsEmits } from "reka-ui";
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { PopoverRootEmits, PopoverRootProps } from 'reka-ui'
+import { PopoverRoot, useForwardPropsEmits } from 'reka-ui'
 
-const props = defineProps({
-  defaultOpen: { type: Boolean, required: false },
-  open: { type: Boolean, required: false },
-  modal: { type: Boolean, required: false },
-  class: { type: null, required: false },
-});
-const emits = defineEmits(["update:open"]);
+const props = defineProps<PopoverRootProps>()
+const emits = defineEmits<PopoverRootEmits>()
 
-const forwarded = useForwardPropsEmits(props, emits);
+const forwarded = useForwardPropsEmits(props, emits)
 </script>
 
 <template>
-  <PopoverRoot data-slot="popover" v-bind="forwarded" :class="cn('block w-full min-w-0', props.class)">
-    <slot />
+  <PopoverRoot
+    v-slot="slotProps"
+    data-slot="popover"
+    v-bind="forwarded"
+  >
+    <slot v-bind="slotProps" />
   </PopoverRoot>
 </template>

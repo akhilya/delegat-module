@@ -1,20 +1,15 @@
-<script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { AccordionItem, useForwardProps } from "reka-ui";
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { AccordionItemProps } from 'reka-ui'
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { AccordionItem, useForwardProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  disabled: { type: Boolean, required: false },
-  value: { type: String, required: true },
-  unmountOnHide: { type: Boolean, required: false },
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  class: { type: null, required: false },
-});
+const props = defineProps<AccordionItemProps & { class?: HTMLAttributes['class'] }>()
 
-const delegatedProps = reactiveOmit(props, "class");
+const delegatedProps = reactiveOmit(props, 'class')
 
-const forwardedProps = useForwardProps(delegatedProps);
+const forwardedProps = useForwardProps(delegatedProps)
 </script>
 
 <template>
@@ -22,7 +17,7 @@ const forwardedProps = useForwardProps(delegatedProps);
     v-slot="slotProps"
     data-slot="accordion-item"
     v-bind="forwardedProps"
-    :class="cn('border-b last:border-b-0', props.class)"
+    :class="cn('data-open:bg-muted/50 not-last:border-b', props.class)"
   >
     <slot v-bind="slotProps" />
   </AccordionItem>

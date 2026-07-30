@@ -1,20 +1,19 @@
-<script setup>
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  class: { type: null, required: false },
-});
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
 </script>
 
 <template>
   <div
     data-slot="empty"
-    :class="
-      cn(
-        'flex min-w-0 flex-1 flex-col items-center justify-center gap-4 text-balance rounded-lg p-6 text-center md:p-12',
-        props.class,
-      )
-    "
+    :class="cn(
+      'gap-4 rounded-lg border-dashed p-12 flex w-full min-w-0 flex-1 flex-col items-center justify-center text-center text-balance',
+      props.class,
+    )"
   >
     <slot />
   </div>

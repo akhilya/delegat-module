@@ -1,24 +1,22 @@
-<script setup>
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import type { EmptyMediaVariants } from '.'
+import { cn } from '@/lib/utils'
+import { emptyMediaVariants } from '.'
 
-const props = defineProps({
-  // "icon": muted circle around a lucide icon; "default": bare media (image, illustration)
-  variant: { type: String, default: "default" },
-  class: { type: null, required: false },
-});
+const props = withDefaults(defineProps<{
+  class?: HTMLAttributes['class']
+  variant?: EmptyMediaVariants['variant']
+}>(), {
+  variant: 'default',
+})
 </script>
 
 <template>
   <div
-    data-slot="empty-media"
-    :class="
-      cn(
-        'mb-1 flex shrink-0 items-center justify-center',
-        variant === 'icon' &&
-          'grid size-12 place-items-center rounded-full border bg-muted/40 text-muted-foreground [&_svg]:size-6',
-        props.class,
-      )
-    "
+    data-slot="empty-icon"
+    :data-variant="variant"
+    :class="cn(emptyMediaVariants({ variant }), props.class)"
   >
     <slot />
   </div>

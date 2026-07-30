@@ -1,15 +1,19 @@
-<script setup>
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
 
-const props = defineProps({
-  class: { type: null, required: false },
-});
+defineProps<{
+  class?: HTMLAttributes['class']
+}>()
 </script>
 
 <template>
   <p
     data-slot="empty-description"
-    :class="cn('text-sm/relaxed text-muted-foreground', props.class)"
+    :class="cn(
+      'text-sm/relaxed text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary',
+      $attrs.class ?? '',
+    )"
   >
     <slot />
   </p>

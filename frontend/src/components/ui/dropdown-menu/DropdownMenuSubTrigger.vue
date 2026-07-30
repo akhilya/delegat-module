@@ -1,34 +1,33 @@
-<script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { ChevronRight } from "lucide-vue-next";
-import { DropdownMenuSubTrigger, useForwardProps } from "reka-ui";
-import { cn } from "@/lib/utils";
+<script setup lang="ts">
+import type { DropdownMenuSubTriggerProps } from 'reka-ui'
 
-const props = defineProps({
-  disabled: { type: Boolean, required: false },
-  textValue: { type: String, required: false },
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  class: { type: null, required: false },
-  inset: { type: Boolean, required: false },
-});
+import type { HTMLAttributes } from 'vue'
+import { HugeiconsIcon } from '@hugeicons/vue'
+import { ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { reactiveOmit } from '@vueuse/core'
+import {
+  DropdownMenuSubTrigger,
+  useForwardProps,
+} from 'reka-ui'
+import { cn } from '@/lib/utils'
 
-const delegatedProps = reactiveOmit(props, "class", "inset");
-const forwardedProps = useForwardProps(delegatedProps);
+const props = defineProps<DropdownMenuSubTriggerProps & { class?: HTMLAttributes['class'], inset?: boolean }>()
+
+const delegatedProps = reactiveOmit(props, 'class', 'inset')
+const forwardedProps = useForwardProps(delegatedProps)
 </script>
 
 <template>
   <DropdownMenuSubTrigger
     data-slot="dropdown-menu-sub-trigger"
+    :data-inset="inset ? '' : undefined"
     v-bind="forwardedProps"
-    :class="
-      cn(
-        'focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[inset]:pl-8 [&_svg:not([class*=\'text-\'])]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=\'size-\'])]:size-4',
-        props.class,
-      )
-    "
+    :class="cn(
+      'focus:bg-accent focus:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground gap-2 rounded-xl px-3 py-2 text-sm data-inset:pl-9.5 [&_svg:not([class*=size-])]:size-4 flex cursor-default items-center outline-hidden select-none [&_svg]:pointer-events-none [&_svg]:shrink-0',
+      props.class,
+    )"
   >
     <slot />
-    <ChevronRight class="ml-auto size-4" />
+    <HugeiconsIcon :icon="ArrowRight01Icon" class="cn-rtl-flip ml-auto"  />
   </DropdownMenuSubTrigger>
 </template>

@@ -30,6 +30,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MenuKbd } from "@/components/ui/kbd";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1959,7 +1960,9 @@ async function importMappingFile(event) {
               <Loader2 v-if="saving" class="size-4 mr-2 animate-spin" />
               <Save v-else class="size-4 mr-2" />
               {{ t("marketplace.canvas.save") }}
-              <DropdownMenuShortcut :keys="['mod', 'S']" />
+              <DropdownMenuShortcut>
+                <MenuKbd :keys="['mod', 'S']" />
+              </DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem @select="showAutoArrangeConfirm = true">

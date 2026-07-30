@@ -1,16 +1,23 @@
-<script setup>
-import { Primitive } from "reka-ui";
-import { cn } from "@/lib/utils";
-import { sidebarMenuButtonVariants } from ".";
+<script setup lang="ts">
+import type { PrimitiveProps } from 'reka-ui'
+import type { HTMLAttributes } from 'vue'
+import type { SidebarMenuButtonVariants } from '.'
+import { Primitive } from 'reka-ui'
+import { cn } from '@/lib/utils'
+import { sidebarMenuButtonVariants } from '.'
 
-const props = defineProps({
-  as: { type: null, default: "button" },
-  asChild: { type: Boolean, required: false },
-  variant: { type: String, default: "default" },
-  size: { type: String, default: "default" },
-  isActive: { type: Boolean, default: false },
-  class: { type: null, required: false },
-});
+export interface SidebarMenuButtonProps extends PrimitiveProps {
+  variant?: SidebarMenuButtonVariants['variant']
+  size?: SidebarMenuButtonVariants['size']
+  isActive?: boolean
+  class?: HTMLAttributes['class']
+}
+
+const props = withDefaults(defineProps<SidebarMenuButtonProps>(), {
+  as: 'button',
+  variant: 'default',
+  size: 'default',
+})
 </script>
 
 <template>
@@ -18,7 +25,7 @@ const props = defineProps({
     data-slot="sidebar-menu-button"
     data-sidebar="menu-button"
     :data-size="size"
-    :data-active="isActive"
+    :data-active="isActive || undefined"
     :class="cn(sidebarMenuButtonVariants({ variant, size }), props.class)"
     :as="as"
     :as-child="asChild"
