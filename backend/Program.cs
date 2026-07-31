@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
@@ -62,14 +64,20 @@ if (string.IsNullOrWhiteSpace(encryptionKey))
 builder.Services.AddSingleton(new EncryptionService(encryptionKey));
 
 // Database
-var connectionString = $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};User={mysqlSettings.User};Password={mysqlSettings.Password};AllowPublicKeyRetrieval=True;SslMode=None;";
+var connectionString =
+    $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};" +
+    $"User={mysqlSettings.User};Password={mysqlSettings.Password};" +
+    "AllowPublicKeyRetrieval=True;SslMode=None;Default Command Timeout=120;";
 var serverVersion = new MySqlServerVersion(new Version(8, 4, 8));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseMySql(connectionString, serverVersion, mysqlOptions =>
+    {
+        mysqlOptions.CommandTimeout(120);
         mysqlOptions.EnableRetryOnFailure(
             maxRetryCount: 10,
             maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorNumbersToAdd: null)));
+            errorNumbersToAdd: null);
+    }));
 
 // Identity
 builder.Services.AddIdentity<User, UserRole>(options =>
@@ -695,6 +703,127 @@ static async Task RebasePreSquashHistoryIfNeededAsync(
         efProductVersion);
 }
 
+// Fresh MySQL can drop the connection mid-Baseline. Tables are left behind but
+// __EFMigrationsHistory never records Baseline, so the next MigrateAsync fails with
+// "already exists" forever. Recover by stamping a complete empty-history schema, or
+// by dropping an incomplete greenfield schema and reapplying.
+static async Task<bool> TryRecoverInterruptedBaselineAsync(
+    DataContext db,
+    ILogger logger,
+    string baselineMigrationId,
+    string efProductVersion)
+{
+    var applied = db.Database.GetAppliedMigrations().ToList();
+    var pending = db.Database.GetPendingMigrations().ToList();
+
+    if (applied.Count > 0)
+        return false;
+    if (pending.Count != 1
+        || !string.Equals(pending[0], baselineMigrationId, StringComparison.Ordinal))
+        return false;
+
+    var existingTables = await ListBaseTablesAsync(db);
+    var expectedTables = ExpectedModelTables(db);
+    var schemaComplete = expectedTables.Count > 0
+        && expectedTables.All(t => existingTables.Contains(t));
+
+    if (schemaComplete)
+    {
+        logger.LogWarning(
+            "Baseline schema is present but {Baseline} is missing from __EFMigrationsHistory. Stamping it.",
+            baselineMigrationId);
+        await StampBaselineHistoryAsync(db, baselineMigrationId, efProductVersion);
+        return true;
+    }
+
+    if (await HasApplicationUserRowsAsync(db))
+    {
+        logger.LogError(
+            "Interrupted Baseline left a partial schema with existing AspNetUsers rows. " +
+            "Refusing automatic reset — restore __EFMigrationsHistory or recreate the database manually.");
+        return false;
+    }
+
+    logger.LogWarning(
+        "Interrupted Baseline left {Existing}/{Expected} model tables without history. " +
+        "Dropping database and reapplying {Baseline}.",
+        existingTables.Count,
+        expectedTables.Count,
+        baselineMigrationId);
+    await db.Database.EnsureDeletedAsync();
+    return true;
+}
+
+static HashSet<string> ExpectedModelTables(DataContext db) =>
+    db.Model.GetEntityTypes()
+        .Select(e => e.GetTableName())
+        .Where(n => !string.IsNullOrEmpty(n))
+        .Cast<string>()
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+static async Task<HashSet<string>> ListBaseTablesAsync(DataContext db)
+{
+    var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != ConnectionState.Open)
+        await db.Database.OpenConnectionAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText =
+        "SELECT table_name FROM information_schema.tables " +
+        "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'";
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+        tables.Add(reader.GetString(0));
+    return tables;
+}
+
+static async Task<bool> HasApplicationUserRowsAsync(DataContext db)
+{
+    try
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+            await db.Database.OpenConnectionAsync();
+
+        await using var existsCmd = connection.CreateCommand();
+        existsCmd.CommandText =
+            "SELECT COUNT(*) FROM information_schema.tables " +
+            "WHERE table_schema = DATABASE() AND table_name = 'AspNetUsers'";
+        var tableCount = Convert.ToInt64(await existsCmd.ExecuteScalarAsync());
+        if (tableCount == 0)
+            return false;
+
+        await using var rowsCmd = connection.CreateCommand();
+        rowsCmd.CommandText = "SELECT COUNT(*) FROM `AspNetUsers`";
+        return Convert.ToInt64(await rowsCmd.ExecuteScalarAsync()) > 0;
+    }
+    catch (Exception)
+    {
+        return false;
+    }
+}
+
+static async Task StampBaselineHistoryAsync(
+    DataContext db,
+    string baselineMigrationId,
+    string efProductVersion)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        CREATE TABLE IF NOT EXISTS `__EFMigrationsHistory` (
+            `MigrationId` varchar(150) CHARACTER SET utf8mb4 NOT NULL,
+            `ProductVersion` varchar(32) CHARACTER SET utf8mb4 NOT NULL,
+            PRIMARY KEY (`MigrationId`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+    await db.Database.ExecuteSqlRawAsync("DELETE FROM `__EFMigrationsHistory`");
+    await db.Database.ExecuteSqlRawAsync(
+        "INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`) VALUES ({0}, {1})",
+        baselineMigrationId,
+        efProductVersion);
+}
+
 static async Task ApplyMigrationsWithRetryAsync(
     DataContext db,
     IMigrator migrator,
@@ -739,6 +868,26 @@ static async Task ApplyMigrationsWithRetryAsync(
                     "Schema drift detected while applying migrations. " +
                     "An object (table/column/index) already exists but the migration that should have created it " +
                     "is not recorded in __EFMigrationsHistory. Message: {Message}", message);
+
+                try
+                {
+                    if (await TryRecoverInterruptedBaselineAsync(
+                            db, logger, baselineMigrationId, efProductVersion))
+                    {
+                        // Stamp path: no pending left. Wipe path: DB was dropped — recreate via Migrate.
+                        await migrator.MigrateAsync();
+                        logger.LogInformation(
+                            "Database migrations applied successfully after Baseline recovery.");
+                        return;
+                    }
+                }
+                catch (Exception recoverEx)
+                {
+                    logger.LogError(
+                        recoverEx,
+                        "Failed to recover from interrupted Baseline apply: {Message}",
+                        recoverEx.InnerException?.Message ?? recoverEx.Message);
+                }
             }
             else
             {
