@@ -403,10 +403,14 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks
+// Health checks — MinIO ensure-bucket can exceed the default when the node is cold.
 builder.Services.AddHealthChecks()
     .AddMySql(connectionString, name: "mysql")
-    .AddCheck<Delegat.Infrastructure.Health.MinIOHealthCheck>("minio");
+    .AddCheck<Delegat.Infrastructure.Health.MinIOHealthCheck>(
+        "minio",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"],
+        timeout: TimeSpan.FromSeconds(20));
 
 // Trust X-Forwarded-* from the in-compose nginx reverse proxy so rate limits
 // key off the real client IP (without this, every user shares nginx's Docker IP).

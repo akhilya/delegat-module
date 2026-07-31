@@ -32,7 +32,7 @@ public class MinIOSettings
     public string AccessKey { get; set; } = string.Empty;
     public string SecretKey { get; set; } = string.Empty;
     public string Bucket { get; set; } = string.Empty;
-    public bool Secure { get; set; } = true;
+    public bool Secure { get; set; } = false;
 
     /// <summary>
     /// Whether to use HTTPS for public URLs (separate from Secure which is for API calls).

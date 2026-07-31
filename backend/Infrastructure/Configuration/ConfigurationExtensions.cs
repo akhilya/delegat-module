@@ -35,7 +35,7 @@ public static class ConfigurationExtensions
             AccessKey = GetValue(config, "MINIO_ACCESS_KEY"),
             SecretKey = GetValue(config, "MINIO_SECRET_KEY"),
             Bucket = GetValue(config, "MINIO_BUCKET"),
-            Secure = bool.Parse(GetValue(config, "MINIO_SECURE", "true")),
+            Secure = bool.Parse(GetValue(config, "MINIO_SECURE", "false")),
             PublicEndpoint = string.IsNullOrEmpty(publicEndpoint) ? null : publicEndpoint,
             PublicSecure = string.IsNullOrEmpty(publicSecureStr) ? null : bool.Parse(publicSecureStr)
         };
