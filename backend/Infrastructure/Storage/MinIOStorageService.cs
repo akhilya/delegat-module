@@ -383,7 +383,16 @@ public class MinIOStorageService : IStorageService
             return;
 
         var bucketExistsArgs = new BucketExistsArgs().WithBucket(_bucket);
-        var exists = await _client.BucketExistsAsync(bucketExistsArgs, ct);
+        bool exists;
+        try
+        {
+            exists = await _client.BucketExistsAsync(bucketExistsArgs, ct);
+        }
+        catch (NullReferenceException)
+        {
+            // MinIO.NET 6.0.5 bug when the bucket does not exist yet.
+            exists = false;
+        }
 
         if (!exists)
         {

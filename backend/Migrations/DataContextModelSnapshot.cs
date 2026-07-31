@@ -379,9 +379,7 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("isUnique")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(false);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("key")
                         .IsRequired()
@@ -1083,10 +1081,8 @@ namespace Delegat.Migrations
 
                     b.Property<string>("preferredExportMode")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
-                        .HasColumnType("varchar(16)")
-                        .HasDefaultValue("full");
+                        .HasColumnType("varchar(16)");
 
                     b.Property<int>("productId")
                         .HasColumnType("int");
@@ -1361,6 +1357,62 @@ namespace Delegat.Migrations
                     b.ToTable("pendingImageDownloads");
                 });
 
+            modelBuilder.Entity("Delegat.Models.PendingProductBulkUpdate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("completedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("failedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("productIdsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("startedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("updatesJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("batchId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.ToTable("pendingProductBulkUpdates");
+                });
+
             modelBuilder.Entity("Delegat.Models.PendingProductExport", b =>
                 {
                     b.Property<int>("Id")
@@ -1565,62 +1617,6 @@ namespace Delegat.Migrations
                     b.ToTable("pendingProductTransfers");
                 });
 
-            modelBuilder.Entity("Delegat.Models.PendingProductBulkUpdate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("authorUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("batchId")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<int>("completedCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("createdAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("failedCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("finishedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("lastError")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("productIdsJson")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime?>("startedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("status")
-                        .HasColumnType("int");
-
-                    b.Property<int>("storeId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("updatesJson")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("batchId");
-
-                    b.HasIndex("status", "createdAt");
-
-                    b.ToTable("pendingProductBulkUpdates");
-                });
-
             modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
@@ -1795,15 +1791,13 @@ namespace Delegat.Migrations
                     b.Property<decimal?>("oldPrice")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<decimal?>("price")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<string>("preferredExportAllMode")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
-                        .HasColumnType("varchar(16)")
-                        .HasDefaultValue("full");
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<decimal?>("price")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("sku")
                         .IsRequired()
@@ -2106,9 +2100,7 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("isUnique")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(false);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("key")
                         .IsRequired()

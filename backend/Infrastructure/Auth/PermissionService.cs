@@ -115,11 +115,11 @@ public sealed class PermissionService : IPermissionService
 
     private async Task MigrateStoreAdministratorsAsync(CancellationToken ct)
     {
-        // After DropStoreAdministrators the table is gone; entity mapping may still exist for
-        // transitional builds, so check applied migrations instead of Model.FindEntityType.
+        // After DropStoreAdministrators / Baseline squash the table is gone.
         const string dropMigration = "20260721134624_DropStoreAdministrators";
+        const string baselineMigration = "20260731183033_Baseline";
         var applied = (await _db.Database.GetAppliedMigrationsAsync(ct)).ToHashSet();
-        if (applied.Contains(dropMigration))
+        if (applied.Contains(dropMigration) || applied.Contains(baselineMigration))
             return;
 
         if (_db.Model.FindEntityType(typeof(StoreAdministrator)) == null)

@@ -46,11 +46,16 @@ public static class ConfigurationExtensions
     /// </summary>
     public static JwtSettings GetJwtSettings(this IConfiguration config)
     {
+        // Empty ValidIssuer/ValidAudience makes JwtBearer reject every cookie with
+        // "The audience 'empty' is invalid" (lab stacks often omit JWT_ISSUER/AUDIENCE).
+        const string fallback = "delegat";
+        var issuer = GetValue(config, "JWT_ISSUER", fallback);
+        var audience = GetValue(config, "JWT_AUDIENCE", fallback);
         return new JwtSettings
         {
             Key = GetValue(config, "JWT_KEY"),
-            Issuer = GetValue(config, "JWT_ISSUER"),
-            Audience = GetValue(config, "JWT_AUDIENCE")
+            Issuer = string.IsNullOrWhiteSpace(issuer) ? fallback : issuer,
+            Audience = string.IsNullOrWhiteSpace(audience) ? fallback : audience,
         };
     }
 

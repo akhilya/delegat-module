@@ -509,11 +509,12 @@ if (!aiEnabled)
 
 var app = builder.Build();
 
-const string RolesAndPermissionsMigration = "20260721134512_RolesAndPermissions";
-const string DropStoreAdministratorsMigration = "20260721134624_DropStoreAdministrators";
+// Squashed schema baseline (replaces the pre-squash 68-migration chain).
+// Do not rename/delete after shipping — existing DBs stamp this id into __EFMigrationsHistory.
+const string BaselineMigrationId = "20260731183033_Baseline";
+const string EfProductVersion = "8.0.20";
 
 // Apply migrations automatically (with retry for slow MySQL startup).
-// Two-phase: stop before DropStoreAdministrators so PermissionService can migrate legacy store-admins via EF.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
@@ -521,18 +522,8 @@ using (var scope = app.Services.CreateScope())
     var migrator = db.GetService<IMigrator>()
         ?? throw new InvalidOperationException("EF IMigrator is not available.");
 
-    var pendingMigrations = db.Database.GetPendingMigrations().ToList();
-    if (pendingMigrations.Any())
-    {
-        logger.LogInformation("Pending migrations to apply ({Count}): {Migrations}", pendingMigrations.Count, string.Join(", ", pendingMigrations));
-    }
-
-    var applied = db.Database.GetAppliedMigrations().ToHashSet();
-    // Do not target an older migration if Drop already applied - that would roll back.
-    string? phase1Target = applied.Contains(DropStoreAdministratorsMigration)
-        ? null
-        : RolesAndPermissionsMigration;
-    await ApplyMigrationsWithRetryAsync(migrator, logger, phase1Target);
+    await ApplyMigrationsWithRetryAsync(
+        db, migrator, logger, BaselineMigrationId, EfProductVersion);
 }
 
 // Run platform data migrations
@@ -541,7 +532,7 @@ using (var scope = app.Services.CreateScope())
     await DataMigrationRunner.RunAsync(scope.ServiceProvider);
 }
 
-// Seed admin user if configured; migrate legacy access while StoreAdministrators still exists
+// Seed admin user if configured; migrate legacy access if StoreAdministrators still exists
 var adminSettings = builder.Configuration.GetAdminSeedSettings();
 using (var scope = app.Services.CreateScope())
 {
@@ -550,19 +541,27 @@ using (var scope = app.Services.CreateScope())
     await permissionService.MigrateLegacyAccessAsync();
 }
 
-// Apply remaining migrations (DropStoreAdministrators)
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
-    var migrator = db.GetService<IMigrator>()
-        ?? throw new InvalidOperationException("EF IMigrator is not available.");
-    await ApplyMigrationsWithRetryAsync(migrator, logger, targetMigration: null);
-}
-
 // Warm logging / Public API toggles cache (seed from env on first boot)
 await app.Services.GetRequiredService<ILoggingSettingsService>().EnsureInitializedAsync();
 await app.Services.GetRequiredService<IPublicApiSettingsService>().EnsureInitializedAsync();
+
+// Ensure MinIO is reachable and the app bucket exists before /api/health is served.
+// Fresh MinIO has no buckets; MinIO.NET 6.0.5 NREs on BucketExists for missing buckets.
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<DataContext>>();
+    try
+    {
+        await Delegat.Infrastructure.Health.MinioBootstrap.EnsureReachableAndBucketAsync(
+            minioSettings, logger);
+        logger.LogInformation("MinIO bucket '{Bucket}' is ready.", minioSettings.Bucket);
+    }
+    catch (Exception ex)
+    {
+        // Do not block boot forever — health check will keep reporting until MinIO recovers.
+        logger.LogError(ex, "MinIO bootstrap failed; /api/health may stay unhealthy until MinIO is reachable.");
+    }
+}
 
 // --reset-admin mode: generate a new admin password, print JSON to stdout, exit.
 // Usage inside container: dotnet Delegat.dll --reset-admin
@@ -664,22 +663,62 @@ app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthCh
 await app.RunAsync("http://0.0.0.0:5000");
 return 0;
 
+static async Task RebasePreSquashHistoryIfNeededAsync(
+    DataContext db,
+    ILogger logger,
+    string baselineMigrationId,
+    string efProductVersion)
+{
+    var applied = db.Database.GetAppliedMigrations().ToList();
+    if (applied.Count == 0)
+        return;
+
+    var defined = db.Database.GetMigrations().ToHashSet(StringComparer.Ordinal);
+    if (applied.Any(id => defined.Contains(id)))
+        return;
+
+    // History only has pre-squash migration ids that are no longer in the assembly.
+    // Stamp Baseline as applied without running Up() (schema already matches).
+    logger.LogWarning(
+        "Rewriting __EFMigrationsHistory from {Count} pre-squash migrations to Baseline {Baseline}.",
+        applied.Count,
+        baselineMigrationId);
+
+    await db.Database.ExecuteSqlRawAsync("DELETE FROM `__EFMigrationsHistory`");
+    await db.Database.ExecuteSqlRawAsync(
+        "INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`) VALUES ({0}, {1})",
+        baselineMigrationId,
+        efProductVersion);
+}
+
 static async Task ApplyMigrationsWithRetryAsync(
+    DataContext db,
     IMigrator migrator,
     ILogger logger,
-    string? targetMigration)
+    string baselineMigrationId,
+    string efProductVersion)
 {
-    const int maxRetries = 30;
+    const int maxRetries = 60;
     for (int i = 0; i < maxRetries; i++)
     {
         try
         {
-            var label = targetMigration ?? "latest";
+            await RebasePreSquashHistoryIfNeededAsync(db, logger, baselineMigrationId, efProductVersion);
+
+            var pendingMigrations = db.Database.GetPendingMigrations().ToList();
+            if (pendingMigrations.Count > 0)
+            {
+                logger.LogInformation(
+                    "Pending migrations to apply ({Count}): {Migrations}",
+                    pendingMigrations.Count,
+                    string.Join(", ", pendingMigrations));
+            }
+
             logger.LogInformation(
-                "Applying database migrations to {Target} (attempt {Attempt}/{Max})...",
-                label, i + 1, maxRetries);
-            await migrator.MigrateAsync(targetMigration);
-            logger.LogInformation("Database migrations applied successfully (target={Target}).", label);
+                "Applying database migrations to latest (attempt {Attempt}/{Max})...",
+                i + 1, maxRetries);
+            await migrator.MigrateAsync();
+            logger.LogInformation("Database migrations applied successfully.");
             return;
         }
         catch (Exception ex)
@@ -710,7 +749,7 @@ static async Task ApplyMigrationsWithRetryAsync(
                     $"Last error: {message}", ex);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(3));
+            await Task.Delay(TimeSpan.FromSeconds(5));
         }
     }
 
