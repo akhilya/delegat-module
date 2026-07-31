@@ -24,6 +24,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- First-run setup wizard: step rail, skeleton loading, and skip catalogs when Control Plane is unlinked or catalogs are not ready (create store by name; server defaults for currency/timezone)
 - Sign-in accepts email as well as username (input is trimmed)
 - Connection settings: Save + actions use a Button Group (Save keeps ⌘/Ctrl+S hotkey; Kbd shown only in menus)
 - Platform menus use shadcn `Kbd` / `MenuKbd` for shortcuts via `DropdownMenuShortcut` / `ContextMenuShortcut` `:keys` (not on buttons)

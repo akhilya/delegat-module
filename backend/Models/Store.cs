@@ -79,10 +79,16 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     public bool AddFill(AddForm form)
     {
         name = form.name;
-        if (string.IsNullOrWhiteSpace(timezone))
+        if (!string.IsNullOrWhiteSpace(form.timezone))
+            timezone = form.timezone.Trim();
+        else if (string.IsNullOrWhiteSpace(timezone))
             timezone = DEFAULT_TIMEZONE;
-        if (string.IsNullOrWhiteSpace(baseCurrency))
+
+        if (!string.IsNullOrWhiteSpace(form.baseCurrency))
+            baseCurrency = CurrencyService.NormalizeCode(form.baseCurrency);
+        else if (string.IsNullOrWhiteSpace(baseCurrency))
             baseCurrency = DEFAULT_BASE_CURRENCY;
+
         return true;
     }
 
@@ -162,6 +168,16 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Add every currently active user as a member of the new store.
         /// </summary>
         public bool addAllUsers { get; set; }
+
+        /// <summary>
+        /// Optional IANA timezone (defaults to <see cref="DEFAULT_TIMEZONE"/>).
+        /// </summary>
+        public string? timezone { get; set; }
+
+        /// <summary>
+        /// Optional ISO 4217 base currency (defaults to <see cref="DEFAULT_BASE_CURRENCY"/>).
+        /// </summary>
+        public string? baseCurrency { get; set; }
     }
 
     /// <summary>

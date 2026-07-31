@@ -69,7 +69,7 @@
       "noMembershipBody": "You are not a member of any store. Contact an administrator to be added.",
       "noStoresTitle": "No stores yet",
       "noStoresBody": "There are no stores on this platform. Create the first store to get started.",
-      "noStoresLink": "Go to Stores"
+      "noStoresLink": "Open setup"
     },
     "logs": {
       "method": "Method",
@@ -365,7 +365,8 @@
     "unavailable": "Server unavailable",
     "adapters": "Adapters",
     "categoryImport": "Import category",
-    "fieldMapping": "Field mapping"
+    "fieldMapping": "Field mapping",
+    "setup": "Setup"
   },
   "ai": {
     "historyTooltip": "Conversation history",
@@ -2092,6 +2093,40 @@
       "whitespaceOnlyDiff": "Difference is only whitespace (spaces or line breaks) — shown as ↵ ·"
   },
   "pages": {
+    "setup": {
+      "stepsAriaLabel": "Setup steps",
+      "stepWelcomeShort": "Welcome",
+      "stepStoreShort": "Store",
+      "stepDoneShort": "Done",
+      "stepWelcomeTitle": "Welcome",
+      "stepStoreTitle": "Create your store",
+      "stepDoneTitle": "You're ready",
+      "welcomeBody": "Create your first store to unlock products and adapters. Currency and timezone come from the platform catalogs when Control Plane is linked.",
+      "statusUnknown": "Catalog status unknown",
+      "statusReady": "Catalogs ready",
+      "statusLinkedNotReady": "Linked — waiting for catalogs",
+      "statusNotLinked": "Not linked to Control Plane",
+      "statusCounts": "{currencies} currencies · {timezones} timezones",
+      "catalogsNotReadyTitle": "Reference catalogs unavailable",
+      "catalogsNotReadyLinked": "Platform Link is configured, but currency and timezone catalogs have not synced yet. Refresh in a moment, or skip and use server defaults.",
+      "catalogsNotReadyUnlinked": "No Control Plane link. Refresh after linking, or skip catalogs and create the store with server defaults.",
+      "catalogsNotReadyUnknown": "Could not load catalog status. Refresh, or skip catalogs and create the store with server defaults.",
+      "continueCreateStore": "Continue",
+      "skipCatalogs": "Skip catalogs",
+      "skippedCatalogsHint": "Currency and timezone will use server defaults. You can change them later in store settings.",
+      "storeNameLabel": "Store name",
+      "storeNamePlaceholder": "My store",
+      "baseCurrencyLabel": "Base currency",
+      "baseCurrencyPlaceholder": "Select currency",
+      "timezoneLabel": "Timezone",
+      "timezonePlaceholder": "Select timezone",
+      "createStore": "Create store",
+      "storeCreated": "Store created",
+      "doneBody": "“{name}” is selected. You can open products now. Marketplace connection can wait.",
+      "yourStore": "Your store",
+      "openProducts": "Open products",
+      "marketplaceLaterHint": "Connect a marketplace later from Adapters."
+    },
     "productEditPage": {
       "breadcrumbEditing": "Editing",
       "validation": {

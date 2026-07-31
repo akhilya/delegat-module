@@ -107,7 +107,7 @@ Do **not** send catalog PII or marketplace credentials.
    - `GET /reference/plugins`
    - `GET /reference/status` - `{ linked, lastSyncedAt, currenciesCount, timezonesCount, pluginsCount, ready }`
 3. Empty DB + no CP → empty lists; UI empty state (no frontend hardcode).
-4. Future **initialization wizard** uses `/reference/status` and these catalogs for first-run store setup.
+4. First-run wizard (`/setup`) uses `/reference/status` and these catalogs for store currency/timezone. When catalogs are not ready, the wizard can skip them and create a store with server defaults (`RUB` / `Europe/Moscow`) without sending currency/timezone.
 
 ## Crypto choice
 

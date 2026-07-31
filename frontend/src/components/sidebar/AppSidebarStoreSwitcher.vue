@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { t } from "@/i18n";
-import { PAGE_ADMIN_STORES } from "@/router";
+import { PAGE_SETUP } from "@/router";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -82,7 +82,7 @@ const showEmptyState = computed(() => !hasMemberships.value && props.emptyMode !
     </p>
     <RouterLink
       v-if="isNoStoresAdmin"
-      :to="PAGE_ADMIN_STORES"
+      :to="PAGE_SETUP"
       class="mt-2 inline-block text-[11px] font-medium text-primary underline-offset-2 hover:underline"
     >
       {{ t("components.appSidebarStoreSwitcher.noStoresLink") }}

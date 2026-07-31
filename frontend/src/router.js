@@ -3,6 +3,7 @@ import { BRAND_NAME } from "@/brand";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
+import { PAGE_SETUP } from "@/lib/setupGate";
 
 const signUpPage = () => import("./pages/signUpPage.vue");
 const signInPage = () => import("./pages/signInPage.vue");
@@ -34,11 +35,13 @@ const MarketplaceFieldMappingPage = () => import("./pages/marketplace/fieldMappi
 const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
 const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
+const SetupWizardPage = () => import("./pages/setup/SetupWizardPage.vue");
 
 export const PAGE_SIGN_UP = "/signUp";
 export const PAGE_SIGN_IN = "/signIn";
 export const PAGE_UNAVAILABLE = "/unavailable";
 export const PAGE_PRODUCTS = "/products";
+export { PAGE_SETUP };
 export const PAGE_PRODUCT_CREATION = "/products/create";
 export const PAGE_PRODUCT_EDIT = "/products/:id/edit";
 export const PAGE_CATEGORIES = "/categories";
@@ -78,6 +81,11 @@ export const routes = [
     path: PAGE_UNAVAILABLE,
     component: UnavailablePage,
     meta: { public: true, titleKey: "routes.unavailable" },
+  },
+  {
+    path: PAGE_SETUP,
+    component: SetupWizardPage,
+    meta: { bareLayout: true, titleKey: "routes.setup", permissions: [PERMS.StoresCreate] },
   },
   { path: "/", component: productsPage, meta: { titleKey: "routes.products" } },
   { path: PAGE_PRODUCTS, component: productsPage, meta: { titleKey: "routes.products" } },

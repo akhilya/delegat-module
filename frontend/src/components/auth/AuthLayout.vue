@@ -7,6 +7,8 @@ import { BRAND_NAME } from "@/brand";
 defineProps({
   /** Page action under the brand (e.g. Sign in / Sign up) */
   title: { type: String, required: true },
+  /** Wider card for multi-field flows (first-run wizard). */
+  wide: { type: Boolean, default: false },
 });
 </script>
 
@@ -16,7 +18,7 @@ defineProps({
       <LanguageSwitcher variant="corner" />
     </div>
 
-    <div class="auth-center">
+    <div class="auth-center" :class="{ 'auth-center--wide': wide }">
       <header class="auth-brand">
         <Logo class="auth-logo" />
         <h1 class="auth-brand-name">{{ BRAND_NAME }}</h1>
@@ -62,6 +64,10 @@ defineProps({
   align-items: stretch;
   gap: 1.5rem;
   animation: auth-enter 280ms ease-out both;
+}
+
+.auth-center--wide {
+  max-width: 26rem;
 }
 
 .auth-brand {

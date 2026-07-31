@@ -99,7 +99,7 @@
 - Reference Catalog synced into MySQL (`referenceCurrencies`, `referenceTimezones`, `referencePlugins`)
 - Instance API: `GET /reference/currencies|timezones|plugins|status` (UI has no hardcoded catalogs)
 - 5xx sampled reporting + optional heartbeat
-- Empty catalogs until CP sync (or future initialization wizard)
+- Empty catalogs until CP sync (first-run wizard can skip and use server defaults)
 
 ### Background Services
 - ImageDownloadBackgroundService - downloads images from marketplaces
@@ -137,8 +137,8 @@
 ### Critical - before first customers
 
 #### Onboarding / First-Run Wizard
-- **Current:** Admin seed via env vars + invitation tokens. Reference catalogs fill from Control Plane via Platform Link (`GET /reference/status`). No visual wizard yet.
-- **Needed:** Steps: account setup → store configuration (base currency / timezone from reference catalog) → marketplace connection → first sync.
+- **Current (MVP):** Authenticated admin (or `stores.create`) with zero stores is redirected to `/setup`. Steps: welcome + Platform Link catalog status → create store (name, base currency, timezone from `GET /reference/*`) → select store → open products. If catalogs are unavailable (no Control Plane link or not synced yet), the wizard can skip catalogs and create the store with server defaults (`RUB` / `Europe/Moscow`). Marketplace connection and first sync are deferred (skip in MVP).
+- **Still needed (v2):** Marketplace connection wizard, first sync run, invite teammates, bootstrap password change in-wizard.
 
 #### Backup & Recovery
 - **Current:** Manual MySQL dump for administrators via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.

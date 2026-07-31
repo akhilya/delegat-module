@@ -85,6 +85,17 @@ public class StoreController : ControllerBase
         if (existingStore != null)
             throw ApiException.BadRequest("A store with this name already exists");
 
+        if (!string.IsNullOrWhiteSpace(input.timezone)
+            && !StoreTimeHelper.IsValidTimezoneId(input.timezone.Trim()))
+            throw ApiException.BadRequest("Invalid timezone");
+
+        if (!string.IsNullOrWhiteSpace(input.baseCurrency))
+        {
+            var normalized = input.baseCurrency.Trim().ToUpperInvariant();
+            if (!CurrencyService.IsValidCurrencyCode(normalized))
+                throw ApiException.BadRequest("Invalid base currency");
+        }
+
         var newStore = new Store();
         newStore.AddFill(input);
 

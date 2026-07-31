@@ -54,17 +54,22 @@ export default {
      * @param {Object} params - Action parameters.
      * @param {string} params.name - Name for the new store.
      * @param {boolean} params.addAllUsers - Whether to add every active user to the new store.
+     * @param {string} [params.timezone] - Optional IANA timezone.
+     * @param {string} [params.baseCurrency] - Optional ISO 4217 base currency.
      * @param {Function} params.onSuccess - Callback on successful response.
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createStore(ctx, { name, addAllUsers, onSuccess, onError }) {
+    async createStore(ctx, { name, addAllUsers, timezone, baseCurrency, onSuccess, onError }) {
+      const data = { name, addAllUsers };
+      if (timezone) data.timezone = timezone;
+      if (baseCurrency) data.baseCurrency = baseCurrency;
       return await useAxios(
         `/stores/`,
         {
           method: "POST",
           cache: false,
-          data: { name, addAllUsers }
+          data,
         },
         http,
         {

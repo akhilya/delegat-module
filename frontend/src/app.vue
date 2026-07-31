@@ -38,6 +38,9 @@ export default {
     const { t } = useI18n();
     const route = useRoute();
     const isPublicPage = computed(() => !!route.meta?.public);
+    const isBareLayout = computed(
+      () => !!route.meta?.public || !!route.meta?.bareLayout,
+    );
     // Default false until /auth/me confirms AI_ENABLED — avoids loading AI chunk on free tier.
     const aiEnabled = ref(false);
 
@@ -52,7 +55,7 @@ export default {
       localStorage.setItem("mobile-warning-dismissed", "1");
     }
 
-    return { t, BRAND_NAME, isPublicPage, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
+    return { t, BRAND_NAME, isPublicPage, isBareLayout, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
   },
   computed: {
     appKey() {
@@ -68,13 +71,13 @@ export default {
       return this.$store.getters["operations/hasLocalActiveUploads"];
     },
     showMobileWarning() {
-      return this.isMobileScreen && !this.mobileWarningDismissed && !this.isPublicPage;
+      return this.isMobileScreen && !this.mobileWarningDismissed && !this.isBareLayout;
     },
   },
   mounted() {
     this.$store.dispatch("operations/initSignalR");
     window.addEventListener("beforeunload", this._onBeforeUnload);
-    if (!this.isPublicPage) {
+    if (!this.isBareLayout) {
       loadMe().then((me) => {
         this.aiEnabled = me?.aiEnabled === true;
       }).catch(() => {
@@ -99,7 +102,7 @@ export default {
 
 <template>
   <LoadingBar ref="loadingBar" />
-  <RouterView v-if="isPublicPage" v-slot="{ Component, route }">
+  <RouterView v-if="isBareLayout" v-slot="{ Component, route }">
     <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
   </RouterView>
   <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
@@ -120,7 +123,7 @@ export default {
   </SidebarProvider>
   <Toaster />
   <ConfirmDialogHost />
-  <template v-if="!isPublicPage">
+  <template v-if="!isBareLayout">
     <OperationsPanel />
     <FabGroup :ai-enabled="aiEnabled" />
   </template>

@@ -69,7 +69,7 @@
       "noMembershipBody": "Вы не являетесь участником ни одного магазина. Обратитесь к администратору, чтобы вас добавили.",
       "noStoresTitle": "Магазинов пока нет",
       "noStoresBody": "На платформе ещё не создано ни одного магазина. Создайте первый магазин, чтобы начать работу.",
-      "noStoresLink": "Перейти к магазинам"
+      "noStoresLink": "Открыть настройку"
     },
     "logs": {
       "method": "Метод",
@@ -365,7 +365,8 @@
     "unavailable": "Сервер недоступен",
     "adapters": "Адаптеры",
     "categoryImport": "Импорт категории",
-    "fieldMapping": "Маппинг полей"
+    "fieldMapping": "Маппинг полей",
+    "setup": "Настройка"
   },
   "ai": {
     "historyTooltip": "История диалогов",
@@ -2092,6 +2093,40 @@
       "whitespaceOnlyDiff": "Разница только в пробелах или переносах строк — показаны как ↵ ·"
   },
   "pages": {
+    "setup": {
+      "stepsAriaLabel": "Шаги настройки",
+      "stepWelcomeShort": "Старт",
+      "stepStoreShort": "Магазин",
+      "stepDoneShort": "Готово",
+      "stepWelcomeTitle": "Добро пожаловать",
+      "stepStoreTitle": "Создайте магазин",
+      "stepDoneTitle": "Готово",
+      "welcomeBody": "Создайте первый магазин, чтобы открыть товары и адаптеры. Валюта и часовой пояс берутся из каталогов платформы, когда есть связь с Control Plane.",
+      "statusUnknown": "Статус каталогов неизвестен",
+      "statusReady": "Каталоги готовы",
+      "statusLinkedNotReady": "Связь есть — ждём каталоги",
+      "statusNotLinked": "Нет связи с Control Plane",
+      "statusCounts": "{currencies} валют · {timezones} часовых поясов",
+      "catalogsNotReadyTitle": "Справочники недоступны",
+      "catalogsNotReadyLinked": "Platform Link настроен, но валюты и часовые пояса ещё не синхронизировались. Обновите через мгновение или пропустите справочники — будут значения по умолчанию.",
+      "catalogsNotReadyUnlinked": "Нет связи с Control Plane. Обновите после подключения или пропустите справочники — магазин создастся с значениями по умолчанию.",
+      "catalogsNotReadyUnknown": "Не удалось загрузить статус каталогов. Обновите или пропустите справочники — будут значения по умолчанию.",
+      "continueCreateStore": "Продолжить",
+      "skipCatalogs": "Пропустить справочники",
+      "skippedCatalogsHint": "Валюта и часовой пояс будут заданы сервером по умолчанию. Позже их можно изменить в настройках магазина.",
+      "storeNameLabel": "Название магазина",
+      "storeNamePlaceholder": "Мой магазин",
+      "baseCurrencyLabel": "Базовая валюта",
+      "baseCurrencyPlaceholder": "Выберите валюту",
+      "timezoneLabel": "Часовой пояс",
+      "timezonePlaceholder": "Выберите часовой пояс",
+      "createStore": "Создать магазин",
+      "storeCreated": "Магазин создан",
+      "doneBody": "«{name}» выбран. Можно открыть товары. Подключение маркетплейса можно отложить.",
+      "yourStore": "Ваш магазин",
+      "openProducts": "Открыть товары",
+      "marketplaceLaterHint": "Маркетплейс можно подключить позже в разделе Адаптеры."
+    },
     "productEditPage": {
       "breadcrumbEditing": "Редактирование",
       "validation": {

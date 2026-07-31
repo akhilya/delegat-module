@@ -16,6 +16,7 @@ const PAGE_STORE_ATTRIBUTES = "/store-attributes";
 const PAGE_TOOLS = "/tools";
 const PAGE_MARKETPLACE = "/adapter";
 const PAGE_PRODUCTS = "/products";
+const PAGE_SETUP = "/setup";
 
 /**
  * Route path → required permission(s) (any-of).
@@ -36,6 +37,7 @@ const ROUTE_PERMISSIONS = {
   [PAGE_STORE_ATTRIBUTES]: [PERMS.CatalogManage],
   [PAGE_TOOLS]: [PERMS.OperationsManage, PERMS.CatalogManage],
   [PAGE_MARKETPLACE]: [PERMS.MarketplaceManage],
+  [PAGE_SETUP]: [PERMS.StoresCreate],
 };
 
 /**

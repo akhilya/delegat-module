@@ -30,8 +30,15 @@ import {
   getCachedMe,
   primeMeCache,
 } from "./lib/meCache";
+import {
+  canEnterSetupWizard,
+  resolveSetupNavigation,
+  PAGE_SETUP,
+} from "./lib/setupGate";
+import { fetchSetupStoreCount } from "./lib/setupStoreCount";
 
 export { getCachedMe, primeMeCache } from "./lib/meCache";
+export { clearSetupStoreCountCache } from "./lib/setupStoreCount";
 
 export const http = setupCache(
   axios.create({
@@ -300,6 +307,28 @@ router.beforeEach(async (to) => {
     const me = getCachedMe() || (await loadMe());
     if (me?.publicApiEnabled === false) {
       return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
+  }
+
+  // First-run wizard: admin (or stores.create) with zero stores → /setup.
+  {
+    const me = getCachedMe() || (await loadMe());
+    const needsSetupCheck =
+      to.path === PAGE_SETUP ||
+      to.path.startsWith(`${PAGE_SETUP}/`) ||
+      canEnterSetupWizard(me);
+    if (needsSetupCheck) {
+      const storeCount = await fetchSetupStoreCount({
+        force: to.path === PAGE_SETUP,
+      });
+      const decision = resolveSetupNavigation({
+        path: to.path,
+        me,
+        storeCount,
+      });
+      if (decision?.redirect && decision.redirect !== to.path) {
+        return { path: decision.redirect };
+      }
     }
   }
 
