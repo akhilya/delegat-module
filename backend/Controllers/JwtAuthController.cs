@@ -48,7 +48,10 @@ public class JwtAuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> PostSignInUser([FromBody] SignInForm input)
     {
-        var user = await _userManager.FindByNameAsync(input.userName);
+        var userName = (input.userName ?? "").Trim();
+        var user = await _userManager.FindByNameAsync(userName);
+        if (user == null && userName.Contains('@'))
+            user = await _userManager.FindByEmailAsync(userName);
         if (user == null)
             throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
 
