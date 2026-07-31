@@ -276,14 +276,10 @@ public class UserController : ControllerBase
         if (!update.Succeeded)
             throw ApiException.BadRequest(update.Errors.Select(e => e.Description).ToArray());
 
-        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        Response.Cookies.Append("selected_store_id", id.ToString(), new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = SameSiteMode.Lax,
-            Expires = DateTime.UtcNow.AddDays(30)
-        });
+        Response.Cookies.Append(
+            "selected_store_id",
+            id.ToString(),
+            AuthCookie.SelectedStore(Request));
 
         return Ok(new { next = "/products" });
     }

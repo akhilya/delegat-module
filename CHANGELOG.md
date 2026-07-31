@@ -54,6 +54,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Auth cookies use HTTPS/`COOKIE_SECURE` instead of `ASPNETCORE_ENVIRONMENT=Production`, so sign-in keeps refresh cookies on HTTP lab hosts
 - Product edit: leaving with unsaved changes shows the discard confirmation dialog again (was blocked with no dialog)
 - Mappings list product count uses products in the local category (not only marketplace links)
 - Mapping canvas no longer freezes for ~1–2s after moving a block (undo history used `JSON.stringify` through Vue proxies on the full graph)

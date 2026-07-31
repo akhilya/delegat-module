@@ -325,40 +325,20 @@ public class JwtAuthController : ControllerBase
 
     private void SetAccessTokenCookie(string token, bool rememberMe)
     {
-        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        Response.Cookies.Append(ACCESS_COOKIE, token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = SameSiteMode.Strict,
-            Path = "/",
-            Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
-        });
+        Response.Cookies.Append(ACCESS_COOKIE, token, AuthCookie.AccessOrRefresh(Request, rememberMe));
     }
 
     private void SetRefreshTokenCookie(string token, bool rememberMe)
     {
-        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        Response.Cookies.Append(REFRESH_COOKIE, token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = SameSiteMode.Strict,
-            Path = "/",
-            Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(7)
-        });
+        Response.Cookies.Append(REFRESH_COOKIE, token, AuthCookie.AccessOrRefresh(Request, rememberMe));
     }
 
     private void SetSelectedStoreCookie(int storeId)
     {
-        var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        Response.Cookies.Append("selected_store_id", storeId.ToString(), new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTime.UtcNow.AddDays(30)
-        });
+        Response.Cookies.Append(
+            "selected_store_id",
+            storeId.ToString(),
+            AuthCookie.SelectedStore(Request));
     }
 
     public struct SignInForm
