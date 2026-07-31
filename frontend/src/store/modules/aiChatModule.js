@@ -1,4 +1,5 @@
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { randomUuid } from "@/utils/uuid";
 import { t } from "@/i18n";
 
 /** Model-facing control messages - always English (system prompts are English). */
@@ -6,7 +7,7 @@ const AI_CONFIRM_PLAN = "Confirmed, proceed";
 const AI_CANCEL_PLAN =
   "Cancelling the proposed plan - do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation.";
 
-function newSessionId() { return crypto.randomUUID(); }
+function newSessionId() { return randomUuid(); }
 
 let abortController = null;
 

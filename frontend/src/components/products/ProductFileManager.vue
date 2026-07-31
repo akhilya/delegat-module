@@ -59,6 +59,7 @@ import { Tag } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MenuKbd } from "@/components/ui/kbd";
 import { t } from "@/i18n";
+import { randomUuidCompact } from "@/utils/uuid";
 
 const props = defineProps({
   files: { type: Array, required: true },
@@ -679,7 +680,7 @@ async function uploadFiles(fileList) {
   // Register operation in Vuex FIRST (before backend call) so the local version
   // with silent+onCancel wins the race against SignalR OperationStarted event.
   // ADD_OPERATION deduplicates by ID - whoever adds first keeps the entry.
-  const opId = crypto.randomUUID().replace(/-/g, "");
+  const opId = randomUuidCompact();
   const uploadTitle = totalFiles === 1
     ? t("products.productFileManager.uploadingFileTitle", { subject: subjectLabel.value })
     : t("products.productFileManager.uploadingFilesTitle", { count: totalFiles, subject: subjectLabel.value });
@@ -1247,7 +1248,7 @@ async function confirmDeletePendingFile() {
 // Unified delete: registers operation, calls bulk-delete, logs results
 async function deleteFilesWithOperation(fileIds, fileNames) {
   const count = fileIds.length;
-  const opId = crypto.randomUUID().replace(/-/g, "");
+  const opId = randomUuidCompact();
   const title = count === 1
     ? t("products.productFileManager.deletingFileTitle", { subject: subjectLabel.value })
     : t("products.productFileManager.deletingFilesTitle", { count, subject: subjectLabel.value });

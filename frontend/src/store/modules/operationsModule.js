@@ -2,6 +2,7 @@ import { HubConnectionBuilder, LogLevel, HttpTransportType } from "@microsoft/si
 import { http } from "@/main";
 import { t } from "@/i18n";
 import { parseServerUtc } from "@/utils/dateTime";
+import { randomUuidCompact } from "@/utils/uuid";
 
 let connection = null;
 
@@ -320,7 +321,7 @@ const actions = {
 
   addOperation({ commit, state }, operation) {
     const op = {
-      id: operation.id || crypto.randomUUID().replace(/-/g, ""),
+      id: operation.id || randomUuidCompact(),
       type: operation.type || "unknown",
       title: operation.title || t("store.operationsModule.defaultTitle"),
       status: "running",

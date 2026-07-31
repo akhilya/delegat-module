@@ -10,6 +10,7 @@ import {
 } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
+import { randomUuidCompact } from "@/utils/uuid";
 import {
   Loader2,
   Upload,
@@ -404,7 +405,7 @@ export default {
       let errorCount = 0;
 
       for (const conn of allExportable) {
-        const operationId = crypto.randomUUID().replace(/-/g, "");
+        const operationId = randomUuidCompact();
         const title = conn.isLinked
           ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
           : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });
@@ -600,7 +601,7 @@ export default {
       this.isApplyingImport = true;
       const excludeFields = [...this.importExcludedFields];
 
-      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const operationId = randomUuidCompact();
       const conn = this.previewConnection;
       await this.$store.dispatch("operations/startOperation", {
         id: operationId,
@@ -788,7 +789,7 @@ export default {
 
       this.exportingConnectionId = conn.connectionId;
 
-      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const operationId = randomUuidCompact();
       const title = conn.isLinked
         ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
         : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });

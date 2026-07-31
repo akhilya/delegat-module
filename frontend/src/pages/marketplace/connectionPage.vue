@@ -16,6 +16,7 @@ import { mapActions } from "vuex";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
+import { randomUuidCompact } from "@/utils/uuid";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -1946,7 +1947,7 @@ export default {
       this.isImportingWithCategories = true;
 
       // Create operation upfront so user sees it immediately
-      const operationId = crypto.randomUUID().replace(/-/g, "");
+      const operationId = randomUuidCompact();
       const totalProducts = this.selectedUnlinkedItems.length;
       const connectionName = this.connection?.name || "";
 
