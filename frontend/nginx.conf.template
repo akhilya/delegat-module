@@ -1,0 +1,98 @@
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private auth;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml application/javascript;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: *; connect-src 'self' ws: wss:; font-src 'self' data: https://fonts.gstatic.com; worker-src blob:; object-src 'none'; frame-ancestors 'self';" always;
+
+    # Container liveness only — must not proxy to the API (SPA has /unavailable).
+    location = /health {
+        access_log off;
+        default_type text/plain;
+        return 200 "OK";
+    }
+
+    # Swagger UI + OpenAPI — must use ^~ so regex static-asset location
+    # does not steal /swagger/*.js|/swagger/*.css and 404 from the SPA root.
+    # API_UPSTREAM is unique per stack (envsubst); never share short names like
+    # "delegat-api" across projects on dokploy-network.
+    location ^~ /swagger {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://${API_UPSTREAM}:5000;
+        proxy_pass $upstream_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Cache static assets (SPA only — not /swagger, thanks to ^~ above)
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Reverse proxy for API (dynamic DNS resolution for Docker)
+    location /api/ {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://${API_UPSTREAM}:5000;
+        proxy_pass $upstream_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts for long requests (file uploads)
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+
+        # Large request bodies (file uploads)
+        client_max_body_size 10G;
+    }
+
+    # Reverse proxy for SignalR hubs (WebSocket)
+    location /hubs/ {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://${API_UPSTREAM}:5000;
+        proxy_pass $upstream_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket upgrade
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Long-lived connections for SignalR
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    # SPA routing - serve index.html for all routes
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

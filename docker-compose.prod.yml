@@ -1,7 +1,10 @@
 services:
   # Backend API (ASP.NET Core)
+  # Unique container_name so nginx API_UPSTREAM never resolves a sibling stack's
+  # short Compose service name on a shared Docker network.
   delegat-api:
     image: ghcr.io/akhilya/delegat-module/api:${IMAGE_TAG:-latest}
+    container_name: ${API_CONTAINER_NAME:-delegat-prod-api}
     pull_policy: always
     ports:
       - "5000:5000"
@@ -54,6 +57,9 @@ services:
   frontend:
     image: ghcr.io/akhilya/delegat-module/frontend:${IMAGE_TAG:-latest}
     pull_policy: always
+    environment:
+      # Must match delegat-api container_name (not the short Compose service name).
+      - API_UPSTREAM=${API_CONTAINER_NAME:-delegat-prod-api}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
       interval: 10s

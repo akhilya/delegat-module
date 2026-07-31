@@ -27,11 +27,12 @@ FROM nginx:alpine
 # Copy built files from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Runtime-rendered nginx config — API_UPSTREAM must be unique on shared Docker networks.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV API_UPSTREAM=delegat-api
 
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
+# nginx image entrypoint runs envsubst on /etc/nginx/templates/*.template
 CMD ["nginx", "-g", "daemon off;"]
