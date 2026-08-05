@@ -1,7 +1,11 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed } from "vue";
 import { useStore } from "vuex";
-import { Sparkles, Loader2, Activity } from "lucide-vue-next";
+import {
+  Sparkles,
+  Activity,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 
@@ -39,7 +43,7 @@ function toggleOps() { store.dispatch("operations/togglePanel"); }
       :title="t('components.rightActionStrip.aiAssistantTitle')"
       @click="toggleAi"
     >
-      <Loader2 v-if="isAiLoading" class="size-4 animate-spin" />
+      <Spinner v-if="isAiLoading" />
       <Sparkles v-else class="size-4" />
       <span v-if="isAiLoading" class="absolute inset-0 rounded-full bg-primary/25 animate-ping" />
     </Button>

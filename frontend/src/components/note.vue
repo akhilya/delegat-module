@@ -1,9 +1,9 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import {
   NotebookPen,
   NotebookText,
   Trash2,
-  Loader2,
   Loader,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -34,10 +34,10 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 
 export default {
   components: {
+    Spinner,
     NotebookPen,
     NotebookText,
     Trash2,
-    Loader2,
     Button,
     Badge,
     Textarea,
@@ -56,7 +56,7 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
+    AlertDialogTrigger
   },
   props: {
     productId: {
@@ -172,7 +172,7 @@ export default {
         </Select>
       </span>
       <div class="flex items-center gap-4">
-        <Loader2 class="size-4 animate-spin" v-show="isUpdating" />
+        <Spinner v-show="isUpdating" />
         <AlertDialog>
           <AlertDialogTrigger as-child>
             <Button
@@ -193,7 +193,7 @@ export default {
             <AlertDialogFooter>
               <AlertDialogCancel>{{ $t('common.cancel') }}</AlertDialogCancel>
               <AlertDialogAction
-                class="bg-destructive text-white hover:bg-destructive/90"
+                variant="destructive"
                 @click="deleteThisNote"
               >
                 {{ $t('common.delete') }}

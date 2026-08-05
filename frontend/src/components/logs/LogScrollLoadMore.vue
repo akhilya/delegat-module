@@ -1,6 +1,7 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-vue-next";
+
 import { useI18n } from "vue-i18n";
 
 defineProps({
@@ -23,7 +24,7 @@ const { t } = useI18n();
       :disabled="loading"
       @click="$emit('load-more')"
     >
-      <Loader2 v-if="loading" class="mr-1.5 size-3.5 animate-spin" />
+      <Spinner v-if="loading" size="sm" class="mr-1.5" />
       {{ label || t("components.logs.loadMore") }}
     </Button>
   </div>

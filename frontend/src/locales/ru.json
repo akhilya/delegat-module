@@ -1894,6 +1894,7 @@
       "loadingStoresPlaceholder": "Загрузка магазинов...",
       "chooseStorePlaceholder": "Выберите магазин",
       "currentStoreSuffix": "текущий",
+      "currentStoreFallback": "Текущий магазин",
       "checkingPreview": "Проверка данных...",
       "skuResolvedLabel": "Новый SKU: {sku}",
       "skuConflictLabel": "SKU «{sku}» уже используется в целевом магазине",
@@ -1965,7 +1966,8 @@
     },
     "productGroupSidebar": {
       "title": "Группа товаров",
-      "duplicate": "Дублировать"
+      "duplicate": "Дублировать",
+      "addProduct": "Добавить товар в группу"
     },
     "productFileManager": {
       "storageRootLabel": "Хранилище",

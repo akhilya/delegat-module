@@ -1,5 +1,6 @@
 <script>
 
+import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,18 @@ import {
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Check, Copy, KeyRound, Loader2, Pencil, Plus, Save, Trash2, UserCheck, UserPlus, Users } from "lucide-vue-next";
+import {
+  Check,
+  Copy,
+  KeyRound,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  Users,
+} from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { confirm } from "@/composables/useConfirm";
@@ -39,6 +51,7 @@ export default {
     return { formatStoreDateTime };
   },
   components: {
+    Spinner,
     PageSection,
     Button,
     Input,
@@ -62,14 +75,13 @@ export default {
     Check,
     Copy,
     KeyRound,
-    Loader2,
     Pencil,
     Plus,
     Save,
     Trash2,
     UserCheck,
     UserPlus,
-    Users,
+    Users
   },
   data() {
     return {
@@ -489,7 +501,7 @@ export default {
       @update:open="(v) => { if (!v) closeInviteDialog(); else isInviteDialogOpen = true; }"
     >
       <DialogContent size="3xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader class="shrink-0 space-y-1.5 border-b px-6 py-4 text-left">
+        <DialogHeader variant="bar">
           <DialogTitle>{{ $t("pages.usersPage.invite.title") }}</DialogTitle>
           <DialogDescription>
             {{ $t("pages.usersPage.invite.description") }}
@@ -502,7 +514,7 @@ export default {
               {{ $t("pages.usersPage.invite.hint") }}
             </p>
             <Button class="shrink-0" :disabled="isCreatingToken" @click="handleCreateToken">
-              <Loader2 v-if="isCreatingToken" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isCreatingToken" class="mr-2" />
               <Plus v-else class="mr-2 size-4" />
               {{ $t("pages.usersPage.invite.createToken") }}
             </Button>
@@ -543,7 +555,7 @@ export default {
               <KeyRound />
             </template>
             <Button class="mt-2" :disabled="isCreatingToken" @click="handleCreateToken">
-              <Loader2 v-if="isCreatingToken" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isCreatingToken" class="mr-2" />
               <Plus v-else class="mr-2 size-4" />
               {{ $t("pages.usersPage.invite.createToken") }}
             </Button>
@@ -600,12 +612,12 @@ export default {
                         <Button
                           variant="ghost"
                           size="icon"
-                          class="size-8 text-destructive hover:text-destructive"
+                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           :disabled="revokingTokenId === token.id"
                           :title="$t('pages.usersPage.invite.revokeAction')"
                           @click="handleRevokeToken(token)"
                         >
-                          <Loader2 v-if="revokingTokenId === token.id" class="size-4 animate-spin" />
+                          <Spinner v-if="revokingTokenId === token.id" />
                           <Trash2 v-else class="size-4" />
                         </Button>
                       </div>
@@ -617,7 +629,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="shrink-0 border-t px-6 py-4 sm:justify-end">
+        <DialogFooter variant="bar">
           <Button variant="outline" @click="closeInviteDialog">
             {{ $t("common.close") }}
           </Button>
@@ -734,7 +746,7 @@ export default {
         <DialogFooter>
           <Button variant="outline" @click="closeEditDialog">{{ $t("common.cancel") }}</Button>
           <Button :disabled="savingUserId === editingUser?.id" @click="saveIdentityChanges">
-            <Loader2 v-if="savingUserId === editingUser?.id" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="savingUserId === editingUser?.id" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
             {{ $t("common.save") }}
           </Button>

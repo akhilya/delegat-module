@@ -44,6 +44,35 @@ Chat with the human may be Russian; **everything written into this repo stays En
 
 6. **Env** — Dev: `.env.dev` · Prod: `.env` · Template: `.env.example`. No secrets in git.
 
+7. **Icons** — Hugeicons (same family as Control Plane). Keep Lucide-compatible import names; Vite aliases `lucide-vue-next` → [`frontend/src/lib/icons.js`](frontend/src/lib/icons.js). Rebuild map with `node frontend/scripts/build-icons.mjs`. Free pack is stroke-rounded; wrappers use denser stroke for a filled look (except **loaders**: Control Plane `Loading03` / `Spinner`, default stroke). True solid needs Hugeicons Pro.
+
+8. **Radius** — `--radius: 1rem` (aligned with Control Plane DESIGN).
+
+9. **Loaders** — only [`Spinner`](frontend/src/components/ui/spinner) (`Loading03`). Prefer `size` prop over ad-hoc `size-*` classes:
+
+| `size` | px | Use |
+|--------|----|-----|
+| `xs` | 12 | Dense chips, nested AI/ops status |
+| `sm` | 14 | Compact toolbars / dense controls |
+| `default` | 16 | Buttons, menus, form actions |
+| `lg` | 20 | Panel / list placeholders |
+| `xl` | 24 | Overlays / mid-block waiting |
+| `2xl` | 32 | EmptyState / full-region loading (products table, PageSection, storage, etc.) |
+
+Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `Loader2` for loaders (exception: dynamic status *icon* components that must spin as a Lucide-compatible export).
+
+**Page vs panel:** any loader that replaces a full list/table/page body uses `EmptyState loading` or `Spinner size="2xl"` — never `lg`/`default` for those. Overlays → `xl`; side panels / sheet chrome → `lg`; buttons/menus → default/`sm`/`xs`.
+
+10. **Menus** — every `DropdownMenuItem` / `ContextMenuItem` (and submenu triggers) should have a leading Hugeicons icon when it is an action. Data-picker lists (template fields, long option catalogs) may omit per-row icons. Destructive actions use `variant="destructive"` (same as Sign out), not ad-hoc `class="text-destructive"`. Icon-only delete/revoke/unlink triggers use `text-destructive hover:bg-destructive/10 hover:text-destructive`. Confirm buttons use `AlertDialogAction variant="destructive"`.
+
+11. **Checkboxes** — only shadcn `Checkbox` (`rounded-xs`). Never native `<input type="checkbox">` or hand-drawn `div` boxes (MultiSelect historically used `rounded-sm`, which looked nearly round at `--radius` 1rem).
+
+12. **Dialog chrome** — one title scale and two header/footer layouts only:
+    - **Title:** `DialogTitle` / `AlertDialogTitle` / `SheetTitle` = `text-base font-semibold tracking-tight leading-none`. Text only — no decorative leading icons in the header.
+    - **Default:** `DialogHeader` / `DialogFooter` inside padded `DialogContent` (`p-6`) — no local `px/py/border` overrides.
+    - **Bar (`variant="bar"`):** for `DialogContent` with `p-0` / `gap-0` (scroll / tall editors). Header = `border-b px-6 py-4`; footer = `border-t px-6 py-4`. Do not re-specify those classes at call sites; only add layout extras (`sm:justify-between`, `gap-3` for step rows).
+    - Description stays `text-sm text-muted-foreground` from the primitive.
+
 ---
 
 - Theme no longer jumps from light Setup to dark Products: color scheme boots once (`theme.js`, light default) instead of applying system dark only when the account menu mounts.
@@ -64,7 +93,7 @@ Chat with the human may be Russian; **everything written into this repo stays En
 | Area | Where |
 |------|--------|
 | Backend | ASP.NET Core 8, EF Core + Pomelo MySQL, MinIO |
-| Frontend | Vue 3 + Vite + shadcn-vue (reka-ui) |
+| Frontend | Vue 3 + Vite + shadcn-vue (reka-ui); icons = **Hugeicons** via [`frontend/src/lib/icons.js`](frontend/src/lib/icons.js) (Lucide import names aliased in Vite) |
 | Migrations | `backend/Migrations/` — Baseline squash `20260731183033_Baseline` then additive |
 | Public API | `/api/v1`, docs in `docs/api/public-v1.md` |
 | Settings toggles | Logging / Public API / Branding singletons + services |

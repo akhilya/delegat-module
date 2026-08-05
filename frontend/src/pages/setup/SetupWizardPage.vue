@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AuthLayout from "@/components/auth/AuthLayout.vue";
 import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, CheckCircle2, AlertTriangle } from "lucide-vue-next";
+import {
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { invalidateMeCache, loadMe } from "@/main";
 import { clearSetupStoreCountCache } from "@/lib/setupStoreCount";
@@ -25,6 +29,7 @@ const STEPS = [STEP_WELCOME, STEP_BRANDING, STEP_STORE, STEP_DONE];
 
 export default {
   components: {
+    Spinner,
     AuthLayout,
     BrandingForm,
     Button,
@@ -37,9 +42,8 @@ export default {
     Separator,
     Skeleton,
     SearchableSelect,
-    Loader2,
     CheckCircle2,
-    AlertTriangle,
+    AlertTriangle
   },
   data() {
     return {
@@ -394,7 +398,7 @@ export default {
           :disabled="brandingSaving"
           @click="continueBranding"
         >
-          <Loader2 v-if="brandingSaving" class="size-4 animate-spin" />
+          <Spinner v-if="brandingSaving" />
           {{ $t("pages.setup.brandingContinue") }}
         </Button>
         <Button
@@ -464,7 +468,7 @@ export default {
             :disabled="!canCreateStore || submitting"
             @click="submitStore"
           >
-            <Loader2 v-if="submitting" class="size-4 animate-spin" />
+            <Spinner v-if="submitting" />
             {{ $t("pages.setup.createStore") }}
           </Button>
           <Button

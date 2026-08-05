@@ -87,18 +87,18 @@ export default {
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
       <DropdownMenuItem @click.stop="navigate">
-        <ArrowRight class="size-4 mr-2" />
+        <ArrowRight />
         {{ $t("productRowActions.goTo") }}
       </DropdownMenuItem>
       <DropdownMenuItem @click.stop="openTransfer">
-        <ArrowRightLeft class="size-4 mr-2" />
+        <ArrowRightLeft />
         {{ $t("productRowActions.moveToStore") }}
       </DropdownMenuItem>
       <DropdownMenuItem
-        class="text-destructive focus:text-destructive"
+        variant="destructive"
         @click.stop="showDeleteDialog = true"
       >
-        <Trash2 class="size-4 mr-2" />
+        <Trash2 />
         {{ $t("productRowActions.moveToTrash") }}
       </DropdownMenuItem>
     </DropdownMenuContent>
@@ -115,7 +115,7 @@ export default {
       <AlertDialogFooter>
         <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction
-          class="bg-destructive text-white hover:bg-destructive/90"
+          variant="destructive"
           @click="confirmDelete"
         >
           {{ $t("productRowActions.toTrash") }}

@@ -1,6 +1,9 @@
 <script setup>
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  RefreshCw,
+} from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 
 defineProps({
@@ -19,7 +22,7 @@ const { t } = useI18n();
     :disabled="disabled || loading"
     @click="$emit('click')"
   >
-    <Loader2 v-if="loading" class="mr-2 size-4 animate-spin" />
+    <Spinner v-if="loading" class="mr-2" />
     <RefreshCw v-else class="mr-2 size-4" />
     <slot>{{ t("common.refresh") }}</slot>
   </Button>

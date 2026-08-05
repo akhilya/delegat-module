@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@
 import {
   Plus,
   Store,
-  Loader2,
   Package,
   Trash2,
   Settings,
@@ -57,6 +57,7 @@ import { PAGE_ADMIN_PLUGINS } from "@/router";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -65,7 +66,6 @@ export default {
     Badge,
     Plus,
     Store,
-    Loader2,
     Package,
     Trash2,
     Settings,
@@ -98,7 +98,7 @@ export default {
     SelectTrigger,
     SelectValue,
     Switch,
-    EmptyState,
+    EmptyState
   },
   data() {
     return {
@@ -370,7 +370,7 @@ export default {
               <Button variant="outline" @click="resetForm">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateConnection" :disabled="isCreating">
-              <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="isCreating" class="mr-2" />
               {{ $t("common.create") }}
             </Button>
           </DialogFooter>
@@ -449,12 +449,12 @@ export default {
                         <Button
                           variant="ghost"
                           size="icon"
-                          class="size-8"
+                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           :disabled="deletingConnectionId === conn.id"
                           @click.stop
                         >
-                          <Loader2 v-if="deletingConnectionId === conn.id" class="size-4 animate-spin text-destructive" />
-                          <Trash2 v-else class="size-4 text-destructive" />
+                          <Spinner v-if="deletingConnectionId === conn.id" />
+                          <Trash2 v-else class="size-4" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -467,10 +467,11 @@ export default {
                         <AlertDialogFooter>
                           <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                           <AlertDialogAction
+                            variant="destructive"
                             @click="handleDeleteConnection(conn.id)"
                             :disabled="deletingConnectionId != null"
                           >
-                            <Loader2 v-if="deletingConnectionId === conn.id" class="size-4 mr-2 animate-spin" />
+                            <Spinner v-if="deletingConnectionId === conn.id" class="mr-2" />
                             {{ $t("common.delete") }}
                           </AlertDialogAction>
                         </AlertDialogFooter>

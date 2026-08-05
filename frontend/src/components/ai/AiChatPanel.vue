@@ -1,13 +1,38 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from "vue";
 import { useStore } from "vuex";
 import { unrefElement } from "@vueuse/core";
 import {
-  X, ArrowUp, Bot, CheckCircle2, ExternalLink, Loader2, Square, Copy, Check,
-  ThumbsUp, ThumbsDown, Plus, Pencil, Trash2,
-  ChevronLeft, History, Wrench, MessageSquare, ChevronDown,
-  Boxes, FolderOpen, GitBranch, Plug, Upload, Download, Layers,
-  HardDrive, BarChart2, Globe, Sparkles,
+  X,
+  ArrowUp,
+  Bot,
+  CheckCircle2,
+  ExternalLink,
+  Square,
+  Copy,
+  Check,
+  ThumbsUp,
+  ThumbsDown,
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronLeft,
+  History,
+  Wrench,
+  MessageSquare,
+  ChevronDown,
+  Boxes,
+  FolderOpen,
+  GitBranch,
+  Plug,
+  Upload,
+  Download,
+  Layers,
+  HardDrive,
+  BarChart2,
+  Globe,
+  Sparkles,
 } from "lucide-vue-next";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -577,7 +602,7 @@ function renderMarkdown(text) {
       <div v-if="activeView === 'history'" class="flex-1 overflow-y-auto">
         <!-- Loading -->
         <div v-if="convListLoading" class="flex items-center justify-center py-10">
-          <Loader2 class="size-4 animate-spin text-muted-foreground" />
+          <Spinner size="lg" class="text-muted-foreground" />
         </div>
 
         <!-- Empty state -->
@@ -616,7 +641,7 @@ function renderMarkdown(text) {
               <Button
                 variant="ghost"
                 size="icon"
-                class="shrink-0 opacity-0 group-hover:opacity-100 size-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                class="shrink-0 opacity-0 group-hover:opacity-100 size-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 :title="t('ai.deleteConversationTooltip')"
                 @click="openConfirmDelete($event, c.sessionId)"
               >
@@ -768,7 +793,7 @@ function renderMarkdown(text) {
                 <details>
                   <summary class="list-none cursor-pointer">
                     <div class="flex items-center gap-1.5 text-xs text-muted-foreground font-mono py-0.5 hover:text-foreground transition-colors w-fit select-none">
-                      <Loader2 v-if="tc.status === 'running'" class="size-3 shrink-0 animate-spin" />
+                      <Spinner v-if="tc.status === 'running'" size="xs" class="shrink-0" />
                       <CheckCircle2 v-else class="size-3 shrink-0 text-green-500/80" />
                       <span>{{ tc.name }}</span>
                       <span v-if="tc.summary" class="opacity-50 truncate max-w-[200px]">→ {{ tc.summary }}</span>
@@ -938,7 +963,7 @@ function renderMarkdown(text) {
         <AlertDialogFooter>
           <AlertDialogCancel @click="confirmDeleteDialog.open = false">{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
-            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            variant="destructive"
             @click="confirmDeleteConversation"
           >{{ t("common.delete") }}</AlertDialogAction>
         </AlertDialogFooter>

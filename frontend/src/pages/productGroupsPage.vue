@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,11 @@ import Input from "@/components/ui/input/Input.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Plus, Layers, Loader2, Trash2 } from "lucide-vue-next";
+import {
+  Plus,
+  Layers,
+  Trash2,
+} from "lucide-vue-next";
 import { PAGE_PRODUCT_GROUP_CREATE, PAGE_PRODUCTS } from "@/router";
 import {
   Dialog,
@@ -30,6 +35,7 @@ import {
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -37,7 +43,6 @@ export default {
     Badge,
     Plus,
     Layers,
-    Loader2,
     Trash2,
     Table,
     TableBody,
@@ -53,7 +58,7 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    ConfirmDialog,
+    ConfirmDialog
   },
   data() {
     return {
@@ -196,7 +201,7 @@ export default {
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateGroup" :disabled="isCreating">
-              <Loader2 v-if="isCreating" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="isCreating" class="mr-2" />
               {{ $t("common.create") }}
             </Button>
           </DialogFooter>
@@ -280,10 +285,10 @@ export default {
                       <Button
                         variant="ghost"
                         size="icon"
-                        class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        class="size-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 hover:text-destructive"
                         @click.stop
                       >
-                        <Trash2 class="size-4 text-destructive" />
+                        <Trash2 class="size-4" />
                       </Button>
                     </template>
                   </ConfirmDialog>

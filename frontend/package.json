@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@hugeicons/core-free-icons": "^4.2.3",
+    "@hugeicons/vue": "^1.0.7",
     "@microsoft/signalr": "^10.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/vue-table": "^8.21.3",

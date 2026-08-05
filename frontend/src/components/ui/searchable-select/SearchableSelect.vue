@@ -6,8 +6,14 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
+
+function focusSearchInput() {
+  const el = searchInputRef.value?.$el ?? searchInputRef.value;
+  el?.focus?.();
+}
 
 const props = defineProps({
   options: {
@@ -69,7 +75,7 @@ watch(open, (isOpen) => {
   }
   if (isOpen && (isLargeList.value || props.remote)) {
     nextTick(() => {
-      searchInputRef.value?.focus();
+      focusSearchInput();
     });
   }
 });
@@ -183,18 +189,18 @@ const clearSelection = () => {
         <div v-if="showSearch" class="p-2 border-b">
           <div class="relative">
             <Search
-              class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
+              class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             />
-            <input
+            <Input
               ref="searchInputRef"
               v-model="searchQuery"
-              type="text"
+              type="search"
               :placeholder="
                 remote || isLargeList
                   ? t('components.searchableSelect.searchPlaceholderLarge')
                   : t('components.searchableSelect.searchPlaceholder')
               "
-              class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              class="h-8 bg-background pl-8"
               @click.stop
             />
           </div>

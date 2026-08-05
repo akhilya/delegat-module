@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useStore } from "vuex";
 import { useRoute, useRouter } from "vue-router";
@@ -39,7 +40,6 @@ import {
   Pencil,
   Trash2,
   ArrowDownToLine,
-  Loader2,
   ChevronRight,
   Share2,
   Copy,
@@ -55,7 +55,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Tag } from "lucide-vue-next";
+import {
+  Tag,
+} from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MenuKbd } from "@/components/ui/kbd";
 import { t } from "@/i18n";
@@ -1390,7 +1392,7 @@ watch(() => props.productId, () => {
         <AlertDialogFooter>
           <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
-            class="bg-destructive text-white hover:bg-destructive/90"
+            variant="destructive"
             @click="confirmDeleteSelected"
             :disabled="isDeletingSelected"
           >
@@ -1402,7 +1404,7 @@ watch(() => props.productId, () => {
 
     <!-- File list -->
     <div
-      class="relative min-h-[24rem] flex-1 overflow-auto"
+      class="relative flex min-h-0 flex-1 flex-col overflow-auto"
       @contextmenu="onContextMenu($event, 'area', null)"
       @click.self="clearSelection"
       @dragenter="onAreaDragEnter"
@@ -1421,18 +1423,16 @@ watch(() => props.productId, () => {
         </div>
       </div>
 
-      <div v-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
-        class="flex min-h-[24rem] items-center justify-center"
+      <EmptyState
+        v-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
+        :framed="false"
+        :title="t('products.productFileManager.emptyFolderTitle')"
+        :description="t('products.productFileManager.emptyFolderDescription')"
       >
-        <EmptyState
-          :title="t('products.productFileManager.emptyFolderTitle')"
-          :description="t('products.productFileManager.emptyFolderDescription')"
-        >
-          <template #icon>
-            <Folder />
-          </template>
-        </EmptyState>
-      </div>
+        <template #icon>
+          <Folder />
+        </template>
+      </EmptyState>
 
       <table v-if="currentFolderId != null || currentSubfolders.length > 0 || currentFiles.length > 0 || inlineNewFolder || currentPendingUploads.length > 0" class="w-full text-sm">
         <tbody>
@@ -1459,7 +1459,7 @@ watch(() => props.productId, () => {
           <!-- Inline new folder row -->
           <tr v-if="inlineNewFolder" class="border-b bg-muted/30 h-11">
             <td class="pl-4 pr-3 w-8">
-              <Loader2 v-if="isCreatingFolder" class="size-4 text-muted-foreground animate-spin" />
+              <Spinner v-if="isCreatingFolder" class="text-muted-foreground" />
               <Folder v-else class="size-4 text-muted-foreground" />
             </td>
             <td colspan="4">
@@ -1500,7 +1500,7 @@ watch(() => props.productId, () => {
             ]"
           >
             <td class="pl-4 pr-3 w-8">
-              <Loader2 v-if="isDownloadingArchive && downloadingFolderId === folder.id" class="size-4 text-muted-foreground animate-spin" />
+              <Spinner v-if="isDownloadingArchive && downloadingFolderId === folder.id" class="text-muted-foreground" />
               <Folder v-else class="size-4 text-muted-foreground" />
             </td>
             <td>
@@ -1695,7 +1695,7 @@ watch(() => props.productId, () => {
             :class="entry.status === 'done' ? 'bg-success/5' : 'animate-pulse bg-muted/40'"
           >
             <td class="pl-4 pr-3 w-8">
-              <Loader2 v-if="entry.status === 'uploading'" class="size-4 text-muted-foreground animate-spin" />
+              <Spinner v-if="entry.status === 'uploading'" class="text-muted-foreground" />
               <Check v-else-if="entry.status === 'done'" class="size-4 text-success" />
               <FileIcon v-else class="size-4 text-muted-foreground" />
             </td>
@@ -1887,6 +1887,7 @@ watch(() => props.productId, () => {
         <AlertDialogFooter>
           <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
+            variant="destructive"
             @click="deleteFolder"
             :disabled="deleteFolderTarget && (deleteFolderTarget.fileCount > 0 || deleteFolderTarget.subfolderCount > 0) && !deleteFolderRecursive"
           >
@@ -1922,7 +1923,7 @@ watch(() => props.productId, () => {
           <DialogFooter>
             <Button variant="outline" @click="showShareDialog = false">{{ t("common.cancel") }}</Button>
             <Button @click="createShareLink" :disabled="isCreatingShare">
-              <Loader2 v-if="isCreatingShare" class="size-4 animate-spin mr-1" />
+              <Spinner v-if="isCreatingShare" class="mr-1" />
               {{ t("products.productFileManager.createLinkAction") }}
             </Button>
           </DialogFooter>
@@ -1957,7 +1958,7 @@ watch(() => props.productId, () => {
         {{ t("products.productFileManager.cancelUploadsAction") }}
       </Button>
       <Button variant="outline" size="sm" @click="downloadFolderArchive(currentFolderId)" :disabled="isDownloadingArchive">
-        <Loader2 v-if="isDownloadingArchive && downloadingFolderId === currentFolderId" class="size-4 animate-spin mr-1" />
+        <Spinner v-if="isDownloadingArchive && downloadingFolderId === currentFolderId" class="mr-1" />
         <ArrowDownToLine v-else class="size-4 mr-1" />
         {{ t("products.productFileManager.downloadArchiveAction") }}
       </Button>

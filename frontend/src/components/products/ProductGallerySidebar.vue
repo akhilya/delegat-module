@@ -1,6 +1,10 @@
 <script setup>
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, X } from "lucide-vue-next";
+import {
+  Plus,
+  X,
+} from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 import draggable from "vuedraggable";
 import { t } from "@/i18n";
 
@@ -17,6 +21,10 @@ defineProps({
 });
 
 const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
+
+function thumbSrc(element) {
+  return element.previewUrl || `/api/files/${element.fileId}/thumbnail?w=256`;
+}
 </script>
 
 <template>
@@ -53,23 +61,27 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
         <template #item="{ element, index }">
           <div
             :class="[
-              'gallery-item group rounded-lg overflow-hidden bg-muted cursor-grab active:cursor-grabbing hover:ring-2 ring-primary relative',
+              'gallery-item group relative overflow-hidden rounded-lg bg-muted cursor-grab active:cursor-grabbing hover:ring-2 ring-primary',
               layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
               index === 0 ? 'ring-2 ring-primary' : '',
             ]"
             @click="emit('preview', index)"
           >
+            <!-- Blurred fill so letterboxed contain never shows empty muted bands -->
             <img
-              :src="element.previewUrl || `/api/files/${element.fileId}/thumbnail?w=256`"
+              :src="thumbSrc(element)"
+              alt=""
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-0 size-full scale-110 object-cover blur-xl"
+            />
+            <img
+              :src="thumbSrc(element)"
               :alt="element.displayName || t('products.productGallerySidebar.productPhotoAlt')"
-              :class="[
-                'size-full pointer-events-none',
-                layout === 'sidebar' ? 'object-cover' : 'object-contain',
-              ]"
+              class="pointer-events-none relative z-10 size-full object-contain"
             />
             <div
               v-if="index === 0"
-              class="absolute top-1.5 left-1.5 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-medium"
+              class="absolute top-1.5 left-1.5 z-20 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
             >
               {{ t("products.productGallerySidebar.mainBadge") }}
             </div>
@@ -77,7 +89,7 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
               type="button"
               variant="ghost"
               size="icon"
-              class="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/60 hover:bg-destructive text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              class="absolute top-1.5 right-1.5 z-20 size-6 rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
               @click.stop="emit('remove', index)"
             >
               <X class="size-3" />
@@ -88,12 +100,12 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
           <button
             type="button"
             :class="[
-              'rounded-lg border border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors bg-transparent',
+              'flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent transition-colors hover:border-primary/50',
               layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
             ]"
             @click="emit('upload')"
           >
-            <Loader2 v-if="isUploading" class="size-5 text-muted-foreground animate-spin" />
+            <Spinner v-if="isUploading" size="lg" class="text-muted-foreground" />
             <Plus v-else class="size-5 text-muted-foreground" />
           </button>
         </template>
@@ -103,12 +115,12 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
         v-else
         type="button"
         :class="[
-          'rounded-lg border border-dashed border-muted-foreground/30 hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors bg-transparent',
+          'flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent transition-colors hover:border-primary/50',
           layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
         ]"
         @click="emit('upload')"
       >
-        <Loader2 v-if="isUploading" class="size-5 text-muted-foreground animate-spin" />
+        <Spinner v-if="isUploading" size="lg" class="text-muted-foreground" />
         <Plus v-else class="size-5 text-muted-foreground" />
       </button>
     </div>
@@ -124,18 +136,18 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
 <style>
 .drag-ghost {
   opacity: 0.3;
-  border: 2px dashed hsl(var(--primary));
-  border-radius: 0.5rem;
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-md);
 }
 .drag-chosen {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  border-radius: 0.5rem;
+  box-shadow: none;
+  border-radius: var(--radius-md);
 }
 .drag-active {
   opacity: 1 !important;
-  transform: scale(1.03) rotate(1deg);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-  border-radius: 0.5rem;
+  transform: scale(1.03);
+  box-shadow: none;
+  border-radius: var(--radius-md);
   cursor: grabbing !important;
   z-index: 50;
 }

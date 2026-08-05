@@ -1,7 +1,10 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed } from "vue";
 import { useStore } from "vuex";
-import { Sparkles, Loader2 } from "lucide-vue-next";
+import {
+  Sparkles,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "vue-i18n";
 
@@ -29,7 +32,7 @@ function toggle() {
       :title="isOpen ? t('ai.closeAssistant') : t('ai.openAssistant')"
       @click="toggle"
     >
-      <Loader2 v-if="isLoading" class="size-5 animate-spin" />
+      <Spinner v-if="isLoading" size="lg" />
       <Sparkles v-else class="size-5" />
 
       <span

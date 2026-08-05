@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,6 @@ import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
 import {
-  Loader2,
   Plus,
   Trash2,
   GripVertical,
@@ -88,6 +88,7 @@ const ATTRIBUTE_TYPE_OPTIONS = [
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -123,7 +124,6 @@ export default {
     TableHeader,
     TableRow,
     TableCell,
-    Loader2,
     Plus,
     Trash2,
     GripVertical,
@@ -132,7 +132,7 @@ export default {
     Download,
     Upload,
     SearchableSelect,
-    draggable,
+    draggable
   },
   data() {
     return {
@@ -761,8 +761,12 @@ export default {
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger as-child>
-                            <Button variant="ghost" size="icon" class="size-8">
-                              <Trash2 class="size-4 text-destructive" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 class="size-4" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -775,10 +779,11 @@ export default {
                             <AlertDialogFooter>
                               <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                               <AlertDialogAction
+                                variant="destructive"
                                 @click="handleDeleteAttribute(attribute.id)"
                                 :disabled="isDeletingAttribute"
                               >
-                                <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
+                                <Spinner v-if="isDeletingAttribute" class="mr-2" />
                                 {{ $t("common.delete") }}
                               </AlertDialogAction>
                             </AlertDialogFooter>
@@ -800,7 +805,7 @@ export default {
         size="2xl"
         class="max-h-[min(90vh,48rem)] flex flex-col gap-0 p-0 overflow-hidden"
       >
-        <DialogHeader class="shrink-0 border-b px-6 pt-6 pb-4">
+        <DialogHeader variant="bar">
           <DialogTitle>
             {{ editingAttribute ? $t("pages.storeAttributesPage.dialog.editTitle") : $t("pages.storeAttributesPage.dialog.newTitle") }}
           </DialogTitle>
@@ -1053,12 +1058,12 @@ export default {
           </FieldGroup>
         </div>
 
-        <DialogFooter class="shrink-0 border-t px-6 py-4">
+        <DialogFooter variant="bar">
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
-            <Loader2 v-if="isAddingAttribute" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isAddingAttribute" class="mr-2" />
             {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>
         </DialogFooter>

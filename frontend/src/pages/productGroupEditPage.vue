@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,6 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
-  Loader2,
   Save,
   Plus,
   Trash2,
@@ -68,6 +68,7 @@ import draggable from "vuedraggable";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -102,7 +103,6 @@ export default {
     TableRow,
     TableCell,
     Checkbox,
-    Loader2,
     Save,
     Plus,
     Trash2,
@@ -119,7 +119,7 @@ export default {
     ChevronsLeft,
     ChevronsRight,
     draggable,
-    EmptyState,
+    EmptyState
   },
   data() {
     const groupId = this.$route.params.id ? parseInt(this.$route.params.id) : null;
@@ -608,7 +608,7 @@ export default {
             @click="handleSaveGroup"
             :disabled="isSaving"
           >
-            <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isSaving" class="mr-2" />
             <Save v-else class="size-4 mr-2" />
             {{ isCreateMode ? $t("pages.productGroupEditPage.actions.createGroup") : $t("common.save") }}
           </Button>
@@ -744,8 +744,12 @@ export default {
                           <div class="opacity-0 group-hover:opacity-100 transition-opacity">
                             <AlertDialog>
                               <AlertDialogTrigger as-child>
-                                <Button variant="ghost" size="icon" class="size-8">
-                                  <Trash2 class="size-4 text-destructive" />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 class="size-4" />
                                 </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
@@ -758,14 +762,11 @@ export default {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                                   <AlertDialogAction
+                                    variant="destructive"
                                     @click="handleRemoveProduct(member.product.id)"
                                     :disabled="isRemovingProduct"
-                                    class="bg-destructive text-white hover:bg-destructive/90"
                                   >
-                                    <Loader2
-                                      v-if="isRemovingProduct"
-                                      class="size-4 mr-2 animate-spin"
-                                    />
+                                    <Spinner v-if="isRemovingProduct" class="mr-2" />
                                     {{ $t("common.delete") }}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
@@ -816,7 +817,7 @@ export default {
                 v-else-if="isLoadingConnectionGrouping"
                 class="flex items-center gap-2 text-sm text-muted-foreground py-2"
               >
-                <Loader2 class="size-4 animate-spin" />
+                <Spinner />
                 {{ $t("pages.productGroupEditPage.sections.marketplaceMerge.checkingCapabilities") }}
               </div>
 
@@ -899,10 +900,7 @@ export default {
                               :disabled="isExporting || members.length === 0"
                               size="sm"
                             >
-                              <Loader2
-                                v-if="isExporting"
-                                class="size-4 mr-2 animate-spin"
-                              />
+                              <Spinner v-if="isExporting" class="mr-2" />
                               <Upload v-else class="size-4 mr-2" />
                               {{ getExportButtonLabel(connection) }}
                             </Button>
@@ -983,9 +981,8 @@ export default {
         size="4xl"
         class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
       >
-        <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
-          <DialogTitle class="flex items-center gap-2">
-            <Plus class="size-5" />
+        <DialogHeader variant="bar">
+          <DialogTitle>
             {{ $t("pages.productGroupEditPage.addProductsDialog.title") }}
           </DialogTitle>
           <DialogDescription>
@@ -1009,7 +1006,7 @@ export default {
               :disabled="isSearchingProducts"
               @click="searchProducts(true)"
             >
-              <Loader2 v-if="isSearchingProducts" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="isSearchingProducts" class="mr-2" />
               <Search v-else class="size-4 mr-2" />
               {{ $t("pages.productGroupEditPage.addProductsDialog.searchAction") }}
             </Button>
@@ -1059,7 +1056,7 @@ export default {
 
           <div class="min-h-0 flex-1 overflow-y-auto thin-scrollbar">
             <div v-if="isSearchingProducts" class="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-              <Loader2 class="size-5 animate-spin" />
+              <Spinner size="xl" />
               {{ $t("pages.productGroupEditPage.addProductsDialog.searching") }}
             </div>
 
@@ -1174,7 +1171,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="gap-2 border-t px-6 py-4 sm:justify-between">
+        <DialogFooter variant="bar" class="sm:justify-between">
           <p class="hidden text-xs text-muted-foreground sm:block">
             {{ $t("pages.productGroupEditPage.addProductsDialog.reorderHint") }}
           </p>
@@ -1186,7 +1183,7 @@ export default {
               :disabled="isAddingProducts || selectedProductsToAdd.length === 0"
               @click="handleAddSelectedProducts"
             >
-              <Loader2 v-if="isAddingProducts" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="isAddingProducts" class="mr-2" />
               <Plus v-else class="size-4 mr-2" />
               <template v-if="selectedProductsToAdd.length > 0">
                 {{ $t("pages.productGroupEditPage.addProductsDialog.addCount", { count: selectedProductsToAdd.length, unit: selectedProductsCountLabel }) }}

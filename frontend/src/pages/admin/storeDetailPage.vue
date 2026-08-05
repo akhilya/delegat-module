@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
@@ -7,7 +8,12 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { loadMe, invalidateMeCache } from "@/main";
 import { PAGE_ADMIN_STORES } from "@/router";
-import { UserPlus, UserMinus, Loader2, Users, Trash2 } from "lucide-vue-next";
+import {
+  UserPlus,
+  UserMinus,
+  Users,
+  Trash2,
+} from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -40,12 +46,12 @@ import { setPageTitle } from "@/router";
 
 export default {
   components: {
+    Spinner,
     PageSection,
     Button,
     Input,
     UserPlus,
     UserMinus,
-    Loader2,
     Users,
     Trash2,
     Dialog,
@@ -69,7 +75,7 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    EmptyState,
+    EmptyState
   },
   data() {
     return {
@@ -268,7 +274,7 @@ export default {
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
-              <Loader2 v-if="isAddingMember" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isAddingMember" class="mr-2" />
               {{ $t("common.add") }}
             </Button>
           </DialogFooter>
@@ -309,11 +315,12 @@ export default {
                   <Button
                     variant="ghost"
                     size="sm"
+                    class="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     @click="handleRemoveMember(member.id)"
                     :disabled="removingUserId === member.id"
                   >
-                    <Loader2 v-if="removingUserId === member.id" class="size-4 animate-spin" />
-                    <UserMinus v-else class="size-4 text-destructive" />
+                    <Spinner v-if="removingUserId === member.id" />
+                    <UserMinus v-else class="size-4" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -367,7 +374,7 @@ export default {
               :disabled="!deleteNameMatches || isDeleting"
               @click="handleDeleteStore"
             >
-              <Loader2 v-if="isDeleting" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isDeleting" class="mr-2" />
               {{ $t("pages.storeDetailPage.deleteForever") }}
             </Button>
           </DialogFooter>

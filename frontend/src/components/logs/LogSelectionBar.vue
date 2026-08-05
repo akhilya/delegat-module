@@ -1,6 +1,11 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, Loader2, X } from "lucide-vue-next";
+import {
+  Download,
+  Trash2,
+  X,
+} from "lucide-vue-next";
 import { t } from "@/i18n";
 
 defineProps({
@@ -37,7 +42,7 @@ defineEmits(["download", "delete", "clear"]);
       :disabled="downloading || deleting"
       @click="$emit('download')"
     >
-      <Loader2 v-if="downloading" class="size-3.5 animate-spin" />
+      <Spinner v-if="downloading" size="sm" />
       <Download v-else class="size-3.5" />
       {{ t("components.logs.downloadSelected") }}
     </Button>
@@ -49,7 +54,7 @@ defineEmits(["download", "delete", "clear"]);
       :disabled="downloading || deleting"
       @click="$emit('delete')"
     >
-      <Loader2 v-if="deleting" class="size-3.5 animate-spin" />
+      <Spinner v-if="deleting" size="sm" />
       <Trash2 v-else class="size-3.5" />
       {{ t("components.logs.deleteSelected") }}
     </Button>

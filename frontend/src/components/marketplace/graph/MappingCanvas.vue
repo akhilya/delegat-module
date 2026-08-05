@@ -46,7 +46,6 @@ import {
   Save,
   AlertTriangle,
   EyeOff,
-  Loader2,
   Activity,
   ChevronDown,
   Download,
@@ -54,6 +53,7 @@ import {
   RefreshCw,
   Upload,
 } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 import {
   SplitterGroup,
   SplitterPanel,
@@ -1922,7 +1922,7 @@ async function importMappingFile(event) {
     direction="horizontal"
     :class="[
       'flex min-h-0 overflow-hidden border bg-background',
-      maximized ? 'fixed inset-0 z-50' : 'relative h-full w-full rounded-lg',
+      maximized ? 'fixed inset-0 z-50' : 'relative h-full w-full rounded-xl',
     ]"
   >
     <SplitterPanel :min-size="40">
@@ -1932,7 +1932,7 @@ async function importMappingFile(event) {
         @contextmenu="onContextMenu"
       >
       <div
-        class="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border bg-card/95 p-1 shadow-sm backdrop-blur"
+        class="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-xl border bg-card p-1"
       >
         <DropdownMenu>
           <ButtonGroup>
@@ -1956,7 +1956,7 @@ async function importMappingFile(event) {
               :disabled="saving || errorCount > 0"
               @select="save"
             >
-              <Loader2 v-if="saving" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="saving" class="mr-2" />
               <Save v-else class="size-4 mr-2" />
               {{ t("marketplace.canvas.save") }}
               <DropdownMenuShortcut :keys="['mod', 'S']" />
@@ -1967,7 +1967,7 @@ async function importMappingFile(event) {
               {{ t("marketplace.fieldMappingPage.autoArrange") }}
             </DropdownMenuItem>
             <DropdownMenuItem :disabled="syncingFields" @select="syncAdapterFieldSchema">
-              <Loader2 v-if="syncingFields" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="syncingFields" class="mr-2" />
               <RefreshCw v-else class="size-4 mr-2" />
               {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
             </DropdownMenuItem>
@@ -1997,7 +1997,7 @@ async function importMappingFile(event) {
           v-if="previewing"
           class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
         >
-          <Loader2 class="size-3.5 animate-spin" /> {{ t("marketplace.canvas.previewing") }}
+          <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
         </span>
         <Button
           v-if="previewProductId"
@@ -2269,7 +2269,7 @@ async function importMappingFile(event) {
         v-if="loading"
         class="absolute inset-0 z-40 flex items-center justify-center bg-background/60"
       >
-        <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        <Spinner size="xl" class="text-muted-foreground" />
       </div>
       </div>
     </SplitterPanel>
@@ -2388,11 +2388,11 @@ async function importMappingFile(event) {
   min-width: 150px;
   max-width: 220px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--foreground);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   font-size: 12px;
 }
 .vf-card--selected {
@@ -2423,7 +2423,7 @@ async function importMappingFile(event) {
   margin-left: auto;
   width: 13px;
   height: 13px;
-  color: var(--warning, #d97706);
+  color: var(--warning);
 }
 .vf-card__title {
   margin-top: 3px;
@@ -2476,7 +2476,7 @@ async function importMappingFile(event) {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
@@ -2536,16 +2536,16 @@ async function importMappingFile(event) {
 }
 /* Merged-duplicate (alias) field: dashed neutral pill "= <primary>" */
 .vf-adapter__pill--alias {
-  background: hsl(var(--muted));
-  border-color: hsl(var(--border));
+  background: var(--muted);
+  border-color: var(--border);
   border-style: dashed;
-  color: hsl(var(--muted-foreground));
+  color: var(--muted-foreground);
 }
 .vf-adapter__pill--omit {
   background: transparent;
-  border-color: hsl(var(--border));
+  border-color: var(--border);
   border-style: dotted;
-  color: hsl(var(--muted-foreground));
+  color: var(--muted-foreground);
   opacity: 0.85;
 }
 .vf-adapter__dir {
@@ -2563,8 +2563,8 @@ async function importMappingFile(event) {
 /* Windows-style marquee selection rectangle */
 .vue-flow__selection,
 .vue-flow__nodesselection-rect {
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.8);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--primary) 70%, transparent);
 }
 
 /* Vue Flow handle (pin) sizing */
@@ -2577,12 +2577,12 @@ async function importMappingFile(event) {
 
 /* Default (static / floating) edges - plain wire, no animation. */
 .vf-canvas .vue-flow__edge-path {
-  stroke: #b1b1b7;
+  stroke: var(--muted-foreground);
   stroke-width: 2.5;
   opacity: 0.35;
 }
 .vf-canvas .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #3b82f6;
+  stroke: var(--primary);
   opacity: 0.85;
 }
 
@@ -2592,17 +2592,16 @@ async function importMappingFile(event) {
   top: 8px;
   right: 8px;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.88);
-  color: #e5e7eb;
+  background: color-mix(in oklch, var(--foreground) 92%, transparent);
+  color: var(--background);
   font-family: monospace;
   font-size: 11px;
   line-height: 1.5;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   max-width: 400px;
   max-height: 65vh;
   overflow-y: auto;
-  backdrop-filter: blur(4px);
   pointer-events: none;
   display: flex;
   flex-direction: column;
@@ -2647,7 +2646,7 @@ async function importMappingFile(event) {
 .vf-canvas .vue-flow__controls {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: none;
   overflow: hidden;
   display: flex;
@@ -2677,9 +2676,6 @@ async function importMappingFile(event) {
   max-width: 14px;
   height: 14px;
   max-height: 14px;
-  fill: currentColor;
-}
-.vf-canvas .vue-flow__controls-button svg.lucide {
   fill: none;
   stroke: currentColor;
 }
@@ -2717,7 +2713,7 @@ async function importMappingFile(event) {
 .vf-canvas .vue-flow__minimap {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: none;
 }

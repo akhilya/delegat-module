@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Hugeicons (CP kit) behind lucide-compatible names — see src/lib/icons.js
+      "lucide-vue-next": path.resolve(__dirname, "./src/lib/icons.js"),
     },
   },
   preview: {

@@ -4,28 +4,25 @@
       size="3xl"
       class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-3 border-b px-6 py-4 text-left">
-        <div class="flex items-start justify-between gap-4 pr-6">
-          <div class="space-y-1">
-            <DialogTitle class="flex items-center gap-2">
-              <FileSpreadsheet class="size-5 text-muted-foreground" />
-              {{ t("products.importExcelDialog.title") }}
-            </DialogTitle>
-            <DialogDescription>
-              <template v-if="step === 'upload' || step === 'processing'">
-                {{ t("products.importExcelDialog.stepUploadDescription") }}
-              </template>
-              <template v-else-if="step === 'preview'">
-                {{ t("products.importExcelDialog.stepPreviewDescription") }}
-              </template>
-              <template v-else-if="step === 'applying'">
-                {{ t("products.importExcelDialog.stepApplyingDescription") }}
-              </template>
-              <template v-else>
-                {{ t("products.importExcelDialog.stepResultDescription") }}
-              </template>
-            </DialogDescription>
-          </div>
+      <DialogHeader variant="bar" class="gap-3">
+        <div class="space-y-1">
+          <DialogTitle>
+            {{ t("products.importExcelDialog.title") }}
+          </DialogTitle>
+          <DialogDescription>
+            <template v-if="step === 'upload' || step === 'processing'">
+              {{ t("products.importExcelDialog.stepUploadDescription") }}
+            </template>
+            <template v-else-if="step === 'preview'">
+              {{ t("products.importExcelDialog.stepPreviewDescription") }}
+            </template>
+            <template v-else-if="step === 'applying'">
+              {{ t("products.importExcelDialog.stepApplyingDescription") }}
+            </template>
+            <template v-else>
+              {{ t("products.importExcelDialog.stepResultDescription") }}
+            </template>
+          </DialogDescription>
         </div>
 
         <ol class="flex items-center gap-1 sm:gap-2" aria-label="Import steps">
@@ -106,7 +103,7 @@
           v-else-if="step === 'processing'"
           class="flex flex-col items-center justify-center gap-3 py-16"
         >
-          <Loader2 class="size-8 animate-spin text-muted-foreground" />
+          <Spinner size="2xl" class="text-muted-foreground" />
           <p class="text-sm text-muted-foreground">
             {{ t("products.importExcelDialog.processingFile") }}
           </p>
@@ -185,7 +182,7 @@
           v-else-if="step === 'applying'"
           class="flex flex-col items-center justify-center gap-3 py-16"
         >
-          <Loader2 class="size-8 animate-spin text-muted-foreground" />
+          <Spinner size="2xl" class="text-muted-foreground" />
           <p class="text-sm text-muted-foreground">
             {{ t("products.importExcelDialog.stepApplyingDescription") }}
           </p>
@@ -223,7 +220,7 @@
         </div>
       </div>
 
-      <DialogFooter class="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
+      <DialogFooter variant="bar" class="sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <DialogClose v-if="step === 'upload' || step === 'result'" as-child>
             <Button variant="outline">
@@ -246,14 +243,13 @@
 </template>
 
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { ref, computed, watch } from "vue";
 import { useStore } from "vuex";
 import {
   Upload,
-  Loader2,
   CheckCircle2,
   AlertCircle,
-  FileSpreadsheet,
   Check,
 } from "lucide-vue-next";
 import { t } from "@/i18n";

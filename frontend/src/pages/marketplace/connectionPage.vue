@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
@@ -23,7 +24,6 @@ import {
 import {
   Plus,
   Store,
-  Loader2,
   ChevronRight,
   ChevronLeft,
   ChevronsLeft,
@@ -36,7 +36,6 @@ import {
   Save,
   TestTube,
   ArrowRight,
-  ListChecks,
   Settings,
   Link,
   Link2,
@@ -134,6 +133,7 @@ import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 export default {
   components: {
+    Spinner,
     AiErrorExplainer,
     AppPageChrome,
     PageSection,
@@ -146,7 +146,6 @@ export default {
     EmptyState,
     Plus,
     Store,
-    Loader2,
     ChevronRight,
     ChevronLeft,
     ChevronsLeft,
@@ -159,7 +158,6 @@ export default {
     Save,
     TestTube,
     ArrowRight,
-    ListChecks,
     Settings,
     Link,
     Link2,
@@ -239,7 +237,7 @@ export default {
     Tooltip,
     TooltipContent,
     TooltipProvider,
-    TooltipTrigger,
+    TooltipTrigger
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
@@ -2977,7 +2975,7 @@ export default {
               <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
                 <ButtonGroup class="items-stretch [&_button]:h-9">
                   <Button @click="handleSave" :disabled="isSaving">
-                    <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+                    <Spinner v-if="isSaving" class="mr-2" />
                     <Save v-else class="size-4 mr-2" />
                     {{ $t("common.save") }}
                   </Button>
@@ -2993,7 +2991,7 @@ export default {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" class="w-56">
                       <DropdownMenuItem :disabled="isTesting" @click="handleTest">
-                        <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
+                        <Spinner v-if="isTesting" class="mr-2" />
                         <TestTube v-else class="size-4 mr-2" />
                         {{ $t("marketplace.connectionPage.header.test") }}
                       </DropdownMenuItem>
@@ -3001,7 +2999,7 @@ export default {
                         :disabled="isVerifyingLinks"
                         @click="handleVerifyLinks"
                       >
-                        <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
+                        <Spinner v-if="isVerifyingLinks" class="mr-2" />
                         <SearchCheck v-else class="size-4 mr-2" />
                         {{ $t("marketplace.connectionPage.header.verifyLinks") }}
                       </DropdownMenuItem>
@@ -3013,8 +3011,12 @@ export default {
                         {{ $t("marketplace.connectionPage.limits.title") }}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
-                        <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        :disabled="isClearingCache"
+                        @click="handleClearCache"
+                      >
+                        <Spinner v-if="isClearingCache" class="mr-2" />
                         <Trash2 v-else class="size-4 mr-2" />
                         {{ $t("marketplace.connectionPage.header.clearCache") }}
                       </DropdownMenuItem>
@@ -3035,8 +3037,7 @@ export default {
                 <Dialog v-model:open="showCapabilitiesDialog">
                   <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle class="flex items-center gap-2">
-                        <ListChecks class="size-5" />
+                      <DialogTitle>
                         {{ $t("marketplace.connectionPage.settings.capabilitiesTitle") }}
                       </DialogTitle>
                       <DialogDescription>
@@ -3071,8 +3072,7 @@ export default {
                 <Dialog v-model:open="showLimitsDialog">
                   <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle class="flex items-center gap-2">
-                        <Activity class="size-5" />
+                      <DialogTitle>
                         {{ $t("marketplace.connectionPage.limits.title") }}
                       </DialogTitle>
                       <DialogDescription>
@@ -3084,7 +3084,7 @@ export default {
                       v-if="isLoadingLimits"
                       class="flex justify-center py-10"
                     >
-                      <Loader2 class="size-8 animate-spin text-muted-foreground" />
+                      <Spinner size="2xl" class="text-muted-foreground" />
                     </div>
 
                     <EmptyState
@@ -3270,9 +3270,8 @@ export default {
                     size="6xl"
                     class="flex min-h-[36rem] max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl"
                   >
-                    <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
-                      <DialogTitle class="flex items-center gap-2">
-                        <Link class="size-5" />
+                    <DialogHeader variant="bar">
+                      <DialogTitle>
                         {{ $t("marketplace.connectionPage.mappings.createMapping") }}
                       </DialogTitle>
                       <DialogDescription>
@@ -3368,7 +3367,7 @@ export default {
                               :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
                               @click="handleCreateExternalCategoryMapping"
                             >
-                              <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                              <Spinner v-if="isCreatingExternalCategory" class="mr-2" />
                               <FolderTree v-else class="size-4 mr-2" />
                               {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
                             </Button>
@@ -3387,7 +3386,7 @@ export default {
                       </div>
                     </div>
 
-                    <DialogFooter class="gap-2 px-6 py-4">
+                    <DialogFooter variant="bar">
                       <DialogClose as-child>
                         <Button variant="outline">{{ $t("common.cancel") }}</Button>
                       </DialogClose>
@@ -3397,7 +3396,7 @@ export default {
                         @click="handleCreateExternalCategoryMapping"
                         :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
                       >
-                        <Loader2 v-if="isCreatingExternalCategory" class="size-4 mr-2 animate-spin" />
+                        <Spinner v-if="isCreatingExternalCategory" class="mr-2" />
                         <FolderTree v-else class="size-4 mr-2" />
                         {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
                       </Button>
@@ -3411,10 +3410,7 @@ export default {
                           selectedExternalIsFolder
                         "
                       >
-                        <Loader2
-                          v-if="isCreatingMapping"
-                          class="size-4 mr-2 animate-spin"
-                        />
+                        <Spinner v-if="isCreatingMapping" class="mr-2" />
                         {{ isCreatingMapping ? $t("marketplace.connectionPage.mappings.linking") : $t("marketplace.connectionPage.mappings.link") }}
                       </Button>
                     </DialogFooter>
@@ -3516,9 +3512,8 @@ export default {
               v-model:open="showBulkCreateCategoriesDialog"
             >
               <DialogContent class="sm:max-w-lg flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
-                <DialogHeader class="space-y-1.5 px-6 pt-6 pb-4">
-                  <DialogTitle class="flex items-center gap-2">
-                    <Upload class="size-5" />
+                <DialogHeader variant="bar">
+                  <DialogTitle>
                     {{ $t("marketplace.connectionPage.mappings.createCategoriesFromLocal", { adapter: adapterDisplayName }) }}
                   </DialogTitle>
                   <DialogDescription>
@@ -3605,7 +3600,7 @@ export default {
                   </div>
                 </div>
 
-                <DialogFooter class="gap-2 px-6 py-4">
+                <DialogFooter variant="bar">
                   <DialogClose as-child>
                     <Button variant="outline" :disabled="isBulkCreatingCategories">
                       {{ $t("common.cancel") }}
@@ -3619,10 +3614,7 @@ export default {
                     "
                     @click="handleBulkCreateCategories"
                   >
-                    <Loader2
-                      v-if="isBulkCreatingCategories"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isBulkCreatingCategories" class="mr-2" />
                     <Upload v-else class="size-4 mr-2" />
                     {{
                       isBulkCreatingCategories
@@ -3693,16 +3685,19 @@ export default {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
+                              <Pencil />
                               {{ $t("marketplace.connectionPage.mappings.rename") }}
                             </DropdownMenuItem>
                             <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
+                              <Copy />
                               {{ $t("marketplace.connectionPage.mappings.duplicate") }}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              class="text-destructive"
+                              variant="destructive"
                               @click.stop="handleDeleteMapping(mapping)"
                             >
+                              <Trash2 />
                               {{ $t("common.delete") }}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -3762,7 +3757,7 @@ export default {
             <template v-if="productsViewMode === 'external'">
               <!-- Loading state -->
               <div v-if="isLoadingProducts" class="flex flex-1 items-center justify-center py-12">
-                <Loader2 class="size-8 animate-spin text-muted-foreground" />
+                <Spinner size="2xl" class="text-muted-foreground" />
               </div>
 
               <EmptyState
@@ -3940,10 +3935,7 @@ export default {
                             :title="$t('marketplace.connectionPage.products.importFromAdapter')"
                             :aria-label="$t('marketplace.connectionPage.products.importFromAdapter')"
                           >
-                            <Loader2
-                              v-if="importingLinkId === product.linkId"
-                              class="size-4 animate-spin"
-                            />
+                            <Spinner v-if="importingLinkId === product.linkId" />
                             <Download v-else class="size-4" />
                           </Button>
                           <Button
@@ -3957,25 +3949,19 @@ export default {
                             :title="$t('marketplace.connectionPage.products.exportToAdapter')"
                             :aria-label="$t('marketplace.connectionPage.products.exportToAdapter')"
                           >
-                            <Loader2
-                              v-if="exportingLinkId === product.linkId"
-                              class="size-4 animate-spin"
-                            />
+                            <Spinner v-if="exportingLinkId === product.linkId" />
                             <Upload v-else class="size-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            class="text-destructive hover:text-destructive"
+                            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
                             @click="handleUnlinkProduct(product)"
                             :disabled="unlinkingLinkId === product.linkId"
                             :title="$t('marketplace.connectionPage.products.unlinkProduct')"
                             :aria-label="$t('marketplace.connectionPage.products.unlinkProduct')"
                           >
-                            <Loader2
-                              v-if="unlinkingLinkId === product.linkId"
-                              class="size-4 animate-spin"
-                            />
+                            <Spinner v-if="unlinkingLinkId === product.linkId" />
                             <Ban v-else class="size-4" />
                           </Button>
                         </div>
@@ -3992,10 +3978,7 @@ export default {
                     :disabled="isLoadingMore"
                     @click="loadMoreProducts"
                   >
-                    <Loader2
-                      v-if="isLoadingMore"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isLoadingMore" class="mr-2" />
                     {{ isLoadingMore ? $t("common.loading") : $t("marketplace.connectionPage.products.loadMore") }}
                   </Button>
                 </div>
@@ -4027,10 +4010,7 @@ export default {
                     @click="openImportDialog"
                     :disabled="isCreatingLocal"
                   >
-                    <Loader2
-                      v-if="isCreatingLocal"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isCreatingLocal" class="mr-2" />
                     <Plus v-else class="size-4 mr-2" />
                     {{ $t("marketplace.connectionPage.products.createLocal", { count: selectedUnlinkedItems.length }) }}
                   </Button>
@@ -4042,10 +4022,7 @@ export default {
                     @click="handleImportBulk"
                     :disabled="isImportingBulk"
                   >
-                    <Loader2
-                      v-if="isImportingBulk"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isImportingBulk" class="mr-2" />
                     <Download v-else class="size-4 mr-2" />
                     {{ $t("marketplace.connectionPage.products.importCount", { count: selectedLinkedItems.length }) }}
                   </Button>
@@ -4057,10 +4034,7 @@ export default {
                     @click="handleExportBulk"
                     :disabled="isExportingBulk"
                   >
-                    <Loader2
-                      v-if="isExportingBulk"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isExportingBulk" class="mr-2" />
                     <Upload v-else class="size-4 mr-2" />
                     {{ $t("marketplace.connectionPage.products.exportCount", { count: selectedLinkedItems.length }) }}
                   </Button>
@@ -4072,10 +4046,7 @@ export default {
                     @click="handleExportPricesBulk"
                     :disabled="isExportingPrices"
                   >
-                    <Loader2
-                      v-if="isExportingPrices"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isExportingPrices" class="mr-2" />
                     <DollarSign v-else class="size-4 mr-2" />
                     {{ $t("marketplace.connectionPage.products.exportPrices") }}
                   </Button>
@@ -4086,10 +4057,7 @@ export default {
                     @click="handleExportStocksBulk"
                     :disabled="isExportingStocks"
                   >
-                    <Loader2
-                      v-if="isExportingStocks"
-                      class="size-4 mr-2 animate-spin"
-                    />
+                    <Spinner v-if="isExportingStocks" class="mr-2" />
                     <Boxes v-else class="size-4 mr-2" />
                     {{ $t("marketplace.connectionPage.products.exportStocks") }}
                   </Button>
@@ -4105,7 +4073,7 @@ export default {
                 v-if="isLoadingLocalProducts && localProducts.length === 0"
                 class="flex flex-1 items-center justify-center py-12"
               >
-                <Loader2 class="size-8 animate-spin text-muted-foreground" />
+                <Spinner size="2xl" class="text-muted-foreground" />
               </div>
 
               <EmptyState
@@ -4316,10 +4284,7 @@ export default {
                   @click="handleExportNewBulk"
                   :disabled="isExportingNewBulk"
                 >
-                  <Loader2
-                    v-if="isExportingNewBulk"
-                    class="size-4 mr-2 animate-spin"
-                  />
+                  <Spinner v-if="isExportingNewBulk" class="mr-2" />
                   <Upload v-else class="size-4 mr-2" />
                   {{ $t("marketplace.connectionPage.products.exportToAdapterCount", { count: selectedLocalIds.length }) }}
                 </Button>
@@ -4373,9 +4338,8 @@ export default {
     <!-- Import Dialog (create local products from unlinked) -->
     <Dialog v-model:open="showImportDialog">
       <DialogContent size="2xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader class="shrink-0 space-y-1 border-b px-6 py-4 text-left">
-          <DialogTitle class="flex items-center gap-2">
-            <Download class="size-5 text-muted-foreground" />
+        <DialogHeader variant="bar">
+          <DialogTitle>
             {{ $t("marketplace.connectionPage.dialogs.importProductsTitle") }}
           </DialogTitle>
           <DialogDescription>
@@ -4384,7 +4348,7 @@ export default {
         </DialogHeader>
 
         <div v-if="isLoadingDialogData" class="flex flex-1 items-center justify-center py-12">
-          <Loader2 class="size-8 animate-spin text-muted-foreground" />
+          <Spinner size="2xl" class="text-muted-foreground" />
         </div>
 
         <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
@@ -4537,7 +4501,7 @@ export default {
           </div>
         </div>
 
-        <DialogFooter class="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
+        <DialogFooter variant="bar" class="sm:justify-between">
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
@@ -4545,10 +4509,7 @@ export default {
             @click="handleImportWithCategories"
             :disabled="isImportingWithCategories"
           >
-            <Loader2
-              v-if="isImportingWithCategories"
-              class="size-4 mr-2 animate-spin"
-            />
+            <Spinner v-if="isImportingWithCategories" class="mr-2" />
             <Download v-else class="size-4 mr-2" />
             {{ $t("marketplace.connectionPage.import.importCount", { count: selectedUnlinkedItems.length }) }}
           </Button>
@@ -4594,10 +4555,7 @@ export default {
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleRenameMapping" :disabled="isRenamingMapping">
-            <Loader2
-              v-if="isRenamingMapping"
-              class="size-4 mr-2 animate-spin"
-            />
+            <Spinner v-if="isRenamingMapping" class="mr-2" />
             {{ $t("common.save") }}
           </Button>
         </DialogFooter>
@@ -4778,10 +4736,7 @@ export default {
               (deleteMappingMode === 'reassign' && !deleteMappingReplacementId)
             "
           >
-            <Loader2
-              v-if="isDeletingMapping"
-              class="size-4 mr-2 animate-spin"
-            />
+            <Spinner v-if="isDeletingMapping" class="mr-2" />
             {{
               deleteMappingMode === "reassign"
                 ? $t("marketplace.connectionPage.dialogs.moveAndDelete")
@@ -4818,10 +4773,7 @@ export default {
             @click="saveMappingSettingsDialog"
             :disabled="isSavingMappingSettings"
           >
-            <Loader2
-              v-if="isSavingMappingSettings"
-              class="size-4 mr-2 animate-spin"
-            />
+            <Spinner v-if="isSavingMappingSettings" class="mr-2" />
             {{ $t("common.save") }}
           </Button>
         </DialogFooter>
@@ -4935,10 +4887,7 @@ export default {
             @click="confirmMappingSelections"
             :disabled="isSavingMappingSelections"
           >
-            <Loader2
-              v-if="isSavingMappingSelections"
-              class="size-4 mr-2 animate-spin"
-            />
+            <Spinner v-if="isSavingMappingSelections" class="mr-2" />
             <Upload v-else class="size-4 mr-2" />
             {{ $t("marketplace.connectionPage.dialogs.continueExport") }}
           </Button>

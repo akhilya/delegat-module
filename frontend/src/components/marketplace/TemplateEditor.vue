@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 const BRACES_OPEN = "{{";
 const BRACES_CLOSE = "}}";
@@ -24,6 +25,7 @@ export default {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
     Button,
+    Textarea,
     Plus,
   },
   props: {
@@ -41,14 +43,15 @@ export default {
     },
   },
   methods: {
-    onInput(event) {
-      this.$emit("update:modelValue", event.target.value);
+    textareaEl() {
+      const ref = this.$refs.textarea;
+      return ref?.$el ?? ref ?? null;
     },
     wrap(key) {
       return `${BRACES_OPEN}${key}${BRACES_CLOSE}`;
     },
     insertPlaceholder(placeholder) {
-      const textarea = this.$refs.textarea;
+      const textarea = this.textareaEl();
       if (!textarea) {
         this.$emit("update:modelValue", (this.modelValue || "") + placeholder);
         return;
@@ -82,12 +85,12 @@ export default {
 
 <template>
   <div class="space-y-2">
-    <textarea
+    <Textarea
       ref="textarea"
-      :value="modelValue"
-      @input="onInput"
-      class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[80px] resize-y font-mono"
+      :model-value="modelValue"
+      class="min-h-[80px] resize-y bg-background font-mono text-xs md:text-xs"
       :placeholder="placeholderText"
+      @update:model-value="$emit('update:modelValue', $event)"
     />
     <DropdownMenu>
       <DropdownMenuTrigger as-child>

@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
 import ProductRowActionButtons from "@/components/products/productRowActionButtons.vue";
@@ -47,7 +48,6 @@ import {
   FileSpreadsheet,
   Undo2,
   RefreshCw,
-  Loader2,
 } from "lucide-vue-next";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -90,6 +90,7 @@ const COLUMN_ORDER_KEY = "products-column-order";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     ProductsTable,
     ProductRowActionButtons,
@@ -119,7 +120,6 @@ export default {
     FileSpreadsheet,
     Undo2,
     RefreshCw,
-    Loader2,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -144,7 +144,7 @@ export default {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
-    AlertDialogTitle,
+    AlertDialogTitle
   },
   setup() {
     return { toast };
@@ -1049,9 +1049,8 @@ export default {
     <!-- Excel Actions Dialog -->
     <Dialog v-model:open="isExcelDialogOpen">
       <DialogContent size="md" class="gap-0 overflow-hidden p-0">
-        <DialogHeader class="space-y-1 border-b px-6 py-4 text-left">
-          <DialogTitle class="flex items-center gap-2">
-            <FileSpreadsheet class="size-5 text-muted-foreground" />
+        <DialogHeader variant="bar">
+          <DialogTitle>
             {{ $t("pages.productsPage.excelDialog.title") }}
           </DialogTitle>
           <DialogDescription>
@@ -1067,7 +1066,7 @@ export default {
             @click="handleExportExcel"
           >
             <div class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-              <Loader2 v-if="isExporting" class="size-4 animate-spin text-muted-foreground" />
+              <Spinner v-if="isExporting" class="text-muted-foreground" />
               <Download v-else class="size-4 text-muted-foreground" />
             </div>
             <div class="min-w-0 flex-1">
@@ -1103,7 +1102,7 @@ export default {
           </button>
         </div>
 
-        <DialogFooter class="border-t px-6 py-4 sm:justify-start">
+        <DialogFooter variant="bar" class="sm:justify-start">
           <Button variant="outline" @click="isExcelDialogOpen = false">
             {{ $t("common.cancel") }}
           </Button>
@@ -1140,7 +1139,7 @@ export default {
           <AlertDialogAction
             @click.prevent="handleBulkDelete"
             :disabled="isDeleting"
-            class="bg-destructive text-white hover:bg-destructive/90"
+            variant="destructive"
           >
             {{ isDeleting ? $t("pages.productsPage.bulkTrashConfirm.moving") : $t("productRowActions.toTrash") }}
           </AlertDialogAction>
@@ -1162,7 +1161,7 @@ export default {
           <AlertDialogAction
             @click.prevent="handleBulkPermanentDelete"
             :disabled="isPermanentDeleting"
-            class="bg-destructive text-white hover:bg-destructive/90"
+            variant="destructive"
           >
             {{ isPermanentDeleting ? $t("pages.productsPage.bulkPermanentDeleteConfirm.deleting") : $t("trashRowActions.deleteForever") }}
           </AlertDialogAction>

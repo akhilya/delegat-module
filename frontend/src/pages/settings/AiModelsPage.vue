@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
@@ -39,25 +40,69 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Switch } from "@/components/ui/switch";
-import { Bot, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Zap, Network } from "lucide-vue-next";
+import {
+  Bot,
+  CheckCircle2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Zap,
+  Network,
+} from "lucide-vue-next";
 import { useStore } from "vuex";
 import { ref, computed, onMounted } from "vue";
 import { t } from "@/i18n";
 
 export default {
   components: {
+    Spinner,
     PageSection,
     SettingsFormSection,
     SettingsFormField,
     EmptyState,
-    Button, Input, PasswordInput, Label, Badge, Textarea, Switch,
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-    AlertDialog, AlertDialogAction, AlertDialogCancel,
-    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogTitle,
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-    Bot, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Zap, Network,
+    Button,
+    Input,
+    PasswordInput,
+    Label,
+    Badge,
+    Textarea,
+    Switch,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+    Bot,
+    CheckCircle2,
+    Pencil,
+    Plus,
+    RefreshCw,
+    Save,
+    Trash2,
+    Zap,
+    Network
   },
   setup() {
     const store = useStore();
@@ -380,7 +425,7 @@ export default {
                         :disabled="testingId === model.id"
                         @click="testModel(model)"
                       >
-                        <Loader2 v-if="testingId === model.id" class="mr-1 size-3 animate-spin" />
+                        <Spinner v-if="testingId === model.id" size="xs" class="mr-1" />
                         <Zap v-else class="mr-1 size-3" />
                         {{ $t("pages.aiModelsPage.testButton") }}
                       </Button>
@@ -388,7 +433,12 @@ export default {
                         <Pencil class="size-4" />
                         <span class="sr-only">{{ $t("common.edit") }}</span>
                       </Button>
-                      <Button variant="ghost" size="icon" class="text-destructive hover:text-destructive" @click="deleteModel(model)">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        @click="deleteModel(model)"
+                      >
                         <Trash2 class="size-4" />
                         <span class="sr-only">{{ $t("common.delete") }}</span>
                       </Button>
@@ -476,7 +526,7 @@ export default {
 
         <template #footer>
           <Button :disabled="isSettingsSaving" @click="saveSettings">
-            <Loader2 v-if="isSettingsSaving" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isSettingsSaving" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
             {{ isSettingsSaving ? $t("pages.aiModelsPage.saving") : $t("common.save") }}
           </Button>
@@ -496,7 +546,7 @@ export default {
         <AlertDialogFooter>
           <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
-            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            variant="destructive"
             @click="confirmDialog.resolve(true); confirmDialog.open = false"
           >{{ $t("common.delete") }}</AlertDialogAction>
         </AlertDialogFooter>
@@ -565,7 +615,7 @@ export default {
             <div class="flex items-center justify-between">
               <Label>Model ID</Label>
               <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" :disabled="isDiscovering" @click="discoverModels">
-                <Loader2 v-if="isDiscovering" class="mr-1 size-3 animate-spin" />
+                <Spinner v-if="isDiscovering" size="xs" class="mr-1" />
                 <RefreshCw v-else class="mr-1 size-3" />
                 {{ $t("pages.aiModelsPage.fetchListButton") }}
               </Button>
@@ -595,7 +645,7 @@ export default {
         <DialogFooter>
           <Button variant="ghost" @click="closeDialog">{{ $t("common.cancel") }}</Button>
           <Button :disabled="isSaving" @click="save">
-            <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isSaving" class="mr-2" />
             {{ isSaving ? $t("pages.aiModelsPage.saving") : $t("common.save") }}
           </Button>
         </DialogFooter>

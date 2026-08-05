@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,9 @@ import {
   FormItem,
 } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus } from "lucide-vue-next";
+import {
+  Plus,
+} from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
 import { useRouter, useRoute } from "vue-router";
@@ -66,13 +69,13 @@ const GROUP_NONE = "__none__";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
     FormControl,
     FormField,
     FormItem,
-
     Input,
     Textarea,
     ProductAttributeForm,
@@ -88,7 +91,6 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
-    Loader2,
     Plus,
     AiDescriptionGenerator,
     Select,
@@ -104,7 +106,7 @@ export default {
     Tooltip,
     TooltipContent,
     TooltipProvider,
-    TooltipTrigger,
+    TooltipTrigger
   },
   data() {
     return {
@@ -916,7 +918,7 @@ export default {
                               class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
                             >
                               <p class="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Loader2 class="size-3.5 animate-spin" />
+                                <Spinner size="sm" />
                                 {{ descriptionGeneratingHint }}
                               </p>
                             </div>
@@ -1131,7 +1133,7 @@ export default {
                             :disabled="isSaveDisabled"
                             class="disabled:opacity-100 disabled:bg-primary/70"
                           >
-                            <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
+                            <Spinner v-if="isSubmitting" class="mr-2" />
                             <Plus v-else class="size-4 mr-2" />
                             {{ $t("pages.productCreationPage.actions.createProduct") }}
                           </Button>

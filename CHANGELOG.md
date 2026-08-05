@@ -29,6 +29,20 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- UI corner radius base `--radius` raised to **1rem** (aligned with Control Plane)
+- Icons switched from Lucide to **Hugeicons** (same kit as Control Plane) via `frontend/src/lib/icons.js`; denser stroke as a filled-look experiment (true solid styles need Hugeicons Pro)
+- Mapping editor chrome aligned with DESIGN: fill-viewport canvas, flat node cards / controls, primary selection wires, Spinner loaders, Field forms in settings dialogs
+- Product transfer dialog restyled to Catalog Workbench: bordered header/footer, mode Tabs, Field forms, semantic warning/success surfaces, store route strip
+- Loaders formalized: single `Spinner` with size scale `xs`–`2xl` (default 16px for actions; `2xl` for EmptyState); ad-hoc `Loader2` + `size-*` replaced across the UI
+- Dropdown/context menus: leading icons on actions; destructive items use `variant="destructive"` (Sign-out pattern)
+- Destructive confirms and icon-only delete/revoke/unlink controls use destructive color tokens (`AlertDialogAction variant="destructive"`, `text-destructive` triggers)
+- Checkboxes unified on shadcn `Checkbox` with `rounded-xs` (MultiSelect no longer uses a hand-rolled nearly-round box)
+- Full-region loaders aligned to EmptyState `2xl` (products/trash table, storage, category browser, API keys)
+- Dialog chrome unified: title scale `text-base font-semibold tracking-tight`; `DialogHeader` / `DialogFooter` `variant="bar"` for `p-0` dialogs (no per-call `px-6 py-*` / `text-lg` overrides)
+- Raw search/`textarea` controls replaced with shadcn `Input` / `Textarea` (MultiSelect, SearchableSelect, mapping context menu, TemplateEditor)
+- Dialog titles are text-only (removed decorative header icons)
+- Product group sidebar collapses to a photos-only rail when the edit row is narrow (e.g. wide AI panel)
+- Product edit: removed fixed action bar; Save/Delete sit in-flow at page bottom; Duplicate moved to header ⋯ menu
 - Settings overview breadcrumb shows «Администрирование» (was «Настройки»)
 - App pages share `AppPageChrome` (Page gutters + nav + breadcrumbs) so catalog and settings breadcrumbs align
 - Page title/description headers removed; breadcrumbs carry the page name; primary actions stay as a right-aligned toolbar when needed

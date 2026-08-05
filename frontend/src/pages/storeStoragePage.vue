@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import ProductFileManager from "@/components/products/ProductFileManager.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 import { http } from "@/main";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
@@ -29,9 +30,12 @@ onMounted(fetchFiles);
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection class="flex min-h-[calc(100vh-12rem)] flex-1 flex-col overflow-hidden rounded-xl border bg-card p-0">
-      <div v-if="isLoading" class="flex min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
-        {{ t("pages.storeStoragePage.loading") }}
-      </div>
+      <EmptyState
+        v-if="isLoading"
+        loading
+        :framed="false"
+        class="min-h-[24rem]"
+      />
       <ProductFileManager
         v-else
         scope="store"

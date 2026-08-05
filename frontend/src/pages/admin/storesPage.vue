@@ -1,5 +1,6 @@
 <script>
 
+import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
@@ -12,7 +13,6 @@ import {
   Plus,
   Store,
   Users,
-  Loader2,
   Pencil,
   Save,
   Trash2,
@@ -53,6 +53,7 @@ import {
 
 export default {
   components: {
+    Spinner,
     PageSection,
     Button,
     Input,
@@ -62,7 +63,6 @@ export default {
     Plus,
     Store,
     Users,
-    Loader2,
     Pencil,
     Save,
     Trash2,
@@ -94,7 +94,7 @@ export default {
     TabsContent,
     TabsList,
     TabsTrigger,
-    Separator,
+    Separator
   },
   data() {
     return {
@@ -460,7 +460,7 @@ export default {
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button @click="handleCreateStore" :disabled="isCreating">
-              <Loader2 v-if="isCreating" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isCreating" class="mr-2" />
               {{ $t("common.create") }}
             </Button>
           </DialogFooter>
@@ -520,37 +520,30 @@ export default {
 
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent size="3xl" class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader class="shrink-0 space-y-3 border-b px-6 py-5 text-left">
-          <div class="flex items-start gap-3 pr-8">
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-              <Store class="size-5 text-muted-foreground" />
-            </div>
-            <div class="min-w-0 flex-1 space-y-1">
-              <DialogTitle class="truncate text-lg">
-                {{ editingStore?.name || $t("pages.storesPage.editDialogTitle") }}
-              </DialogTitle>
-              <DialogDescription>
-                {{ $t("pages.storesPage.editDialogDescription") }}
-              </DialogDescription>
-              <div v-if="editingStore" class="flex flex-wrap items-center gap-2 pt-1">
-                <Badge variant="secondary" class="font-normal tabular-nums">
-                  ID {{ editingStore.id }}
-                </Badge>
-                <Badge variant="outline" class="gap-1 font-normal">
-                  <Users class="size-3" />
-                  {{ $t("pages.storesPage.membersSelected", { count: selectedMembersCount }) }}
-                </Badge>
-                <Badge v-if="storeBaseCurrency" variant="outline" class="gap-1 font-normal">
-                  <Coins class="size-3" />
-                  {{ storeBaseCurrency }}
-                </Badge>
-              </div>
-            </div>
+        <DialogHeader variant="bar">
+          <DialogTitle class="truncate">
+            {{ editingStore?.name || $t("pages.storesPage.editDialogTitle") }}
+          </DialogTitle>
+          <DialogDescription>
+            {{ $t("pages.storesPage.editDialogDescription") }}
+          </DialogDescription>
+          <div v-if="editingStore" class="flex flex-wrap items-center gap-2 pt-1">
+            <Badge variant="secondary" class="font-normal tabular-nums">
+              ID {{ editingStore.id }}
+            </Badge>
+            <Badge variant="outline" class="gap-1 font-normal">
+              <Users class="size-3" />
+              {{ $t("pages.storesPage.membersSelected", { count: selectedMembersCount }) }}
+            </Badge>
+            <Badge v-if="storeBaseCurrency" variant="outline" class="gap-1 font-normal">
+              <Coins class="size-3" />
+              {{ storeBaseCurrency }}
+            </Badge>
           </div>
         </DialogHeader>
 
         <div v-if="!editingStore" class="flex h-56 items-center justify-center">
-          <Loader2 class="size-5 animate-spin text-muted-foreground" />
+          <Spinner size="xl" class="text-muted-foreground" />
         </div>
 
         <Tabs
@@ -692,7 +685,7 @@ export default {
                         <Button
                           variant="ghost"
                           size="icon"
-                          class="mt-5 shrink-0 text-muted-foreground hover:text-destructive"
+                          class="mt-5 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           :disabled="isSaving"
                           @click="removeCurrency(cur.code)"
                         >
@@ -793,7 +786,7 @@ export default {
           </div>
         </Tabs>
 
-        <DialogFooter class="shrink-0 border-t bg-muted/20 px-6 py-4 sm:justify-between">
+        <DialogFooter variant="bar" class="sm:justify-between">
           <p class="hidden text-xs text-muted-foreground sm:block">
             {{ $t("pages.storesPage.saveHint") }}
           </p>
@@ -802,7 +795,7 @@ export default {
               {{ $t("common.cancel") }}
             </Button>
             <Button class="flex-1 sm:flex-none" :disabled="isSaving || !editingStore" @click="saveStore">
-              <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
+              <Spinner v-if="isSaving" class="mr-2" />
               <Save v-else class="mr-2 size-4" />
               {{ $t("common.save") }}
             </Button>

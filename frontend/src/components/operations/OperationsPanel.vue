@@ -1,7 +1,12 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, watch } from "vue";
 import { useStore } from "vuex";
-import { X, Trash2, Activity, Loader2 } from "lucide-vue-next";
+import {
+  X,
+  Trash2,
+  Activity,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -123,7 +128,7 @@ function handleRemove(id) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-                <AlertDialogAction @click="clearCompleted">
+                <AlertDialogAction variant="destructive" @click="clearCompleted">
                   {{ t("operations.clearCompletedConfirm") }}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -139,7 +144,11 @@ function handleRemove(id) {
           </Button>
         </header>
 
-        <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            v-if="activeOperations.length > 0 || historyOperations.length > 0"
+            class="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3"
+          >
           <section v-if="activeOperations.length > 0" class="space-y-2">
             <div class="flex items-center gap-2 px-1">
               <span class="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
@@ -186,29 +195,27 @@ function handleRemove(id) {
               </Button>
             </div>
           </section>
+          </div>
 
           <div
-            v-if="!historyLoaded && activeOperations.length === 0"
-            class="flex flex-col items-center justify-center min-h-[40vh] text-muted-foreground gap-2"
+            v-else-if="!historyLoaded && activeOperations.length === 0"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground"
           >
-            <Loader2 class="size-5 animate-spin" />
+            <Spinner size="lg" />
             <span class="text-sm">{{ t("operations.loading") }}</span>
           </div>
 
-          <div
-            v-else-if="activeOperations.length === 0 && historyOperations.length === 0"
-            class="flex min-h-[40vh] items-center justify-center"
+          <EmptyState
+            v-else
+            :framed="false"
+            size="sm"
+            :title="t('operations.emptyTitle')"
+            :description="t('operations.emptyDescription')"
           >
-            <EmptyState
-              size="sm"
-              :title="t('operations.emptyTitle')"
-              :description="t('operations.emptyDescription')"
-            >
-              <template #icon>
-                <Activity />
-              </template>
-            </EmptyState>
-          </div>
+            <template #icon>
+              <Activity />
+            </template>
+          </EmptyState>
         </div>
       </aside>
     </Transition>

@@ -1,7 +1,11 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { ref } from "vue";
 import { http } from "@/main";
-import { Loader2, Sparkles, X } from "lucide-vue-next";
+import {
+  Sparkles,
+  X,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "vue-i18n";
 
@@ -50,7 +54,7 @@ async function explain() {
     </Button>
 
     <div v-if="isLoading" class="flex items-center gap-1.5 text-xs text-muted-foreground italic">
-      <Loader2 class="size-3 animate-spin" />
+      <Spinner size="xs" />
       {{ t("ai.analyzing") }}
     </div>
 

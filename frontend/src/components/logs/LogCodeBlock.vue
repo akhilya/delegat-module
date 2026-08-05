@@ -1,8 +1,13 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, ref } from "vue";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, Download, Loader2 } from "lucide-vue-next";
+import {
+  Check,
+  Copy,
+  Download,
+} from "lucide-vue-next";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { highlightJsonHtml, prettyJson } from "./logFormat.js";
 import { useI18n } from "vue-i18n";
@@ -152,7 +157,7 @@ async function download() {
           :disabled="downloading"
           @click="download"
         >
-          <Loader2 v-if="downloading" class="mr-1 size-3.5 animate-spin" />
+          <Spinner v-if="downloading" size="sm" class="mr-1" />
           <Download v-else class="mr-1 size-3.5" />
           {{ t("common.download") }}
         </Button>

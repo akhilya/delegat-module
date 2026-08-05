@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
@@ -20,11 +21,12 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useRouter, useRoute } from "vue-router";
 import { PAGE_SIGN_IN } from "@/router";
 import { ref } from "vue";
-import { Loader2 } from "lucide-vue-next";
+
 import { useI18n } from "vue-i18n";
 
 export default {
   components: {
+    Spinner,
     AuthLayout,
     FormControl,
     FormDescription,
@@ -34,8 +36,7 @@ export default {
     FormMessage,
     Button,
     Input,
-    PasswordInput,
-    Loader2,
+    PasswordInput
   },
   setup() {
     const { t } = useI18n();
@@ -161,7 +162,7 @@ export default {
       </FormField>
 
       <Button type="submit" class="w-full" :disabled="isSubmitting">
-        <Loader2 v-if="isSubmitting" class="animate-spin" />
+        <Spinner v-if="isSubmitting" />
         <span v-else>{{ t("auth.createAccount") }}</span>
       </Button>
     </form>

@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import Input from "@/components/ui/input/Input.vue";
-import { Link2 } from "lucide-vue-next";
 import {
   localizeExternalFieldName,
   localizeStandardSourceName,
@@ -112,12 +111,11 @@ function isActive(value) {
       size="lg"
       class="flex max-h-[min(80vh,640px)] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
-        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <Link2 class="size-4 shrink-0 text-muted-foreground" />
+      <DialogHeader variant="bar">
+        <DialogTitle>
           {{ t("marketplace.graph.inspector.bindingDialogTitle", { field: fieldTitle }) }}
         </DialogTitle>
-        <DialogDescription class="text-sm text-muted-foreground">
+        <DialogDescription>
           {{ t("marketplace.graph.inspector.bindingDialogHint") }}
         </DialogDescription>
       </DialogHeader>

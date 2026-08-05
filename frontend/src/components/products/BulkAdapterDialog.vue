@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 // BulkAdapterDialog — pick adapter + action for a product selection.
 // Shell matches bulkEditDialog / FieldChangesPreviewDialog (bordered header/footer, min-h-0 scroll).
 import { ref, watch, computed } from "vue";
@@ -25,8 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Loader2,
-  Cable,
   ArrowUpToLine,
   ArrowDownToLine,
   DollarSign,
@@ -249,12 +248,11 @@ function actionRowClass(action) {
       size="2xl"
       class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
-        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <Cable class="size-4 text-muted-foreground" />
+      <DialogHeader variant="bar">
+        <DialogTitle>
           {{ t("products.bulkAdapterDialog.title") }}
         </DialogTitle>
-        <DialogDescription class="text-sm text-muted-foreground">
+        <DialogDescription>
           {{ t("products.bulkAdapterDialog.selectedCount", { count: selectedCount }) }}
         </DialogDescription>
       </DialogHeader>
@@ -292,7 +290,7 @@ function actionRowClass(action) {
           v-if="isLoadingCapabilities"
           class="flex items-center gap-2 py-1 text-sm text-muted-foreground"
         >
-          <Loader2 class="size-4 animate-spin" />
+          <Spinner />
           {{ t("products.bulkAdapterDialog.loadingCapabilities") }}
         </div>
 
@@ -337,7 +335,7 @@ function actionRowClass(action) {
           </div>
 
           <div v-if="isResolving" class="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 class="size-3.5 animate-spin" />
+            <Spinner size="sm" />
             {{ t("products.bulkAdapterDialog.checkingLinks") }}
           </div>
 
@@ -365,14 +363,14 @@ function actionRowClass(action) {
         </div>
       </div>
 
-      <DialogFooter class="shrink-0 gap-2 border-t border-border px-6 py-4 sm:justify-between">
+      <DialogFooter variant="bar" class="sm:justify-between">
         <DialogClose as-child>
           <Button type="button" variant="outline" :disabled="isRunning">
             {{ t("common.cancel") }}
           </Button>
         </DialogClose>
         <Button type="button" :disabled="!canRun" @click="run">
-          <Loader2 v-if="isRunning" class="mr-2 size-4 animate-spin" />
+          <Spinner v-if="isRunning" class="mr-2" />
           {{ selectedAction?.label ?? t("products.bulkAdapterDialog.runButton") }}
         </Button>
       </DialogFooter>

@@ -1,6 +1,7 @@
 <script>
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -25,12 +26,12 @@ import {
   Copy,
   ExternalLink,
   KeyRound,
-  Loader2,
   Trash2,
 } from "lucide-vue-next";
 
 export default {
   components: {
+    Spinner,
     PageSection,
     Button,
     Badge,
@@ -47,8 +48,7 @@ export default {
     Copy,
     ExternalLink,
     KeyRound,
-    Loader2,
-    Trash2,
+    Trash2
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -223,7 +223,7 @@ export default {
             />
           </div>
           <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
-            <Loader2 v-if="isCreatingKey" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isCreatingKey" class="mr-2" />
             <KeyRound v-else class="mr-2 size-4" />
             {{ $t("pages.apiPage.keys.create") }}
           </Button>
@@ -240,9 +240,8 @@ export default {
           </Button>
         </div>
 
-        <div v-if="apiKeysLoading" class="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 class="size-4 animate-spin" />
-          {{ $t("pages.apiPage.keys.loading") }}
+        <div v-if="apiKeysLoading" class="flex min-h-[12rem] flex-1 items-center justify-center">
+          <Spinner size="2xl" class="text-muted-foreground" />
         </div>
 
         <PageSection
@@ -299,7 +298,7 @@ export default {
                       :disabled="revokingId === key.id"
                       @click="revokeApiKey(key.id)"
                     >
-                      <Loader2 v-if="revokingId === key.id" class="size-4 animate-spin" />
+                      <Spinner v-if="revokingId === key.id" />
                       <Trash2 v-else class="size-4" />
                     </Button>
                   </TableCell>

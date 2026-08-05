@@ -32,6 +32,7 @@ import {
   opLabel,
 } from "./graphModel.js";
 import { localizeStandardSourceName } from "./fieldLabels.js";
+import { Input } from "@/components/ui/input";
 
 const { t } = useI18n();
 
@@ -50,7 +51,8 @@ const search = ref("");
 const inputEl = ref(null);
 onMounted(async () => {
   await nextTick();
-  inputEl.value?.focus();
+  const el = inputEl.value?.$el ?? inputEl.value;
+  el?.focus?.();
 });
 
 const q = computed(() => search.value.trim().toLowerCase());
@@ -261,11 +263,12 @@ const pick = (desc) => {
 
 <template>
   <div class="vf-ctx" @click.stop @contextmenu.prevent>
-    <input
+    <Input
       ref="inputEl"
       v-model="search"
+      type="search"
       :placeholder="t('marketplace.graph.contextMenu.searchPlaceholder')"
-      class="vf-ctx__search"
+      class="h-auto rounded-none border-0 border-b border-border bg-transparent px-2.5 py-2 text-[13px] shadow-none focus-visible:ring-0"
       @keydown.esc="emit('close')"
     />
     <div class="vf-ctx__list thin-scrollbar">
@@ -303,18 +306,9 @@ const pick = (desc) => {
   flex-direction: column;
   border: 1px solid var(--border);
   background: var(--popover, var(--card));
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-md);
+  box-shadow: none;
   overflow: hidden;
-}
-.vf-ctx__search {
-  padding: 8px 10px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--foreground);
-  outline: none;
-  font-size: 13px;
 }
 .vf-ctx__list {
   overflow-y: auto;
@@ -348,7 +342,7 @@ const pick = (desc) => {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   text-align: left;
   color: var(--foreground);

@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import BarcodeInput from "@/components/ui/barcode/BarcodeInput.vue";
@@ -23,7 +24,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, Plus, Trash2, GripVertical, Layers } from "lucide-vue-next";
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  Layers,
+} from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useDebounceFn } from "@vueuse/core";
 import draggable from "vuedraggable";
@@ -31,6 +37,7 @@ import { t } from "@/i18n";
 
 export default {
   components: {
+    Spinner,
     Button,
     Input,
     EmptyState,
@@ -50,12 +57,11 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Loader2,
     Plus,
     Trash2,
     GripVertical,
     Layers,
-    draggable,
+    draggable
   },
   props: {
     productId: {
@@ -191,28 +197,28 @@ export default {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-0">
-    <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
-      <p class="text-sm font-medium flex items-center gap-2">
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="flex h-11 shrink-0 items-center justify-between border-b px-4">
+      <p class="flex items-center gap-2 text-sm font-medium">
         <Layers class="size-4" />
         {{ $t("products.productVariantsEditor.title") }}
       </p>
       <Button variant="ghost" size="sm" @click="handleAdd" :disabled="isAdding" class="h-7">
-        <Loader2 v-if="isAdding" class="size-4 mr-1 animate-spin" />
+        <Spinner v-if="isAdding" class="mr-1" />
         <Plus v-else class="size-4 mr-1" />
         {{ $t("common.add") }}
       </Button>
     </div>
-    <div class="flex-1 min-h-0 overflow-y-auto">
-      <div v-if="isLoading" class="flex justify-center py-12">
-        <Loader2 class="size-8 animate-spin text-muted-foreground" />
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div v-if="isLoading" class="flex flex-1 items-center justify-center py-12">
+        <Spinner size="2xl" class="text-muted-foreground" />
       </div>
 
       <EmptyState
         v-else-if="variants.length === 0"
+        :framed="false"
         :title="$t('products.productVariantsEditor.emptyTitle')"
         :description="$t('products.productVariantsEditor.emptyDescription')"
-        class="py-10"
       >
         <template #icon>
           <Layers />
@@ -293,11 +299,11 @@ export default {
                   <Button
                     variant="ghost"
                     size="icon"
-                    class="size-8"
+                    class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     :disabled="deletingId === variant.id"
                   >
-                    <Loader2 v-if="deletingId === variant.id" class="size-4 animate-spin" />
-                    <Trash2 v-else class="size-4 text-destructive" />
+                    <Spinner v-if="deletingId === variant.id" />
+                    <Trash2 v-else class="size-4" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -309,7 +315,7 @@ export default {
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                    <AlertDialogAction @click="handleDelete(variant)">
+                    <AlertDialogAction variant="destructive" @click="handleDelete(variant)">
                       {{ $t("common.delete") }}
                     </AlertDialogAction>
                   </AlertDialogFooter>
@@ -325,7 +331,7 @@ export default {
         v-if="Object.keys(pendingSaves).length > 0"
         class="flex items-center gap-2 border-t px-4 py-2 text-sm text-muted-foreground"
       >
-        <Loader2 class="size-3 animate-spin" />
+        <Spinner size="xs" />
         <span>{{ $t("products.productVariantsEditor.saving") }}</span>
       </div>
     </div>

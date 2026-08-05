@@ -35,7 +35,7 @@ const labelX = computed(() => bezier.value[1]);
 const labelY = computed(() => bezier.value[2]);
 
 const pathId = computed(() => `vf-wp-${props.id}`);
-const wire   = computed(() => props.selected ? "#3b82f6" : "#b1b1b7");
+const wire   = computed(() => props.selected ? "var(--primary)" : "var(--muted-foreground)");
 const baseOp = computed(() => props.selected ? 0.65 : 0.2);
 const arrOp  = computed(() => props.selected ? 1 : 0.85);
 

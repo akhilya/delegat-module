@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 // NavigationBar - Page-level toolbar with mobile sidebar trigger, center slot, and user menu.
 // Height is locked to --app-navbar-height (single row) so breadcrumbs share one Y-offset on every page.
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -7,7 +8,7 @@ import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { Loader2 } from "lucide-vue-next";
+
 
 export default {
   props: {
@@ -16,9 +17,9 @@ export default {
     hasCenter: { type: Boolean, default: false },
   },
   components: {
+    Spinner,
     SidebarTrigger,
-    Loader2,
-    UserAccountMenu,
+    UserAccountMenu
   },
   data() {
     return {
@@ -96,7 +97,7 @@ export default {
 
     <template v-else>
       <div class="flex h-full items-center justify-center">
-        <Loader2 class="size-4 animate-spin" />
+        <Spinner />
       </div>
     </template>
   </div>

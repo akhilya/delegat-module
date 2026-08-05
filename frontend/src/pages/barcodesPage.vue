@@ -2,6 +2,7 @@
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
@@ -23,7 +24,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Loader2,
   Search,
 } from "lucide-vue-next";
 
@@ -32,6 +32,7 @@ const EXPORT_PAGE_SIZE = 100;
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -48,8 +49,7 @@ export default {
     ChevronLeft,
     ChevronRight,
     Download,
-    Loader2,
-    Search,
+    Search
   },
   data() {
     return {
@@ -285,12 +285,12 @@ export default {
         :disabled="isBusy || selectedCount === 0"
         @click="downloadSelected"
       >
-        <Loader2 v-if="isDownloadingSelected" class="mr-2 size-4 animate-spin" />
+        <Spinner v-if="isDownloadingSelected" class="mr-2" />
         <Download v-else class="mr-2 size-4" />
         {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
       </Button>
       <Button :disabled="isBusy || totalCount === 0" @click="downloadAll">
-        <Loader2 v-if="isDownloadingAll" class="mr-2 size-4 animate-spin" />
+        <Spinner v-if="isDownloadingAll" class="mr-2" />
         <Download v-else class="mr-2 size-4" />
         {{ $t("pages.barcodesPage.downloadAll") }}
       </Button>

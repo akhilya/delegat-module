@@ -45,7 +45,7 @@ const revPathD = computed(() => {
 
 const pathId    = computed(() => `vf-wp-${props.id}`);
 const revPathId = computed(() => `vf-wp-bwd-${props.id}`);
-const wire      = computed(() => props.selected ? "#3b82f6" : "#b1b1b7");
+const wire      = computed(() => props.selected ? "var(--primary)" : "var(--muted-foreground)");
 const baseOp    = computed(() => props.selected ? 0.65 : 0.2);
 const fwdOp     = computed(() => props.selected ? 1 : 0.85);
 const bwdOp     = computed(() => props.selected ? 0.75 : 0.5);

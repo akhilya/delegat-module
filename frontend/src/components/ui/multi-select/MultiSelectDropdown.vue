@@ -1,14 +1,20 @@
 <script setup>
 import { computed, ref, watch, nextTick } from "vue";
-import { ChevronDown, Check, X, Search } from "lucide-vue-next";
+import { ChevronDown, X, Search } from "lucide-vue-next";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
+
+function focusSearchInput() {
+  const el = searchInputRef.value?.$el ?? searchInputRef.value;
+  el?.focus?.();
+}
 
 const props = defineProps({
   options: {
@@ -58,7 +64,7 @@ watch(open, (isOpen) => {
   } else if (isLargeList.value) {
     // Auto-focus search input for large lists
     nextTick(() => {
-      searchInputRef.value?.focus();
+      focusSearchInput();
     });
   }
 });
@@ -181,13 +187,13 @@ const clearAll = () => {
       <!-- Search input (only shown if many options) -->
       <div v-if="showSearch" class="p-2 border-b">
         <div class="relative">
-          <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
+          <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
             ref="searchInputRef"
             v-model="searchQuery"
-            type="text"
+            type="search"
             :placeholder="isLargeList ? t('components.multiSelectDropdown.searchPlaceholderLarge') : t('components.multiSelectDropdown.searchPlaceholder')"
-            class="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            class="h-8 bg-background pl-8"
             @click.stop
           />
         </div>
@@ -206,22 +212,21 @@ const clearAll = () => {
           {{ t('components.multiSelectDropdown.nothingFound') }}
         </div>
         <div v-else class="p-1">
-          <label
+          <div
             v-for="option in displayedOptions"
             :key="option"
+            role="option"
+            :aria-selected="isSelected(option)"
             class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
-            @click.prevent="toggleOption(option)"
+            @click="toggleOption(option)"
           >
-            <div
-              :class="cn(
-                'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary',
-                isSelected(option) ? 'bg-primary text-primary-foreground' : 'opacity-50'
-              )"
-            >
-              <Check v-if="isSelected(option)" class="size-3" />
-            </div>
+            <Checkbox
+              :model-value="isSelected(option)"
+              class="pointer-events-none"
+              tabindex="-1"
+            />
             <span class="text-sm flex-1 truncate" :title="option">{{ option }}</span>
-          </label>
+          </div>
 
           <!-- Hint when there are more options -->
           <div v-if="hasMoreOptions" class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1">

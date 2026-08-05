@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 // ProductMarketplaceIntegrations - Manages marketplace connections for a product: export, import, and sync status.
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -12,7 +13,6 @@ import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
 import { randomUuidCompact } from "@/utils/uuid";
 import {
-  Loader2,
   Upload,
   Download,
   CheckCircle,
@@ -29,6 +29,9 @@ import {
   Unlink,
   SearchCheck,
   ChevronRight,
+  Package,
+  DollarSign,
+  Boxes,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
@@ -100,10 +103,10 @@ const EXPORT_MODE_STOCK = "stock";
 
 export default {
   components: {
+    Spinner,
     Button,
     Badge,
     EmptyState,
-    Loader2,
     Upload,
     Download,
     CheckCircle,
@@ -159,12 +162,15 @@ export default {
     Unlink,
     SearchCheck,
     ChevronRight,
+    Package,
+    DollarSign,
+    Boxes,
     ButtonGroup,
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-    FieldChangesPreviewDialog,
+    FieldChangesPreviewDialog
   },
   props: {
     productId: {
@@ -1138,24 +1144,26 @@ export default {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-0">
+  <div class="flex min-h-0 flex-1 flex-col">
     <!-- Header -->
-    <div class="flex items-center px-4 h-11 border-b shrink-0">
-      <p class="text-sm font-medium flex items-center gap-2">
+    <div class="flex h-11 shrink-0 items-center border-b px-4">
+      <p class="flex items-center gap-2 text-sm font-medium">
         <Link2 class="size-4" />
         {{ $t("productMarketplaceIntegrations.header") }}
       </p>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-6">
-    <!-- Loading state -->
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="size-8 animate-spin text-muted-foreground" />
+    <div
+      v-if="isLoading"
+      class="flex min-h-0 flex-1 items-center justify-center py-12"
+    >
+      <Spinner size="2xl" class="text-muted-foreground" />
     </div>
 
     <!-- No category warning -->
     <EmptyState
       v-else-if="connections && !connections.categoryId"
+      :framed="false"
       :title="$t('productMarketplaceIntegrations.noCategoryTitle')"
       :description="$t('productMarketplaceIntegrations.noCategoryDescription')"
     >
@@ -1167,6 +1175,7 @@ export default {
     <!-- No connections -->
     <EmptyState
       v-else-if="!connections?.allConnections?.length"
+      :framed="false"
       :title="$t('productMarketplaceIntegrations.noConnectionsTitle')"
       :description="$t('productMarketplaceIntegrations.noConnectionsDescription')"
     >
@@ -1180,7 +1189,7 @@ export default {
     </EmptyState>
 
     <!-- Connection cards -->
-    <div v-else class="space-y-4">
+    <div v-else class="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
       <!-- Export all banner -->
       <div
         v-if="connectionsWithMapping.length > 0"
@@ -1207,7 +1216,7 @@ export default {
             @click="runSelectedExportAll"
             :disabled="isExportingAnyAll || isLoading"
           >
-            <Loader2 v-if="isExportingAnyAll" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isExportingAnyAll" class="mr-2" />
             <Upload v-else class="size-4 mr-2" />
             {{ exportAllModeLabel }}
           </Button>
@@ -1256,7 +1265,7 @@ export default {
       >
         <div class="flex items-center gap-3 px-4 py-3">
         <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
-          <Loader2 class="size-5 animate-spin text-primary" />
+          <Spinner size="lg" class="text-primary" />
         </div>
         <a
           v-if="getMarketplaceProductUrl(conn)"
@@ -1361,18 +1370,21 @@ export default {
                       @update:model-value="setExportMode(conn, $event)"
                     >
                       <DropdownMenuRadioItem value="full">
+                        <Package />
                         {{ $t("productMarketplaceIntegrations.menuExportFull") }}
                       </DropdownMenuRadioItem>
                       <DropdownMenuRadioItem
                         v-if="conn.canExportPrices"
                         value="price"
                       >
+                        <DollarSign />
                         {{ $t("productMarketplaceIntegrations.menuExportPrice") }}
                       </DropdownMenuRadioItem>
                       <DropdownMenuRadioItem
                         v-if="conn.canExportStocks"
                         value="stock"
                       >
+                        <Boxes />
                         {{ $t("productMarketplaceIntegrations.menuExportStock") }}
                       </DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
@@ -1399,7 +1411,7 @@ export default {
                 @click="handleVerifyLink(conn)"
                 :disabled="verifyingLinkId === conn.linkId || !conn.canImport"
               >
-                <Loader2 v-if="verifyingLinkId === conn.linkId" class="animate-spin" />
+                <Spinner v-if="verifyingLinkId === conn.linkId" />
                 <SearchCheck v-else />
                 {{ $t("productMarketplaceIntegrations.menuVerify") }}
               </DropdownMenuItem>
@@ -1456,7 +1468,7 @@ export default {
                 @click="handleUnlink(conn)"
                 :disabled="unlinkingLinkId === conn.linkId"
               >
-                <Loader2 v-if="unlinkingLinkId === conn.linkId" class="animate-spin" />
+                <Spinner v-if="unlinkingLinkId === conn.linkId" />
                 <Unlink v-else />
                 {{ $t("productMarketplaceIntegrations.menuUnlink") }}
               </DropdownMenuItem>
@@ -1474,7 +1486,7 @@ export default {
         <!-- Variants panel -->
         <div v-if="variantsData[conn.connectionId]" class="border-t px-4 py-2">
           <div v-if="variantsData[conn.connectionId].loading" class="flex items-center gap-2 py-2">
-            <Loader2 class="size-4 animate-spin" />
+            <Spinner />
             <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.loadingSizes") }}</span>
           </div>
           <div v-else-if="variantsData[conn.connectionId].variants.length === 0" class="py-2">
@@ -1514,7 +1526,7 @@ export default {
         class="relative flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
       >
         <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
-          <Loader2 class="size-5 animate-spin text-primary" />
+          <Spinner size="lg" class="text-primary" />
         </div>
         <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
           <ExternalLink class="size-4 text-muted-foreground" />
@@ -1642,6 +1654,7 @@ export default {
         "
       >
         <EmptyState
+          :framed="false"
           size="sm"
           :title="$t('productMarketplaceIntegrations.noAvailableAdaptersTitle')"
           :description="$t('productMarketplaceIntegrations.noAvailableAdaptersDescription')"
@@ -1740,7 +1753,7 @@ export default {
         <DialogFooter>
           <DialogClose as-child><Button variant="outline" :disabled="isRecreating">{{ $t("common.cancel") }}</Button></DialogClose>
           <Button @click="submitRecreate" :disabled="isRecreating || !recreateNewSku.trim()">
-            <Loader2 v-if="isRecreating" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isRecreating" class="mr-2" />
             <RefreshCw v-else class="size-4 mr-2" />
             {{ $t("productMarketplaceIntegrations.menuRecreate") }}
           </Button>
@@ -1769,13 +1782,12 @@ export default {
         <DialogFooter>
           <DialogClose as-child><Button variant="outline" :disabled="isLinking">{{ $t("common.cancel") }}</Button></DialogClose>
           <Button @click="submitLink" :disabled="isLinking || !linkExternalId.trim()">
-            <Loader2 v-if="isLinking" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isLinking" class="mr-2" />
             <Link2 v-else class="size-4 mr-2" />
             {{ isRelinking ? $t("productMarketplaceIntegrations.relinkAction") : $t("productMarketplaceIntegrations.linkAction") }}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    </div>
   </div>
 </template>

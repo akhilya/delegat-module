@@ -28,7 +28,7 @@ import {
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Button } from "@/components/ui/button";
-import { ChevronUp, ChevronDown, X, Plus, AlertTriangle } from "lucide-vue-next";
+import { ChevronUp, ChevronDown, X, Plus, AlertTriangle, Wand2 } from "lucide-vue-next";
 
 export default {
   components: {
@@ -57,6 +57,7 @@ export default {
     X,
     Plus,
     AlertTriangle,
+    Wand2,
   },
   props: {
     modifiers: { type: Array, default: () => [] },
@@ -471,6 +472,7 @@ export default {
               @click="addModifier(mod)"
               class="text-sm cursor-pointer"
             >
+              <Wand2 />
               {{ mod.displayName }}
             </DropdownMenuItem>
           </DropdownMenuGroup>

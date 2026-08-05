@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useStore } from "vuex";
 import { useSharedNow } from "@/composables/useSharedNow";
@@ -8,7 +9,6 @@ import {
   DollarSign,
   Package,
   FileSpreadsheet,
-  Loader2,
   CheckCircle,
   XCircle,
   AlertTriangle,
@@ -30,6 +30,7 @@ import {
   Cable,
   Copy,
   Check,
+  Loader2,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -525,7 +526,7 @@ async function downloadArtifact() {
           </div>
 
           <div v-if="loadingLogs" class="flex items-center gap-2 text-xs text-muted-foreground py-2">
-            <Loader2 class="size-3 animate-spin" />
+            <Spinner size="xs" />
             {{ t("operations.loadingLogs") }}
           </div>
           <OperationLogTimeline v-else-if="hasLogs" :logs="operation.logs" />
@@ -608,7 +609,7 @@ async function downloadArtifact() {
               :disabled="explainingWithAi || store.state.aiChat.isLoading"
               @click.stop="explainWithAi"
             >
-              <Loader2 v-if="explainingWithAi" class="size-3 mr-1 animate-spin" />
+              <Spinner v-if="explainingWithAi" size="xs" class="mr-1" />
               <Sparkles v-else class="size-3 mr-1" />
               {{ t("operations.explainWithAi") }}
             </Button>
@@ -628,7 +629,7 @@ async function downloadArtifact() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-                  <AlertDialogAction @click="emit('remove', operation.id)">
+                  <AlertDialogAction variant="destructive" @click="emit('remove', operation.id)">
                     {{ t("operations.deleteConfirm") }}
                   </AlertDialogAction>
                 </AlertDialogFooter>

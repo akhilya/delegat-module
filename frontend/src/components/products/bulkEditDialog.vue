@@ -1,9 +1,12 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 // BulkEditDialog — enable-then-edit fields for a product selection.
 // Shell matches FieldChangesPreviewDialog / importExcelDialog (bordered header/footer, min-h-0 scroll).
 import { ref, computed, watch, reactive } from "vue";
 import { useStore } from "vuex";
-import { Loader2, Pencil, AlertTriangle } from "lucide-vue-next";
+import {
+  AlertTriangle,
+} from "lucide-vue-next";
 import { t } from "@/i18n";
 import {
   Dialog,
@@ -348,12 +351,11 @@ async function handleSubmit() {
       size="2xl"
       class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
-        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <Pencil class="size-4 text-muted-foreground" />
+      <DialogHeader variant="bar">
+        <DialogTitle>
           {{ t("products.bulkEditDialog.title") }}
         </DialogTitle>
-        <DialogDescription class="text-sm text-muted-foreground">
+        <DialogDescription>
           {{ t("products.bulkEditDialog.selectedCount", { count: selectedCount }) }}
         </DialogDescription>
       </DialogHeader>
@@ -733,7 +735,7 @@ async function handleSubmit() {
         </div>
       </Tabs>
 
-      <DialogFooter class="shrink-0 gap-2 border-t border-border px-6 py-4 sm:justify-between">
+      <DialogFooter variant="bar" class="sm:justify-between">
         <DialogClose as-child>
           <Button type="button" variant="outline" :disabled="isSubmitting">
             {{ t("common.cancel") }}
@@ -744,7 +746,7 @@ async function handleSubmit() {
           :disabled="!hasAnyEnabled || isSubmitting || selectedCount === 0"
           @click="handleSubmit"
         >
-          <Loader2 v-if="isSubmitting" class="mr-2 size-4 animate-spin" />
+          <Spinner v-if="isSubmitting" class="mr-2" />
           {{ t("common.save") }}
         </Button>
       </DialogFooter>

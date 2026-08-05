@@ -63,11 +63,14 @@ export default {
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
       <DropdownMenuItem @click.stop="showRestoreDialog = true">
-        <Undo2 class="size-4 mr-2" />
+        <Undo2 />
         {{ $t("trashRowActions.restore") }}
       </DropdownMenuItem>
-      <DropdownMenuItem class="text-destructive focus:text-destructive" @click.stop="showDeleteDialog = true">
-        <Trash2 class="size-4 mr-2" />
+      <DropdownMenuItem
+        variant="destructive"
+        @click.stop="showDeleteDialog = true"
+      >
+        <Trash2 />
         {{ $t("trashRowActions.deleteForever") }}
       </DropdownMenuItem>
     </DropdownMenuContent>
@@ -101,7 +104,7 @@ export default {
       <AlertDialogFooter>
         <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction
-          class="bg-destructive text-white hover:bg-destructive/90"
+          variant="destructive"
           @click="$emit('permanent-delete', id)"
         >
           {{ $t("trashRowActions.deleteForever") }}

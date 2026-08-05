@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GripVertical,
+  Wand2,
 } from "lucide-vue-next";
 
 export default {
@@ -50,6 +51,7 @@ export default {
     ChevronLeft,
     ChevronRight,
     GripVertical,
+    Wand2,
   },
   props: {
     modifiers: { type: Array, default: () => [] },
@@ -258,6 +260,7 @@ export default {
               @click="addModifier(mod)"
               class="text-sm cursor-pointer"
             >
+              <Wand2 />
               {{ mod.displayName }}
             </DropdownMenuItem>
           </DropdownMenuGroup>

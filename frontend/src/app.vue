@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { RouterView, useRoute } from "vue-router";
 import { Toaster } from "vue-sonner";
 import "vue-sonner/style.css";
@@ -6,10 +7,12 @@ import OperationsPanel from "@/components/operations/OperationsPanel.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { Loader2 } from "lucide-vue-next";
+
 import { computed, defineAsyncComponent, ref } from "vue";
 import { Button } from "@/components/ui/button";
-import { Monitor } from "lucide-vue-next";
+import {
+  Monitor,
+} from "lucide-vue-next";
 import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
@@ -20,6 +23,7 @@ const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPan
 
 export default {
   components: {
+    Spinner,
     RouterView,
     Toaster,
     OperationsPanel,
@@ -27,12 +31,11 @@ export default {
     AppSidebar,
     SidebarInset,
     SidebarProvider,
-    Loader2,
     Button,
     Monitor,
     AiChatPanel,
     FabGroup,
-    ConfirmDialogHost,
+    ConfirmDialogHost
   },
   setup() {
     const { t } = useI18n();
@@ -156,7 +159,7 @@ export default {
       class="fixed inset-0 z-50 flex items-center justify-center bg-background"
     >
       <div class="flex flex-col items-center gap-3">
-        <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        <Spinner size="xl" class="text-muted-foreground" />
         <span class="text-sm text-muted-foreground">{{ t("app.switchingStore") }}</span>
       </div>
     </div>

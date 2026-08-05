@@ -18,6 +18,7 @@ import ValueMapEditor from "../ValueMapEditor.vue";
 import OptionMapEditor from "../OptionMapEditor.vue";
 import TemplateEditor from "../TemplateEditor.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Trash2, X, Plus } from "lucide-vue-next";
 import { fieldPinsFor, mergeProductFieldSources, opLabel, opParamLabel } from "./graphModel.js";
 import { localizeExternalFieldName, localizeStandardSourceName } from "./fieldLabels.js";
@@ -535,11 +536,9 @@ function resolvePreview(fieldKey, raw) {
                 :key="opt.value"
                 class="flex cursor-pointer items-center gap-2 text-xs"
               >
-                <input
-                  type="checkbox"
-                  :checked="selectedArrayValues.includes(opt.value)"
-                  class="size-3 shrink-0 accent-primary"
-                  @change="toggleArrayValue(opt.value)"
+                <Checkbox
+                  :model-value="selectedArrayValues.includes(opt.value)"
+                  @update:model-value="toggleArrayValue(opt.value)"
                 />
                 <span>{{ opt.label }}</span>
               </label>
@@ -798,7 +797,7 @@ function resolvePreview(fieldKey, raw) {
             <Button
               variant="ghost"
               size="icon"
-              class="size-8 shrink-0 text-destructive hover:text-destructive"
+              class="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
               @click="removeFieldPin(idx)"
             >
               <Trash2 class="size-3.5" />
@@ -953,13 +952,13 @@ function resolvePreview(fieldKey, raw) {
 
     <div v-if="deletable" class="border-t p-2">
       <Button
-        variant="ghost"
+        variant="destructive"
         size="sm"
-        class="w-full text-destructive hover:text-destructive"
+        class="w-full"
         @click="emit('delete')"
       >
         <Trash2 class="mr-2 size-4" /> {{ t("marketplace.graph.inspector.deleteNode") }}
-        <span class="ml-1 text-xs text-muted-foreground">(Delete)</span>
+        <span class="ml-1 text-xs opacity-80">(Delete)</span>
       </Button>
     </div>
   </div>

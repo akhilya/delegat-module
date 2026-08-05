@@ -1,21 +1,25 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 // ProductImagesEditor - Drag-and-drop editor for reordering product card images and managing unused images.
 import draggableComponent from "vuedraggable";
 import ImageFile from "./imageFile.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
-import { Image, ImageOff, Loader2 } from "lucide-vue-next";
+import {
+  Image,
+  ImageOff,
+} from "lucide-vue-next";
 import { useStore } from "vuex";
 import { useDebounceFn } from "@vueuse/core";
 import { displaySonnerError } from "@/store/sonnerHelper";
 
 export default {
   components: {
+    Spinner,
     draggableComponent,
     ImageFile,
     Badge,
     Image,
-    ImageOff,
-    Loader2,
+    ImageOff
   },
   emits: ['update:images', 'preview'],
   props: {
@@ -111,7 +115,7 @@ export default {
           <Image class="size-4" />
           {{ $t('components.productImagesEditor.productImagesTitle') }}
         </p>
-        <Loader2 v-if="isSaving" class="size-4 animate-spin text-muted-foreground" />
+        <Spinner v-if="isSaving" class="text-muted-foreground" />
         <span v-if="!isSaving" class="text-xs text-muted-foreground">- {{ $t('components.productImagesEditor.dragToReorderHint') }}</span>
       </div>
       <draggableComponent

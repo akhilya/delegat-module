@@ -52,7 +52,7 @@ function preventOutside(event) {
           {{ confirmState.cancelLabel }}
         </AlertDialogCancel>
         <AlertDialogAction
-          :class="confirmState.destructive ? 'bg-destructive text-white hover:bg-destructive/90' : ''"
+          :variant="confirmState.destructive ? 'destructive' : 'default'"
           @pointerdown="markAccept"
           @click="markAccept"
         >

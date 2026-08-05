@@ -185,7 +185,7 @@ Flat by default. Depth is tonal (sidebar vs paper, muted fills) and 1px borders 
 Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide). Prefer `pnpm`-style add flows; do not invent parallel controls.
 
 ### Buttons
-- **Shape:** Medium radius (`rounded-md`, tied to `--radius` 0.5rem)
+- **Shape:** Larger radius (`rounded-md` / `rounded-lg`, tied to `--radius` **1rem**)
 - **Primary:** Ink fill + primary-foreground; hover at 90% primary
 - **Secondary / Outline / Ghost / Link / Destructive:** Standard CVA variants in `button/index.js`
 - **Sizes:** default `h-9`, sm `h-8`, lg `h-10`, compact `xs` / icon sizes
@@ -198,11 +198,20 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Shadow Strategy:** Flat; border via `{colors.border}`
 - **Use:** Group related form sections or auth content — not decorative marketing tiles in the app shell
 
+### Dialogs / Modals
+- **Title:** `text-base font-semibold tracking-tight leading-none` on `DialogTitle` / `AlertDialogTitle` / `SheetTitle` — plain text only, no leading decorative icons
+- **Header / footer layouts:**
+  - **Default** — inside padded content (`DialogContent` `p-6`): bare `DialogHeader` / `DialogFooter`
+  - **Bar** — `variant="bar"` when content is `p-0` / `gap-0`: header `border-b px-6 py-4`, footer `border-t px-6 py-4` (built into primitives)
+- Do not invent per-dialog title sizes (`text-lg`) or ad-hoc `px-6 py-5` / `pt-6 pb-4` header chrome
+- Icons stay in buttons, menus, empty states, and inline status — not the modal chrome header
+
 ### Inputs / Fields
 - **Style:** Border `{colors.input}`, height `h-9`, `rounded-md`, text `{colors.foreground}`
 - **Focus:** Ring token; match `color-scheme` to light/dark
 - **Error:** `aria-invalid` → destructive border/ring
 - **Password:** Eye toggle in muted → foreground on hover
+- **Checkbox:** only shadcn `Checkbox` with `rounded-xs` (not `rounded-sm` / native inputs — at `--radius` 1rem those look nearly round on a 16px box)
 
 ### Navigation
 - **Sidebar:** `{colors.sidebar}` surface, quiet borders, primary for active emphasis sparingly
@@ -211,6 +220,13 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 
 ### Status chips / badges
 - Use success / warning / destructive (and muted companions) for sync and marketplace state — never rainbow decoration
+
+### Loaders / Spinner
+- **Component:** only `Spinner` (`frontend/src/components/ui/spinner`) — Hugeicons `Loading03`, default stroke
+- **Size prop (formal scale):** `xs` 12 · `sm` 14 · `default` 16 · `lg` 20 · `xl` 24 · `2xl` 32
+- **Default:** actions (buttons, menus, forms) use `default` (omit prop)
+- **Region loading:** EmptyState / full pane / products table → `2xl`; overlays / mid-block (dialogs) → `xl`; panel chrome (sidebars, sheets) → `lg`; actions → default
+- **Do not** invent parallel loaders with raw `Loader2` + ad-hoc `size-*` (except dynamic status *icon* slots that need a Lucide-compatible component export)
 
 ## 6. Do's and Don'ts
 

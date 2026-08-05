@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -34,12 +35,12 @@ import {
   AlertTriangle,
   Check,
   Copy,
-  Loader2,
   Trash2,
 } from "lucide-vue-next";
 
 export default {
   components: {
+    Spinner,
     Button,
     Input,
     TableBody,
@@ -61,8 +62,7 @@ export default {
     AlertTriangle,
     Check,
     Copy,
-    Loader2,
-    Trash2,
+    Trash2
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -469,10 +469,7 @@ export default {
           :disabled="deletingLogId === selected.id"
           @click="removeLog(selected)"
         >
-          <Loader2
-            v-if="deletingLogId === selected.id"
-            class="mr-1.5 size-3.5 animate-spin"
-          />
+          <Spinner v-if="deletingLogId === selected.id" size="sm" class="mr-1.5" />
           <Trash2 v-else class="mr-1.5 size-3.5" />
           {{ $t("common.delete") }}
         </Button>

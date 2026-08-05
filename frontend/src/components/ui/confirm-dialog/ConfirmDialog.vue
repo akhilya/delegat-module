@@ -1,5 +1,6 @@
 <script setup>
-import { Loader2 } from "lucide-vue-next";
+
+import { Spinner } from "@/components/ui/spinner";
 import { t } from "@/i18n";
 import {
   AlertDialog,
@@ -40,11 +41,11 @@ const emit = defineEmits(['confirm'])
       <AlertDialogFooter>
         <AlertDialogCancel>{{ cancelLabel }}</AlertDialogCancel>
         <AlertDialogAction
-          :class="destructive ? 'bg-destructive text-white hover:bg-destructive/90' : ''"
+          :variant="destructive ? 'destructive' : 'default'"
           :disabled="loading"
           @click="emit('confirm')"
         >
-          <Loader2 v-if="loading" class="size-4 mr-2 animate-spin" />
+          <Spinner v-if="loading" class="mr-2" />
           {{ confirmLabel }}
         </AlertDialogAction>
       </AlertDialogFooter>

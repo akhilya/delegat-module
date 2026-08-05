@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
@@ -8,7 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { http, invalidateMeCache, loadMe } from "@/main";
 import { notifyMeUpdated } from "@/lib/meCache";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Download, Loader2, Palette } from "lucide-vue-next";
+import {
+  Download,
+  Palette,
+} from "lucide-vue-next";
 import { t } from "@/i18n";
 import BrandingSettingsDialog from "@/components/settings/BrandingSettingsDialog.vue";
 import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
@@ -261,7 +265,7 @@ onMounted(async () => {
             :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
             @click="savePublicApiSettings"
           >
-            <Loader2 v-if="publicApiSaving" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="publicApiSaving" class="mr-2" />
             {{ $t("pages.settingsOverviewPage.savePublicApiButton") }}
           </Button>
         </div>
@@ -331,7 +335,7 @@ onMounted(async () => {
             :disabled="!settingsLoaded || loggingLoading || loggingSaving || !loggingDirty"
             @click="saveLoggingSettings"
           >
-            <Loader2 v-if="loggingSaving" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="loggingSaving" class="mr-2" />
             {{ $t("pages.settingsOverviewPage.saveLoggingButton") }}
           </Button>
         </div>
@@ -343,7 +347,7 @@ onMounted(async () => {
       >
         <SettingsFormField :label="$t('pages.settingsOverviewPage.downloadDumpButton')">
           <Button :disabled="isDumping" @click="downloadDatabaseDump">
-            <Loader2 v-if="isDumping" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isDumping" class="mr-2" />
             <Download v-else class="mr-2 size-4" />
             {{ $t("pages.settingsOverviewPage.downloadDumpButton") }}
           </Button>

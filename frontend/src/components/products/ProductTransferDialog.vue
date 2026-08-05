@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
   Select,
@@ -35,8 +34,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Loader2, AlertTriangle, ArrowRightLeft, Copy, ExternalLink, CheckCircle2, XCircle } from "lucide-vue-next";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ArrowRightLeft,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  FileText,
+  Image,
+  NotebookPen,
+  Package,
+  XCircle,
+} from "lucide-vue-next";
 import { t } from "@/i18n";
 
 const props = defineProps({
@@ -80,6 +95,29 @@ const confirmBreakLinks = ref(false);
 const syncMissingAttrs = ref(true);
 
 const isSubmitting = ref(false);
+
+const currentStoreName = computed(
+  () => memberships.value.find((m) => m.id === currentStoreId.value)?.name || null,
+);
+const targetStoreName = computed(
+  () => memberships.value.find((m) => m.id === targetStoreId.value)?.name || null,
+);
+
+const productLabel = computed(
+  () => props.productName || props.productSku || `#${props.productId}`,
+);
+
+const modeHint = computed(() =>
+  mode.value === "clone"
+    ? t("products.productTransferDialog.cloneModeHint")
+    : t("products.productTransferDialog.moveModeHint"),
+);
+
+const syncingMissingAttrs = computed(
+  () =>
+    syncMissingAttrs.value &&
+    (categoryAction.value === "match" || categoryAction.value === "create"),
+);
 
 // --- Lifecycle: open ↔ load memberships ---
 watch(() => props.open, async (isOpen) => {
@@ -248,10 +286,10 @@ async function submit() {
       // Backend now enqueues - returns { queued: true, operationId, totalFiles }.
       // Real progress lives in the operations side panel.
       const result = response.data.value;
-      const targetStoreName = preview.value.targetStore?.name || t("products.productTransferDialog.targetStoreFallback");
+      const storeName = preview.value.targetStore?.name || t("products.productTransferDialog.targetStoreFallback");
       const headline = mode.value === "move"
-        ? t("products.productTransferDialog.queuedMoveHeadline", { store: targetStoreName })
-        : t("products.productTransferDialog.queuedCloneHeadline", { store: targetStoreName });
+        ? t("products.productTransferDialog.queuedMoveHeadline", { store: storeName })
+        : t("products.productTransferDialog.queuedCloneHeadline", { store: storeName });
       const tail = result?.totalFiles
         ? t("products.productTransferDialog.progressWithFiles", { count: result.totalFiles })
         : t("products.productTransferDialog.progressGeneric");
@@ -275,234 +313,424 @@ function close() {
 
 <template>
   <Dialog :open="open" @update:open="(v) => emit('update:open', v)">
-    <DialogContent size="3xl" class="flex max-h-[85vh] flex-col overflow-hidden">
-      <DialogHeader>
-        <DialogTitle class="flex items-center gap-2">
-          <ArrowRightLeft class="size-5" />
+    <DialogContent
+      size="2xl"
+      class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+    >
+      <DialogHeader variant="bar">
+        <DialogTitle>
           {{ t("products.productTransferDialog.dialogTitle") }}
         </DialogTitle>
-        <DialogDescription>
-          {{ productName || productSku || `#${productId}` }}
-          <span v-if="productSku" class="text-muted-foreground ml-2">[{{ productSku }}]</span>
+        <DialogDescription class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span class="font-medium text-foreground">{{ productLabel }}</span>
+          <span
+            v-if="productSku && productName"
+            class="font-mono text-xs text-muted-foreground tabular-nums"
+          >{{ productSku }}</span>
         </DialogDescription>
       </DialogHeader>
 
-      <div class="-mx-6 min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-2 thin-scrollbar">
-        <!-- Mode toggle -->
+      <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4 thin-scrollbar">
+        <!-- Mode: Tabs (clone vs move) -->
         <div class="space-y-2">
-          <Label class="text-sm">{{ t("products.productTransferDialog.modeLabel") }}</Label>
-          <div class="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              :class="[
-                'h-auto flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-normal transition',
-                mode === 'clone' ? 'border-primary bg-primary/5 text-foreground' : 'border-input text-muted-foreground hover:border-primary/50'
-              ]"
-              @click="mode = 'clone'"
-            >
-              <Copy class="size-4" />
-              {{ t("products.productTransferDialog.cloneAction") }}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              :class="[
-                'h-auto flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-normal transition',
-                mode === 'move' ? 'border-primary bg-primary/5 text-foreground' : 'border-input text-muted-foreground hover:border-primary/50'
-              ]"
-              @click="mode = 'move'"
-            >
-              <ArrowRightLeft class="size-4" />
-              {{ t("products.productTransferDialog.moveAction") }}
-            </Button>
-          </div>
-          <p class="text-xs text-muted-foreground">
-            <template v-if="mode === 'clone'">{{ t("products.productTransferDialog.cloneModeHint") }}</template>
-            <template v-else>{{ t("products.productTransferDialog.moveModeHint") }}</template>
-          </p>
+          <Tabs v-model="mode">
+            <TabsList class="grid h-9 w-full grid-cols-2">
+              <TabsTrigger value="clone" class="gap-1.5">
+                <Copy class="size-3.5" />
+                {{ t("products.productTransferDialog.cloneAction") }}
+              </TabsTrigger>
+              <TabsTrigger value="move" class="gap-1.5">
+                <ArrowRightLeft class="size-3.5" />
+                {{ t("products.productTransferDialog.moveAction") }}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <p class="text-xs text-muted-foreground">{{ modeHint }}</p>
         </div>
 
-        <!-- Target store -->
-        <div class="space-y-2">
-          <Label for="target-store" class="text-sm">{{ t("products.productTransferDialog.targetStoreLabel") }}</Label>
-          <Select
-            :model-value="targetStoreId == null ? '' : String(targetStoreId)"
-            @update:model-value="(v) => targetStoreId = v ? Number(v) : null"
-            :disabled="isLoadingMemberships"
+        <FieldGroup class="gap-5">
+          <SettingsFormField
+            :label="t('products.productTransferDialog.targetStoreLabel')"
+            label-for="target-store"
           >
-            <SelectTrigger id="target-store" class="w-full">
-              <SelectValue :placeholder="isLoadingMemberships ? t('products.productTransferDialog.loadingStoresPlaceholder') : t('products.productTransferDialog.chooseStorePlaceholder')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="m in availableTargetStores"
-                :key="m.id"
-                :value="String(m.id)"
-                as="button"
-              >
-                {{ m.name }}<span v-if="m.id === currentStoreId" class="text-muted-foreground"> · {{ t("products.productTransferDialog.currentStoreSuffix") }}</span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+            <Select
+              :model-value="targetStoreId == null ? '' : String(targetStoreId)"
+              :disabled="isLoadingMemberships"
+              @update:model-value="(v) => (targetStoreId = v ? Number(v) : null)"
+            >
+              <SelectTrigger id="target-store" class="w-full">
+                <SelectValue
+                  :placeholder="
+                    isLoadingMemberships
+                      ? t('products.productTransferDialog.loadingStoresPlaceholder')
+                      : t('products.productTransferDialog.chooseStorePlaceholder')
+                  "
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="m in availableTargetStores"
+                  :key="m.id"
+                  :value="String(m.id)"
+                  as="button"
+                >
+                  {{ m.name }}<span
+                    v-if="m.id === currentStoreId"
+                    class="text-muted-foreground"
+                  > · {{ t("products.productTransferDialog.currentStoreSuffix") }}</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsFormField>
+        </FieldGroup>
+
+        <!-- Signature: store route once destination is known -->
+        <div
+          v-if="targetStoreName"
+          class="flex min-w-0 items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm"
+          aria-live="polite"
+        >
+          <span class="min-w-0 truncate text-muted-foreground">
+            {{ currentStoreName || t("products.productTransferDialog.currentStoreFallback") }}
+          </span>
+          <ArrowRight class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span class="min-w-0 truncate font-medium text-foreground">{{ targetStoreName }}</span>
         </div>
 
-        <!-- Preview area -->
-        <div v-if="isLoadingPreview" class="flex items-center gap-2 text-sm text-muted-foreground py-2">
-          <Loader2 class="size-4 animate-spin" />
+        <div
+          v-if="isLoadingPreview"
+          class="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+        >
+          <Spinner />
           {{ t("products.productTransferDialog.checkingPreview") }}
         </div>
 
-        <div v-else-if="previewError" class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div
+          v-else-if="previewError"
+          class="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+          role="alert"
+        >
           {{ previewError }}
         </div>
 
-        <div v-else-if="preview" class="space-y-4">
-          <!-- SKU collision - dynamic: amber while unresolved, green once user entered a valid alternative -->
-          <div v-if="preview.skuConflict"
-               :class="[
-                 'space-y-2 rounded-md border p-3 transition-colors',
-                 skuResolved
-                   ? 'border-emerald-500/40 bg-emerald-500/5'
-                   : 'border-amber-500/40 bg-amber-500/5'
-               ]">
-            <Label for="new-sku" :class="[
-              'flex items-center gap-2 text-sm font-medium',
-              skuResolved ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'
-            ]">
-              <CheckCircle2 v-if="skuResolved" class="size-4" />
-              <AlertTriangle v-else class="size-4" />
-              <template v-if="skuResolved">
-                {{ t("products.productTransferDialog.skuResolvedLabel", { sku: newSku.trim() }) }}
-              </template>
-              <template v-else>
-                {{ t("products.productTransferDialog.skuConflictLabel", { sku: productSku }) }}
-              </template>
-            </Label>
-            <Input id="new-sku" v-model="newSku" :placeholder="t('products.productTransferDialog.newSkuPlaceholder')" />
-          </div>
-
-          <!-- Category resolution -->
-          <div v-if="preview.sourceProduct.categoryName" class="space-y-2">
-            <Label class="text-sm">{{ t("products.productTransferDialog.categoryLabel") }}</Label>
-            <div class="flex items-start gap-1.5 text-xs">
-              <CheckCircle2 v-if="preview.matchedCategory" class="size-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <XCircle v-else class="size-3.5 mt-0.5 text-amber-700 dark:text-amber-400 shrink-0" />
-              <span class="text-muted-foreground">
-                {{ t("products.productTransferDialog.sourceCategoryLabel") }} <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
-                <template v-if="preview.matchedCategory">
-                  {{ t("products.productTransferDialog.foundSameNameInTarget") }}
-                  <span class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesMappable }} {{ pluralize(preview.matchedCategory.attributesMappable, [t("products.productTransferDialog.attrMappableOne"), t("products.productTransferDialog.attrMappableFew"), t("products.productTransferDialog.attrMappableMany")]) }}</span><template v-if="preview.matchedCategory.attributesUnmappable?.length">,
-                    <span v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')" class="text-emerald-700 dark:text-emerald-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.attrWillBeAddedOne"), t("products.productTransferDialog.attrWillBeAddedFew"), t("products.productTransferDialog.attrWillBeAddedMany")]) }}</span>
-                    <span v-else class="text-amber-700 dark:text-amber-400">{{ preview.matchedCategory.attributesUnmappable.length }} {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.attrWontFitOne"), t("products.productTransferDialog.attrWontFitFew"), t("products.productTransferDialog.attrWontFitMany")]) }}</span>
-                  </template>.
+        <div v-else-if="preview" class="space-y-5">
+          <!-- SKU collision -->
+          <div
+            v-if="preview.skuConflict"
+            :class="[
+              'space-y-3 rounded-xl border p-3 transition-colors',
+              skuResolved
+                ? 'border-success/40 bg-success-muted/50'
+                : 'border-warning/40 bg-warning-muted/50',
+            ]"
+          >
+            <div
+              :class="[
+                'flex items-center gap-2 text-sm font-medium',
+                skuResolved ? 'text-success-foreground' : 'text-warning-foreground',
+              ]"
+            >
+              <CheckCircle2 v-if="skuResolved" class="size-4 shrink-0" />
+              <AlertTriangle v-else class="size-4 shrink-0" />
+              <span>
+                <template v-if="skuResolved">
+                  {{ t("products.productTransferDialog.skuResolvedLabel", { sku: newSku.trim() }) }}
                 </template>
                 <template v-else>
-                  {{ t("products.productTransferDialog.notFoundInTarget") }}
+                  {{ t("products.productTransferDialog.skuConflictLabel", { sku: productSku }) }}
                 </template>
               </span>
             </div>
-            <Select v-model="categoryAction">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-if="preview.matchedCategory" value="match" as="button">
-                  {{ t("products.productTransferDialog.useFoundCategory", { name: preview.matchedCategory.name }) }}
-                </SelectItem>
-                <SelectItem value="create" as="button">{{ t("products.productTransferDialog.createSameCategory") }}</SelectItem>
-                <SelectItem value="none" as="button">{{ t("products.productTransferDialog.noCategory") }}</SelectItem>
-              </SelectContent>
-            </Select>
-            <div v-if="preview.matchedCategory?.attributesUnmappable?.length" class="space-y-2">
-              <div class="text-xs" :class="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create') ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'">
-                <template v-if="syncMissingAttrs && (categoryAction === 'match' || categoryAction === 'create')">
-                  {{ t("products.productTransferDialog.willBeAddedPrefix") }} {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+            <SettingsFormField
+              :label="t('products.productTransferDialog.newSkuPlaceholder')"
+              label-for="new-sku"
+            >
+              <Input
+                id="new-sku"
+                v-model="newSku"
+                :placeholder="t('products.productTransferDialog.newSkuPlaceholder')"
+              />
+            </SettingsFormField>
+          </div>
+
+          <FieldGroup class="gap-5">
+            <!-- Category resolution -->
+            <SettingsFormField
+              v-if="preview.sourceProduct.categoryName"
+              :label="t('products.productTransferDialog.categoryLabel')"
+              label-for="category-action"
+            >
+              <template #description>
+                <span class="inline-flex items-start gap-1.5">
+                  <CheckCircle2
+                    v-if="preview.matchedCategory"
+                    class="mt-0.5 size-3.5 shrink-0 text-success"
+                  />
+                  <XCircle
+                    v-else
+                    class="mt-0.5 size-3.5 shrink-0 text-warning"
+                  />
+                  <span>
+                    {{ t("products.productTransferDialog.sourceCategoryLabel") }}
+                    <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
+                    <template v-if="preview.matchedCategory">
+                      {{ t("products.productTransferDialog.foundSameNameInTarget") }}
+                      <span class="text-success-foreground">
+                        {{ preview.matchedCategory.attributesMappable }}
+                        {{
+                          pluralize(preview.matchedCategory.attributesMappable, [
+                            t("products.productTransferDialog.attrMappableOne"),
+                            t("products.productTransferDialog.attrMappableFew"),
+                            t("products.productTransferDialog.attrMappableMany"),
+                          ])
+                        }}
+                      </span>
+                      <template v-if="preview.matchedCategory.attributesUnmappable?.length">
+                        ,
+                        <span
+                          :class="
+                            syncingMissingAttrs
+                              ? 'text-success-foreground'
+                              : 'text-warning-foreground'
+                          "
+                        >
+                          {{ preview.matchedCategory.attributesUnmappable.length }}
+                          {{
+                            pluralize(preview.matchedCategory.attributesUnmappable.length, [
+                              syncingMissingAttrs
+                                ? t("products.productTransferDialog.attrWillBeAddedOne")
+                                : t("products.productTransferDialog.attrWontFitOne"),
+                              syncingMissingAttrs
+                                ? t("products.productTransferDialog.attrWillBeAddedFew")
+                                : t("products.productTransferDialog.attrWontFitFew"),
+                              syncingMissingAttrs
+                                ? t("products.productTransferDialog.attrWillBeAddedMany")
+                                : t("products.productTransferDialog.attrWontFitMany"),
+                            ])
+                          }}
+                        </span>
+                      </template>.
+                    </template>
+                    <template v-else>
+                      {{ t("products.productTransferDialog.notFoundInTarget") }}
+                    </template>
+                  </span>
+                </span>
+              </template>
+              <Select v-model="categoryAction">
+                <SelectTrigger id="category-action" class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-if="preview.matchedCategory" value="match" as="button">
+                    {{
+                      t("products.productTransferDialog.useFoundCategory", {
+                        name: preview.matchedCategory.name,
+                      })
+                    }}
+                  </SelectItem>
+                  <SelectItem value="create" as="button">
+                    {{ t("products.productTransferDialog.createSameCategory") }}
+                  </SelectItem>
+                  <SelectItem value="none" as="button">
+                    {{ t("products.productTransferDialog.noCategory") }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+
+            <div
+              v-if="preview.matchedCategory?.attributesUnmappable?.length"
+              class="space-y-2"
+            >
+              <p
+                class="text-xs"
+                :class="
+                  syncingMissingAttrs
+                    ? 'text-success-foreground'
+                    : 'text-muted-foreground'
+                "
+              >
+                <template v-if="syncingMissingAttrs">
+                  {{ t("products.productTransferDialog.willBeAddedPrefix") }}
+                  {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}
+                  <span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
                 </template>
                 <template v-else>
-                  {{ t("products.productTransferDialog.wontFitPrefix") }} {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}<span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                  {{ t("products.productTransferDialog.wontFitPrefix") }}
+                  {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}
+                  <span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
                 </template>
-              </div>
-              <label v-if="categoryAction === 'match' || categoryAction === 'create'" class="flex items-start gap-2 text-sm cursor-pointer">
+              </p>
+              <label
+                v-if="categoryAction === 'match' || categoryAction === 'create'"
+                class="flex cursor-pointer items-start gap-2 text-sm"
+              >
                 <Checkbox
-                  :model-value="syncMissingAttrs"
-                  @update:model-value="syncMissingAttrs = $event"
+                  id="sync-missing-attrs"
+                  v-model="syncMissingAttrs"
                   class="mt-0.5"
                 />
-                <span class="text-xs">
-                  {{ t("products.productTransferDialog.addMissingAttrsPrefix") }} {{ preview.matchedCategory.attributesUnmappable.length }}
-                  {{ pluralize(preview.matchedCategory.attributesUnmappable.length, [t("products.productTransferDialog.missingAttrOne"), t("products.productTransferDialog.missingAttrFew"), t("products.productTransferDialog.missingAttrMany")]) }}
-                  {{ t("products.productTransferDialog.addMissingAttrsSuffix", { name: preview.matchedCategory.name }) }}
+                <span class="text-xs leading-snug">
+                  {{ t("products.productTransferDialog.addMissingAttrsPrefix") }}
+                  {{ preview.matchedCategory.attributesUnmappable.length }}
+                  {{
+                    pluralize(preview.matchedCategory.attributesUnmappable.length, [
+                      t("products.productTransferDialog.missingAttrOne"),
+                      t("products.productTransferDialog.missingAttrFew"),
+                      t("products.productTransferDialog.missingAttrMany"),
+                    ])
+                  }}
+                  {{
+                    t("products.productTransferDialog.addMissingAttrsSuffix", {
+                      name: preview.matchedCategory.name,
+                    })
+                  }}
                 </span>
               </label>
             </div>
-          </div>
 
-          <!-- Store attributes -->
-          <div v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
-               class="text-xs text-muted-foreground">
-            {{ t("products.productTransferDialog.storeAttributesSummary", { mapped: preview.storeAttributesMappable, total: preview.storeAttributesMappable + preview.storeAttributesUnmappable.length }) }}<template v-if="preview.storeAttributesUnmappable.length">. {{ t("products.productTransferDialog.storeAttributesMissingInTarget") }} {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}<span v-if="preview.storeAttributesUnmappable.length > 3">…</span></template>
-          </div>
-
-          <!-- Group selection -->
-          <div class="space-y-2">
-            <Label class="text-sm">{{ t("products.productTransferDialog.groupLabel") }}</Label>
-            <Select v-model="groupAction">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" as="button">{{ t("products.productTransferDialog.noGroup") }}</SelectItem>
-                <SelectItem v-if="preview.targetGroups.length > 0" value="use" as="button">{{ t("products.productTransferDialog.addToExistingGroup") }}</SelectItem>
-                <SelectItem value="create" as="button">{{ t("products.productTransferDialog.createNewGroup") }}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              v-if="groupAction === 'use'"
-              :model-value="groupUseId == null ? '' : String(groupUseId)"
-              @update:model-value="(v) => groupUseId = v ? Number(v) : null"
+            <p
+              v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
+              class="text-xs text-muted-foreground"
             >
-              <SelectTrigger class="w-full">
-                <SelectValue :placeholder="t('products.productTransferDialog.chooseGroupPlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="g in preview.targetGroups" :key="g.id" :value="String(g.id)" as="button">
-                  {{ g.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Input v-if="groupAction === 'create'" v-model="groupNewName" :placeholder="t('products.productTransferDialog.newGroupNamePlaceholder')" />
-          </div>
+              {{
+                t("products.productTransferDialog.storeAttributesSummary", {
+                  mapped: preview.storeAttributesMappable,
+                  total:
+                    preview.storeAttributesMappable +
+                    preview.storeAttributesUnmappable.length,
+                })
+              }}
+              <template v-if="preview.storeAttributesUnmappable.length">
+                .
+                {{ t("products.productTransferDialog.storeAttributesMissingInTarget") }}
+                {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}
+                <span v-if="preview.storeAttributesUnmappable.length > 3">…</span>
+              </template>
+            </p>
 
-          <!-- Marketplace links: behavior differs by mode -->
-          <!-- Clone: just informational ("new product won't have links"). No checkbox. -->
-          <!-- Move: warning + explicit acknowledgement (original loses its links). -->
-          <div v-if="preview.marketplaceLinksToBreak?.length > 0"
-               :class="[
-                 'space-y-2 rounded-md border p-3',
-                 mode === 'move'
-                   ? 'border-amber-500/40 bg-amber-500/5'
-                   : 'border-input bg-muted/30'
-               ]">
-            <div :class="[
-              'flex items-center gap-2 text-sm font-medium',
-              mode === 'move' ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'
-            ]">
-              <AlertTriangle v-if="mode === 'move'" class="size-4" />
-              <ExternalLink v-else class="size-4" />
-              <template v-if="mode === 'move'">
-                {{ t("products.productTransferDialog.linksWillBreakAfterMovePrefix") }} {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, [t("products.productTransferDialog.linkOne"), t("products.productTransferDialog.linkFew"), t("products.productTransferDialog.linkMany")]) }} {{ t("products.productTransferDialog.withAdaptersSuffix") }}
-              </template>
-              <template v-else>
-                {{ t("products.productTransferDialog.originalHasLinksPrefix") }} {{ preview.marketplaceLinksToBreak.length }} {{ pluralize(preview.marketplaceLinksToBreak.length, [t("products.productTransferDialog.linkOne"), t("products.productTransferDialog.linkFew"), t("products.productTransferDialog.linkMany")]) }} {{ t("products.productTransferDialog.withAdaptersSuffix") }}
-              </template>
+            <SettingsFormField
+              :label="t('products.productTransferDialog.groupLabel')"
+              label-for="group-action"
+            >
+              <Select v-model="groupAction">
+                <SelectTrigger id="group-action" class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" as="button">
+                    {{ t("products.productTransferDialog.noGroup") }}
+                  </SelectItem>
+                  <SelectItem
+                    v-if="preview.targetGroups.length > 0"
+                    value="use"
+                    as="button"
+                  >
+                    {{ t("products.productTransferDialog.addToExistingGroup") }}
+                  </SelectItem>
+                  <SelectItem value="create" as="button">
+                    {{ t("products.productTransferDialog.createNewGroup") }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+
+            <SettingsFormField
+              v-if="groupAction === 'use'"
+              :label="t('products.productTransferDialog.chooseGroupPlaceholder')"
+              label-for="group-use"
+            >
+              <Select
+                :model-value="groupUseId == null ? '' : String(groupUseId)"
+                @update:model-value="(v) => (groupUseId = v ? Number(v) : null)"
+              >
+                <SelectTrigger id="group-use" class="w-full">
+                  <SelectValue
+                    :placeholder="t('products.productTransferDialog.chooseGroupPlaceholder')"
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="g in preview.targetGroups"
+                    :key="g.id"
+                    :value="String(g.id)"
+                    as="button"
+                  >
+                    {{ g.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+
+            <SettingsFormField
+              v-if="groupAction === 'create'"
+              :label="t('products.productTransferDialog.newGroupNamePlaceholder')"
+              label-for="group-new-name"
+            >
+              <Input
+                id="group-new-name"
+                v-model="groupNewName"
+                :placeholder="t('products.productTransferDialog.newGroupNamePlaceholder')"
+              />
+            </SettingsFormField>
+          </FieldGroup>
+
+          <!-- Marketplace links -->
+          <div
+            v-if="preview.marketplaceLinksToBreak?.length > 0"
+            :class="[
+              'space-y-3 rounded-xl border p-3',
+              mode === 'move'
+                ? 'border-warning/40 bg-warning-muted/50'
+                : 'border-border bg-muted/40',
+            ]"
+          >
+            <div
+              :class="[
+                'flex items-center gap-2 text-sm font-medium',
+                mode === 'move' ? 'text-warning-foreground' : 'text-foreground',
+              ]"
+            >
+              <AlertTriangle v-if="mode === 'move'" class="size-4 shrink-0" />
+              <ExternalLink v-else class="size-4 shrink-0 text-muted-foreground" />
+              <span>
+                <template v-if="mode === 'move'">
+                  {{ t("products.productTransferDialog.linksWillBreakAfterMovePrefix") }}
+                  {{ preview.marketplaceLinksToBreak.length }}
+                  {{
+                    pluralize(preview.marketplaceLinksToBreak.length, [
+                      t("products.productTransferDialog.linkOne"),
+                      t("products.productTransferDialog.linkFew"),
+                      t("products.productTransferDialog.linkMany"),
+                    ])
+                  }}
+                  {{ t("products.productTransferDialog.withAdaptersSuffix") }}
+                </template>
+                <template v-else>
+                  {{ t("products.productTransferDialog.originalHasLinksPrefix") }}
+                  {{ preview.marketplaceLinksToBreak.length }}
+                  {{
+                    pluralize(preview.marketplaceLinksToBreak.length, [
+                      t("products.productTransferDialog.linkOne"),
+                      t("products.productTransferDialog.linkFew"),
+                      t("products.productTransferDialog.linkMany"),
+                    ])
+                  }}
+                  {{ t("products.productTransferDialog.withAdaptersSuffix") }}
+                </template>
+              </span>
             </div>
-            <ul class="text-xs text-muted-foreground space-y-1">
-              <li v-for="(l, i) in preview.marketplaceLinksToBreak" :key="i" class="flex items-center gap-2">
-                <ExternalLink class="size-3" />
-                <span>{{ l.connectionName }}</span>
-                <span class="text-muted-foreground">·</span>
-                <span class="font-mono">{{ l.externalProductId }}</span>
+            <ul class="space-y-1.5 text-xs text-muted-foreground">
+              <li
+                v-for="(l, i) in preview.marketplaceLinksToBreak"
+                :key="i"
+                class="flex min-w-0 items-center gap-2"
+              >
+                <ExternalLink class="size-3 shrink-0" />
+                <span class="truncate">{{ l.connectionName }}</span>
+                <span class="text-border">·</span>
+                <span class="font-mono tabular-nums">{{ l.externalProductId }}</span>
               </li>
             </ul>
             <p class="text-xs text-muted-foreground">
@@ -513,34 +741,108 @@ function close() {
                 {{ t("products.productTransferDialog.cloneLinksExplanation") }}
               </template>
             </p>
-            <label v-if="mode === 'move'" class="flex items-start gap-2 text-sm cursor-pointer">
+            <label
+              v-if="mode === 'move'"
+              class="flex cursor-pointer items-start gap-2 text-sm"
+            >
               <Checkbox
-                :model-value="confirmBreakLinks"
-                @update:model-value="confirmBreakLinks = $event"
+                id="confirm-break-links"
+                v-model="confirmBreakLinks"
                 class="mt-0.5"
               />
               <span>{{ t("products.productTransferDialog.confirmBreakLinksLabel") }}</span>
             </label>
           </div>
 
-          <!-- Summary of what will travel -->
-          <div class="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-0.5">
-            <div class="font-medium text-foreground mb-1">
-              {{ mode === 'move' ? t("products.productTransferDialog.alsoMovesLabel") : t("products.productTransferDialog.alsoCopiesLabel") }}
-            </div>
-            <div>· {{ preview.filesCount }} {{ pluralize(preview.filesCount, [t("products.productTransferDialog.fileOne"), t("products.productTransferDialog.fileFew"), t("products.productTransferDialog.fileMany")]) }}<span v-if="preview.foldersCount"> {{ t("products.productTransferDialog.inFoldersPrefix") }} {{ preview.foldersCount }} {{ pluralize(preview.foldersCount, [t("products.productTransferDialog.folderOne"), t("products.productTransferDialog.folderFew"), t("products.productTransferDialog.folderMany")]) }}</span></div>
-            <div>· {{ preview.imagesCount }} {{ pluralize(preview.imagesCount, [t("products.productTransferDialog.imageOne"), t("products.productTransferDialog.imageFew"), t("products.productTransferDialog.imageMany")]) }}</div>
-            <div v-if="preview.notesCount > 0">· {{ preview.notesCount }} {{ pluralize(preview.notesCount, [t("products.productTransferDialog.noteOne"), t("products.productTransferDialog.noteFew"), t("products.productTransferDialog.noteMany")]) }}</div>
-            <div v-if="preview.variantsCount > 0">· {{ preview.variantsCount }} {{ pluralize(preview.variantsCount, [t("products.productTransferDialog.variantOne"), t("products.productTransferDialog.variantFew"), t("products.productTransferDialog.variantMany")]) }}</div>
+          <!-- Cargo that travels with the product -->
+          <div class="rounded-xl border border-border bg-muted/40 p-3">
+            <p class="mb-2 text-sm font-medium text-foreground">
+              {{
+                mode === "move"
+                  ? t("products.productTransferDialog.alsoMovesLabel")
+                  : t("products.productTransferDialog.alsoCopiesLabel")
+              }}
+            </p>
+            <ul class="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
+              <li class="flex items-center gap-2">
+                <FileText class="size-3.5 shrink-0" />
+                <span>
+                  {{ preview.filesCount }}
+                  {{
+                    pluralize(preview.filesCount, [
+                      t("products.productTransferDialog.fileOne"),
+                      t("products.productTransferDialog.fileFew"),
+                      t("products.productTransferDialog.fileMany"),
+                    ])
+                  }}
+                  <template v-if="preview.foldersCount">
+                    {{ t("products.productTransferDialog.inFoldersPrefix") }}
+                    {{ preview.foldersCount }}
+                    {{
+                      pluralize(preview.foldersCount, [
+                        t("products.productTransferDialog.folderOne"),
+                        t("products.productTransferDialog.folderFew"),
+                        t("products.productTransferDialog.folderMany"),
+                      ])
+                    }}
+                  </template>
+                </span>
+              </li>
+              <li class="flex items-center gap-2">
+                <Image class="size-3.5 shrink-0" />
+                <span>
+                  {{ preview.imagesCount }}
+                  {{
+                    pluralize(preview.imagesCount, [
+                      t("products.productTransferDialog.imageOne"),
+                      t("products.productTransferDialog.imageFew"),
+                      t("products.productTransferDialog.imageMany"),
+                    ])
+                  }}
+                </span>
+              </li>
+              <li v-if="preview.notesCount > 0" class="flex items-center gap-2">
+                <NotebookPen class="size-3.5 shrink-0" />
+                <span>
+                  {{ preview.notesCount }}
+                  {{
+                    pluralize(preview.notesCount, [
+                      t("products.productTransferDialog.noteOne"),
+                      t("products.productTransferDialog.noteFew"),
+                      t("products.productTransferDialog.noteMany"),
+                    ])
+                  }}
+                </span>
+              </li>
+              <li v-if="preview.variantsCount > 0" class="flex items-center gap-2">
+                <Package class="size-3.5 shrink-0" />
+                <span>
+                  {{ preview.variantsCount }}
+                  {{
+                    pluralize(preview.variantsCount, [
+                      t("products.productTransferDialog.variantOne"),
+                      t("products.productTransferDialog.variantFew"),
+                      t("products.productTransferDialog.variantMany"),
+                    ])
+                  }}
+                </span>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" @click="close" :disabled="isSubmitting">{{ t("common.cancel") }}</Button>
-        <Button @click="submit" :disabled="!canSubmit">
-          <Loader2 v-if="isSubmitting" class="size-4 animate-spin mr-2" />
-          {{ mode === "move" ? t("products.productTransferDialog.moveAction") : t("products.productTransferDialog.cloneAction") }}
+      <DialogFooter variant="bar">
+        <Button variant="outline" :disabled="isSubmitting" @click="close">
+          {{ t("common.cancel") }}
+        </Button>
+        <Button :disabled="!canSubmit" @click="submit">
+          <Spinner v-if="isSubmitting" class="mr-2" />
+          {{
+            mode === "move"
+              ? t("products.productTransferDialog.moveAction")
+              : t("products.productTransferDialog.cloneAction")
+          }}
         </Button>
       </DialogFooter>
     </DialogContent>

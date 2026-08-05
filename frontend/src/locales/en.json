@@ -1894,6 +1894,7 @@
       "loadingStoresPlaceholder": "Loading stores...",
       "chooseStorePlaceholder": "Choose a store",
       "currentStoreSuffix": "current",
+      "currentStoreFallback": "Current store",
       "checkingPreview": "Checking data...",
       "skuResolvedLabel": "New SKU: {sku}",
       "skuConflictLabel": "SKU \"{sku}\" is already used in the target store",
@@ -1965,7 +1966,8 @@
     },
     "productGroupSidebar": {
       "title": "Product group",
-      "duplicate": "Duplicate"
+      "duplicate": "Duplicate",
+      "addProduct": "Add product to group"
     },
     "productFileManager": {
       "storageRootLabel": "Storage",

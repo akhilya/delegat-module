@@ -1,6 +1,6 @@
 <script setup>
 import { useSlots, useAttrs, computed } from "vue";
-import { Loader2 } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   Empty,
@@ -17,6 +17,11 @@ const props = defineProps({
   description: { type: String, default: "" },
   // "sm" for dense inline cases only; page/tab empties use default
   size: { type: String, default: "default" },
+  /**
+   * When false, omit border/radius — use inside an already-framed parent
+   * (tab panels, side sheets, cards).
+   */
+  framed: { type: Boolean, default: true },
   class: { type: null, required: false },
 });
 
@@ -27,8 +32,8 @@ const attrs = useAttrs();
 
 const frameClass = computed(() =>
   cn(
-    // Expand inside flex parents (PageSection / fill layouts) and keep a visible frame.
-    "flex w-full min-h-0 flex-1 flex-col items-center justify-center rounded-lg border",
+    "flex w-full min-h-0 flex-1 flex-col items-center justify-center",
+    props.framed && "rounded-lg border",
     props.size === "sm" ? "gap-3 p-4 md:p-6" : "gap-4 p-6 md:p-12",
     props.class,
   ),
@@ -41,7 +46,7 @@ const frameClass = computed(() =>
     :class="frameClass"
     v-bind="attrs"
   >
-    <Loader2 class="size-8 animate-spin text-muted-foreground" />
+    <Spinner size="2xl" class="text-muted-foreground" />
   </div>
   <Empty v-else :class="frameClass" v-bind="attrs">
     <EmptyHeader>

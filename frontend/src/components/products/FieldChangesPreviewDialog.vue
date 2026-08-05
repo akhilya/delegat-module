@@ -4,7 +4,9 @@
  * Same shell pattern as Excel import: bordered header/footer, scrollable body.
  */
 import { computed } from "vue";
-import { Download, Loader2 } from "lucide-vue-next";
+import {
+  Download,
+} from "lucide-vue-next";
 import { t } from "@/i18n";
 import {
   Dialog,
@@ -16,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 
 const props = defineProps({
@@ -74,12 +77,11 @@ function onConfirm() {
       :size="size"
       class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-1 border-b border-border px-6 py-4 text-left">
-        <DialogTitle class="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <Download class="size-4 text-muted-foreground" />
+      <DialogHeader variant="bar">
+        <DialogTitle>
           {{ title }}
         </DialogTitle>
-        <DialogDescription v-if="description" class="text-sm text-muted-foreground">
+        <DialogDescription v-if="description">
           {{ description }}
         </DialogDescription>
       </DialogHeader>
@@ -99,14 +101,14 @@ function onConfirm() {
         </p>
       </div>
 
-      <DialogFooter class="shrink-0 gap-2 border-t border-border px-6 py-4 sm:justify-between">
+      <DialogFooter variant="bar" class="sm:justify-between">
         <DialogClose as-child>
           <Button variant="outline" :disabled="confirmLoading">
             {{ t("common.cancel") }}
           </Button>
         </DialogClose>
         <Button :disabled="confirmDisabled" @click="onConfirm">
-          <Loader2 v-if="confirmLoading" class="mr-2 size-4 animate-spin" />
+          <Spinner v-if="confirmLoading" class="mr-2" />
           <Download v-else class="mr-2 size-4" />
           {{ resolvedConfirmLabel }}
         </Button>

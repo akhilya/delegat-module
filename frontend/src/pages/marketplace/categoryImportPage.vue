@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
@@ -11,7 +12,6 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
-  Loader2,
   Sparkles,
   Link2,
   Download,
@@ -24,6 +24,7 @@ import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     SettingsFormField,
@@ -33,7 +34,6 @@ export default {
     Input,
     Badge,
     Checkbox,
-    Loader2,
     Sparkles,
     Link2,
     Download,
@@ -41,7 +41,7 @@ export default {
     RadioGroup,
     RadioGroupItem,
     EmptyState,
-    SearchableSelect,
+    SearchableSelect
   },
   data() {
     return {
@@ -345,7 +345,7 @@ export default {
             :disabled="importButtonDisabled || !hasImportConfig"
             @click="handleImportCategory"
           >
-            <Loader2 v-if="isImporting" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isImporting" class="mr-2" />
             <Download v-else class="size-4 mr-2" />
             {{ $t("marketplace.categoryImportPage.import") }}
             <template v-if="importSelectedFieldKeys.length > 0">
@@ -422,7 +422,7 @@ export default {
               v-else-if="isLoadingFields"
               class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border text-muted-foreground"
             >
-              <Loader2 class="size-6 animate-spin" />
+              <Spinner size="2xl" />
               <span class="text-sm">{{ $t("marketplace.categoryImportPage.loadingCategoryFields") }}</span>
             </div>
 

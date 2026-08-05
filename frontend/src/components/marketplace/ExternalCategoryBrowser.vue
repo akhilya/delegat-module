@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,7 +11,11 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Loader2, ChevronRight, Home, Search } from "lucide-vue-next";
+import {
+  ChevronRight,
+  Home,
+  Search,
+} from "lucide-vue-next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +26,7 @@ export default {
   name: "ExternalCategoryBrowser",
   inheritAttrs: false,
   components: {
+    Spinner,
     Button,
     Input,
     EmptyState,
@@ -30,10 +36,9 @@ export default {
     BreadcrumbList,
     BreadcrumbPage,
     BreadcrumbSeparator,
-    Loader2,
     ChevronRight,
     Home,
-    Search,
+    Search
   },
   props: {
     categories: { type: Array, default: () => [] },
@@ -140,7 +145,7 @@ export default {
         v-if="loading"
         class="flex flex-1 items-center justify-center py-10"
       >
-        <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        <Spinner size="2xl" class="text-muted-foreground" />
       </div>
       <div
         v-else-if="categories.length === 0"

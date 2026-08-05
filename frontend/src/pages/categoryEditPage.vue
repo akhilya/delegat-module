@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,6 @@ import {
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
-  Loader2,
   Save,
   Plus,
   Trash2,
@@ -96,6 +96,7 @@ const ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4];
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -106,7 +107,6 @@ export default {
     Badge,
     SettingsFormField,
     FieldGroup,
-
     Select,
     SelectContent,
     SelectItem,
@@ -138,7 +138,6 @@ export default {
     TableHeader,
     TableRow,
     TableCell,
-    Loader2,
     Save,
     Plus,
     Trash2,
@@ -149,7 +148,7 @@ export default {
     Upload,
     draggable,
     SearchableSelect,
-    EmptyState,
+    EmptyState
   },
   data() {
     const categoryId = parseInt(this.$route.params.id);
@@ -807,7 +806,7 @@ export default {
             @click="handleSaveCategory"
             :disabled="isSaving"
           >
-            <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isSaving" class="mr-2" />
             <Save v-else class="size-4 mr-2" />
             {{ $t("common.save") }}
           </Button>
@@ -966,8 +965,12 @@ export default {
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger as-child>
-                                <Button variant="ghost" size="icon" class="size-8">
-                                  <Trash2 class="size-4 text-destructive" />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 class="size-4" />
                                 </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
@@ -980,10 +983,11 @@ export default {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                                   <AlertDialogAction
+                                    variant="destructive"
                                     @click="handleDeleteAttribute(attribute.id)"
                                     :disabled="isDeletingAttribute"
                                   >
-                                    <Loader2 v-if="isDeletingAttribute" class="size-4 mr-2 animate-spin" />
+                                    <Spinner v-if="isDeletingAttribute" class="mr-2" />
                                     {{ $t("common.delete") }}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
@@ -1008,7 +1012,7 @@ export default {
         size="2xl"
         class="max-h-[min(90vh,48rem)] flex flex-col gap-0 p-0 overflow-hidden"
       >
-        <DialogHeader class="shrink-0 border-b px-6 pt-6 pb-4">
+        <DialogHeader variant="bar">
           <DialogTitle>
             {{ editingAttribute ? $t("pages.categoryEditPage.editAttributeTitle") : $t("pages.categoryEditPage.newAttributeTitle") }}
           </DialogTitle>
@@ -1290,12 +1294,12 @@ export default {
           </FieldGroup>
         </div>
 
-        <DialogFooter class="shrink-0 border-t px-6 py-4">
+        <DialogFooter variant="bar">
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
-            <Loader2 v-if="isAddingAttribute" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isAddingAttribute" class="mr-2" />
             {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>
         </DialogFooter>

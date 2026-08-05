@@ -1,8 +1,9 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { onMounted, onUnmounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { Loader2 } from "lucide-vue-next";
+
 import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ async function onRetry() {
             :disabled="isChecking"
             @click="onRetry"
           >
-            <Loader2 v-if="isChecking" class="size-4 animate-spin" />
+            <Spinner v-if="isChecking" />
             {{
               isChecking
                 ? t("pages.unavailablePage.checking")

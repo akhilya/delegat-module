@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import {
   Sheet,
   SheetContent,
@@ -6,7 +7,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Loader2 } from "lucide-vue-next";
+
 
 defineProps({
   open: { type: Boolean, default: false },
@@ -43,7 +44,7 @@ defineEmits(["update:open"]);
         v-if="loading"
         class="flex flex-1 items-center justify-center px-4 py-12 text-muted-foreground"
       >
-        <Loader2 class="size-5 animate-spin" />
+        <Spinner size="lg" />
       </div>
       <div
         v-else

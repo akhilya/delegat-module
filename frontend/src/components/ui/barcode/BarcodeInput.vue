@@ -227,7 +227,7 @@ export default {
         <PopoverTrigger as-child>
           <button
             type="button"
-            class="shrink-0 h-9 bg-background border rounded px-1.5 flex items-center cursor-pointer hover:border-foreground/30 transition-colors"
+            class="flex h-9 shrink-0 cursor-pointer items-center rounded-md border border-input bg-background px-1.5 transition-colors hover:border-foreground/30"
             :title="t('barcodeCell.clickToEnlarge')"
           >
             <svg ref="svgRef" class="h-6 block"></svg>

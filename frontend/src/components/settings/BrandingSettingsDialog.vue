@@ -1,7 +1,7 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, ref, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { Loader2, Palette } from "lucide-vue-next";
 import {
   Dialog,
   DialogClose,
@@ -58,20 +58,13 @@ function onOpenChange(v) {
       size="2xl"
       class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
     >
-      <DialogHeader class="shrink-0 space-y-3 border-b px-6 py-5 text-left">
-        <div class="flex items-start gap-3 pr-8">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <Palette class="size-5 text-muted-foreground" />
-          </div>
-          <div class="min-w-0 flex-1 space-y-1">
-            <DialogTitle>
-              {{ t("pages.settingsOverviewPage.branding.dialogTitle") }}
-            </DialogTitle>
-            <DialogDescription>
-              {{ t("pages.settingsOverviewPage.branding.dialogDescription") }}
-            </DialogDescription>
-          </div>
-        </div>
+      <DialogHeader variant="bar">
+        <DialogTitle>
+          {{ t("pages.settingsOverviewPage.branding.dialogTitle") }}
+        </DialogTitle>
+        <DialogDescription>
+          {{ t("pages.settingsOverviewPage.branding.dialogDescription") }}
+        </DialogDescription>
       </DialogHeader>
 
       <div class="flex-1 overflow-y-auto px-6 py-5">
@@ -81,7 +74,7 @@ function onOpenChange(v) {
         />
       </div>
 
-      <DialogFooter class="shrink-0 border-t bg-muted/20 px-6 py-4">
+      <DialogFooter variant="bar">
         <DialogClose as-child>
           <Button type="button" variant="outline" :disabled="saving">
             {{ t("common.cancel") }}
@@ -92,7 +85,7 @@ function onOpenChange(v) {
           :disabled="loading || saving || !dirty || !canSave"
           @click="save"
         >
-          <Loader2 v-if="saving" class="mr-2 size-4 animate-spin" />
+          <Spinner v-if="saving" class="mr-2" />
           {{ t("common.save") }}
         </Button>
       </DialogFooter>

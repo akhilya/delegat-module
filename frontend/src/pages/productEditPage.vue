@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import Note from "@/components/note.vue";
 
 import {
-  Loader2,
   Save,
   Trash2,
   NotebookPen,
@@ -61,7 +61,14 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  EllipsisVertical,
 } from "lucide-vue-next";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PAGE_PRODUCTS, setPageTitle } from "@/router";
 import { useStore } from "vuex";
 import { useRoute, onBeforeRouteLeave } from "vue-router";
@@ -113,6 +120,7 @@ const GROUP_NONE = "__none__";
 
 export default {
   components: {
+    Spinner,
     AppPageChrome,
     PageSection,
     Button,
@@ -158,7 +166,6 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
-    Loader2,
     Save,
     Trash2,
     NotebookPen,
@@ -169,6 +176,11 @@ export default {
     X,
     ChevronLeft,
     ChevronRight,
+    EllipsisVertical,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
     ContextMenu,
     ContextMenuContent,
     ContextMenuItem,
@@ -187,7 +199,7 @@ export default {
     Tooltip,
     TooltipContent,
     TooltipProvider,
-    TooltipTrigger,
+    TooltipTrigger
   },
   data() {
     return {
@@ -1174,6 +1186,26 @@ export default {
           </TabsList>
         </Tabs>
     </template>
+    <template #nav-right>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-9"
+            :aria-label="$t('common.actions')"
+          >
+            <EllipsisVertical class="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem @select="goToDuplicate">
+            <Copy />
+            {{ $t("pages.productEditPage.actions.duplicate") }}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </template>
     <PageSection
       :loading="isProductLoading && !productSKU"
       :class="
@@ -1203,7 +1235,7 @@ export default {
           />
           <div class="relative min-w-0 flex-1">
             <div v-if="isProductLoading && productSKU" class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]">
-              <Loader2 class="size-6 animate-spin text-muted-foreground" />
+              <Spinner size="xl" class="text-muted-foreground" />
             </div>
             <form
             v-if="form"
@@ -1356,7 +1388,7 @@ export default {
                           class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
                         >
                           <p class="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Loader2 class="size-3.5 animate-spin" />
+                            <Spinner size="sm" />
                             {{ descriptionGeneratingHint }}
                           </p>
                         </div>
@@ -1547,7 +1579,7 @@ export default {
                     @click="submitSkuChange"
                     :disabled="isUpdatingSku || !newSkuValue.trim() || newSkuValue.trim() === productSKU"
                   >
-                    <Loader2 v-if="isUpdatingSku" class="size-4 mr-2 animate-spin" />
+                    <Spinner v-if="isUpdatingSku" class="mr-2" />
                     {{ $t("pages.productEditPage.skuDialog.changeAction") }}
                   </Button>
                 </DialogFooter>
@@ -1601,13 +1633,11 @@ export default {
               </CardContent>
             </Card>
 
-            <div class="h-[4.75rem] shrink-0" aria-hidden="true" />
-
             </div>
             </form>
 
             <!-- Files tab -->
-            <div v-show="tab == 'files'" class="flex flex-col border rounded-xl" style="min-height: calc(100vh - 8.5rem)">
+            <div v-show="tab == 'files'" class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
               <ProductFileManager
                 :files="files"
                 :productId="productId"
@@ -1619,7 +1649,7 @@ export default {
             </div>
 
             <!-- Images tab -->
-            <div v-show="tab == 'images'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
+            <div v-show="tab == 'images'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
               <ProductImagesEditor
                 :files="files"
                 v-model:images="images"
@@ -1629,19 +1659,19 @@ export default {
             </div>
 
             <!-- Sizes tab -->
-            <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
+            <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
               <ProductVariantsEditor :productId="productId" />
             </div>
 
             <!-- Marketplaces tab -->
-            <div v-show="tab == 'marketplaces'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
+            <div v-show="tab == 'marketplaces'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
               <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
             </div>
 
             <!-- Notes tab -->
-            <div v-show="tab == 'notes'" class="flex flex-col border rounded-xl overflow-hidden" style="height: calc(100vh - 8.5rem)">
-              <div class="flex items-center justify-between px-4 h-11 border-b shrink-0">
-                <p class="text-sm font-medium flex items-center gap-2">
+            <div v-show="tab == 'notes'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
+              <div class="flex h-11 shrink-0 items-center justify-between border-b px-4">
+                <p class="flex items-center gap-2 text-sm font-medium">
                   <NotebookPen class="size-4" />
                   {{ $t("pages.productEditPage.tabs.notes") }}
                 </p>
@@ -1650,13 +1680,18 @@ export default {
                   {{ $t("common.add") }}
                 </Button>
               </div>
-              <div class="flex-1 overflow-y-auto">
-                <EmptyState v-if="notes.length === 0" :title="$t('pages.productEditPage.notesEmpty.title')" :description="$t('pages.productEditPage.notesEmpty.description')">
+              <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <EmptyState
+                  v-if="notes.length === 0"
+                  :framed="false"
+                  :title="$t('pages.productEditPage.notesEmpty.title')"
+                  :description="$t('pages.productEditPage.notesEmpty.description')"
+                >
                   <template #icon>
                     <NotebookPen />
                   </template>
                 </EmptyState>
-                <div v-else class="p-4 flex flex-col gap-4">
+                <div v-else class="flex flex-col gap-4 p-4">
                   <div v-for="(note, index) in notes" :key="note.id || index">
                     <Note
                       v-model:note="notes[index]"
@@ -1667,6 +1702,70 @@ export default {
                 </div>
               </div>
             </div>
+
+          <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
+          <div
+            v-show="tab === 'properties' && productSKU"
+            class="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button variant="destructive" type="button">
+                  <Trash2 class="size-4 mr-2" />
+                  {{ $t("common.delete") }}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{{ $t("pages.productEditPage.deleteConfirm.title", { sku: productSKU }) }}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {{ $t("pages.productEditPage.deleteConfirm.description") }}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
+                  <AlertDialogAction @click="handleDeleteProduct" variant="destructive">
+                    {{ $t("pages.productEditPage.deleteConfirm.confirmAction") }}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <div class="flex items-center justify-end gap-3">
+              <p
+                v-if="hasUnsavedChanges"
+                class="text-sm text-muted-foreground"
+              >
+                {{ $t("pages.productEditPage.unsavedChanges") }}
+              </p>
+              <TooltipProvider :delay-duration="200">
+                <Tooltip :disabled="!isSaveDisabled || saveDisabledReasons.length === 0">
+                  <TooltipTrigger as-child>
+                    <span
+                      class="inline-flex"
+                      :tabindex="isSaveDisabled ? 0 : undefined"
+                    >
+                      <Button
+                        type="submit"
+                        form="product-edit-form"
+                        :disabled="isSaveDisabled"
+                      >
+                        <Spinner v-if="isSubmitting" class="mr-2" />
+                        <Save v-else class="size-4 mr-2" />
+                        {{ $t("common.save") }}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" class="max-w-xs">
+                    <ul class="list-disc space-y-1 pl-4 text-left">
+                      <li v-for="reason in saveDisabledReasons" :key="reason">
+                        {{ reason }}
+                      </li>
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
           </div>
 
           <ProductGallerySidebar
@@ -1682,96 +1781,6 @@ export default {
         </div>
       </div>
     </PageSection>
-
-    <div
-      v-show="tab === 'properties'"
-      class="fixed bottom-0 z-20 left-0 right-0 md:left-[var(--sidebar-width)] pointer-events-none pb-3"
-    >
-      <div class="adaptive-padding pointer-events-none">
-        <div class="flex w-full items-stretch gap-4 lg:gap-5 pointer-events-none">
-          <div class="product-group-sidebar-spacer hidden shrink-0 lg:block" aria-hidden="true" />
-          <Card class="flex-1 min-w-0 pointer-events-auto rounded-xl !gap-0 !p-3 shadow-sm">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div class="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  @click="goToDuplicate"
-                >
-                  <Copy class="size-4 mr-2" />
-                  {{ $t("pages.productEditPage.actions.duplicate") }}
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger as-child>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      class="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 class="size-4 mr-2" />
-                      {{ $t("common.delete") }}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{{ $t("pages.productEditPage.deleteConfirm.title", { sku: productSKU }) }}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {{ $t("pages.productEditPage.deleteConfirm.description") }}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                      <AlertDialogAction @click="handleDeleteProduct" class="bg-destructive text-white hover:bg-destructive/90">
-                        {{ $t("pages.productEditPage.deleteConfirm.confirmAction") }}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-              <div class="flex items-center justify-end gap-3">
-                <p
-                  v-if="hasUnsavedChanges"
-                  class="text-sm text-muted-foreground"
-                >
-                  {{ $t("pages.productEditPage.unsavedChanges") }}
-                </p>
-                <TooltipProvider :delay-duration="200">
-                  <Tooltip :disabled="!isSaveDisabled || saveDisabledReasons.length === 0">
-                    <TooltipTrigger as-child>
-                      <span
-                        class="inline-flex"
-                        :tabindex="isSaveDisabled ? 0 : undefined"
-                      >
-                        <Button
-                          type="submit"
-                          form="product-edit-form"
-                          size="sm"
-                          :disabled="isSaveDisabled"
-                        >
-                          <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-                          <Save v-else class="size-4 mr-2" />
-                          {{ $t("common.save") }}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" class="max-w-xs">
-                      <ul class="list-disc space-y-1 pl-4 text-left">
-                        <li v-for="reason in saveDisabledReasons" :key="reason">
-                          {{ reason }}
-                        </li>
-                      </ul>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-          </Card>
-          <div class="product-gallery-sidebar-spacer hidden shrink-0 lg:block" aria-hidden="true" />
-        </div>
-      </div>
-    </div>
 
     <!-- Lightbox overlay -->
     <Teleport to="body">
@@ -1806,12 +1815,3 @@ export default {
     </Teleport>
   </AppPageChrome>
 </template>
-
-<style scoped>
-.product-group-sidebar-spacer {
-  width: clamp(14rem, 22vw, 24rem);
-}
-.product-gallery-sidebar-spacer {
-  width: clamp(10rem, 14vw, 14rem);
-}
-</style>

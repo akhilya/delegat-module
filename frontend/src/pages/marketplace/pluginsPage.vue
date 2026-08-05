@@ -1,5 +1,6 @@
 <script>
 
+import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 
 
@@ -10,11 +11,9 @@ import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@
 import {
   Plus,
   Puzzle,
-  Loader2,
   Trash2,
   RefreshCw,
   Upload,
-  Package,
   FileCode2,
   X,
 } from "lucide-vue-next";
@@ -56,6 +55,7 @@ export default {
     return { formatStoreDateTime };
   },
   components: {
+    Spinner,
     PageSection,
     Button,
     Badge,
@@ -67,11 +67,9 @@ export default {
     TableRow,
     Plus,
     Puzzle,
-    Loader2,
     Trash2,
     RefreshCw,
     Upload,
-    Package,
     FileCode2,
     X,
     Dialog,
@@ -90,7 +88,7 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
+    AlertDialogTrigger
   },
   data() {
     return {
@@ -287,9 +285,8 @@ export default {
           </Button>
         </DialogTrigger>
         <DialogContent size="lg" class="gap-0 p-0">
-          <DialogHeader class="space-y-1 border-b px-6 py-4 text-left">
-            <DialogTitle class="flex items-center gap-2 text-base">
-              <Package class="size-4 text-muted-foreground" />
+          <DialogHeader variant="bar">
+            <DialogTitle>
               {{ $t("marketplace.pluginsPage.uploadDialogTitle") }}
             </DialogTitle>
             <DialogDescription>
@@ -400,7 +397,7 @@ export default {
             </p>
           </div>
 
-          <DialogFooter class="border-t px-6 py-4 sm:justify-between">
+          <DialogFooter variant="bar" class="sm:justify-between">
             <DialogClose as-child>
               <Button variant="outline" :disabled="isUploading">
                 {{ $t("common.cancel") }}
@@ -410,7 +407,7 @@ export default {
               :disabled="isUploading || !selectedFile"
               @click="handleUpload"
             >
-              <Loader2 v-if="isUploading" class="size-4 mr-2 animate-spin" />
+              <Spinner v-if="isUploading" class="mr-2" />
               <Upload v-else class="size-4 mr-2" />
               {{
                 isUploading
@@ -543,10 +540,7 @@ export default {
                       :disabled="isReloading === plugin.key"
                       :title="$t('marketplace.pluginsPage.reload')"
                     >
-                      <Loader2
-                        v-if="isReloading === plugin.key"
-                        class="size-4 animate-spin"
-                      />
+                      <Spinner v-if="isReloading === plugin.key" />
                       <RefreshCw v-else class="size-4" />
                     </Button>
                     <AlertDialog v-if="!plugin.isSystem">
@@ -554,10 +548,10 @@ export default {
                         <Button
                           variant="ghost"
                           size="icon"
-                          class="size-8"
+                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           :title="$t('common.delete')"
                         >
-                          <Trash2 class="size-4 text-destructive" />
+                          <Trash2 class="size-4" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -570,10 +564,11 @@ export default {
                         <AlertDialogFooter>
                           <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
                           <AlertDialogAction
+                            variant="destructive"
                             @click="handleDelete(plugin.key)"
                             :disabled="isDeleting"
                           >
-                            <Loader2 v-if="isDeleting" class="size-4 mr-2 animate-spin" />
+                            <Spinner v-if="isDeleting" class="mr-2" />
                             {{ $t("common.delete") }}
                           </AlertDialogAction>
                         </AlertDialogFooter>

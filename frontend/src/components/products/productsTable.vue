@@ -1,19 +1,25 @@
 <script>
+import { EmptyState } from "@/components/ui/empty-state";
 // ProductsTable - Reusable data table with row selection, column visibility, and drag-and-drop column reordering.
 // Actions column is rendered outside <table> as a sticky-right div for reliable positioning with table-fixed.
 import { ref, computed, watch, onMounted, onUpdated, onBeforeUnmount } from "vue";
 import { FlexRender, getCoreRowModel, useVueTable } from "@tanstack/vue-table";
-import { Loader2, GripVertical, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-vue-next";
+import {
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+} from "lucide-vue-next";
 import { getSortIndex } from "@/lib/productSort";
 
 export default {
   components: {
+    EmptyState,
     FlexRender,
-    Loader2,
     GripVertical,
     ArrowUp,
     ArrowDown,
-    ArrowUpDown,
+    ArrowUpDown
   },
   props: {
     columns: {
@@ -330,9 +336,12 @@ export default {
 
 <template>
   <div class="flex flex-col flex-1 min-h-0">
-    <div v-if="isLoading" class="flex-1 flex items-center justify-center min-h-[12rem]">
-      <Loader2 class="size-5 animate-spin text-muted-foreground" />
-    </div>
+    <EmptyState
+      v-if="isLoading"
+      loading
+      :framed="false"
+      class="min-h-[12rem] flex-1"
+    />
     <div v-else ref="scrollContainerEl" class="flex-1 min-h-0 overflow-auto">
       <div class="flex min-w-full w-max">
         <!-- Data table -->

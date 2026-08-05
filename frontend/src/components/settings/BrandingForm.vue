@@ -1,7 +1,11 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { Loader2, Upload, X } from "lucide-vue-next";
+import {
+  Upload,
+  X,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -257,7 +261,7 @@ defineExpose({
 
 <template>
   <div v-if="loading" class="flex h-40 items-center justify-center">
-    <Loader2 class="size-5 animate-spin text-muted-foreground" />
+    <Spinner size="xl" class="text-muted-foreground" />
   </div>
 
   <div v-else class="space-y-6" :class="{ 'space-y-8': !compact }">
@@ -383,7 +387,7 @@ defineExpose({
               <Upload class="size-4" />
             </div>
             <p class="text-sm font-medium">
-              <Loader2 v-if="uploadingLogo" class="mr-1 inline size-3.5 animate-spin" />
+              <Spinner v-if="uploadingLogo" size="sm" class="mr-1 inline" />
               {{ t("pages.settingsOverviewPage.branding.dropzoneTitle") }}
             </p>
             <p class="mt-1 text-xs text-muted-foreground">
@@ -441,7 +445,7 @@ defineExpose({
               <Upload class="size-4" />
             </div>
             <p class="text-sm font-medium">
-              <Loader2 v-if="uploadingFavicon" class="mr-1 inline size-3.5 animate-spin" />
+              <Spinner v-if="uploadingFavicon" size="sm" class="mr-1 inline" />
               {{ t("pages.settingsOverviewPage.branding.dropzoneTitle") }}
             </p>
             <p class="mt-1 text-xs text-muted-foreground">

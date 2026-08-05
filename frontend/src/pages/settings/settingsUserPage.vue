@@ -1,4 +1,5 @@
 <script setup>
+import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, ref } from "vue";
 import { useStore } from "vuex";
 import PageSection from "@/components/pageSection.vue";
@@ -13,7 +14,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { hasPermission, PERMS } from "@/lib/permissions";
-import { Loader2 } from "lucide-vue-next";
+
 import { t } from "@/i18n";
 
 const store = useStore();
@@ -109,7 +110,7 @@ onMounted(fetchMe);
             :disabled="isSavingProfile || !hasProfileChanges"
             @click="saveProfile"
           >
-            <Loader2 v-if="isSavingProfile" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isSavingProfile" class="mr-2" />
             {{ $t("pages.settingsUserPage.saveProfileButton") }}
           </Button>
         </template>
@@ -147,7 +148,7 @@ onMounted(fetchMe);
             :disabled="isChangingPassword || !currentPassword || !newPassword"
             @click="changePassword"
           >
-            <Loader2 v-if="isChangingPassword" class="mr-2 size-4 animate-spin" />
+            <Spinner v-if="isChangingPassword" class="mr-2" />
             {{ $t("pages.settingsUserPage.changePasswordButton") }}
           </Button>
         </template>

@@ -1,4 +1,5 @@
 <script>
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
@@ -19,12 +20,13 @@ import { useStore } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useRouter, useRoute } from "vue-router";
 import { ref } from "vue";
-import { Loader2 } from "lucide-vue-next";
+
 import { PAGE_SIGN_UP } from "@/router";
 import { useI18n } from "vue-i18n";
 
 export default {
   components: {
+    Spinner,
     AuthLayout,
     FormControl,
     FormField,
@@ -34,8 +36,7 @@ export default {
     Button,
     Input,
     PasswordInput,
-    Checkbox,
-    Loader2,
+    Checkbox
   },
   setup() {
     const { t } = useI18n();
@@ -138,7 +139,7 @@ export default {
       </FormField>
 
       <Button type="submit" class="w-full" :disabled="isSubmitting">
-        <Loader2 v-if="isSubmitting" class="animate-spin" />
+        <Spinner v-if="isSubmitting" />
         <span v-else>{{ t("auth.signIn") }}</span>
       </Button>
     </form>

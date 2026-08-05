@@ -3,7 +3,6 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MappingCanvas from "@/components/marketplace/graph/MappingCanvas.vue";
 import { mergeProductFieldSources } from "@/components/marketplace/graph/graphModel.js";
@@ -15,11 +14,12 @@ import {
 } from "@/store/sonnerHelper";
 import { setPageTitle } from "@/router";
 import {
-  ArrowLeft,
-  Loader2,
   Plus,
 } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import {
   Dialog,
   DialogContent,
@@ -52,14 +52,14 @@ export default {
     EmptyState,
     Button,
     Input,
-    Label,
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-    ArrowLeft,
-    Loader2,
+    Spinner,
     Plus,
+    SettingsFormField,
+    FieldGroup,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -1086,14 +1086,17 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <PageSection :loading="isLoading">
+  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+    <PageSection
+      :loading="isLoading"
+      class="!mb-0 flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
       <template v-if="!isLoading">
         <!-- Visual node graph editor (whole-category Blueprint) - the sole mapping editor.
              The preview-product selector lives in the canvas toolbar. -->
         <div
           v-if="connectionId && mappingId"
-          class="relative mb-4 h-[calc(100vh-150px)] min-h-[480px] w-full"
+          class="relative min-h-0 w-full flex-1"
         >
           <MappingCanvas
             ref="mappingCanvas"
@@ -1131,7 +1134,7 @@ export default {
           <div
             v-for="item in previewSummary"
             :key="item.externalFieldKey"
-            class="rounded-md border p-3 text-sm"
+            class="rounded-xl border p-3 text-sm"
             :class="{
               'bg-destructive/10': item.error,
               'bg-warning/10': item.isChanged && !item.error,
@@ -1167,7 +1170,7 @@ export default {
                     <div
                       v-for="(url, idx) in parseImageUrls(item.resultValue)"
                       :key="idx"
-                      class="h-24 w-24 rounded-md border overflow-hidden bg-muted relative group"
+                      class="h-24 w-24 rounded-xl border overflow-hidden bg-muted relative group"
                     >
                       <img
                         :src="url"
@@ -1231,6 +1234,7 @@ export default {
           <EmptyState
             v-if="previewSummary.length === 0"
             size="sm"
+            :framed="false"
             :title="$t('marketplace.fieldMappingPage.noActiveFieldsTitle')"
             :description="$t('marketplace.fieldMappingPage.noActiveFieldsDescription')"
           />
@@ -1246,18 +1250,21 @@ export default {
           <DialogTitle>{{ $t("marketplace.fieldMappingPage.mappingSettingsTitle") }}</DialogTitle>
           <DialogDescription>{{ $t("marketplace.fieldMappingPage.mappingSettingsDescription") }}</DialogDescription>
         </DialogHeader>
-        <div class="space-y-4 py-4">
-          <div class="space-y-2">
-            <Label>{{ $t("common.name") }}</Label>
-            <Input v-model="settingsName" :placeholder="$t('marketplace.fieldMappingPage.mappingNamePlaceholder')" />
-          </div>
-        </div>
+        <FieldGroup class="gap-5 py-2">
+          <SettingsFormField :label="$t('common.name')" label-for="mapping-settings-name">
+            <Input
+              id="mapping-settings-name"
+              v-model="settingsName"
+              :placeholder="$t('marketplace.fieldMappingPage.mappingNamePlaceholder')"
+            />
+          </SettingsFormField>
+        </FieldGroup>
         <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button @click="saveMappingSettings" :disabled="isSavingSettings">
-            <Loader2 v-if="isSavingSettings" class="size-4 mr-2 animate-spin" />
+            <Spinner v-if="isSavingSettings" class="mr-2" />
             {{ $t("common.save") }}
           </Button>
         </DialogFooter>
@@ -1273,25 +1280,24 @@ export default {
           </DialogDescription>
         </DialogHeader>
 
-        <div class="space-y-4 py-4">
-          <div class="space-y-2">
-            <Label>{{ $t("marketplace.fieldMappingPage.fieldKeyLabel") }}</Label>
+        <FieldGroup class="gap-5 py-2">
+          <SettingsFormField :label="$t('marketplace.fieldMappingPage.fieldKeyLabel')" label-for="new-field-key">
             <Input
+              id="new-field-key"
               v-model="newField.externalFieldKey"
               :placeholder="$t('marketplace.fieldMappingPage.fieldKeyPlaceholder')"
             />
-          </div>
-          <div class="space-y-2">
-            <Label>{{ $t("marketplace.fieldMappingPage.nameOptionalLabel") }}</Label>
+          </SettingsFormField>
+          <SettingsFormField :label="$t('marketplace.fieldMappingPage.nameOptionalLabel')" label-for="new-field-name">
             <Input
+              id="new-field-name"
               v-model="newField.externalFieldName"
               :placeholder="$t('marketplace.fieldMappingPage.displayNamePlaceholder')"
             />
-          </div>
-          <div class="space-y-2">
-            <Label>{{ $t("marketplace.fieldMappingPage.sourceTypeLabel") }}</Label>
+          </SettingsFormField>
+          <SettingsFormField :label="$t('marketplace.fieldMappingPage.sourceTypeLabel')" label-for="new-field-source">
             <Select v-model="newField.sourceType">
-              <SelectTrigger>
+              <SelectTrigger id="new-field-source">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1304,12 +1310,19 @@ export default {
                 <SelectItem value="GroupName">{{ $t("marketplace.fieldMappingPage.sourceType.groupName") }}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div v-if="newField.sourceType === 'Static'" class="space-y-2">
-            <Label>{{ $t("marketplace.graph.inspector.valueLabel") }}</Label>
-            <Input v-model="newField.staticValue" :placeholder="$t('marketplace.fieldMappingPage.fieldValuePlaceholder')" />
-          </div>
-        </div>
+          </SettingsFormField>
+          <SettingsFormField
+            v-if="newField.sourceType === 'Static'"
+            :label="$t('marketplace.graph.inspector.valueLabel')"
+            label-for="new-field-value"
+          >
+            <Input
+              id="new-field-value"
+              v-model="newField.staticValue"
+              :placeholder="$t('marketplace.fieldMappingPage.fieldValuePlaceholder')"
+            />
+          </SettingsFormField>
+        </FieldGroup>
 
         <DialogFooter>
           <DialogClose as-child>

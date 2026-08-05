@@ -159,7 +159,7 @@ export default {
       <Button
         variant="ghost"
         size="icon"
-        class="size-7 shrink-0 text-destructive hover:text-destructive"
+        class="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
         @click="removeRow(index)"
       >
         <Trash2 class="size-3" />
