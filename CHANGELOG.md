@@ -10,6 +10,16 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.5.0] - 2026-08-05
+
+### Added
 - Per-adapter brand icons (`icon.webp` in each marketplace plugin; mirrored to `frontend/public/adapter-icons`) shown in sidebar, marketplace, plugins, and product adapter lists
 - Instance owner can permanently delete a store (type exact name to confirm; last store protected; catalog/adapters/files purged including MinIO)
 - Instance branding (white-label): Settings modal and first-run Setup step for name, description, logo, favicon, and primary/accent colors; seeded once from `BRAND_*` env; applied at runtime without rebuild
@@ -32,7 +42,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Fixed
 - Frontend Docker build: sync `package-lock.json` with Hugeicons deps so `npm ci` succeeds in CI
 
+### Security
+- Frontend npm overrides: `postcss` 8.5.25, `brace-expansion` 1.1.18 (Dependabot alerts)
+
 ### Changed
+- Local `docker-compose.yml` MySQL image aligned with prod (`mysql:8.4`)
+- Frontend production/dev dependency minor/patch bumps (vue-router, axios, eslint, Playwright, and related)
 - Aligned default brand name and copy to **Delegat.Module** (Vite env, `index.html`, docs/tests, branding defaults)
 - Sonner toasts themed to Catalog Workbench: mount `@/components/ui/sonner` (not raw vue-sonner), flat popover surface + border, Onest, `--z-toast`, compact `--radius-md` (no soft drop shadow)
 - Icons switched from Lucide to **Hugeicons** (same kit as Control Plane) via `frontend/src/lib/icons.js`; denser stroke as a filled-look experiment (true solid styles need Hugeicons Pro)
@@ -191,7 +206,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 - Initial Delegat.Module release
 
-[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/akhilya/delegat-module/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/akhilya/delegat-module/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/akhilya/delegat-module/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/akhilya/delegat-module/compare/v1.3.0...v1.3.1
