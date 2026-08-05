@@ -103,8 +103,9 @@ public class PublicGroupsController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
-        var repo = _uow.Repository<ProductGroup>();
-        var group = await repo.FindAsync(g => g.Id == groupId && g.storeId == storeId);
+        // Must be tracked — Repository.FindAsync is AsNoTracking and would no-op SaveChanges.
+        var group = await _uow.Repository<ProductGroup>().QueryTracking()
+            .FirstOrDefaultAsync(g => g.Id == groupId && g.storeId == storeId, ct);
         if (group == null)
             throw ApiException.NotFound("Group not found", code: "group_not_found");
 

@@ -158,7 +158,8 @@
       "generalSettings": "General settings"
     },
     "userAccountMenu": {
-      "account": "Account"
+      "account": "Account",
+      "documentation": "Documentation"
     },
     "note": {
       "updateSuccess": "Note successfully updated.",

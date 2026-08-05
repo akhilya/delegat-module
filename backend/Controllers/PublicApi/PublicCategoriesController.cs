@@ -113,8 +113,9 @@ public class PublicCategoriesController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
-        var repo = _uow.Repository<Category>();
-        var category = await repo.FindAsync(c => c.Id == categoryId && c.storeId == storeId);
+        // Must be tracked — Repository.FindAsync is AsNoTracking and would no-op SaveChanges.
+        var category = await _uow.Repository<Category>().QueryTracking()
+            .FirstOrDefaultAsync(c => c.Id == categoryId && c.storeId == storeId, ct);
         if (category == null)
             throw ApiException.NotFound("Category not found", code: "category_not_found");
 

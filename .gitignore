@@ -142,6 +142,11 @@ design-docs/
 artifacts/
 
 # ======================
+# Local-only scripts
+# ======================
+scripts/marketing-demo-seed/
+
+# ======================
 # Misc
 # ======================
 nul

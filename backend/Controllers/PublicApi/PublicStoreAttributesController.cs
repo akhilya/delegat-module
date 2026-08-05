@@ -105,8 +105,9 @@ public class PublicStoreAttributesController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
-        var repo = _uow.Repository<StoreAttribute>();
-        var attribute = await repo.FindAsync(a => a.Id == attributeId && a.storeId == storeId);
+        // Must be tracked — Repository.FindAsync is AsNoTracking and would no-op SaveChanges.
+        var attribute = await _uow.Repository<StoreAttribute>().QueryTracking()
+            .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
         if (attribute == null)
             throw ApiException.NotFound("Attribute not found");
 

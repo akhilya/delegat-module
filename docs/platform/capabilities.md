@@ -9,7 +9,7 @@
 - Deploy: Dokploy + GitHub Actions
 - Isolation: physical - cross-tenant data leakage is architecturally impossible
 
-> Selling, billing, fleet updates, Ops/Customer consoles, **Platform Link** (instance ↔ control plane): [../architecture/control-plane.md](../architecture/control-plane.md)  
+> Selling, billing, fleet updates, Ops/Customer consoles, Platform Link **server**: Control Plane repo `delegat-module-platform` (`docs/control-plane.md`). Instance stub: [../architecture/control-plane.md](../architecture/control-plane.md).  
 > Infrastructure details (provisioning, scaling, Registry draft): [../architecture/saas-architecture.md](../architecture/saas-architecture.md)
 
 ---

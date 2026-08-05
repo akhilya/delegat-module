@@ -190,8 +190,9 @@ public class PublicProductsController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
-        var repo = _uow.Repository<Product>();
-        var product = await repo.FindAsync(p => p.Id == productId && p.storeId == storeId);
+        // Must be tracked — Repository.FindAsync is AsNoTracking and would no-op SaveChanges.
+        var product = await _uow.Repository<Product>().QueryTracking()
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (product == null)
             throw ApiException.NotFound("Product not found", code: "product_not_found");
 

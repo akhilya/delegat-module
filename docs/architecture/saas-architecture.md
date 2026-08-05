@@ -3,7 +3,7 @@
 > This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal (technical draft).
 >
 > **Product decisions for the Control Plane** (self-serve billing, Ops vs Customer surfaces, support, backups policy):  
-> [control-plane.md](control-plane.md)
+> Canon: sibling `delegat-module-platform` → `docs/control-plane.md`. Local stub: [control-plane.md](control-plane.md).
 >
 > Platform features and roadmap: [../platform/capabilities.md](../platform/capabilities.md)
 

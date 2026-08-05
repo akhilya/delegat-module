@@ -10,6 +10,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Account menu link to public product docs (`VITE_DOCS_PUBLIC_URL`, default `https://docs.module.delegat.pro`)
+- `ADMIN_FORCE_RESET` passthrough in production Compose for first-admin reset
 - Product Adapters tab: remembered Export mode (Entire product / Price only / Stock only) per product and adapter in the database; split control runs export on the main click and changes mode via ›
 - Mapping canvas: snap-to-grid and alignment guidelines toggles in the bottom-left controls
 - Mapping graph: Subtract modifier («Вычесть») for number/integer lanes
@@ -24,6 +26,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- Control Plane docs in this repo are stubs pointing to `delegat-module-platform` (canon lives there)
 - First-run setup wizard: step rail, skeleton loading, and skip catalogs when Control Plane is unlinked or catalogs are not ready (create store by name; server defaults for currency/timezone)
 - Sign-in accepts email as well as username (input is trimmed)
 - Connection settings: Save + actions use a Button Group (Save keeps ⌘/Ctrl+S hotkey; Kbd shown only in menus)
@@ -55,6 +58,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Public API PATCH for products, categories, groups, and store attributes now persists (load used `AsNoTracking`, so updates were silent no-ops)
 - Auth cookies use HTTPS/`COOKIE_SECURE` instead of `ASPNETCORE_ENVIRONMENT=Production`, so sign-in keeps refresh cookies on HTTP lab hosts
 - Product edit: leaving with unsaved changes shows the discard confirmation dialog again (was blocked with no dialog)
 - Mappings list product count uses products in the local category (not only marketplace links)

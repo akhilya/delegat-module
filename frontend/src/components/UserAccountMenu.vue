@@ -12,9 +12,11 @@ import {
   Sun,
   UserCog,
   UserRound,
+  BookOpen,
 } from "lucide-vue-next";
 import { setLocale, SUPPORTED_LOCALES } from "@/i18n";
 import { PAGE_SETTINGS_USER } from "@/router";
+import { getDocsPublicUrl } from "@/utils/docsUrl";
 import LocaleFlag from "@/components/LocaleFlag.vue";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +120,17 @@ function onLogout() {
       <DropdownMenuItem @select="goToUserSettings">
         <UserCog />
         {{ t("components.navigationBar.mySettings") }}
+      </DropdownMenuItem>
+
+      <DropdownMenuItem as-child>
+        <a
+          :href="getDocsPublicUrl(locale)"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <BookOpen />
+          {{ t("components.userAccountMenu.documentation") }}
+        </a>
       </DropdownMenuItem>
 
       <DropdownMenuSub>

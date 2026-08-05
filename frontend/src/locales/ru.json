@@ -158,7 +158,8 @@
       "generalSettings": "Общие настройки"
     },
     "userAccountMenu": {
-      "account": "Аккаунт"
+      "account": "Аккаунт",
+      "documentation": "Документация"
     },
     "note": {
       "updateSuccess": "Заметка успешно обновлена.",
