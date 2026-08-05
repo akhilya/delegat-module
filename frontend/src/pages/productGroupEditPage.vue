@@ -66,6 +66,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 
 export default {
   components: {
@@ -78,6 +79,7 @@ export default {
     Badge,
     SettingsFormField,
     FieldGroup,
+    AdapterIcon,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -847,9 +849,10 @@ export default {
                                 :alt="connection.name"
                                 class="size-6"
                               />
-                              <ExternalLink
+                              <AdapterIcon
                                 v-else
-                                class="size-5 text-muted-foreground"
+                                :adapter-key="connection.adapterKey"
+                                class="size-6"
                               />
                             </div>
                             <div class="min-w-0 space-y-1">
@@ -945,9 +948,10 @@ export default {
                             :alt="connection.name"
                             class="size-6 opacity-70"
                           />
-                          <Ban
+                          <AdapterIcon
                             v-else
-                            class="size-4 text-muted-foreground/70"
+                            :adapter-key="connection.adapterKey"
+                            class="size-6 opacity-70"
                           />
                         </div>
                         <div class="min-w-0 flex-1">

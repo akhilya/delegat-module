@@ -51,6 +51,7 @@ import {
 import Switch from "@/components/ui/switch/Switch.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 
 export default {
   components: {
@@ -70,6 +71,7 @@ export default {
     Trash2,
     Settings,
     Check,
+    AdapterIcon,
     Table,
     TableBody,
     TableCell,
@@ -363,6 +365,10 @@ export default {
                           class="size-2.5"
                         />
                       </span>
+                      <AdapterIcon
+                        :adapter-key="adapter.key"
+                        class="mt-0.5 size-5"
+                      />
                       <div class="min-w-0 flex-1 space-y-0.5">
                         <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span class="text-sm font-medium text-foreground">
@@ -513,13 +519,19 @@ export default {
                   />
                 </TableCell>
                 <TableCell class="font-medium max-w-0">
-                  <span class="truncate block">{{ conn.name }}</span>
-                  <span class="text-xs text-muted-foreground truncate block sm:hidden">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+                    <span class="truncate block">{{ conn.name }}</span>
+                  </div>
+                  <span class="text-xs text-muted-foreground truncate block sm:hidden pl-6">
                     {{ getAdapterName(conn.adapterKey) }}
                   </span>
                 </TableCell>
                 <TableCell class="hidden sm:table-cell text-muted-foreground max-w-xs truncate">
-                  {{ getAdapterName(conn.adapterKey) }}
+                  <div class="flex items-center gap-2 min-w-0">
+                    <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+                    <span class="truncate">{{ getAdapterName(conn.adapterKey) }}</span>
+                  </div>
                 </TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
                   {{ conn.categoryMappingsCount || 0 }}

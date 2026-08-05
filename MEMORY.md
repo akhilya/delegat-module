@@ -77,6 +77,8 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 
 14. **Toasts** — mount [`Toaster`](frontend/src/components/ui/sonner/Sonner.vue) from `@/components/ui/sonner` only (not raw `vue-sonner`). Flat popover surface + border, compact `--radius-md`, no soft shadow; description = muted-foreground. Keep `richColors` off unless a screen needs muted semantic fills.
 
+15. **Adapter icons** — each plugin ships `icon.webp` (white/any RGB on **transparent** alpha). Mirror to [`frontend/public/adapter-icons/{adapterKey}.webp`](frontend/public/adapter-icons). UI tints with SVG `feFlood currentColor` + `feComposite operator="in"` — keeps alpha, replaces RGB ([`AdapterIcon`](frontend/src/components/marketplace/AdapterIcon.vue)).
+
 ---
 
 - Theme no longer jumps from light Setup to dark Products: color scheme boots once (`theme.js`, light default) instead of applying system dark only when the account menu mounts.

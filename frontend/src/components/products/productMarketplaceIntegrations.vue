@@ -38,6 +38,7 @@ import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import {
   Select,
   SelectContent,
@@ -108,6 +109,7 @@ export default {
     Button,
     Badge,
     EmptyState,
+    AdapterIcon,
     Upload,
     Download,
     CheckCircle,
@@ -1274,13 +1276,13 @@ export default {
           :href="getMarketplaceProductUrl(conn)"
           target="_blank"
           rel="noopener noreferrer"
-          class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 hover:bg-primary/20 transition-colors"
+          class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0 hover:bg-muted/80 transition-colors"
           :title="$t('productMarketplaceIntegrations.openOnAdapter')"
         >
-          <ExternalLink class="size-4 text-primary" />
+          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
         </a>
-        <div v-else class="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <ExternalLink class="size-4 text-primary" />
+        <div v-else class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -1531,7 +1533,7 @@ export default {
           <Spinner size="lg" class="text-primary" />
         </div>
         <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <ExternalLink class="size-4 text-muted-foreground" />
+          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -1619,7 +1621,7 @@ export default {
         class="flex items-center gap-3 rounded-lg px-4 py-3 border border-dashed"
       >
         <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <Link2 class="size-4 text-muted-foreground" />
+          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">

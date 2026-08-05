@@ -28,6 +28,7 @@ import {
 import { getSettingsSidebarSubItems } from "./settingsNav";
 import { getLocale, t, toBcp47 } from "@/i18n";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { adapterIconComponent } from "@/lib/adapterIcons";
 
 /**
  * @typedef {'link'|'action'} NavItemType
@@ -155,7 +156,7 @@ const SIDEBAR_GROUPS = [
             ),
             type: "link",
             to: `/adapter/${connId}`,
-            icon: Plug,
+            icon: adapterIconComponent(adapterKey, Plug),
           };
         }),
       ];

@@ -47,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 
 export default {
   setup() {
@@ -59,6 +60,7 @@ export default {
     PageSection,
     Button,
     Badge,
+    AdapterIcon,
     Table,
     TableBody,
     TableCell,
@@ -441,7 +443,12 @@ export default {
           </TableHeader>
           <TableBody>
             <TableRow v-for="plugin in availableFromRegistry" :key="plugin.key">
-              <TableCell class="px-3 font-medium">{{ plugin.displayName }}</TableCell>
+              <TableCell class="px-3 font-medium">
+                <div class="flex items-center gap-2">
+                  <AdapterIcon :adapter-key="plugin.key" class="size-4" />
+                  <span>{{ plugin.displayName }}</span>
+                </div>
+              </TableCell>
               <TableCell class="px-3 font-mono text-xs text-muted-foreground">{{ plugin.key }}</TableCell>
               <TableCell class="px-3">
                 <Badge variant="outline" class="text-xs tabular-nums">
@@ -491,7 +498,7 @@ export default {
               >
                 <TableCell class="px-3 align-top">
                   <div class="flex items-start gap-2.5 min-w-0">
-                    <Puzzle class="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <AdapterIcon :adapter-key="plugin.key" class="size-4 mt-0.5" />
                     <div class="min-w-0">
                       <div class="font-medium break-words">{{ plugin.displayName }}</div>
                       <div

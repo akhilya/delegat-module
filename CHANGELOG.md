@@ -10,6 +10,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Per-adapter brand icons (`icon.webp` in each marketplace plugin; mirrored to `frontend/public/adapter-icons`) shown in sidebar, marketplace, plugins, and product adapter lists
 - Instance owner can permanently delete a store (type exact name to confirm; last store protected; catalog/adapters/files purged including MinIO)
 - Instance branding (white-label): Settings modal and first-run Setup step for name, description, logo, favicon, and primary/accent colors; seeded once from `BRAND_*` env; applied at runtime without rebuild
 - Default favicon matches Control Plane (`/logo-square-favicon.webp`); no default logo until upload
