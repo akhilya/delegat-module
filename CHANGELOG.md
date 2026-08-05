@@ -28,6 +28,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Connection settings: ⋮ menu with Test, API limits, and Clear cache (refresh dictionaries without waiting for TTL)
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
+### Fixed
+- Frontend Docker build: sync `package-lock.json` with Hugeicons deps so `npm ci` succeeds in CI
+
 ### Changed
 - Aligned default brand name and copy to **Delegat.Module** (Vite env, `index.html`, docs/tests, branding defaults)
 - Sonner toasts themed to Catalog Workbench: mount `@/components/ui/sonner` (not raw vue-sonner), flat popover surface + border, Onest, `--z-toast`, compact `--radius-md` (no soft drop shadow)
