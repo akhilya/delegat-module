@@ -6,14 +6,18 @@ namespace Delegat.Infrastructure.Configuration;
 public static class FeatureFlags
 {
     /// <summary>
-    /// AI assistant. Unset defaults to enabled for backward compatibility;
-    /// set <c>AI_ENABLED=false</c> to disable (Control Plane free tier).
+    /// AI assistant. Explicit <c>true</c>/<c>false</c> always win.
+    /// Unset/empty: enabled for self-host backward compatibility; disabled when
+    /// <c>CONTROL_PLANE_URL</c> is set (CP-managed instances must get an explicit flag).
     /// </summary>
     public static bool IsAiEnabled()
     {
         var raw = Environment.GetEnvironmentVariable("AI_ENABLED");
         if (string.IsNullOrWhiteSpace(raw))
-            return true;
+        {
+            var cp = Environment.GetEnvironmentVariable("CONTROL_PLANE_URL");
+            return string.IsNullOrWhiteSpace(cp);
+        }
 
         return IsTruthy(raw);
     }

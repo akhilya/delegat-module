@@ -1,10 +1,8 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
@@ -90,12 +88,10 @@ const ATTRIBUTE_TYPE_OPTIONS = [
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
-    PageHeader,
     Button,
+    Card,
     Input,
     Textarea,
     Switch,
@@ -673,19 +669,13 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      :title="$t('pages.storeAttributesPage.header.title')"
-      :description="$t('pages.storeAttributesPage.header.description')"
-    >
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Button @click="openAddAttributeDialog">
         <Plus class="size-4 mr-2" />
         {{ $t("pages.storeAttributesPage.header.addButton") }}
       </Button>
-    </PageHeader>
+    </div>
 
     <PageSection
       :loading="isLoading"
@@ -702,7 +692,7 @@ export default {
           </Button>
       </template>
 
-        <div class="rounded-lg border overflow-hidden">
+        <Card class="gap-0 overflow-hidden p-0 py-0">
           <div class="overflow-x-auto">
             <table class="w-full caption-bottom text-sm">
               <TableHeader>
@@ -801,7 +791,7 @@ export default {
               </draggable>
             </table>
           </div>
-        </div>
+        </Card>
     </PageSection>
 
     <!-- Attribute Dialog -->
@@ -1074,5 +1064,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </AppPageChrome>
 </template>

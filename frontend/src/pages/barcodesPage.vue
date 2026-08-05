@@ -1,12 +1,9 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import {
   Table,
   TableBody,
@@ -35,14 +32,11 @@ const EXPORT_PAGE_SIZE = 100;
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Checkbox,
-    PageHeader,
     Table,
     TableBody,
     TableCell,
@@ -63,7 +57,6 @@ export default {
       totalCount: 0,
       startIndex: 0,
       searchQuery: "",
-      searchDraft: "",
       isLoading: false,
       isDownloadingSelected: false,
       isDownloadingAll: false,
@@ -132,7 +125,7 @@ export default {
     },
 
     applySearch() {
-      this.searchQuery = this.searchDraft.trim();
+      this.searchQuery = (this.searchQuery || "").trim();
       this.startIndex = 0;
       this.fetchPage();
     },
@@ -259,45 +252,26 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      :title="$t('pages.barcodesPage.title')"
-      :description="$t('pages.barcodesPage.description', { count: totalCount })"
-    >
-      <div class="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          :disabled="isBusy || selectedCount === 0"
-          @click="downloadSelected"
-        >
-          <Loader2 v-if="isDownloadingSelected" class="mr-2 size-4 animate-spin" />
-          <Download v-else class="mr-2 size-4" />
-          {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
-        </Button>
-        <Button :disabled="isBusy || totalCount === 0" @click="downloadAll">
-          <Loader2 v-if="isDownloadingAll" class="mr-2 size-4 animate-spin" />
-          <Download v-else class="mr-2 size-4" />
-          {{ $t("pages.barcodesPage.downloadAll") }}
-        </Button>
-      </div>
-    </PageHeader>
-
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <div class="relative min-w-[220px] flex-1 sm:max-w-sm">
-        <Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <template #nav-center>
+      <div class="relative h-9 w-full">
         <Input
-          v-model="searchDraft"
-          class="pl-9"
+          v-model="searchQuery"
+          class="absolute h-full w-full"
           :placeholder="$t('pages.barcodesPage.searchPlaceholder')"
-          @keydown.enter="applySearch"
+          @keypress.enter="applySearch"
         />
+        <Button
+          class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+          variant="link"
+          @click="applySearch"
+        >
+          <Search class="size-4" />
+        </Button>
       </div>
-      <Button variant="secondary" @click="applySearch">
-        {{ $t("common.search") }}
-      </Button>
+    </template>
+
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Button
         v-if="selectedCount > 0"
         variant="ghost"
@@ -305,6 +279,20 @@ export default {
         @click="clearSelection"
       >
         {{ $t("pages.barcodesPage.clearSelection") }}
+      </Button>
+      <Button
+        variant="outline"
+        :disabled="isBusy || selectedCount === 0"
+        @click="downloadSelected"
+      >
+        <Loader2 v-if="isDownloadingSelected" class="mr-2 size-4 animate-spin" />
+        <Download v-else class="mr-2 size-4" />
+        {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
+      </Button>
+      <Button :disabled="isBusy || totalCount === 0" @click="downloadAll">
+        <Loader2 v-if="isDownloadingAll" class="mr-2 size-4 animate-spin" />
+        <Download v-else class="mr-2 size-4" />
+        {{ $t("pages.barcodesPage.downloadAll") }}
       </Button>
     </div>
 
@@ -396,5 +384,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

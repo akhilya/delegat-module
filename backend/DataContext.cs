@@ -80,6 +80,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Instance runtime settings (admin UI toggles)
     public DbSet<InstanceLoggingSettings> instanceLoggingSettings { get; set; }
     public DbSet<InstancePublicApiSettings> instancePublicApiSettings { get; set; }
+    public DbSet<InstanceBrandingSettings> instanceBrandingSettings { get; set; }
 
     // Outbound marketplace HTTP request logs
     public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }

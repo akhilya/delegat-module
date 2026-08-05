@@ -218,6 +218,7 @@ builder.Services.AddSingleton(mysqlSettings);
 builder.Services.AddSingleton<IDatabaseDumpService, DatabaseDumpService>();
 builder.Services.AddSingleton<ILoggingSettingsService, LoggingSettingsService>();
 builder.Services.AddSingleton<IPublicApiSettingsService, PublicApiSettingsService>();
+builder.Services.AddSingleton<IBrandingSettingsService, BrandingSettingsService>();
 
 // Platform Link (Control Plane m2m) + Reference Catalog
 var platformLinkOptions = PlatformLinkOptions.FromEnvironment();
@@ -310,6 +311,7 @@ builder.Services.AddScoped<ProductSyncService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<CurrencyService>();
+builder.Services.AddScoped<IStoreDeletionService, StoreDeletionService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
 
 // Background services
@@ -553,9 +555,10 @@ using (var scope = app.Services.CreateScope())
     await permissionService.MigrateLegacyAccessAsync();
 }
 
-// Warm logging / Public API toggles cache (seed from env on first boot)
+// Warm logging / Public API / branding toggles cache (seed from env on first boot)
 await app.Services.GetRequiredService<ILoggingSettingsService>().EnsureInitializedAsync();
 await app.Services.GetRequiredService<IPublicApiSettingsService>().EnsureInitializedAsync();
+await app.Services.GetRequiredService<IBrandingSettingsService>().EnsureInitializedAsync();
 
 // Ensure MinIO is reachable and the app bucket exists before /api/health is served.
 // Fresh MinIO has no buckets; MinIO.NET 6.0.5 NREs on BucketExists for missing buckets.

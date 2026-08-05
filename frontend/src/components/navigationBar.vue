@@ -1,5 +1,6 @@
 <script>
 // NavigationBar - Page-level toolbar with mobile sidebar trigger, center slot, and user menu.
+// Height is locked to --app-navbar-height (single row) so breadcrumbs share one Y-offset on every page.
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import UserAccountMenu from "@/components/UserAccountMenu.vue";
 
@@ -11,6 +12,8 @@ import { Loader2 } from "lucide-vue-next";
 export default {
   props: {
     sticky: { type: Boolean, default: true },
+    /** When true, render the center slot (search/tabs). Do not infer from $slots alone. */
+    hasCenter: { type: Boolean, default: false },
   },
   components: {
     SidebarTrigger,
@@ -51,9 +54,14 @@ export default {
 </script>
 
 <template>
-  <div :class="['w-full bg-background', sticky && 'sticky top-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm']">
+  <div
+    :class="[
+      'h-[var(--app-navbar-height)] w-full shrink-0 overflow-hidden bg-background',
+      sticky && 'sticky top-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm',
+    ]"
+  >
     <template v-if="!isLoading">
-      <div class="flex items-center h-14 gap-2">
+      <div class="flex h-full items-center gap-2">
         <div class="md:hidden shrink-0">
           <SidebarTrigger />
         </div>
@@ -62,11 +70,17 @@ export default {
           <slot name="left" />
         </div>
 
-        <div class="hidden sm:flex flex-1 items-center justify-center">
+        <div
+          v-if="hasCenter"
+          class="flex min-w-0 flex-1 items-center justify-center"
+        >
           <slot name="center" />
         </div>
 
-        <div v-if="$slots.right" class="hidden md:flex items-center gap-2 shrink-0 mr-1">
+        <div
+          v-if="$slots.right"
+          class="mr-1 hidden shrink-0 items-center gap-2 md:flex"
+        >
           <slot name="right" />
         </div>
 
@@ -78,14 +92,10 @@ export default {
           />
         </div>
       </div>
-
-      <div class="sm:hidden pb-1.5">
-        <slot name="center" />
-      </div>
     </template>
 
     <template v-else>
-      <div class="flex items-center justify-center h-14">
+      <div class="flex h-full items-center justify-center">
         <Loader2 class="size-4 animate-spin" />
       </div>
     </template>

@@ -46,6 +46,7 @@
 - Users can be members of multiple stores
 - Store switching via selectedStoreId cookie (membership verified against DB)
 - All entities scoped to storeId
+- **Hard-delete a store:** instance owner only (`User.isAdmin`); type exact store name to confirm; cannot delete the last store; purges DB orphans and MinIO `{storeId}/` prefix
 
 ### Authentication & Security
 - JWT in HttpOnly, SameSite=Strict cookie
@@ -71,7 +72,7 @@
 - **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
 - **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
 - **Admin model management:** `/settings/admin/ai` - connect any Anthropic or OpenAI-compatible model
-- **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start; `/settings/admin/ai` is blocked and `llmGenerate` is hidden in the mapping palette — change the flag and **restart** the instance to enable.
+- **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start; `/settings/admin/ai` is blocked and `llmGenerate` is hidden in the mapping palette — change the flag and **restart** the instance to enable. Unset: enabled for self-host; **disabled** when `CONTROL_PLANE_URL` is set (Control Plane must emit an explicit `true`/`false`).
 - All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
 
 ### Quotas
@@ -79,7 +80,7 @@
 - `MAX_STORAGE_GB` - max storage per store
 - `MAX_FILES` - max files per store
 - `MAX_CONNECTIONS` - max marketplace connections
-- `AI_ENABLED` - whether AI assistant is available (`true` / `false`; unset defaults to enabled for backward compatibility). Toggle requires process restart.
+- `AI_ENABLED` - whether AI assistant is available (`true` / `false`). Unset defaults to enabled for self-host; when `CONTROL_PLANE_URL` is set, unset defaults to disabled. Toggle requires process restart.
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
@@ -168,8 +169,8 @@
 - DB indexing strategy.
 
 #### Extended Branding
-- Custom color scheme (primary/accent) via env vars.
-- Email templates.
+- Runtime white-label in **Settings → Branding** (name, description, logo, favicon, primary/accent). Seeded once from `BRAND_*` env (Control Plane provision can inject); admin UI is source of truth after first boot.
+- Email templates (still future).
 
 ---
 

@@ -36,6 +36,8 @@ import {
   PAGE_SETUP,
 } from "./lib/setupGate";
 import { fetchSetupStoreCount } from "./lib/setupStoreCount";
+import { loadBranding } from "./brand";
+import "./theme";
 
 export { getCachedMe, primeMeCache } from "./lib/meCache";
 export { clearSetupStoreCountCache } from "./lib/setupStoreCount";
@@ -364,7 +366,7 @@ app.use(i18n);
 app.use(router);
 app.use(store);
 
-Promise.all([router.isReady(), bootstrapLocale()]).then(() => {
+Promise.all([router.isReady(), bootstrapLocale(), loadBranding(http)]).then(() => {
   app.mount("#app");
   // Warm /auth/me after mount so the first permissioned nav is sync (skip public auth pages).
   if (!router.currentRoute.value.meta?.public) {

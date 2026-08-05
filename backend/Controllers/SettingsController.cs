@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Delegat.Infrastructure.Auth;
 using Delegat.Services;
 
@@ -11,15 +13,18 @@ public class SettingsController : ControllerBase
     private readonly IDatabaseDumpService _databaseDumpService;
     private readonly ILoggingSettingsService _loggingSettings;
     private readonly IPublicApiSettingsService _publicApiSettings;
+    private readonly IBrandingSettingsService _brandingSettings;
 
     public SettingsController(
         IDatabaseDumpService databaseDumpService,
         ILoggingSettingsService loggingSettings,
-        IPublicApiSettingsService publicApiSettings)
+        IPublicApiSettingsService publicApiSettings,
+        IBrandingSettingsService brandingSettings)
     {
         _databaseDumpService = databaseDumpService;
         _loggingSettings = loggingSettings;
         _publicApiSettings = publicApiSettings;
+        _brandingSettings = brandingSettings;
     }
 
     /// <summary>
@@ -79,5 +84,85 @@ public class SettingsController : ControllerBase
             return BadRequest(new { error = "Body required" });
 
         return Ok(await _publicApiSettings.UpdateAsync(request, ct));
+    }
+
+    /// <summary>Current instance white-label branding (public — used on auth and shell before login).</summary>
+    [HttpGet]
+    [Route("/settings/branding")]
+    [AllowAnonymous]
+    [DisableRateLimiting]
+    public async Task<ActionResult<BrandingSettingsDto>> GetBrandingSettings(CancellationToken ct)
+    {
+        return Ok(await _brandingSettings.GetAsync(ct));
+    }
+
+    /// <summary>Update branding identity and colors. Takes effect immediately (no rebuild).</summary>
+    [HttpPut]
+    [Route("/settings/branding")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<BrandingSettingsDto>> UpdateBrandingSettings(
+        [FromBody] UpdateBrandingSettingsRequest request,
+        CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Body required" });
+
+        return Ok(await _brandingSettings.UpdateAsync(request, ct));
+    }
+
+    /// <summary>Upload custom logo (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
+    [HttpPost]
+    [Route("/settings/branding/logo")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
+    public async Task<ActionResult<BrandingSettingsDto>> UploadBrandingLogo(
+        IFormFile file,
+        CancellationToken ct)
+    {
+        return Ok(await _brandingSettings.UploadLogoAsync(file, ct));
+    }
+
+    /// <summary>Upload custom favicon (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
+    [HttpPost]
+    [Route("/settings/branding/favicon")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
+    public async Task<ActionResult<BrandingSettingsDto>> UploadBrandingFavicon(
+        IFormFile file,
+        CancellationToken ct)
+    {
+        return Ok(await _brandingSettings.UploadFaviconAsync(file, ct));
+    }
+
+    /// <summary>Stream custom logo bytes (anonymous).</summary>
+    [HttpGet]
+    [Route("/settings/branding/assets/logo")]
+    [AllowAnonymous]
+    [DisableRateLimiting]
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    public async Task<IActionResult> GetBrandingLogoAsset(CancellationToken ct)
+    {
+        var opened = await _brandingSettings.OpenLogoStreamAsync(ct);
+        if (opened is null)
+            return NotFound();
+
+        Response.Headers.CacheControl = "public, max-age=86400";
+        return File(opened.Value.Stream, opened.Value.ContentType);
+    }
+
+    /// <summary>Stream custom favicon bytes (anonymous).</summary>
+    [HttpGet]
+    [Route("/settings/branding/assets/favicon")]
+    [AllowAnonymous]
+    [DisableRateLimiting]
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    public async Task<IActionResult> GetBrandingFaviconAsset(CancellationToken ct)
+    {
+        var opened = await _brandingSettings.OpenFaviconStreamAsync(ct);
+        if (opened is null)
+            return NotFound();
+
+        Response.Headers.CacheControl = "public, max-age=86400";
+        return File(opened.Value.Stream, opened.Value.ContentType);
     }
 }

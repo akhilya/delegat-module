@@ -10,6 +10,7 @@ import {
 import {
   LogToolbar,
   LogListPanel,
+  LogRefreshButton,
   LogDateCell,
   LogMethodCell,
   LogPathCell,
@@ -51,6 +52,7 @@ export default {
     TableRow,
     LogToolbar,
     LogListPanel,
+    LogRefreshButton,
     LogDateCell,
     LogMethodCell,
     LogPathCell,
@@ -100,10 +102,6 @@ export default {
     };
   },
   computed: {
-    summaryLabel() {
-      if (this.errorCount === 0) return this.$t("pages.apiPage.logs.noErrors");
-      return this.$t("pages.apiPage.logs.errorCount", { count: this.errorCount });
-    },
     keyOptions() {
       return (this.apiKeys || []).map((k) => ({
         value: String(k.id),
@@ -314,35 +312,40 @@ export default {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-    <LogToolbar class="shrink-0" :summary="summaryLabel" :summary-alert="errorCount > 0">
+    <LogToolbar class="shrink-0">
       <LogFilterSelect
         :model-value="filters.apiKeyId"
         :all-value="LOG_FILTER_ALL"
         :all-label="$t('pages.apiPage.logs.allKeys')"
         :placeholder="$t('pages.apiPage.logs.filterKey')"
         :options="keyOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-52"
+        trigger-class="h-9 w-full min-w-0 sm:w-44"
         @update:model-value="(v) => setFilter('apiKeyId', v)"
       />
 
       <LogHttpMethodFilter
         :model-value="filters.method"
         :all-value="LOG_FILTER_ALL"
+        trigger-class="h-9 w-full min-w-0 sm:w-28"
         @update:model-value="(v) => setFilter('method', v)"
       />
 
       <LogHttpStatusFilter
         :model-value="filters.statusClass"
         :all-value="LOG_FILTER_ALL"
+        trigger-class="h-9 w-full min-w-0 sm:w-28"
         @update:model-value="(v) => setFilter('statusClass', v)"
       />
 
       <Input
         v-model="filters.q"
-        class="h-9 w-full min-w-0 sm:max-w-xs"
+        class="h-9 w-full min-w-0 sm:max-w-[14rem]"
         :placeholder="$t('pages.apiPage.logs.searchPlaceholder')"
         @keydown.enter="refresh"
       />
+      <template #actions>
+        <LogRefreshButton :loading="isLoading" @click="refresh" />
+      </template>
     </LogToolbar>
 
     <LogListPanel

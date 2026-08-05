@@ -1,9 +1,7 @@
 <script>
 import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import Input from "@/components/ui/input/Input.vue";
@@ -137,10 +135,8 @@ import { useStoreDateTime } from "@/composables/useStoreDateTime";
 export default {
   components: {
     AiErrorExplainer,
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Label,
@@ -398,6 +394,7 @@ export default {
       isLoadingLimits: false,
       limitsRefreshTimer: null,
       showLimitsDialog: false,
+      showCapabilitiesDialog: false,
       isClearingCache: false,
       isVerifyingLinks: false,
       aiEnabled: false,
@@ -2871,24 +2868,22 @@ export default {
 </script>
 
 <template>
-  <Page
-    class="flex flex-col"
-    :class="activeTab === 'products' ? 'h-screen overflow-hidden' : ''"
+  <AppPageChrome
+    :fill-viewport="activeTab === 'products'"
+    :breadcrumb-items="breadcrumbs"
+    :has-nav-center="true"
   >
-    <NavigationBar class="shrink-0">
-      <template v-if="connection" #center>
-        <Tabs v-model="activeTab">
-          <TabsList>
-            <TabsTrigger value="settings">{{ $t("marketplace.connectionPage.tabs.settings") }}</TabsTrigger>
-            <TabsTrigger value="mappings">{{ $t("marketplace.connectionPage.tabs.mappings") }}</TabsTrigger>
-            <TabsTrigger value="products" @click="onProductsTabActivated">
-              {{ $t("marketplace.connectionPage.tabs.products") }}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </template>
-    </NavigationBar>
-    <Breadcrumbs class="shrink-0" :items="breadcrumbs" />
+    <template #nav-center>
+      <Tabs v-model="activeTab">
+        <TabsList>
+          <TabsTrigger value="settings">{{ $t("marketplace.connectionPage.tabs.settings") }}</TabsTrigger>
+          <TabsTrigger value="mappings">{{ $t("marketplace.connectionPage.tabs.mappings") }}</TabsTrigger>
+          <TabsTrigger value="products" @click="onProductsTabActivated">
+            {{ $t("marketplace.connectionPage.tabs.products") }}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </template>
 
     <PageSection
       :loading="isLoading"
@@ -2900,183 +2895,6 @@ export default {
         class="flex flex-col gap-4"
         :class="activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden' : ''"
       >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between shrink-0">
-          <div class="min-w-0 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-lg font-semibold break-words">{{ connection.name }}</h1>
-              <Badge variant="outline">{{ adapterDisplayName }}</Badge>
-              <Badge :variant="connection.isActive ? 'secondary' : 'outline'">
-                {{ connection.isActive ? $t("marketplace.connectionPage.status.active") : $t("marketplace.connectionPage.status.inactive") }}
-              </Badge>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              {{ $t("marketplace.connectionPage.header.subtitle") }}
-            </p>
-          </div>
-          <div v-if="activeTab === 'settings'" class="flex flex-wrap gap-2 shrink-0">
-            <ButtonGroup>
-              <Button @click="handleSave" :disabled="isSaving">
-                <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
-                <Save v-else class="size-4 mr-2" />
-                {{ $t("common.save") }}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button
-                    size="icon"
-                    :aria-label="$t('marketplace.connectionPage.header.moreActions')"
-                  >
-                    <EllipsisVertical class="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="w-56">
-                  <DropdownMenuItem :disabled="isTesting" @click="handleTest">
-                    <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
-                    <TestTube v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.header.test") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    :disabled="isVerifyingLinks"
-                    @click="handleVerifyLinks"
-                  >
-                    <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
-                    <SearchCheck v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.header.verifyLinks") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    :disabled="limitsData != null && limitsData.supported === false"
-                    @click="showLimitsDialog = true"
-                  >
-                    <Activity class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.limits.title") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
-                    <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
-                    <Trash2 v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.header.clearCache") }}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
-            <Dialog v-model:open="showLimitsDialog">
-                    <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle class="flex items-center gap-2">
-                          <Activity class="size-5" />
-                          {{ $t("marketplace.connectionPage.limits.title") }}
-                        </DialogTitle>
-                        <DialogDescription>
-                          {{ $t("marketplace.connectionPage.limits.subtitle") }}
-                        </DialogDescription>
-                      </DialogHeader>
-
-                      <div
-                        v-if="isLoadingLimits"
-                        class="flex justify-center py-10"
-                      >
-                        <Loader2 class="size-8 animate-spin text-muted-foreground" />
-                      </div>
-
-                      <EmptyState
-                        v-else-if="limitsData && !limitsData.supported"
-                        class="flex-1 py-12"
-                        :title="$t('marketplace.connectionPage.limits.unavailableTitle')"
-                        :description="$t('marketplace.connectionPage.limits.unavailableDescription')"
-                      >
-                        <template #icon>
-                          <Activity />
-                        </template>
-                      </EmptyState>
-
-                      <div
-                        v-else-if="limitsData?.supported"
-                        class="space-y-4"
-                      >
-                        <Card>
-                          <CardHeader class="pb-2">
-                            <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
-                              <span class="flex items-center gap-2">
-                                <Gauge class="size-4 text-muted-foreground" />
-                                {{ $t("marketplace.connectionPage.limits.requestsPerSecond") }}
-                              </span>
-                              <Badge variant="secondary" class="font-normal tabular-nums">
-                                {{ limitsData.currentWindowRequests }} /
-                                {{ limitsData.maxRequestsPerSecond }} RPS
-                              </Badge>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent class="space-y-3">
-                            <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                              <span>{{ $t("marketplace.connectionPage.limits.currentWindow") }}</span>
-                              <span>{{ getUsageLoadLabel(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond) }}</span>
-                            </div>
-                            <Progress :model-value="rpsUsagePercent" :max="100" />
-                            <p class="text-xs text-muted-foreground">
-                              {{ $t("marketplace.connectionPage.limits.totalRequestsSinceStart") }}
-                              {{ limitsData.totalRequestsSinceStart.toLocaleString("ru-RU") }}
-                            </p>
-                          </CardContent>
-                        </Card>
-
-                        <p
-                          v-if="limitsData.quotasAvailable === false"
-                          class="text-xs text-muted-foreground"
-                        >
-                          {{ $t("marketplace.connectionPage.limits.quotasUnavailable") }}
-                        </p>
-
-                        <div
-                          v-if="limitsData.quotas?.length > 0"
-                          class="grid gap-3"
-                        >
-                          <Card
-                            v-for="quota in limitsData.quotas"
-                            :key="quota.key"
-                          >
-                            <CardHeader class="pb-2">
-                              <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
-                                <span class="truncate">{{ quota.displayName }}</span>
-                                <Badge variant="secondary" class="shrink-0 font-normal tabular-nums">
-                                  <template v-if="quota.limit < 0">
-                                    {{ quota.usage.toLocaleString("ru-RU") }} · {{ $t("marketplace.connectionPage.limits.unlimited") }}
-                                  </template>
-                                  <template v-else>
-                                    {{ quota.usage.toLocaleString("ru-RU") }} /
-                                    {{ quota.limit.toLocaleString("ru-RU") }}
-                                  </template>
-                                </Badge>
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent class="space-y-3">
-                              <div
-                                v-if="quota.limit > 0"
-                                class="space-y-2"
-                              >
-                                <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                                  <span>{{ $t("marketplace.connectionPage.limits.usage") }}</span>
-                                  <span>{{ getUsageLoadLabel(quota.usage, quota.limit) }}</span>
-                                </div>
-                                <Progress
-                                  :model-value="getUsagePercent(quota.usage, quota.limit)"
-                                  :max="100"
-                                />
-                              </div>
-                              <p
-                                v-if="quota.resetsAt"
-                                class="text-xs text-muted-foreground"
-                              >
-                                {{ $t("marketplace.connectionPage.limits.reset") }}: {{ formatQuotaResetTime(quota.resetsAt) }}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </div>
-                    </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-
         <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col min-h-0">
           <TabsContent value="settings" class="mt-0">
             <div class="max-w-2xl">
@@ -3156,25 +2974,216 @@ export default {
                 </SettingsFormField>
               </SettingsFormSection>
 
-              <SettingsFormSection
-                v-if="capabilities"
-                :title="$t('marketplace.connectionPage.settings.capabilitiesTitle')"
-              >
-                <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  <div
-                    v-for="(value, key) in capabilities.capabilities"
-                    :key="key"
-                    class="flex items-center gap-2"
-                  >
-                    <CheckCircle
-                      v-if="value"
-                      class="size-4 shrink-0 text-success-foreground"
-                    />
-                    <XCircle v-else class="size-4 shrink-0 text-muted-foreground" />
-                    <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
-                  </div>
-                </div>
-              </SettingsFormSection>
+              <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <ButtonGroup class="items-stretch [&_button]:h-9">
+                  <Button @click="handleSave" :disabled="isSaving">
+                    <Loader2 v-if="isSaving" class="size-4 mr-2 animate-spin" />
+                    <Save v-else class="size-4 mr-2" />
+                    {{ $t("common.save") }}
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger as-child>
+                      <Button
+                        size="icon"
+                        class="h-9 w-9 shrink-0"
+                        :aria-label="$t('marketplace.connectionPage.header.moreActions')"
+                      >
+                        <EllipsisVertical class="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" class="w-56">
+                      <DropdownMenuItem :disabled="isTesting" @click="handleTest">
+                        <Loader2 v-if="isTesting" class="size-4 mr-2 animate-spin" />
+                        <TestTube v-else class="size-4 mr-2" />
+                        {{ $t("marketplace.connectionPage.header.test") }}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        :disabled="isVerifyingLinks"
+                        @click="handleVerifyLinks"
+                      >
+                        <Loader2 v-if="isVerifyingLinks" class="size-4 mr-2 animate-spin" />
+                        <SearchCheck v-else class="size-4 mr-2" />
+                        {{ $t("marketplace.connectionPage.header.verifyLinks") }}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        :disabled="limitsData != null && limitsData.supported === false"
+                        @click="showLimitsDialog = true"
+                      >
+                        <Activity class="size-4 mr-2" />
+                        {{ $t("marketplace.connectionPage.limits.title") }}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem :disabled="isClearingCache" @click="handleClearCache">
+                        <Loader2 v-if="isClearingCache" class="size-4 mr-2 animate-spin" />
+                        <Trash2 v-else class="size-4 mr-2" />
+                        {{ $t("marketplace.connectionPage.header.clearCache") }}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </ButtonGroup>
+
+                <Button
+                  v-if="capabilities"
+                  type="button"
+                  variant="link"
+                  class="h-auto px-0"
+                  @click="showCapabilitiesDialog = true"
+                >
+                  {{ $t("marketplace.connectionPage.settings.capabilitiesLink") }}
+                </Button>
+
+                <Dialog v-model:open="showCapabilitiesDialog">
+                  <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle class="flex items-center gap-2">
+                        <ListChecks class="size-5" />
+                        {{ $t("marketplace.connectionPage.settings.capabilitiesTitle") }}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {{
+                          $t("marketplace.connectionPage.settings.capabilitiesDescription", {
+                            adapter: adapterDisplayName,
+                          })
+                        }}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div
+                      v-if="capabilities?.capabilities"
+                      class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                    >
+                      <div
+                        v-for="(value, key) in capabilities.capabilities"
+                        :key="key"
+                        class="flex items-center gap-2"
+                      >
+                        <CheckCircle
+                          v-if="value"
+                          class="size-4 shrink-0 text-success-foreground"
+                        />
+                        <XCircle v-else class="size-4 shrink-0 text-muted-foreground" />
+                        <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog v-model:open="showLimitsDialog">
+                  <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle class="flex items-center gap-2">
+                        <Activity class="size-5" />
+                        {{ $t("marketplace.connectionPage.limits.title") }}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {{ $t("marketplace.connectionPage.limits.subtitle") }}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div
+                      v-if="isLoadingLimits"
+                      class="flex justify-center py-10"
+                    >
+                      <Loader2 class="size-8 animate-spin text-muted-foreground" />
+                    </div>
+
+                    <EmptyState
+                      v-else-if="limitsData && !limitsData.supported"
+                      class="flex-1 py-12"
+                      :title="$t('marketplace.connectionPage.limits.unavailableTitle')"
+                      :description="$t('marketplace.connectionPage.limits.unavailableDescription')"
+                    >
+                      <template #icon>
+                        <Activity />
+                      </template>
+                    </EmptyState>
+
+                    <div
+                      v-else-if="limitsData?.supported"
+                      class="space-y-4"
+                    >
+                      <Card>
+                        <CardHeader class="pb-2">
+                          <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
+                            <span class="flex items-center gap-2">
+                              <Gauge class="size-4 text-muted-foreground" />
+                              {{ $t("marketplace.connectionPage.limits.requestsPerSecond") }}
+                            </span>
+                            <Badge variant="secondary" class="font-normal tabular-nums">
+                              {{ limitsData.currentWindowRequests }} /
+                              {{ limitsData.maxRequestsPerSecond }} RPS
+                            </Badge>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent class="space-y-3">
+                          <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <span>{{ $t("marketplace.connectionPage.limits.currentWindow") }}</span>
+                            <span>{{ getUsageLoadLabel(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond) }}</span>
+                          </div>
+                          <Progress :model-value="rpsUsagePercent" :max="100" />
+                          <p class="text-xs text-muted-foreground">
+                            {{ $t("marketplace.connectionPage.limits.totalRequestsSinceStart") }}
+                            {{ limitsData.totalRequestsSinceStart.toLocaleString("ru-RU") }}
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      <p
+                        v-if="limitsData.quotasAvailable === false"
+                        class="text-xs text-muted-foreground"
+                      >
+                        {{ $t("marketplace.connectionPage.limits.quotasUnavailable") }}
+                      </p>
+
+                      <div
+                        v-if="limitsData.quotas?.length > 0"
+                        class="grid gap-3"
+                      >
+                        <Card
+                          v-for="quota in limitsData.quotas"
+                          :key="quota.key"
+                        >
+                          <CardHeader class="pb-2">
+                            <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
+                              <span class="truncate">{{ quota.displayName }}</span>
+                              <Badge variant="secondary" class="shrink-0 font-normal tabular-nums">
+                                <template v-if="quota.limit < 0">
+                                  {{ quota.usage.toLocaleString("ru-RU") }} · {{ $t("marketplace.connectionPage.limits.unlimited") }}
+                                </template>
+                                <template v-else>
+                                  {{ quota.usage.toLocaleString("ru-RU") }} /
+                                  {{ quota.limit.toLocaleString("ru-RU") }}
+                                </template>
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent class="space-y-3">
+                            <div
+                              v-if="quota.limit > 0"
+                              class="space-y-2"
+                            >
+                              <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                                <span>{{ $t("marketplace.connectionPage.limits.usage") }}</span>
+                                <span>{{ getUsageLoadLabel(quota.usage, quota.limit) }}</span>
+                              </div>
+                              <Progress
+                                :model-value="getUsagePercent(quota.usage, quota.limit)"
+                                :max="100"
+                              />
+                            </div>
+                            <p
+                              v-if="quota.resetsAt"
+                              class="text-xs text-muted-foreground"
+                            >
+                              {{ $t("marketplace.connectionPage.limits.reset") }}: {{ formatQuotaResetTime(quota.resetsAt) }}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
 
               <div
                 v-if="testResult"
@@ -3709,21 +3718,21 @@ export default {
           <!-- Products Tab -->
           <TabsContent value="products" class="flex flex-1 flex-col mt-0 min-h-0 gap-3 overflow-hidden data-[state=inactive]:hidden">
             <div class="flex flex-wrap items-center gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  :variant="productsViewMode === 'external' ? 'default' : 'outline'"
-                  @click="switchProductsView('external')"
-                >
-                  {{ $t("marketplace.connectionPage.products.adapterProducts") }}
-                </Button>
-                <Button
-                  size="sm"
-                  :variant="productsViewMode === 'local' ? 'default' : 'outline'"
-                  @click="switchProductsView('local')"
-                >
-                  {{ $t("marketplace.connectionPage.products.localForExport") }}
-                </Button>
-                <div class="relative flex-1 min-w-[12rem]">
+              <Tabs
+                :model-value="productsViewMode"
+                class="w-auto shrink-0 gap-0"
+                @update:model-value="switchProductsView"
+              >
+                <TabsList>
+                  <TabsTrigger value="external">
+                    {{ $t("marketplace.connectionPage.products.adapterProducts") }}
+                  </TabsTrigger>
+                  <TabsTrigger value="local">
+                    {{ $t("marketplace.connectionPage.products.localForExport") }}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div class="relative min-h-9 flex-1 min-w-[12rem]">
                 <Search
                   class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
                 />
@@ -3748,10 +3757,7 @@ export default {
               </div>
             </div>
 
-            <div
-              class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
-            >
-              <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
             <!-- ==================== EXTERNAL VIEW ==================== -->
             <template v-if="productsViewMode === 'external'">
               <!-- Loading state -->
@@ -3786,8 +3792,12 @@ export default {
                 </template>
               </EmptyState>
 
-              <!-- Products table -->
-              <div v-else class="min-h-0 flex-1 overflow-auto">
+              <!-- Products table (border only around data, not EmptyState) -->
+              <div
+                v-else
+                class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+              >
+                <div class="min-h-0 flex-1 overflow-auto">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
                     <TableRow class="hover:bg-transparent">
@@ -4085,6 +4095,7 @@ export default {
                   </Button>
                 </div>
               </div>
+              </div>
             </template>
 
             <!-- ==================== LOCAL VIEW ==================== -->
@@ -4137,8 +4148,12 @@ export default {
                 </template>
               </EmptyState>
 
-              <!-- Local products table -->
-              <div v-else class="min-h-0 flex-1 overflow-auto">
+              <!-- Local products table (border only around data, not EmptyState) -->
+              <div
+                v-else
+                class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+              >
+              <div class="min-h-0 flex-1 overflow-auto">
                 <table class="w-full caption-bottom text-sm">
                   <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
                     <TableRow class="hover:bg-transparent">
@@ -4309,8 +4324,8 @@ export default {
                   {{ $t("marketplace.connectionPage.products.exportToAdapterCount", { count: selectedLocalIds.length }) }}
                 </Button>
               </div>
-            </template>
               </div>
+            </template>
             </div>
           </TabsContent>
         </Tabs>
@@ -4930,5 +4945,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </AppPageChrome>
 </template>

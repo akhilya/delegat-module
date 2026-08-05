@@ -19,17 +19,20 @@ public class StoreController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
     private readonly IAuthorizationService _authorizationService;
+    private readonly IStoreDeletionService _storeDeletion;
 
     public StoreController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        IStoreDeletionService storeDeletion)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _authorizationService = authorizationService;
+        _storeDeletion = storeDeletion;
     }
 
     [HttpGet]
@@ -383,6 +386,29 @@ public class StoreController : ControllerBase
         var users = await userRepo.GetAllAsync(u => u.isActive);
 
         return Ok(users.Select(u => new { id = u.Id, userName = u.UserName }).ToList());
+    }
+
+    [HttpDelete]
+    [Route("/stores/{id}")]
+    public async Task<IActionResult> DeleteStore(int id, [FromBody] DeleteStoreForm input)
+    {
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null || !user.isActive)
+            throw ApiException.Unauthorized("User not found", code: "user_not_found");
+        if (!user.isAdmin)
+            throw ApiException.Forbidden("Only the instance owner can delete a store", code: "store_delete_forbidden");
+
+        await _storeDeletion.DeleteStoreAsync(id, input.confirmationName ?? "");
+
+        if (_currentUserService.GetSelectedStoreId() == id)
+            Response.Cookies.Delete("selected_store_id");
+
+        return NoContent();
+    }
+
+    public struct DeleteStoreForm
+    {
+        public string confirmationName { get; set; }
     }
 
     public struct AddMemberForm

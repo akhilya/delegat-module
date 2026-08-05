@@ -25,9 +25,11 @@ defineOptions({ inheritAttrs: false });
 const slots = useSlots();
 const attrs = useAttrs();
 
-const emptyClass = computed(() =>
+const frameClass = computed(() =>
   cn(
-    props.size === "sm" ? "gap-3 p-4 md:p-6" : undefined,
+    // Expand inside flex parents (PageSection / fill layouts) and keep a visible frame.
+    "flex w-full min-h-0 flex-1 flex-col items-center justify-center rounded-lg border",
+    props.size === "sm" ? "gap-3 p-4 md:p-6" : "gap-4 p-6 md:p-12",
     props.class,
   ),
 );
@@ -36,12 +38,12 @@ const emptyClass = computed(() =>
 <template>
   <div
     v-if="loading"
-    :class="cn('flex justify-center py-12', props.class)"
+    :class="frameClass"
     v-bind="attrs"
   >
     <Loader2 class="size-8 animate-spin text-muted-foreground" />
   </div>
-  <Empty v-else :class="emptyClass" v-bind="attrs">
+  <Empty v-else :class="frameClass" v-bind="attrs">
     <EmptyHeader>
       <EmptyMedia
         v-if="slots.icon"

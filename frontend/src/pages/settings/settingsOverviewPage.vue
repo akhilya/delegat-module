@@ -3,16 +3,18 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { http, invalidateMeCache, loadMe } from "@/main";
 import { notifyMeUpdated } from "@/lib/meCache";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Download, Loader2 } from "lucide-vue-next";
+import { Download, Loader2, Palette } from "lucide-vue-next";
 import { t } from "@/i18n";
+import BrandingSettingsDialog from "@/components/settings/BrandingSettingsDialog.vue";
+import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
 
 const isDumping = ref(false);
+const brandingDialogOpen = ref(false);
 const loggingLoading = ref(true);
 const loggingSaving = ref(false);
 const publicApiLoading = ref(true);
@@ -220,18 +222,27 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col">
-    <PageHeader
-      :title="$t('nav.overview')"
-      :description="$t('pages.settingsOverviewPage.description')"
-    />
-
     <PageSection class="!min-h-0">
+      <SettingsFormSection
+        :title="$t('pages.settingsOverviewPage.branding.title')"
+        :description="$t('pages.settingsOverviewPage.branding.description')"
+      >
+        <SettingsSettingRow
+          :title="$t('pages.settingsOverviewPage.branding.rowLabel')"
+          :description="$t('pages.settingsOverviewPage.branding.rowHint')"
+        >
+          <Button variant="outline" @click="brandingDialogOpen = true">
+            <Palette class="mr-2 size-4" />
+            {{ $t("pages.settingsOverviewPage.branding.openButton") }}
+          </Button>
+        </SettingsSettingRow>
+      </SettingsFormSection>
+
       <SettingsFormSection>
-        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
-          <div class="min-w-0">
-            <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.publicApiEnabledLabel") }}</div>
-            <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.publicApiEnabledHint") }}</div>
-          </div>
+        <SettingsSettingRow
+          :title="$t('pages.settingsOverviewPage.publicApiEnabledLabel')"
+          :description="$t('pages.settingsOverviewPage.publicApiEnabledHint')"
+        >
           <Switch
             v-if="settingsLoaded"
             :model-value="publicApi.publicApiEnabled"
@@ -243,7 +254,7 @@ onMounted(async () => {
             class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
             aria-hidden="true"
           />
-        </div>
+        </SettingsSettingRow>
 
         <div class="mt-4 flex justify-end">
           <Button
@@ -261,11 +272,10 @@ onMounted(async () => {
         :description="$t('pages.settingsOverviewPage.loggingDescription')"
       >
         <div class="grid gap-3">
-          <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div class="min-w-0">
-              <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.logErrorsLabel") }}</div>
-              <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.logErrorsHint") }}</div>
-            </div>
+          <SettingsSettingRow
+            :title="$t('pages.settingsOverviewPage.logErrorsLabel')"
+            :description="$t('pages.settingsOverviewPage.logErrorsHint')"
+          >
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logErrorsEnabled"
@@ -277,18 +287,15 @@ onMounted(async () => {
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </div>
-          <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div class="min-w-0">
-              <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.logApiRequestsLabel") }}</div>
-              <div class="text-xs text-muted-foreground">
-                {{
-                  publicApi.publicApiEnabled
-                    ? $t("pages.settingsOverviewPage.logApiRequestsHint")
-                    : $t("pages.settingsOverviewPage.logApiRequestsDisabledHint")
-                }}
-              </div>
-            </div>
+          </SettingsSettingRow>
+          <SettingsSettingRow
+            :title="$t('pages.settingsOverviewPage.logApiRequestsLabel')"
+            :description="
+              publicApi.publicApiEnabled
+                ? $t('pages.settingsOverviewPage.logApiRequestsHint')
+                : $t('pages.settingsOverviewPage.logApiRequestsDisabledHint')
+            "
+          >
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logApiRequestsEnabled"
@@ -300,12 +307,11 @@ onMounted(async () => {
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </div>
-          <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div class="min-w-0">
-              <div class="text-sm font-medium">{{ $t("pages.settingsOverviewPage.logAdapterHttpLabel") }}</div>
-              <div class="text-xs text-muted-foreground">{{ $t("pages.settingsOverviewPage.logAdapterHttpHint") }}</div>
-            </div>
+          </SettingsSettingRow>
+          <SettingsSettingRow
+            :title="$t('pages.settingsOverviewPage.logAdapterHttpLabel')"
+            :description="$t('pages.settingsOverviewPage.logAdapterHttpHint')"
+          >
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logAdapterHttpEnabled"
@@ -317,7 +323,7 @@ onMounted(async () => {
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </div>
+          </SettingsSettingRow>
         </div>
 
         <div class="mt-4 flex justify-end">
@@ -344,5 +350,7 @@ onMounted(async () => {
         </SettingsFormField>
       </SettingsFormSection>
     </PageSection>
+
+    <BrandingSettingsDialog v-model:open="brandingDialogOpen" />
   </div>
 </template>

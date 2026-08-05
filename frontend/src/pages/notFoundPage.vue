@@ -1,7 +1,7 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import { PAGE_PRODUCTS } from "@/router";
 import { ArrowLeft, Home } from "lucide-vue-next";
 import { t } from "@/i18n";
@@ -18,7 +18,7 @@ function goBack() {
 </script>
 
 <template>
-  <Page class="flex min-h-0 flex-1 flex-col">
+  <AppPageChrome>
     <div class="flex flex-1 flex-col items-center justify-center px-4 py-12">
       <div class="w-full max-w-md text-center">
         <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -45,5 +45,5 @@ function goBack() {
         </div>
       </div>
     </div>
-  </Page>
+  </AppPageChrome>
 </template>

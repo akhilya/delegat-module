@@ -16,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/ui/page-header";
 import {
   Table,
   TableBody,
@@ -53,7 +52,6 @@ export default {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    PageHeader,
     EmptyState,
     Table,
     TableBody,
@@ -411,15 +409,12 @@ export default {
 
 <template>
   <div>
-    <PageHeader
-      :title="$t('routes.users')"
-      :description="$t('pages.usersPage.activeUsersDescription', { count: activeUsersCount })"
-    >
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Button @click="openInviteDialog">
         <UserPlus class="size-4 mr-2" />
         {{ $t("pages.usersPage.invite.button") }}
       </Button>
-    </PageHeader>
+    </div>
 
     <PageSection
       :loading="isLoading"

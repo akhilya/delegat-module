@@ -3,7 +3,6 @@
 import PageSection from "@/components/pageSection.vue";
 
 
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
@@ -58,7 +57,6 @@ export default {
   },
   components: {
     PageSection,
-    PageHeader,
     Button,
     Badge,
     Table,
@@ -280,10 +278,7 @@ export default {
 
 <template>
   <div>
-    <PageHeader
-      :title="$t('marketplace.pluginsPage.title')"
-      :description="$t('marketplace.pluginsPage.description')"
-    >
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showUploadDialog">
         <DialogTrigger as-child>
           <Button>
@@ -426,7 +421,7 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageHeader>
+    </div>
 
     <div
       v-if="availableFromRegistry.length"

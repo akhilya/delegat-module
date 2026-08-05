@@ -330,8 +330,8 @@ export default {
 
 <template>
   <div class="flex flex-col flex-1 min-h-0">
-    <div v-if="isLoading" class="flex-1 flex items-center justify-center">
-      <Loader2 class="text-primary size-4 animate-spin" />
+    <div v-if="isLoading" class="flex-1 flex items-center justify-center min-h-[12rem]">
+      <Loader2 class="size-5 animate-spin text-muted-foreground" />
     </div>
     <div v-else ref="scrollContainerEl" class="flex-1 min-h-0 overflow-auto">
       <div class="flex min-w-full w-max">

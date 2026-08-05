@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-vue-next";
 import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { Button } from "@/components/ui/button";
-import { BRAND_NAME } from "@/brand";
+import { brandName } from "@/brand";
 import {
   checkNow,
   startPolling,
@@ -47,7 +47,7 @@ async function onRetry() {
     <div class="unavailable-center">
       <header class="unavailable-brand">
         <Logo class="unavailable-logo" />
-        <p class="unavailable-brand-name">{{ BRAND_NAME }}</p>
+        <p class="unavailable-brand-name">{{ brandName }}</p>
       </header>
 
       <div class="unavailable-body">

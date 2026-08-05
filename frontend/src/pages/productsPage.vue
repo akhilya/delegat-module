@@ -1,7 +1,5 @@
 <script>
-import Page from "@/components/page.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
 import ProductRowActionButtons from "@/components/products/productRowActionButtons.vue";
 import TrashRowActionButtons from "@/components/products/trashRowActionButtons.vue";
@@ -92,9 +90,7 @@ const COLUMN_ORDER_KEY = "products-column-order";
 
 export default {
   components: {
-    Page,
-    NavigationBar,
-    Breadcrumbs,
+    AppPageChrome,
     ProductsTable,
     ProductRowActionButtons,
     TrashRowActionButtons,
@@ -563,7 +559,9 @@ export default {
     return {
       products: [],
       fetchGeneration: 0,
-      isProductsLoading: false,
+      // True until first fetch finishes — otherwise the table flashes empty while
+      // categories / store attributes load in mounted() before fetchProducts().
+      isProductsLoading: true,
       lastPage: false,
       startIndex,
       pageSize,
@@ -613,7 +611,7 @@ export default {
       // Trash mode
       isTrashMode: false,
       trashProducts: [],
-      isTrashLoading: false,
+      isTrashLoading: true,
       trashLastPage: false,
       trashStartIndex: 0,
       trashTotalCount: 0,
@@ -795,6 +793,11 @@ export default {
     },
   },
   async mounted() {
+    if (this.$route.query.trash === "1") {
+      this.isProductsLoading = false;
+      this.isTrashMode = true;
+    }
+
     // Fetch store attributes and categories in parallel
     await Promise.all([
       this.fetchStoreAttributes(),
@@ -807,8 +810,7 @@ export default {
     this.columnVisibility = this.loadColumnVisibility();
 
     // Activate trash mode if ?trash=1 query param present
-    if (this.$route.query.trash === '1') {
-      this.isTrashMode = true;
+    if (this.isTrashMode) {
       await this.fetchTrashProducts();
     } else {
       await this.fetchProducts();
@@ -819,9 +821,8 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col h-screen">
-    <NavigationBar>
-      <template #center>
+  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+    <template #nav-center>
         <div class="flex items-center gap-2 w-full">
           <div class="relative flex-1 h-9">
             <Input
@@ -885,9 +886,7 @@ export default {
             </PopoverContent>
           </Popover>
         </div>
-      </template>
-    </NavigationBar>
-    <Breadcrumbs :items="breadcrumbs" />
+    </template>
 
     <Card
       class="p-0 gap-0 w-full flex-1 min-h-0 mb-4 relative overflow-hidden"
@@ -1170,5 +1169,5 @@ export default {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </Page>
+  </AppPageChrome>
 </template>

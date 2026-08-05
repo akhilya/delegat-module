@@ -7,8 +7,11 @@ const props = defineProps({
 </script>
 
 <template>
-  <!-- min-h-svh only: no max-height / overflow scroll — SidebarInset scrolls the page. -->
-  <div :class="cn('bg-background adaptive-padding min-h-svh', props.class)">
+  <!--
+    min-h-svh: page fills the inset. Flex column so AppPageChrome can grow
+    the region below the navbar without forcing extra scroll (nav + flex-1 = svh).
+  -->
+  <div :class="cn('flex min-h-svh flex-col bg-background adaptive-padding', props.class)">
     <slot />
   </div>
 </template>

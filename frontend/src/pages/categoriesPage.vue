@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import { mapActions } from "vuex";
@@ -19,7 +17,6 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/ui/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Table,
@@ -32,10 +29,8 @@ import {
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Plus,
@@ -56,7 +51,6 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    PageHeader,
     ConfirmDialog,
   },
   data() {
@@ -141,11 +135,8 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader :title="$t('pages.categoriesPage.title')" :description="$t('pages.categoriesPage.description')">
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -182,7 +173,7 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageHeader>
+    </div>
 
     <PageSection
       :loading="isLoading"
@@ -261,5 +252,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

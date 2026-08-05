@@ -1,5 +1,5 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
-import { BRAND_NAME } from "@/brand";
+import { getBrandName } from "@/brand";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
@@ -138,6 +138,7 @@ export const routes = [
   {
     path: PAGE_SETTINGS,
     component: SettingsShell,
+    meta: { stableKey: "settings" },
     children: [
       {
         path: "",
@@ -250,7 +251,8 @@ routes.forEach((r) => (r.name = r.path));
  */
 export function setPageTitle(detail) {
   _customTitle = detail || null;
-  document.title = detail ? `${detail} - ${BRAND_NAME}` : BRAND_NAME;
+  const brand = getBrandName();
+  document.title = detail ? `${detail} - ${brand}` : brand;
 }
 
 function resolveRouteTitle(to) {
@@ -286,7 +288,8 @@ export function createRouter() {
 
     _customTitle = null;
     const title = resolveRouteTitle(to);
-    document.title = title ? `${title} - ${BRAND_NAME}` : BRAND_NAME;
+    const brand = getBrandName();
+    document.title = title ? `${title} - ${brand}` : brand;
   });
 
   return router;

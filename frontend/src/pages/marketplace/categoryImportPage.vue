@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
@@ -26,10 +24,8 @@ import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     SettingsFormField,
     SettingsFormSection,
     ExternalCategoryBrowser,
@@ -328,10 +324,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col pb-4">
-    <NavigationBar class="shrink-0" />
-    <Breadcrumbs :items="breadcrumbs" class="shrink-0 !mb-3" />
-
+  <AppPageChrome :breadcrumb-items="breadcrumbs" content-class="pb-4">
     <PageSection
       :loading="isLoading"
       class="!mb-0 flex flex-1 flex-col"
@@ -591,5 +584,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

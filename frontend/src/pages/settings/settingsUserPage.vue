@@ -4,7 +4,7 @@ import { useStore } from "vuex";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { PageHeader } from "@/components/ui/page-header";
+import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Input from "@/components/ui/input/Input.vue";
@@ -97,11 +97,6 @@ onMounted(fetchMe);
 
 <template>
   <div>
-    <PageHeader
-      :title="$t('pages.settingsUserPage.title')"
-      :description="$t('pages.settingsUserPage.description')"
-    />
-
     <PageSection :loading="isLoading">
       <SettingsFormSection>
         <FieldGroup>
@@ -126,17 +121,12 @@ onMounted(fetchMe);
         :description="$t('pages.settingsUserPage.operationsDescription')"
         class="mt-8"
       >
-        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
-          <div class="min-w-0">
-            <div class="text-sm font-medium">
-              {{ $t("pages.settingsUserPage.autoOpenOperationsLabel") }}
-            </div>
-            <div class="text-xs text-muted-foreground">
-              {{ $t("pages.settingsUserPage.autoOpenOperationsHint") }}
-            </div>
-          </div>
+        <SettingsSettingRow
+          :title="$t('pages.settingsUserPage.autoOpenOperationsLabel')"
+          :description="$t('pages.settingsUserPage.autoOpenOperationsHint')"
+        >
           <Switch v-model="autoOpenOperationsPanel" />
-        </div>
+        </SettingsSettingRow>
       </SettingsFormSection>
 
       <SettingsFormSection

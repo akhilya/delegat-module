@@ -29,9 +29,22 @@ public class FeatureFlagsTests
     [InlineData("false", false)]
     [InlineData("0", false)]
     [InlineData("no", false)]
-    public void IsAiEnabled_ParsesEnv(string? raw, bool expected)
+    public void IsAiEnabled_ParsesEnv_SelfHost(string? raw, bool expected)
     {
-        using var _ = SetEnv("AI_ENABLED", raw);
+        using var _ai = SetEnv("AI_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+        Assert.Equal(expected, FeatureFlags.IsAiEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void IsAiEnabled_FailClosedWhenControlPlaneLinked(string? raw, bool expected)
+    {
+        using var _ai = SetEnv("AI_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", "https://module.delegat.pro");
         Assert.Equal(expected, FeatureFlags.IsAiEnabled());
     }
 

@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/ui/page-header";
 import {
   Table,
   TableBody,
@@ -57,7 +56,6 @@ export default {
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
     AlertDialogHeader, AlertDialogTitle,
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-    PageHeader,
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
     Bot, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Zap, Network,
   },
@@ -306,15 +304,12 @@ export default {
 
 <template>
   <div class="flex flex-col">
-    <PageHeader
-      :title="$t('nav.ai')"
-      :description="$t('pages.aiModelsPage.description')"
-    >
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Button @click="openCreate">
         <Plus class="mr-2 size-4" />
         {{ $t("pages.aiModelsPage.addModel") }}
       </Button>
-    </PageHeader>
+    </div>
 
     <PageSection :loading="isLoading" class="!min-h-0">
       <SettingsFormSection class="max-w-none">

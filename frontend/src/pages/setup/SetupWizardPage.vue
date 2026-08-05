@@ -1,5 +1,6 @@
 <script>
 import AuthLayout from "@/components/auth/AuthLayout.vue";
+import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -16,14 +17,16 @@ import { invalidateMeCache, loadMe } from "@/main";
 import { clearSetupStoreCountCache } from "@/lib/setupStoreCount";
 
 const STEP_WELCOME = "welcome";
+const STEP_BRANDING = "branding";
 const STEP_STORE = "store";
 const STEP_DONE = "done";
 
-const STEPS = [STEP_WELCOME, STEP_STORE, STEP_DONE];
+const STEPS = [STEP_WELCOME, STEP_BRANDING, STEP_STORE, STEP_DONE];
 
 export default {
   components: {
     AuthLayout,
+    BrandingForm,
     Button,
     Input,
     Label,
@@ -43,6 +46,8 @@ export default {
       step: STEP_WELCOME,
       loading: true,
       submitting: false,
+      brandingSaving: false,
+      brandingFormLoading: false,
       skippedCatalogs: false,
       status: null,
       currencies: [],
@@ -54,12 +59,14 @@ export default {
       createdStoreName: "",
       STEPS,
       STEP_WELCOME,
+      STEP_BRANDING,
       STEP_STORE,
       STEP_DONE,
     };
   },
   computed: {
     pageTitle() {
+      if (this.step === STEP_BRANDING) return this.$t("pages.setup.stepBrandingTitle");
       if (this.step === STEP_STORE) return this.$t("pages.setup.stepStoreTitle");
       if (this.step === STEP_DONE) return this.$t("pages.setup.stepDoneTitle");
       return this.$t("pages.setup.stepWelcomeTitle");
@@ -112,6 +119,7 @@ export default {
       "postSelectStore",
     ]),
     stepLabel(id) {
+      if (id === STEP_BRANDING) return this.$t("pages.setup.stepBrandingShort");
       if (id === STEP_STORE) return this.$t("pages.setup.stepStoreShort");
       if (id === STEP_DONE) return this.$t("pages.setup.stepDoneShort");
       return this.$t("pages.setup.stepWelcomeShort");
@@ -191,18 +199,42 @@ export default {
     async retryCatalogs() {
       await this.bootstrap();
     },
-    goStoreStep() {
+    goBrandingStep() {
       this.skippedCatalogs = false;
-      this.step = STEP_STORE;
+      this.step = STEP_BRANDING;
     },
     skipCatalogs() {
       this.skippedCatalogs = true;
       this.baseCurrency = "";
       this.timezone = "";
-      this.step = STEP_STORE;
+      this.step = STEP_BRANDING;
     },
     goWelcome() {
       this.step = STEP_WELCOME;
+    },
+    backToBranding() {
+      this.step = STEP_BRANDING;
+    },
+    skipBranding() {
+      this.step = STEP_STORE;
+    },
+    onBrandingLoaded() {
+      this.brandingFormLoading = false;
+    },
+    async continueBranding() {
+      if (this.brandingSaving) return;
+      const form = this.$refs.brandingForm;
+      if (!form) {
+        this.step = STEP_STORE;
+        return;
+      }
+      this.brandingSaving = true;
+      try {
+        const data = await form.save({ quiet: true });
+        if (data) this.step = STEP_STORE;
+      } finally {
+        this.brandingSaving = false;
+      }
     },
     async submitStore() {
       if (!this.canCreateStore || this.submitting) return;
@@ -319,7 +351,7 @@ export default {
         <Button
           class="w-full"
           :disabled="!catalogsReady"
-          @click="goStoreStep"
+          @click="goBrandingStep"
         >
           {{ $t("pages.setup.continueCreateStore") }}
         </Button>
@@ -338,6 +370,48 @@ export default {
           @click="skipCatalogs"
         >
           {{ $t("pages.setup.skipCatalogs") }}
+        </Button>
+      </div>
+    </template>
+
+    <template v-else-if="step === STEP_BRANDING">
+      <p class="text-sm text-muted-foreground leading-relaxed">
+        {{ $t("pages.setup.brandingBody") }}
+      </p>
+
+      <div class="max-h-[50vh] overflow-y-auto pr-1">
+        <BrandingForm
+          ref="brandingForm"
+          compact
+          load-on-mount
+          @loaded="onBrandingLoaded"
+        />
+      </div>
+
+      <div class="flex flex-col gap-2 pt-1">
+        <Button
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="continueBranding"
+        >
+          <Loader2 v-if="brandingSaving" class="size-4 animate-spin" />
+          {{ $t("pages.setup.brandingContinue") }}
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="skipBranding"
+        >
+          {{ $t("pages.setup.brandingSkip") }}
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="goWelcome"
+        >
+          {{ $t("common.back") }}
         </Button>
       </div>
     </template>
@@ -397,7 +471,7 @@ export default {
             variant="ghost"
             class="w-full"
             :disabled="submitting"
-            @click="goWelcome"
+            @click="backToBranding"
           >
             {{ $t("common.back") }}
           </Button>

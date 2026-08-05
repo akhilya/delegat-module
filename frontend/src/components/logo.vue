@@ -1,12 +1,13 @@
 <script setup>
 import { cn } from "@/lib/utils";
-import { BRAND_LOGO, BRAND_NAME } from "@/brand";
+import { brandLogo, brandName } from "@/brand";
 </script>
 
 <template>
   <img
-    :src="BRAND_LOGO"
-    :alt="BRAND_NAME"
+    v-if="brandLogo"
+    :src="brandLogo"
+    :alt="brandName"
     :class="cn('w-16 opacity-80', $attrs.class)"
   />
 </template>

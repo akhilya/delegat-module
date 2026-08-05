@@ -14,18 +14,31 @@ const props = defineProps({
 </script>
 
 <template>
-  <section :class="cn('w-full mb-4', props.class)">
-    <div v-if="loading" class="flex min-h-60 items-center justify-center">
-      <EmptyState loading />
-    </div>
-    <div v-else-if="empty" class="flex min-h-60 items-center justify-center">
-      <EmptyState :title="emptyTitle" :description="emptyDescription">
-        <template v-if="emptyIcon" #icon>
-          <component :is="emptyIcon" :class="emptyIconClass" />
-        </template>
-        <slot name="empty-action" />
-      </EmptyState>
-    </div>
+  <section
+    :class="
+      cn(
+        'flex w-full flex-col',
+        (loading || empty) ? 'min-h-0 flex-1' : 'mb-4',
+        props.class,
+      )
+    "
+  >
+    <EmptyState
+      v-if="loading"
+      loading
+      class="min-h-0 flex-1"
+    />
+    <EmptyState
+      v-else-if="empty"
+      class="min-h-0 flex-1"
+      :title="emptyTitle"
+      :description="emptyDescription"
+    >
+      <template v-if="emptyIcon" #icon>
+        <component :is="emptyIcon" :class="emptyIconClass" />
+      </template>
+      <slot name="empty-action" />
+    </EmptyState>
     <slot v-else />
   </section>
 </template>

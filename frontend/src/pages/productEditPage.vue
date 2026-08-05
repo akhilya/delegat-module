@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
@@ -115,10 +113,8 @@ const GROUP_NONE = "__none__";
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     FormControl,
     FormField,
@@ -240,7 +236,7 @@ export default {
     const isLoadingStoreAttributes = ref(false);
     const aiEnabled = ref(false);
     const productGroup = ref(null);
-    const isLoadingGroup = ref(false);
+    const isLoadingGroup = ref(true);
     const visibleCategoryAttributes = computed(() =>
       category.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
     );
@@ -1165,9 +1161,8 @@ export default {
 </script>
 
 <template>
-  <Page class="!min-h-0">
-    <NavigationBar>
-      <template #center>
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <template #nav-center>
         <Tabs v-model="tab">
           <TabsList>
             <TabsTrigger value="properties">{{ $t("pages.productEditPage.tabs.properties") }}</TabsTrigger>
@@ -1178,10 +1173,15 @@ export default {
             <TabsTrigger value="marketplaces"><span class="sm:hidden">{{ $t("pages.productEditPage.tabs.marketplacesShort") }}</span><span class="hidden sm:inline">{{ $t("nav.adapters") }}</span></TabsTrigger>
           </TabsList>
         </Tabs>
-      </template>
-    </NavigationBar>
-    <Breadcrumbs :items="breadcrumbs" />
-    <PageSection :loading="isProductLoading && !productSKU" class="!min-h-0 !grow-0 mb-0">
+    </template>
+    <PageSection
+      :loading="isProductLoading && !productSKU"
+      :class="
+        isProductLoading && !productSKU
+          ? 'mb-0 min-h-0 flex-1'
+          : '!min-h-0 !grow-0 mb-0'
+      "
+    >
       <input
         ref="galleryFileInput"
         type="file"
@@ -1190,7 +1190,7 @@ export default {
         class="hidden"
         @change="handleGalleryUpload"
       />
-      <div class="w-full max-w-[90rem]">
+      <div class="w-full">
         <div class="flex items-start gap-4 lg:gap-5">
           <ProductGroupSidebar
             ref="groupSidebarRef"
@@ -1688,8 +1688,8 @@ export default {
       class="fixed bottom-0 z-20 left-0 right-0 md:left-[var(--sidebar-width)] pointer-events-none pb-3"
     >
       <div class="adaptive-padding pointer-events-none">
-        <div class="w-full max-w-[90rem] flex items-stretch gap-4 lg:gap-5 pointer-events-none">
-          <div class="w-96 shrink-0 hidden lg:block" aria-hidden="true" />
+        <div class="flex w-full items-stretch gap-4 lg:gap-5 pointer-events-none">
+          <div class="product-group-sidebar-spacer hidden shrink-0 lg:block" aria-hidden="true" />
           <Card class="flex-1 min-w-0 pointer-events-auto rounded-xl !gap-0 !p-3 shadow-sm">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div class="flex items-center gap-2">
@@ -1768,7 +1768,7 @@ export default {
               </div>
             </div>
           </Card>
-          <div class="w-64 shrink-0 hidden lg:block" aria-hidden="true" />
+          <div class="product-gallery-sidebar-spacer hidden shrink-0 lg:block" aria-hidden="true" />
         </div>
       </div>
     </div>
@@ -1804,5 +1804,14 @@ export default {
         </div>
       </div>
     </Teleport>
-  </Page>
+  </AppPageChrome>
 </template>
+
+<style scoped>
+.product-group-sidebar-spacer {
+  width: clamp(14rem, 22vw, 24rem);
+}
+.product-gallery-sidebar-spacer {
+  width: clamp(10rem, 14vw, 14rem);
+}
+</style>

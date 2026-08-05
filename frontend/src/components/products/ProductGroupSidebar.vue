@@ -47,71 +47,65 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
 </script>
 
 <template>
+  <!-- Always reserve column width on lg+ to avoid layout flicker while group loads. -->
   <div
-    v-if="group"
-    class="w-96 shrink-0 hidden lg:flex flex-col bg-card text-card-foreground border rounded-xl overflow-hidden sticky top-14 self-start h-[calc(100svh-3.5rem-1rem-4.75rem)]"
+    class="product-group-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-14 h-[calc(100svh-3.5rem-1rem-4.75rem)]"
   >
-    <div v-if="loading" class="flex-1 flex items-center justify-center min-h-24 py-6">
+    <div
+      v-if="loading"
+      class="flex min-h-0 flex-1 items-center justify-center py-6"
+    >
       <Loader2 class="size-5 animate-spin text-muted-foreground" />
     </div>
 
-    <template v-else>
-      <div class="shrink-0 border-b px-4 py-3">
-        <p class="text-sm font-medium">{{ t("products.productGroupSidebar.title") }}</p>
-        <p class="text-xs text-muted-foreground mt-0.5 truncate">
-          {{ group.name }}
-        </p>
+    <div
+      v-else
+      ref="scrollRef"
+      class="thin-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3"
+      :class="{ 'pointer-events-none opacity-50': disabled }"
+    >
+      <router-link
+        v-if="addUrl"
+        :to="addUrl"
+        class="flex h-14 items-center justify-center rounded-lg border border-dashed p-2 transition-colors hover:bg-accent/50"
+      >
+        <Plus class="size-4 text-muted-foreground" />
+      </router-link>
+      <div
+        v-else-if="group"
+        class="flex h-14 items-center justify-center rounded-lg bg-accent p-2"
+      >
+        <Plus class="size-4 text-muted-foreground" />
       </div>
 
-      <div
-        ref="scrollRef"
-        class="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-1.5"
-        :class="{ 'pointer-events-none opacity-50': disabled }"
-      >
-        <router-link
-          v-if="addUrl"
-          :to="addUrl"
-          class="flex items-center justify-center p-2 h-14 rounded-lg border border-dashed hover:bg-accent/50 transition-colors"
-        >
-          <Plus class="size-4 text-muted-foreground" />
-        </router-link>
-        <div
-          v-else
-          class="flex items-center justify-center p-2 h-14 rounded-lg bg-accent"
-        >
-          <Plus class="size-4 text-muted-foreground" />
-        </div>
-
+      <template v-if="group">
         <ContextMenu v-for="member in group.members" :key="member.productId">
           <ContextMenuTrigger as-child>
             <router-link
               :to="getMemberRoute(member)"
-              class="flex items-center gap-2.5 p-2 rounded-lg transition-colors relative"
+              class="relative flex items-center gap-2.5 rounded-lg p-2 transition-colors"
               :class="member.isCurrent ? 'bg-accent' : 'hover:bg-accent/50'"
               v-bind="member.isCurrent ? { 'data-current-member': '' } : {}"
             >
               <span
                 v-if="member.isCurrent"
-                class="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-foreground"
+                class="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-foreground"
               />
               <img
                 v-if="member.imageThumbnailUrl || member.imageUrl"
                 :src="member.imageThumbnailUrl ?? member.imageUrl"
-                class="size-10 rounded-md object-cover shrink-0"
+                class="size-10 shrink-0 rounded-md object-cover"
                 :alt="member.productName"
               />
-              <div
-                v-else
-                class="size-10 rounded-md bg-muted shrink-0"
-              />
+              <div v-else class="size-10 shrink-0 rounded-md bg-muted" />
               <div class="min-w-0">
                 <p
-                  class="text-sm truncate"
+                  class="truncate text-sm"
                   :class="member.isCurrent ? 'font-medium' : ''"
                 >
                   {{ member.productName || member.productSku }}
                 </p>
-                <p class="text-xs text-muted-foreground truncate">
+                <p class="truncate text-xs text-muted-foreground">
                   {{ member.productSku }}
                 </p>
               </div>
@@ -124,7 +118,13 @@ defineExpose({ scrollCurrentIntoView, scrollRef });
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-      </div>
-    </template>
+      </template>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.product-group-sidebar {
+  width: clamp(14rem, 22vw, 24rem);
+}
+</style>

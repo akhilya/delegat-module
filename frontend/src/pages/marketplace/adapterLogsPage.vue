@@ -1,5 +1,4 @@
 <script>
-import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
   TableBody,
@@ -44,7 +43,6 @@ import { ScrollText } from "lucide-vue-next";
 
 export default {
   components: {
-    PageHeader,
     Input,
     TableBody,
     TableCell,
@@ -100,10 +98,6 @@ export default {
     };
   },
   computed: {
-    summaryLabel() {
-      if (this.errorCount === 0) return this.$t("marketplace.adapterLogsPage.noErrors");
-      return this.$t("marketplace.adapterLogsPage.errorCount", { count: this.errorCount });
-    },
     connectionOptions() {
       return (this.connections || []).map((c) => ({
         value: String(c.id),
@@ -340,22 +334,14 @@ export default {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
-    <PageHeader
-      class="shrink-0"
-      :title="$t('marketplace.adapterLogsPage.title')"
-      :description="$t('marketplace.adapterLogsPage.description')"
-    >
-      <LogRefreshButton :loading="isLoading" @click="refresh" />
-    </PageHeader>
-
-    <LogToolbar class="mb-3 shrink-0" :summary="summaryLabel" :summary-alert="errorCount > 0">
+    <LogToolbar class="mb-3 shrink-0">
       <LogFilterSelect
         :model-value="filters.connectionId"
         :all-value="LOG_FILTER_ALL"
         :all-label="$t('marketplace.adapterLogsPage.allConnections')"
         :placeholder="$t('marketplace.adapterLogsPage.connection')"
         :options="connectionOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-52"
+        trigger-class="h-9 w-full min-w-0 sm:w-44"
         @update:model-value="(v) => setFilter('connectionId', v)"
       />
 
@@ -365,28 +351,33 @@ export default {
         :all-label="$t('marketplace.adapterLogsPage.allAdapters')"
         :placeholder="$t('marketplace.adapterLogsPage.adapter')"
         :options="adapterKeyOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-40"
+        trigger-class="h-9 w-full min-w-0 sm:w-36"
         @update:model-value="(v) => setFilter('adapterKey', v)"
       />
 
       <LogHttpMethodFilter
         :model-value="filters.method"
         :all-value="LOG_FILTER_ALL"
+        trigger-class="h-9 w-full min-w-0 sm:w-28"
         @update:model-value="(v) => setFilter('method', v)"
       />
 
       <LogHttpStatusFilter
         :model-value="filters.statusClass"
         :all-value="LOG_FILTER_ALL"
+        trigger-class="h-9 w-full min-w-0 sm:w-28"
         @update:model-value="(v) => setFilter('statusClass', v)"
       />
 
       <Input
         v-model="filters.q"
-        class="h-9 w-full min-w-0 sm:max-w-xs"
+        class="h-9 w-full min-w-0 sm:max-w-[14rem]"
         :placeholder="$t('marketplace.adapterLogsPage.searchByPath')"
         @keydown.enter="refresh"
       />
+      <template #actions>
+        <LogRefreshButton :loading="isLoading" @click="refresh" />
+      </template>
     </LogToolbar>
 
     <LogListPanel

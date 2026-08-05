@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -54,16 +52,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Switch from "@/components/ui/switch/Switch.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Label,
@@ -103,7 +98,6 @@ export default {
     SelectTrigger,
     SelectValue,
     Switch,
-    PageHeader,
     EmptyState,
   },
   data() {
@@ -276,14 +270,8 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      :title="$t('marketplace.marketplacePage.title')"
-      :description="$t('marketplace.marketplacePage.description')"
-    >
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -393,7 +381,7 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageHeader>
+    </div>
 
     <PageSection
       :loading="isLoading"
@@ -496,5 +484,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

@@ -1,18 +1,12 @@
 <script>
-import NavigationBar from "@/components/navigationBar.vue";
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { Wrench } from "lucide-vue-next";
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
-    PageHeader,
     Wrench,
   },
   data() {
@@ -24,20 +18,12 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      :title="$t('pages.toolsPage.title')"
-      :description="$t('pages.toolsPage.description')"
-    />
-
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection
       empty
       :empty-icon="Wrench"
       :empty-title="$t('pages.toolsPage.emptyTitle')"
       :empty-description="$t('pages.toolsPage.emptyDescription')"
     />
-  </Page>
+  </AppPageChrome>
 </template>

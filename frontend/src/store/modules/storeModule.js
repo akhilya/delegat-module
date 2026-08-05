@@ -163,6 +163,27 @@ export default {
       }
     },
 
+    /**
+     * Permanently deletes a store (instance owner only).
+     * @param {Object} ctx
+     * @param {Object} params
+     * @param {string|number} params.storeId
+     * @param {string} params.confirmationName - Exact store name
+     * @param {Function} params.onSuccess
+     * @param {Function} params.onError
+     */
+    async deleteStore(ctx, { storeId, confirmationName, onSuccess, onError }) {
+      try {
+        const response = await http.delete(`/stores/${storeId}`, {
+          data: { confirmationName },
+          cache: false,
+        });
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
     async getAllUsers(ctx, { onSuccess, onError }) {
       return await useAxios(
         `/users/all`,

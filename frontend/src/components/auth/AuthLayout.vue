@@ -2,7 +2,7 @@
 import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { Card, CardContent } from "@/components/ui/card";
-import { BRAND_NAME } from "@/brand";
+import { brandLogo, brandName } from "@/brand";
 
 defineProps({
   /** Page action under the brand (e.g. Sign in / Sign up) */
@@ -20,8 +20,8 @@ defineProps({
 
     <div class="auth-center" :class="{ 'auth-center--wide': wide }">
       <header class="auth-brand">
-        <Logo class="auth-logo" />
-        <h1 class="auth-brand-name">{{ BRAND_NAME }}</h1>
+        <Logo v-if="brandLogo" class="auth-logo" />
+        <h1 class="auth-brand-name">{{ brandName }}</h1>
         <p class="auth-title">{{ title }}</p>
       </header>
 

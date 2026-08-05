@@ -1,11 +1,13 @@
 <script>
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import Input from "@/components/ui/input/Input.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
-import { UserPlus, UserMinus, Loader2, Users } from "lucide-vue-next";
+import { loadMe, invalidateMeCache } from "@/main";
+import { PAGE_ADMIN_STORES } from "@/router";
+import { UserPlus, UserMinus, Loader2, Users, Trash2 } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -40,11 +42,12 @@ export default {
   components: {
     PageSection,
     Button,
-    PageHeader,
+    Input,
     UserPlus,
     UserMinus,
     Loader2,
     Users,
+    Trash2,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -72,11 +75,15 @@ export default {
     return {
       store: null,
       allUsers: [],
+      me: null,
       isLoading: false,
       isAddingMember: false,
       removingUserId: null,
       showAddDialog: false,
       selectedUserId: null,
+      showDeleteDialog: false,
+      deleteConfirmName: "",
+      isDeleting: false,
     };
   },
   computed: {
@@ -85,13 +92,27 @@ export default {
     },
     availableUsers() {
       if (!this.store || !this.allUsers.length) return [];
-      const memberIds = this.store.members.map(m => m.id);
-      return this.allUsers.filter(u => !memberIds.includes(u.id));
+      const memberIds = this.store.members.map((m) => m.id);
+      return this.allUsers.filter((u) => !memberIds.includes(u.id));
     },
-
+    canDeleteStore() {
+      return this.me?.isAdmin === true;
+    },
+    deleteNameMatches() {
+      if (!this.store?.name) return false;
+      return this.deleteConfirmName.trim() === this.store.name;
+    },
   },
   methods: {
-    ...mapActions(["getStoreDetail", "getAllUsers", "addMember", "removeMember"]),
+    ...mapActions(["getStoreDetail", "getAllUsers", "addMember", "removeMember", "deleteStore"]),
+
+    async fetchMe() {
+      try {
+        this.me = await loadMe();
+      } catch {
+        this.me = null;
+      }
+    },
 
     async fetchStore() {
       this.isLoading = true;
@@ -166,8 +187,40 @@ export default {
       });
       this.removingUserId = null;
     },
+
+    openDeleteDialog() {
+      this.deleteConfirmName = "";
+      this.showDeleteDialog = true;
+    },
+
+    async handleDeleteStore() {
+      if (!this.deleteNameMatches || this.isDeleting) return;
+      this.isDeleting = true;
+      await this.deleteStore({
+        storeId: this.storeId,
+        confirmationName: this.deleteConfirmName.trim(),
+        onSuccess: async () => {
+          displaySonnerSuccess(this.$t("pages.storeDetailPage.deleteSuccess"));
+          this.showDeleteDialog = false;
+          invalidateMeCache();
+          try {
+            await loadMe();
+          } catch {
+            /* ignore */
+          }
+          // Remount shell / store switcher if current selection was wiped
+          this.$store.commit("incrementAppKey");
+          this.$router.push(PAGE_ADMIN_STORES);
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isDeleting = false;
+    },
   },
   mounted() {
+    this.fetchMe();
     this.fetchStore();
     this.fetchUsers();
   },
@@ -176,10 +229,7 @@ export default {
 
 <template>
   <div>
-    <PageHeader
-      :title="store?.name || $t('routes.store')"
-      :description="store ? $t('pages.storeDetailPage.membersCountDescription', { count: store.members.length }) : $t('pages.storeDetailPage.membersSettingsDescription')"
-    >
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Dialog v-if="store" v-model:open="showAddDialog">
         <DialogTrigger as-child>
           <Button :disabled="availableUsers.length === 0">
@@ -224,11 +274,10 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageHeader>
+    </div>
 
     <PageSection :loading="isLoading">
       <div v-if="store">
-
         <EmptyState
           v-if="store.members.length === 0"
           :title="$t('pages.storeDetailPage.emptyTitle')"
@@ -273,5 +322,57 @@ export default {
         </div>
       </div>
     </PageSection>
+
+    <section
+      v-if="store && canDeleteStore"
+      class="mt-8 rounded-lg border border-destructive/40 p-4"
+    >
+      <h2 class="text-sm font-semibold text-destructive">
+        {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
+      </h2>
+      <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+        {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
+      </p>
+      <Button class="mt-4" variant="destructive" @click="openDeleteDialog">
+        <Trash2 class="mr-2 size-4" />
+        {{ $t("pages.storeDetailPage.deleteStoreButton") }}
+      </Button>
+
+      <Dialog v-model:open="showDeleteDialog">
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>{{ $t("pages.storeDetailPage.deleteDialogTitle") }}</DialogTitle>
+            <DialogDescription>
+              {{ $t("pages.storeDetailPage.deleteDialogDescription") }}
+            </DialogDescription>
+          </DialogHeader>
+          <div class="grid gap-2 py-2">
+            <label class="text-sm font-medium" for="store-delete-confirm">
+              {{ $t("pages.storeDetailPage.deleteConfirmLabel", { name: store.name }) }}
+            </label>
+            <Input
+              id="store-delete-confirm"
+              v-model="deleteConfirmName"
+              :placeholder="$t('pages.storeDetailPage.deleteConfirmPlaceholder')"
+              autocomplete="off"
+              @keydown.enter="handleDeleteStore"
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose as-child>
+              <Button variant="outline" :disabled="isDeleting">{{ $t("common.cancel") }}</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              :disabled="!deleteNameMatches || isDeleting"
+              @click="handleDeleteStore"
+            >
+              <Loader2 v-if="isDeleting" class="mr-2 size-4 animate-spin" />
+              {{ $t("pages.storeDetailPage.deleteForever") }}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   </div>
 </template>

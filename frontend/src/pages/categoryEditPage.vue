@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
@@ -98,10 +96,8 @@ const ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4];
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Textarea,
@@ -794,10 +790,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection :loading="isLoading" class="!min-h-0">
       <div v-if="category" class="space-y-3">
         <div class="flex items-start justify-between gap-4">
@@ -1308,5 +1301,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </AppPageChrome>
 </template>

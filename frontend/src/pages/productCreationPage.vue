@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
@@ -68,10 +66,8 @@ const GROUP_NONE = "__none__";
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     FormControl,
     FormField,
@@ -241,6 +237,7 @@ export default {
     const galleryFileInput = ref(null);
     const isUploadingGallery = ref(false);
     const groupDetail = ref(null);
+    const isLoadingGroupDetail = ref(!!route.query.groupId);
     const isDescriptionGenerating = ref(false);
     const descriptionGeneratingHint = computed(() =>
       form.values.product?.description?.trim()
@@ -468,8 +465,10 @@ export default {
     async function fetchGroupDetail(groupId) {
       if (!groupId) {
         groupDetail.value = null;
+        isLoadingGroupDetail.value = false;
         return;
       }
+      isLoadingGroupDetail.value = true;
       await store.dispatch("getGroup", {
         id: groupId,
         onSuccess: (response) => {
@@ -491,6 +490,7 @@ export default {
           groupDetail.value = null;
         },
       });
+      isLoadingGroupDetail.value = false;
     }
 
     const fromProductId = route.query.fromProduct;
@@ -720,6 +720,7 @@ export default {
       descriptionGeneratingHint,
       autoResizeDescription,
       groupDetail,
+      isLoadingGroupDetail,
       getDuplicateUrl,
       duplicateProductUrl,
       categorySelectOptions,
@@ -747,10 +748,15 @@ export default {
 </script>
 
 <template>
-  <Page class="!min-h-0">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-    <PageSection :loading="isLoadingCategories && categories.length === 0" class="!min-h-0 !grow-0 mb-0">
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
+    <PageSection
+      :loading="isLoadingCategories && categories.length === 0"
+      :class="
+        isLoadingCategories && categories.length === 0
+          ? 'mb-0 min-h-0 flex-1'
+          : '!min-h-0 !grow-0 mb-0'
+      "
+    >
       <input
         ref="galleryFileInput"
         type="file"
@@ -759,10 +765,11 @@ export default {
         class="hidden"
         @change="handleGalleryUpload"
       />
-      <div class="w-full max-w-[90rem]">
+      <div class="w-full">
         <div class="flex items-start gap-4 lg:gap-5">
           <ProductGroupSidebar
             :group="groupDetail"
+            :loading="isLoadingGroupDetail"
             :disabled="isSubmitting"
             :add-url="duplicateProductUrl"
             :get-duplicate-url="getDuplicateUrl"
@@ -1156,5 +1163,5 @@ export default {
         </div>
       </div>
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

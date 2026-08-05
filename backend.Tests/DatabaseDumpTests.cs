@@ -111,7 +111,11 @@ public class DatabaseDumpTests
 
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
-        var controller = new SettingsController(dump, new StubLoggingSettings(), new StubPublicApiSettings());
+        var controller = new SettingsController(
+            dump,
+            new StubLoggingSettings(),
+            new StubPublicApiSettings(),
+            new StubBrandingSettings());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),
@@ -139,6 +143,23 @@ public class DatabaseDumpTests
             Task.FromResult(new PublicApiSettingsDto(true, DateTime.UtcNow));
         public Task<PublicApiSettingsDto> UpdateAsync(UpdatePublicApiSettingsRequest request, CancellationToken ct = default) =>
             GetAsync(ct);
+    }
+
+    private sealed class StubBrandingSettings : IBrandingSettingsService
+    {
+        public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<BrandingSettingsDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(new BrandingSettingsDto("Delegat", null, "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow));
+        public Task<BrandingSettingsDto> UpdateAsync(UpdateBrandingSettingsRequest request, CancellationToken ct = default) =>
+            GetAsync(ct);
+        public Task<BrandingSettingsDto> UploadLogoAsync(IFormFile file, CancellationToken ct = default) =>
+            GetAsync(ct);
+        public Task<BrandingSettingsDto> UploadFaviconAsync(IFormFile file, CancellationToken ct = default) =>
+            GetAsync(ct);
+        public Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(CancellationToken ct = default) =>
+            Task.FromResult<(Stream Stream, string ContentType)?>(null);
+        public Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(CancellationToken ct = default) =>
+            Task.FromResult<(Stream Stream, string ContentType)?>(null);
     }
 
     private sealed class FakeDumpService : IDatabaseDumpService

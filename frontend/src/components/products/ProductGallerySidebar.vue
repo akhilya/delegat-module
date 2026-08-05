@@ -23,26 +23,14 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
   <div
     :class="[
       layout === 'sidebar'
-        ? 'w-64 shrink-0 hidden lg:flex flex-col bg-card text-card-foreground border rounded-xl overflow-hidden sticky top-14 self-start h-[calc(100svh-3.5rem-1rem-4.75rem)]'
-        : 'w-full flex flex-col gap-3',
+        ? 'product-gallery-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-14 h-[calc(100svh-3.5rem-1rem-4.75rem)]'
+        : 'flex w-full flex-col gap-3',
     ]"
   >
     <div
       :class="[
-        'shrink-0 border-b px-3 py-2',
-        layout === 'inline' ? 'px-0 border-b-0 py-0' : '',
-      ]"
-    >
-      <p class="text-sm font-medium">{{ t("products.productGallerySidebar.title") }}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-        {{ t("products.productGallerySidebar.firstIsMainHint") }}
-      </p>
-    </div>
-
-    <div
-      :class="[
         layout === 'sidebar'
-          ? 'flex-1 min-h-0 overflow-y-auto thin-scrollbar p-2'
+          ? 'thin-scrollbar min-h-0 flex-1 overflow-y-auto p-2'
           : '',
         disabled ? 'pointer-events-none opacity-50' : '',
       ]"
@@ -126,6 +114,12 @@ const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
     </div>
   </div>
 </template>
+
+<style scoped>
+.product-gallery-sidebar {
+  width: clamp(10rem, 14vw, 14rem);
+}
+</style>
 
 <style>
 .drag-ghost {

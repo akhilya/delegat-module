@@ -1,11 +1,8 @@
 <script setup>
 import { onMounted, ref } from "vue";
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import ProductFileManager from "@/components/products/ProductFileManager.vue";
-import { PageHeader } from "@/components/ui/page-header";
 import { http } from "@/main";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
@@ -30,15 +27,7 @@ onMounted(fetchFiles);
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-    <Breadcrumbs :items="breadcrumbs" />
-
-    <PageHeader
-      :title="t('pages.storeStoragePage.title')"
-      :description="t('pages.storeStoragePage.description')"
-    />
-
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection class="flex min-h-[calc(100vh-12rem)] flex-1 flex-col overflow-hidden rounded-xl border bg-card p-0">
       <div v-if="isLoading" class="flex min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
         {{ t("pages.storeStoragePage.loading") }}
@@ -51,5 +40,5 @@ onMounted(fetchFiles);
         @filesChanged="fetchFiles"
       />
     </PageSection>
-  </Page>
+  </AppPageChrome>
 </template>

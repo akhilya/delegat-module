@@ -3,7 +3,6 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useStore } from "vuex";
-import { useDark, useToggle } from "@vueuse/core";
 import {
   ChevronsUpDown,
   Languages,
@@ -17,6 +16,7 @@ import {
 import { setLocale, SUPPORTED_LOCALES } from "@/i18n";
 import { PAGE_SETTINGS_USER } from "@/router";
 import { getDocsPublicUrl } from "@/utils/docsUrl";
+import { isDark, toggleDark } from "@/theme";
 import LocaleFlag from "@/components/LocaleFlag.vue";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,8 +51,6 @@ const props = defineProps({
 const { t, locale } = useI18n();
 const router = useRouter();
 const store = useStore();
-const isDark = useDark();
-const toggleDark = useToggle(isDark);
 
 const languageOptions = SUPPORTED_LOCALES.map((code) => ({
   code,

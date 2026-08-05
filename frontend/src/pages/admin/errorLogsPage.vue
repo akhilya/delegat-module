@@ -1,6 +1,5 @@
 <script>
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import Input from "@/components/ui/input/Input.vue";
 import {
   TableBody,
@@ -42,7 +41,6 @@ import {
 export default {
   components: {
     Button,
-    PageHeader,
     Input,
     TableBody,
     TableCell,
@@ -109,16 +107,6 @@ export default {
           .toLowerCase();
         return hay.includes(q);
       });
-    },
-    summaryLabel() {
-      const n = this.logs.length;
-      if (n === 0) return this.$t("pages.errorLogsPage.summaryNone");
-      const mod10 = n % 10;
-      const mod100 = n % 100;
-      let formKey = "many";
-      if (mod10 === 1 && mod100 !== 11) formKey = "one";
-      else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) formKey = "few";
-      return this.$t(`pages.errorLogsPage.summaryCount.${formKey}`, { count: n });
     },
     detailMeta() {
       if (!this.selected) return [];
@@ -321,19 +309,15 @@ export default {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
-    <PageHeader
-      :title="$t('routes.errorLogs')"
-      :description="$t('pages.errorLogsPage.description')"
-    >
-      <LogRefreshButton :loading="isLoading" @click="fetchLogs" />
-    </PageHeader>
-
-    <LogToolbar class="mb-3 shrink-0" :summary="summaryLabel" :summary-alert="logs.length > 0">
+    <LogToolbar class="mb-3 shrink-0">
       <Input
         v-model="query"
-        class="h-9 w-full min-w-0 sm:max-w-sm"
+        class="h-9 w-full min-w-0 sm:max-w-xs"
         :placeholder="$t('pages.errorLogsPage.searchPlaceholder')"
       />
+      <template #actions>
+        <LogRefreshButton :loading="isLoading" @click="fetchLogs" />
+      </template>
     </LogToolbar>
 
     <LogListPanel

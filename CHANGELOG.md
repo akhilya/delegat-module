@@ -10,6 +10,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ## [Unreleased]
 
 ### Added
+- Instance owner can permanently delete a store (type exact name to confirm; last store protected; catalog/adapters/files purged including MinIO)
+- Instance branding (white-label): Settings modal and first-run Setup step for name, description, logo, favicon, and primary/accent colors; seeded once from `BRAND_*` env; applied at runtime without rebuild
+- Default favicon matches Control Plane (`/logo-square-favicon.webp`); no default logo until upload
 - Account menu link to public product docs (`VITE_DOCS_PUBLIC_URL`, default `https://docs.module.delegat.pro`)
 - `ADMIN_FORCE_RESET` passthrough in production Compose for first-admin reset
 - Product Adapters tab: remembered Export mode (Entire product / Price only / Stock only) per product and adapter in the database; split control runs export on the main click and changes mode via ›
@@ -26,6 +29,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
+- Settings overview breadcrumb shows «Администрирование» (was «Настройки»)
+- App pages share `AppPageChrome` (Page gutters + nav + breadcrumbs) so catalog and settings breadcrumbs align
+- Page title/description headers removed; breadcrumbs carry the page name; primary actions stay as a right-aligned toolbar when needed
+- Settings overview / user preference rows use Card (`SettingsSettingRow`) instead of hand-rolled bordered divs
 - Control Plane docs in this repo are stubs pointing to `delegat-module-platform` (canon lives there)
 - First-run setup wizard: step rail, skeleton loading, and skip catalogs when Control Plane is unlinked or catalogs are not ready (create store by name; server defaults for currency/timezone)
 - Sign-in accepts email as well as username (input is trimmed)
@@ -58,6 +65,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - WooCommerce bridge `images/import-archive` rejects zip bombs (entry count, uncompressed size, compression ratio, path traversal); Delegat caps per-image size when packing archives
 
 ### Fixed
+- Theme no longer jumps from light Setup to dark Products: color scheme boots once with light default (shared `theme.js`) instead of applying system dark only when the account menu mounts
+- Products table shows a loading spinner from first paint (was empty while categories/attributes loaded before the products request)
+- Control Plane–linked instances no longer unlock AI when `AI_ENABLED` is unset (fail closed if `CONTROL_PLANE_URL` is set; self-host unset still enables AI)
 - Public API PATCH for products, categories, groups, and store attributes now persists (load used `AsNoTracking`, so updates were silent no-ops)
 - Auth cookies use HTTPS/`COOKIE_SECURE` instead of `ASPNETCORE_ENVIRONMENT=Production`, so sign-in keeps refresh cookies on HTTP lab hosts
 - Product edit: leaving with unsaved changes shows the discard confirmation dialog again (was blocked with no dialog)

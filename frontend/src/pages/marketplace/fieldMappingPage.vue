@@ -1,8 +1,6 @@
 <script>
-import Page from "@/components/page.vue";
+import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
-import NavigationBar from "@/components/navigationBar.vue";
-import Breadcrumbs from "@/components/breadcrumbs.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -48,12 +46,10 @@ import {
 
 export default {
   components: {
-    Page,
+    AppPageChrome,
     PageSection,
     MappingCanvas,
     EmptyState,
-    NavigationBar,
-    Breadcrumbs,
     Button,
     Input,
     Label,
@@ -1090,13 +1086,7 @@ export default {
 </script>
 
 <template>
-  <Page class="flex flex-col">
-    <NavigationBar />
-
-    <div class="mb-4 flex items-center gap-3">
-      <Breadcrumbs :items="breadcrumbs" class="mb-0 min-w-0 flex-1" />
-    </div>
-
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection :loading="isLoading">
       <template v-if="!isLoading">
         <!-- Visual node graph editor (whole-category Blueprint) - the sole mapping editor.
@@ -1332,5 +1322,5 @@ export default {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Page>
+  </AppPageChrome>
 </template>

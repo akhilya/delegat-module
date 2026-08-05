@@ -13,7 +13,7 @@ import { Monitor } from "lucide-vue-next";
 import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
-import { BRAND_NAME } from "@/brand";
+import { brandName } from "@/brand";
 import { loadMe } from "@/main";
 
 const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPanel.vue"));
@@ -55,7 +55,7 @@ export default {
       localStorage.setItem("mobile-warning-dismissed", "1");
     }
 
-    return { t, BRAND_NAME, isPublicPage, isBareLayout, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
+    return { t, brandName, isPublicPage, isBareLayout, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
   },
   computed: {
     appKey() {
@@ -139,7 +139,7 @@ export default {
         <div>
           <h2 class="text-lg font-semibold mb-2">{{ t("app.mobileWarningTitle") }}</h2>
           <p class="text-sm text-muted-foreground leading-relaxed">
-            {{ t("app.mobileWarningBody", { brand: BRAND_NAME }) }}
+            {{ t("app.mobileWarningBody", { brand: brandName }) }}
           </p>
         </div>
         <Button class="w-full" @click="dismissMobileWarning">

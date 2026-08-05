@@ -206,6 +206,7 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 
 ### Navigation
 - **Sidebar:** `{colors.sidebar}` surface, quiet borders, primary for active emphasis sparingly
+- **App page chrome:** Catalog and settings shells use `AppPageChrome` (`Page` + `adaptive-padding` + sticky `NavigationBar` + `Breadcrumbs`). Page titles come from breadcrumbs, not `PageHeader`. Do not nest a second `Page` inside settings route children; do not override breadcrumb `mb-4` locally.
 - **Auth shell:** Centered brand + card form (`AuthLayout`); language switcher corner; no marketing hero
 
 ### Status chips / badges

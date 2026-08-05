@@ -50,7 +50,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PageHeader } from "@/components/ui/page-header";
 
 export default {
   components: {
@@ -85,7 +84,6 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    PageHeader,
     Switch,
     Select,
     SelectContent,
@@ -422,7 +420,7 @@ export default {
 
 <template>
   <div>
-    <PageHeader :title="$t('routes.stores')" :description="$t('pages.storesPage.description')">
+    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -468,7 +466,7 @@ export default {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageHeader>
+    </div>
 
     <PageSection
       :loading="isLoading"
