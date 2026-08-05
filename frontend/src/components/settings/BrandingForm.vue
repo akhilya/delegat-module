@@ -8,7 +8,8 @@ import {
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { http } from "@/main";
 import {
   applyBranding,
@@ -312,30 +313,30 @@ defineExpose({
           {{ t("pages.settingsOverviewPage.branding.identityHint") }}
         </p>
       </div>
-      <div class="grid gap-4">
-        <div class="space-y-2">
-          <Label for="brand-name">
-            {{ t("pages.settingsOverviewPage.branding.nameLabel") }}
-          </Label>
+      <FieldGroup class="gap-4">
+        <SettingsFormField
+          :label="t('pages.settingsOverviewPage.branding.nameLabel')"
+          label-for="brand-name"
+        >
           <Input
             id="brand-name"
             v-model="form.name"
             maxlength="120"
             :placeholder="t('pages.settingsOverviewPage.branding.namePlaceholder')"
           />
-        </div>
-        <div class="space-y-2">
-          <Label for="brand-description">
-            {{ t("pages.settingsOverviewPage.branding.descriptionLabel") }}
-          </Label>
+        </SettingsFormField>
+        <SettingsFormField
+          :label="t('pages.settingsOverviewPage.branding.descriptionLabel')"
+          label-for="brand-description"
+        >
           <Input
             id="brand-description"
             v-model="form.description"
             maxlength="500"
             :placeholder="t('pages.settingsOverviewPage.branding.descriptionPlaceholder')"
           />
-        </div>
-      </div>
+        </SettingsFormField>
+      </FieldGroup>
     </section>
 
     <!-- Assets -->
@@ -350,8 +351,7 @@ defineExpose({
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <div class="space-y-2">
-          <Label>{{ t("pages.settingsOverviewPage.branding.logoLabel") }}</Label>
+        <SettingsFormField :label="t('pages.settingsOverviewPage.branding.logoLabel')">
           <input
             ref="logoInput"
             type="file"
@@ -406,10 +406,9 @@ defineExpose({
             <X class="mr-1 size-3.5" />
             {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
           </Button>
-        </div>
+        </SettingsFormField>
 
-        <div class="space-y-2">
-          <Label>{{ t("pages.settingsOverviewPage.branding.faviconLabel") }}</Label>
+        <SettingsFormField :label="t('pages.settingsOverviewPage.branding.faviconLabel')">
           <input
             ref="faviconInput"
             type="file"
@@ -464,7 +463,7 @@ defineExpose({
             <X class="mr-1 size-3.5" />
             {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
           </Button>
-        </div>
+        </SettingsFormField>
       </div>
     </section>
 
@@ -490,11 +489,11 @@ defineExpose({
         </Button>
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div class="space-y-2">
-          <Label for="brand-primary">
-            {{ t("pages.settingsOverviewPage.branding.primaryLabel") }}
-          </Label>
+      <FieldGroup class="gap-4 sm:grid sm:grid-cols-2">
+        <SettingsFormField
+          :label="t('pages.settingsOverviewPage.branding.primaryLabel')"
+          label-for="brand-primary"
+        >
           <div class="flex items-center gap-2">
             <input
               type="color"
@@ -511,11 +510,11 @@ defineExpose({
               @update:model-value="(v) => (form.primaryColor = normalizeHexInput(v))"
             />
           </div>
-        </div>
-        <div class="space-y-2">
-          <Label for="brand-accent">
-            {{ t("pages.settingsOverviewPage.branding.accentLabel") }}
-          </Label>
+        </SettingsFormField>
+        <SettingsFormField
+          :label="t('pages.settingsOverviewPage.branding.accentLabel')"
+          label-for="brand-accent"
+        >
           <div class="flex items-center gap-2">
             <input
               type="color"
@@ -532,8 +531,8 @@ defineExpose({
               @update:model-value="(v) => (form.accentColor = normalizeHexInput(v))"
             />
           </div>
-        </div>
-      </div>
+        </SettingsFormField>
+      </FieldGroup>
     </section>
   </div>
 </template>

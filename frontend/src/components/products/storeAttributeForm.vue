@@ -3,6 +3,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
@@ -25,6 +26,7 @@ export default {
     MultiSelectDropdown,
     BarcodeInput,
     SettingsFormField,
+    FieldGroup,
     EmptyState,
     FormControl,
     FormField,
@@ -91,9 +93,10 @@ export default {
 </script>
 
 <template>
-  <div
-    class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
-  >
+  <FieldGroup class="gap-5">
+    <div
+      class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
+    >
     <div
       v-for="attribute in sortedAttributes"
       :key="attribute.id"
@@ -190,6 +193,8 @@ export default {
       </FormField>
     </div>
 
+    </div>
+
     <EmptyState
       v-if="sortedAttributes.length === 0"
       size="sm"
@@ -197,5 +202,5 @@ export default {
       :description="$t('products.storeAttributeForm.emptyDescription')"
       class="md:col-span-2 py-8"
     />
-  </div>
+  </FieldGroup>
 </template>

@@ -149,7 +149,7 @@ public class DatabaseDumpTests
     {
         public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task<BrandingSettingsDto> GetAsync(CancellationToken ct = default) =>
-            Task.FromResult(new BrandingSettingsDto("Delegat", null, "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow));
+            Task.FromResult(new BrandingSettingsDto("Delegat.Module", null, "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow));
         public Task<BrandingSettingsDto> UpdateAsync(UpdateBrandingSettingsRequest request, CancellationToken ct = default) =>
             GetAsync(ct);
         public Task<BrandingSettingsDto> UploadLogoAsync(IFormFile file, CancellationToken ct = default) =>

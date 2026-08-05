@@ -4,6 +4,8 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
@@ -40,6 +42,8 @@ export default {
     PageSection,
     Button,
     Input,
+    SettingsFormField,
+    FieldGroup,
     Badge,
     Plus,
     Layers,
@@ -185,17 +189,23 @@ export default {
               {{ $t("pages.productGroupsPage.newGroupDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="py-4 space-y-4">
-            <Input
-              v-model="newGroupName"
-              :placeholder="$t('pages.productGroupsPage.namePlaceholder')"
-              @keyup.enter="handleCreateGroup"
-            />
-            <Input
-              v-model="newGroupDescription"
-              :placeholder="$t('pages.productGroupsPage.descriptionPlaceholder')"
-            />
-          </div>
+          <FieldGroup class="gap-4 py-4">
+            <SettingsFormField :label="$t('common.name')" label-for="new-group-name">
+              <Input
+                id="new-group-name"
+                v-model="newGroupName"
+                :placeholder="$t('pages.productGroupsPage.namePlaceholder')"
+                @keyup.enter="handleCreateGroup"
+              />
+            </SettingsFormField>
+            <SettingsFormField :label="$t('common.description')" label-for="new-group-description">
+              <Input
+                id="new-group-description"
+                v-model="newGroupDescription"
+                :placeholder="$t('pages.productGroupsPage.descriptionPlaceholder')"
+              />
+            </SettingsFormField>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.cancel") }}</Button>

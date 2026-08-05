@@ -125,6 +125,7 @@ import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import { FieldGroup } from "@/components/ui/field";
 import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
@@ -232,6 +233,7 @@ export default {
     PasswordInput,
     SettingsFormField,
     SettingsFormSection,
+    FieldGroup,
     ExternalCategoryBrowser,
     Progress,
     Tooltip,
@@ -4371,11 +4373,9 @@ export default {
 
             <Separator class="mb-3" />
 
-            <div class="space-y-3">
-              <Label class="text-sm text-muted-foreground"
-                >{{ $t("marketplace.connectionPage.dialogs.localCategoryColon") }}</Label
-              >
-
+            <SettingsFormField
+              :label="$t('marketplace.connectionPage.dialogs.localCategoryColon')"
+            >
               <RadioGroup
                 :model-value="
                   categoryAssignments[group.externalCategoryId || '__none__']
@@ -4497,7 +4497,7 @@ export default {
                   </Label>
                 </div>
               </RadioGroup>
-            </div>
+            </SettingsFormField>
           </div>
         </div>
 
@@ -4756,14 +4756,19 @@ export default {
             >{{ $t("marketplace.connectionPage.dialogs.mappingSettingsDescription") }}</DialogDescription
           >
         </DialogHeader>
-        <div class="space-y-4 py-4">
-          <div class="space-y-2">
-            <Label>{{ $t("common.name") }}</Label>
-            <Input
-              v-model="mappingSettingsName"
-              :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
-            />
-          </div>
+        <div class="py-4">
+          <FieldGroup class="gap-4">
+            <SettingsFormField
+              :label="$t('common.name')"
+              label-for="mapping-settings-name"
+            >
+              <Input
+                id="mapping-settings-name"
+                v-model="mappingSettingsName"
+                :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
+              />
+            </SettingsFormField>
+          </FieldGroup>
         </div>
         <DialogFooter>
           <DialogClose as-child>

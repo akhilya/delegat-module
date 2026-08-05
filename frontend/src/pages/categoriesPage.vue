@@ -4,6 +4,8 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -39,6 +41,8 @@ export default {
     PageSection,
     Button,
     Input,
+    SettingsFormField,
+    FieldGroup,
     Plus,
     FolderOpen,
     Trash2,
@@ -156,17 +160,23 @@ export default {
               {{ $t("pages.categoriesPage.newCategoryDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="py-4 space-y-4">
-            <Input
-              v-model="newCategoryName"
-              :placeholder="$t('pages.categoriesPage.namePlaceholder')"
-              @keyup.enter="handleCreateCategory"
-            />
-            <Input
-              v-model="newCategoryDescription"
-              :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
-            />
-          </div>
+          <FieldGroup class="gap-4 py-4">
+            <SettingsFormField :label="$t('common.name')" label-for="new-category-name">
+              <Input
+                id="new-category-name"
+                v-model="newCategoryName"
+                :placeholder="$t('pages.categoriesPage.namePlaceholder')"
+                @keyup.enter="handleCreateCategory"
+              />
+            </SettingsFormField>
+            <SettingsFormField :label="$t('common.description')" label-for="new-category-description">
+              <Input
+                id="new-category-description"
+                v-model="newCategoryDescription"
+                :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
+              />
+            </SettingsFormField>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.cancel") }}</Button>

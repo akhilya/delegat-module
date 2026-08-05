@@ -5,10 +5,12 @@ import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
-import Label from "@/components/ui/label/Label.vue";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { loadMe, invalidateMeCache } from "@/main";
 import {
   Plus,
   Store,
@@ -58,7 +60,8 @@ export default {
     Button,
     Input,
     Checkbox,
-    Label,
+    FieldGroup,
+    SettingsFormField,
     Badge,
     Plus,
     Store,
@@ -123,6 +126,10 @@ export default {
       addableCurrencies: [],
       catalogReady: false,
       catalogLinked: false,
+      me: null,
+      showDeleteDialog: false,
+      deleteConfirmName: "",
+      isDeleting: false,
     };
   },
   computed: {
@@ -160,6 +167,16 @@ export default {
         return name.includes(q) || String(u.id).includes(q);
       });
     },
+    canDeleteStore() {
+      return this.me?.isAdmin === true && !!this.editingStore;
+    },
+    isLastStore() {
+      return (this.stores || []).length <= 1;
+    },
+    deleteNameMatches() {
+      if (!this.editingStore?.name) return false;
+      return this.deleteConfirmName.trim() === this.editingStore.name;
+    },
   },
   methods: {
     ...mapActions([
@@ -171,6 +188,7 @@ export default {
       "addStoreCurrency",
       "patchStoreCurrency",
       "deleteStoreCurrency",
+      "deleteStore",
       "getReferenceCurrencies",
       "getReferenceTimezones",
       "getReferenceStatus",
@@ -409,8 +427,48 @@ export default {
         onError: displaySonnerError,
       });
     },
+
+    openDeleteDialog() {
+      this.deleteConfirmName = "";
+      this.showDeleteDialog = true;
+    },
+
+    async handleDeleteStore() {
+      if (!this.deleteNameMatches || this.isDeleting || !this.editingStore) return;
+      this.isDeleting = true;
+      await this.deleteStore({
+        storeId: this.editingStore.id,
+        confirmationName: this.deleteConfirmName.trim(),
+        onSuccess: async () => {
+          displaySonnerSuccess(this.$t("pages.storeDetailPage.deleteSuccess"));
+          this.showDeleteDialog = false;
+          this.closeEditDialog();
+          invalidateMeCache();
+          try {
+            await loadMe();
+          } catch {
+            /* ignore */
+          }
+          this.$store.commit("incrementAppKey");
+          await this.fetchStores();
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isDeleting = false;
+    },
+
+    async fetchMe() {
+      try {
+        this.me = await loadMe();
+      } catch {
+        this.me = null;
+      }
+    },
   },
-  mounted() {
+  async mounted() {
+    await this.fetchMe();
     this.fetchReferenceCatalogs();
     this.fetchStores();
     this.fetchUsers();
@@ -435,26 +493,29 @@ export default {
               {{ $t("pages.storesPage.newStoreDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="space-y-4 py-2">
-            <div class="grid gap-2">
-              <Label for="new-store-name">{{ $t("common.name") }}</Label>
+          <FieldGroup class="gap-4 py-2">
+            <SettingsFormField
+              :label="$t('common.name')"
+              label-for="new-store-name"
+            >
               <Input
                 id="new-store-name"
                 v-model="newStoreName"
                 :placeholder="$t('pages.storesPage.storeNamePlaceholder')"
                 @keyup.enter="handleCreateStore"
               />
-            </div>
-            <label class="flex cursor-pointer items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm transition-colors hover:bg-muted/50">
+            </SettingsFormField>
+            <SettingsFormField
+              :label="$t('pages.storesPage.addAllUsersLabel')"
+              inline
+              class="rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50"
+            >
               <Checkbox v-model="addAllUsers" class="mt-0.5" />
-              <span class="grid gap-1">
-                <span class="font-medium leading-none">{{ $t("pages.storesPage.addAllUsersLabel") }}</span>
-                <span class="text-xs text-muted-foreground">
-                  {{ $t("pages.storesPage.addAllUsersHint") }}
-                </span>
-              </span>
-            </label>
-          </div>
+              <template #description>
+                {{ $t("pages.storesPage.addAllUsersHint") }}
+              </template>
+            </SettingsFormField>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
@@ -576,10 +637,14 @@ export default {
                     <h3 class="text-sm font-semibold tracking-tight">{{ $t("pages.storesPage.identityTitle") }}</h3>
                     <p class="text-xs text-muted-foreground">{{ $t("pages.storesPage.identityHint") }}</p>
                   </div>
-                  <div class="grid gap-2">
-                    <Label for="store-name">{{ $t("common.name") }}</Label>
-                    <Input id="store-name" v-model="editForm.name" :disabled="isSaving" />
-                  </div>
+                  <FieldGroup class="gap-3">
+                    <SettingsFormField
+                      :label="$t('common.name')"
+                      label-for="store-name"
+                    >
+                      <Input id="store-name" v-model="editForm.name" :disabled="isSaving" />
+                    </SettingsFormField>
+                  </FieldGroup>
                 </section>
 
                 <Separator />
@@ -592,29 +657,30 @@ export default {
                       <p class="text-xs text-muted-foreground">{{ $t("pages.storesPage.regionalHint") }}</p>
                     </div>
                   </div>
-                  <div class="grid gap-2">
-                    <Label>{{ $t("pages.storesPage.timezoneLabel") }}</Label>
-                    <Select
-                      v-model="editForm.timezone"
-                      :disabled="isSaving || !canChangeTimezone"
-                    >
-                      <SelectTrigger>
-                        <SelectValue :placeholder="$t('pages.storesPage.timezoneLabel')" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem
-                          v-for="tz in timezoneSelectOptions"
-                          :key="tz.value"
-                          :value="tz.value"
-                        >
-                          {{ tz.label }}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p v-if="!canChangeTimezone" class="text-xs text-muted-foreground">
-                      {{ $t("pages.storesPage.catalogEmptyHint") }}
-                    </p>
-                  </div>
+                  <FieldGroup class="gap-3">
+                    <SettingsFormField :label="$t('pages.storesPage.timezoneLabel')">
+                      <Select
+                        v-model="editForm.timezone"
+                        :disabled="isSaving || !canChangeTimezone"
+                      >
+                        <SelectTrigger>
+                          <SelectValue :placeholder="$t('pages.storesPage.timezoneLabel')" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            v-for="tz in timezoneSelectOptions"
+                            :key="tz.value"
+                            :value="tz.value"
+                          >
+                            {{ tz.label }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <template v-if="!canChangeTimezone" #description>
+                        {{ $t("pages.storesPage.catalogEmptyHint") }}
+                      </template>
+                    </SettingsFormField>
+                  </FieldGroup>
                 </section>
 
                 <Separator />
@@ -624,10 +690,16 @@ export default {
                     <h3 class="text-sm font-semibold tracking-tight">{{ $t("pages.storesPage.pricesTitle") }}</h3>
                     <p class="text-xs text-muted-foreground">{{ $t("pages.storesPage.extendedPriceParamsHint") }}</p>
                   </div>
-                  <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/35">
-                    <span class="text-sm font-medium">{{ $t("pages.storesPage.extendedPriceParamsLabel") }}</span>
+                  <SettingsFormField
+                    :label="$t('pages.storesPage.extendedPriceParamsLabel')"
+                    inline
+                    class="rounded-lg border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/35"
+                  >
                     <Switch v-model="editForm.extendedPriceParameters" :disabled="isSaving" />
-                  </label>
+                    <template #description>
+                      {{ $t("pages.storesPage.extendedPriceParamsHint") }}
+                    </template>
+                  </SettingsFormField>
                 </section>
               </TabsContent>
 
@@ -668,10 +740,10 @@ export default {
                         </div>
                       </div>
                       <div class="flex items-center gap-2">
-                        <div class="grid gap-1">
-                          <Label class="text-xs text-muted-foreground">
-                            {{ $t("pages.storesPage.columnRate", { base: storeBaseCurrency || $t("pages.storesPage.baseFallback") }) }}
-                          </Label>
+                        <SettingsFormField
+                          :label="$t('pages.storesPage.columnRate', { base: storeBaseCurrency || $t('pages.storesPage.baseFallback') })"
+                          class="gap-1"
+                        >
                           <Input
                             type="number"
                             step="0.000001"
@@ -681,7 +753,7 @@ export default {
                             :disabled="isSaving"
                             @change="updateCurrencyRate(cur.code, $event.target.value)"
                           />
-                        </div>
+                        </SettingsFormField>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -700,8 +772,10 @@ export default {
                 <div v-if="availableCurrencyOptions.length" class="rounded-lg border border-dashed p-4">
                   <div class="mb-3 text-sm font-medium">{{ $t("pages.storesPage.addCurrencyTitle") }}</div>
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <div class="grid flex-1 gap-1">
-                      <Label class="text-xs text-muted-foreground">{{ $t("pages.storesPage.columnCurrency") }}</Label>
+                    <SettingsFormField
+                      :label="$t('pages.storesPage.columnCurrency')"
+                      class="min-w-0 flex-1 gap-1"
+                    >
                       <Select v-model="newCurrencyCode" :disabled="isSaving">
                         <SelectTrigger>
                           <SelectValue :placeholder="$t('pages.storesPage.addCurrencyPlaceholder')" />
@@ -712,11 +786,11 @@ export default {
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div class="grid gap-1">
-                      <Label class="text-xs text-muted-foreground">
-                        {{ $t("pages.storesPage.rateToPlaceholder", { base: storeBaseCurrency || $t("pages.storesPage.baseFallback") }) }}
-                      </Label>
+                    </SettingsFormField>
+                    <SettingsFormField
+                      :label="$t('pages.storesPage.rateToPlaceholder', { base: storeBaseCurrency || $t('pages.storesPage.baseFallback') })"
+                      class="gap-1"
+                    >
                       <Input
                         v-model="newCurrencyRate"
                         type="number"
@@ -725,7 +799,7 @@ export default {
                         class="w-full sm:w-[140px]"
                         :disabled="isSaving"
                       />
-                    </div>
+                    </SettingsFormField>
                     <Button variant="secondary" :disabled="isSaving" @click="addCurrency">
                       <Plus class="mr-1.5 size-4" />
                       {{ $t("common.add") }}
@@ -782,6 +856,33 @@ export default {
                   </ul>
                 </div>
               </TabsContent>
+
+              <section
+                v-if="canDeleteStore"
+                class="mt-8 rounded-lg border border-destructive/40 p-4"
+              >
+                <h3 class="text-sm font-semibold text-destructive">
+                  {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
+                </h3>
+                <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
+                </p>
+                <p
+                  v-if="isLastStore"
+                  class="mt-2 text-sm text-muted-foreground"
+                >
+                  {{ $t("pages.storeDetailPage.deleteLastStoreError") }}
+                </p>
+                <Button
+                  class="mt-4"
+                  variant="destructive"
+                  :disabled="isLastStore || isSaving"
+                  @click="openDeleteDialog"
+                >
+                  <Trash2 class="mr-2 size-4" />
+                  {{ $t("pages.storeDetailPage.deleteStoreButton") }}
+                </Button>
+              </section>
             </div>
           </div>
         </Tabs>
@@ -800,6 +901,44 @@ export default {
               {{ $t("common.save") }}
             </Button>
           </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="showDeleteDialog">
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>{{ $t("pages.storeDetailPage.deleteDialogTitle") }}</DialogTitle>
+          <DialogDescription>
+            {{ $t("pages.storeDetailPage.deleteDialogDescription") }}
+          </DialogDescription>
+        </DialogHeader>
+        <FieldGroup class="gap-4 py-2">
+          <SettingsFormField
+            :label="$t('pages.storeDetailPage.deleteConfirmLabel', { name: editingStore?.name })"
+            label-for="store-delete-confirm"
+          >
+            <Input
+              id="store-delete-confirm"
+              v-model="deleteConfirmName"
+              :placeholder="$t('pages.storeDetailPage.deleteConfirmPlaceholder')"
+              autocomplete="off"
+              @keydown.enter="handleDeleteStore"
+            />
+          </SettingsFormField>
+        </FieldGroup>
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline" :disabled="isDeleting">{{ $t("common.cancel") }}</Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            :disabled="!deleteNameMatches || isDeleting"
+            @click="handleDeleteStore"
+          >
+            <Spinner v-if="isDeleting" class="mr-2" />
+            {{ $t("pages.storeDetailPage.deleteForever") }}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -813,7 +813,7 @@ export default {
         </div>
 
         <!-- Block 1: Settings -->
-        <div class="max-w-2xl space-y-4">
+        <FieldGroup class="max-w-2xl gap-4">
             <SettingsFormField :label="$t('common.name')" label-for="category-name">
               <Input
                 id="category-name"
@@ -841,7 +841,7 @@ export default {
                 </Label>
               </div>
             </SettingsFormField>
-        </div>
+        </FieldGroup>
 
         <!-- Block 2: Attributes -->
         <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">

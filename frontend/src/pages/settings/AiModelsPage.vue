@@ -3,11 +3,11 @@ import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
-import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Dialog,
@@ -61,11 +61,11 @@ export default {
     PageSection,
     SettingsFormSection,
     SettingsFormField,
+    FieldGroup,
     EmptyState,
     Button,
     Input,
     PasswordInput,
-    Label,
     Badge,
     Textarea,
     Switch,
@@ -562,14 +562,12 @@ export default {
           </DialogDescription>
         </DialogHeader>
 
-        <div class="grid gap-4 py-2">
-          <div class="grid gap-2">
-            <Label>{{ $t("common.name") }}</Label>
+        <FieldGroup class="gap-4 py-2">
+          <SettingsFormField :label="$t('common.name')">
             <Input v-model="form.name" placeholder="Claude Sonnet" />
-          </div>
+          </SettingsFormField>
 
-          <div class="grid gap-2">
-            <Label>{{ $t("pages.aiModelsPage.providerLabel") }}</Label>
+          <SettingsFormField :label="$t('pages.aiModelsPage.providerLabel')">
             <Select v-model="form.provider">
               <SelectTrigger class="w-full">
                 <SelectValue :placeholder="$t('pages.aiModelsPage.chooseProviderPlaceholder')" />
@@ -579,68 +577,68 @@ export default {
                 <SelectItem value="1">OpenAI-compatible</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </SettingsFormField>
 
-          <div class="grid gap-2">
-            <Label>API URL</Label>
+          <SettingsFormField label="API URL">
             <Input
               v-model="form.apiUrl"
               :placeholder="form.provider === '0'
                 ? 'https://api.anthropic.com/v1/messages'
                 : $t('pages.aiModelsPage.apiUrlPlaceholderOpenAi')"
             />
-            <p v-if="form.provider === '1'" class="text-xs text-muted-foreground">
+            <template v-if="form.provider === '1'" #description>
               {{ $t("pages.aiModelsPage.baseUrlOnlyPrefix") }} <code>/v1/chat/completions</code> {{ $t("pages.aiModelsPage.baseUrlOnlySuffix") }}
-            </p>
-          </div>
+            </template>
+          </SettingsFormField>
 
-          <div class="grid gap-2">
-            <Label>{{ $t("pages.aiModelsPage.proxyLabel") }} <span class="text-muted-foreground font-normal text-xs">{{ $t("pages.aiModelsPage.optionalSuffix") }}</span></Label>
+          <SettingsFormField :label="`${$t('pages.aiModelsPage.proxyLabel')} (${$t('pages.aiModelsPage.optionalSuffix')})`">
             <PasswordInput
               v-model="form.proxyUrl"
               :placeholder="$t('pages.aiModelsPage.proxyPlaceholder')"
               autocomplete="off"
             />
-            <p class="text-xs text-muted-foreground">
+            <template #description>
               {{ $t("pages.aiModelsPage.proxyHint") }}
-            </p>
-          </div>
+            </template>
+          </SettingsFormField>
 
-          <div v-if="!editingModel" class="grid gap-2">
-            <Label>{{ $t("pages.aiModelsPage.apiKeyLabel") }}</Label>
+          <SettingsFormField
+            v-if="!editingModel"
+            :label="$t('pages.aiModelsPage.apiKeyLabel')"
+          >
             <PasswordInput v-model="form.apiKey" placeholder="sk-ant-..." autocomplete="off" />
-          </div>
+          </SettingsFormField>
 
-          <div class="grid gap-2">
-            <div class="flex items-center justify-between">
-              <Label>Model ID</Label>
-              <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" :disabled="isDiscovering" @click="discoverModels">
-                <Spinner v-if="isDiscovering" size="xs" class="mr-1" />
-                <RefreshCw v-else class="mr-1 size-3" />
-                {{ $t("pages.aiModelsPage.fetchListButton") }}
+          <SettingsFormField label="Model ID">
+            <div class="space-y-2">
+              <div class="flex justify-end">
+                <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" :disabled="isDiscovering" @click="discoverModels">
+                  <Spinner v-if="isDiscovering" size="xs" class="mr-1" />
+                  <RefreshCw v-else class="mr-1 size-3" />
+                  {{ $t("pages.aiModelsPage.fetchListButton") }}
+                </Button>
+              </div>
+              <Select v-if="modelOptions.length" v-model="form.modelId">
+                <SelectTrigger class="w-full">
+                  <SelectValue :placeholder="$t('pages.aiModelsPage.chooseModelPlaceholder')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="id in modelOptions" :key="id" :value="id">{{ id }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input v-else v-model="form.modelId" placeholder="claude-sonnet-4-6" />
+              <Button
+                v-if="modelOptions.length"
+                type="button"
+                variant="link"
+                class="h-auto w-fit p-0 text-xs text-muted-foreground"
+                @click="modelOptions = []"
+              >
+                {{ $t("pages.aiModelsPage.enterManuallyButton") }}
               </Button>
             </div>
-            <Select v-if="modelOptions.length" v-model="form.modelId">
-              <SelectTrigger class="w-full">
-                <SelectValue :placeholder="$t('pages.aiModelsPage.chooseModelPlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="id in modelOptions" :key="id" :value="id">{{ id }}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input v-else v-model="form.modelId" placeholder="claude-sonnet-4-6" />
-            <Button
-              v-if="modelOptions.length"
-              type="button"
-              variant="link"
-              class="h-auto p-0 text-xs text-muted-foreground w-fit"
-              @click="modelOptions = []"
-            >
-              {{ $t("pages.aiModelsPage.enterManuallyButton") }}
-            </Button>
-          </div>
-
-        </div>
+          </SettingsFormField>
+        </FieldGroup>
 
         <DialogFooter>
           <Button variant="ghost" @click="closeDialog">{{ $t("common.cancel") }}</Button>

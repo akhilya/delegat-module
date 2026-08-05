@@ -11,7 +11,7 @@ public class InstanceBrandingSettings
 {
     public const int SingletonId = 1;
 
-    public const string DefaultName = "Delegat";
+    public const string DefaultName = "Delegat.Module";
 
     /// <summary>Control Plane square favicon shipped in instance <c>frontend/public</c>.</summary>
     public const string DefaultFaviconUrl = "/logo-square-favicon.webp";

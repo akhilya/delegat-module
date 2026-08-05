@@ -4,8 +4,11 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
+import Separator from "@/components/ui/separator/Separator.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
@@ -14,6 +17,7 @@ import {
   Package,
   Trash2,
   Settings,
+  Check,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -44,13 +48,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import Switch from "@/components/ui/switch/Switch.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
@@ -62,13 +59,17 @@ export default {
     PageSection,
     Button,
     Input,
-    Label,
+    PasswordInput,
     Badge,
+    SettingsFormField,
+    FieldGroup,
+    Separator,
     Plus,
     Store,
     Package,
     Trash2,
     Settings,
+    Check,
     Table,
     TableBody,
     TableCell,
@@ -92,11 +93,6 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
     Switch,
     EmptyState
   },
@@ -132,6 +128,10 @@ export default {
       const schema = this.selectedAdapterSchema;
       if (!schema) return [];
       return schema.fields || schema.Fields || [];
+    },
+    selectedAdapterMeta() {
+      if (!this.selectedAdapter) return null;
+      return this.adapters.find((a) => a.key === this.selectedAdapter) || null;
     },
   },
   methods: {
@@ -262,6 +262,22 @@ export default {
       const adapter = this.adapters.find((a) => a.key === adapterKey);
       return adapter?.displayName || adapterKey;
     },
+
+    onCreateDialogOpenChange(open) {
+      this.showCreateDialog = open;
+      if (!open) this.resetForm();
+    },
+
+    adapterRowClass(adapterKey) {
+      const selected = this.selectedAdapter === adapterKey;
+      return [
+        "w-full rounded-lg border bg-background p-3 text-left transition-colors outline-none",
+        "focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected
+          ? "border-primary bg-primary/5"
+          : "border-input hover:bg-muted/40",
+      ];
+    },
   },
   mounted() {
     this.fetchData();
@@ -272,24 +288,28 @@ export default {
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
     <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-      <Dialog v-model:open="showCreateDialog">
+      <Dialog :open="showCreateDialog" @update:open="onCreateDialogOpenChange">
         <DialogTrigger as-child>
           <Button>
             <Plus class="size-4 mr-2" />
             {{ $t("marketplace.marketplacePage.addConnection") }}
           </Button>
         </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent
+          size="lg"
+          class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+        >
+          <DialogHeader variant="bar">
             <DialogTitle>{{ $t("marketplace.marketplacePage.newConnectionTitle") }}</DialogTitle>
             <DialogDescription>
               {{ $t("marketplace.marketplacePage.newConnectionDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="py-4 space-y-4">
-            <!-- No plugins available -->
+
+          <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             <EmptyState
               v-if="adapters.length === 0"
+              size="sm"
               :title="$t('marketplace.marketplacePage.noPluginsAvailableTitle')"
               :description="$t('marketplace.marketplacePage.noPluginsAvailableDescription')"
             >
@@ -301,80 +321,154 @@ export default {
               </Button>
             </EmptyState>
 
-            <template v-else>
-              <div class="space-y-2">
-                <Label>{{ $t("marketplace.marketplacePage.connectionNameLabel") }}</Label>
+            <FieldGroup v-else class="gap-5">
+              <SettingsFormField
+                :label="$t('marketplace.marketplacePage.connectionNameLabel')"
+                label-for="new-connection-name"
+              >
                 <Input
+                  id="new-connection-name"
                   v-model="newConnection.name"
                   :placeholder="$t('marketplace.marketplacePage.connectionNamePlaceholder')"
+                  autocomplete="off"
                 />
-              </div>
+              </SettingsFormField>
 
-              <div class="space-y-2">
-                <Label>{{ $t("marketplace.marketplacePage.adapterLabel") }}</Label>
-                <Select v-model="selectedAdapter" @update:modelValue="onAdapterSelect">
-                  <SelectTrigger>
-                    <SelectValue :placeholder="$t('marketplace.marketplacePage.selectAdapterPlaceholder')" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="adapter in adapters"
-                      :key="adapter.key"
-                      :value="adapter.key"
-                    >
-                      {{ adapter.displayName }}
-                      <span v-if="adapter.version" class="text-muted-foreground">
-                        · v{{ adapter.version }}
-                      </span>
-                      <span v-if="adapter.stability" class="text-muted-foreground">
-                        · {{ adapter.stability }}
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p v-if="selectedAdapter" class="text-sm text-muted-foreground">
-                  {{ adapters.find((a) => a.key === selectedAdapter)?.description }}
-                </p>
-              </div>
-
-              <template v-if="credentialFields?.length">
+              <SettingsFormField :label="$t('marketplace.marketplacePage.adapterLabel')">
                 <div
-                  v-for="field in credentialFields"
-                  :key="field.key"
                   class="space-y-2"
+                  role="radiogroup"
+                  :aria-label="$t('marketplace.marketplacePage.adapterLabel')"
                 >
-                  <Label>
-                    {{ field.displayName }}
-                    <span v-if="field.isRequired" class="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    v-model="credentialValues[field.key]"
-                    :type="field.isSecret ? 'password' : 'text'"
-                    :placeholder="field.placeholder || field.description"
-                    :required="field.isRequired"
-                  />
-                  <p v-if="field.description" class="text-xs text-muted-foreground">
-                    {{ field.description }}
+                  <button
+                    v-for="adapter in adapters"
+                    :key="adapter.key"
+                    type="button"
+                    role="radio"
+                    :aria-checked="selectedAdapter === adapter.key"
+                    :class="adapterRowClass(adapter.key)"
+                    @click="onAdapterSelect(adapter.key)"
+                  >
+                    <div class="flex items-start gap-3">
+                      <span
+                        class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border"
+                        :class="
+                          selectedAdapter === adapter.key
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-input bg-background'
+                        "
+                      >
+                        <Check
+                          v-if="selectedAdapter === adapter.key"
+                          class="size-2.5"
+                        />
+                      </span>
+                      <div class="min-w-0 flex-1 space-y-0.5">
+                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span class="text-sm font-medium text-foreground">
+                            {{ adapter.displayName }}
+                          </span>
+                          <span
+                            v-if="adapter.version"
+                            class="font-mono text-xs tabular-nums text-muted-foreground"
+                          >
+                            v{{ adapter.version }}
+                          </span>
+                          <Badge
+                            v-if="adapter.stability"
+                            variant="outline"
+                            class="h-5 px-1.5 text-[10px] font-normal uppercase tracking-wide"
+                          >
+                            {{ adapter.stability }}
+                          </Badge>
+                        </div>
+                        <p
+                          v-if="adapter.description"
+                          class="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {{ adapter.description }}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+                <template #description>
+                  {{ $t("marketplace.marketplacePage.adapterPickHint") }}
+                </template>
+              </SettingsFormField>
+
+              <template v-if="selectedAdapter && credentialFields.length > 0">
+                <Separator />
+                <div class="space-y-1">
+                  <h3 class="text-sm font-medium tracking-tight">
+                    {{ $t("marketplace.marketplacePage.credentialsSectionTitle") }}
+                  </h3>
+                  <p class="text-xs text-muted-foreground">
+                    {{
+                      $t("marketplace.marketplacePage.credentialsSectionHint", {
+                        adapter: selectedAdapterMeta?.displayName || selectedAdapter,
+                      })
+                    }}
                   </p>
                 </div>
+                <FieldGroup class="gap-4">
+                  <SettingsFormField
+                    v-for="field in credentialFields"
+                    :key="field.key"
+                    :label="field.displayName || field.key"
+                    :label-for="`new-cred-${field.key}`"
+                    :required="field.isRequired"
+                    :description="field.description || ''"
+                  >
+                    <PasswordInput
+                      v-if="field.isSecret"
+                      :id="`new-cred-${field.key}`"
+                      v-model="credentialValues[field.key]"
+                      :placeholder="field.placeholder || ''"
+                      autocomplete="off"
+                    />
+                    <Input
+                      v-else
+                      :id="`new-cred-${field.key}`"
+                      v-model="credentialValues[field.key]"
+                      type="text"
+                      :placeholder="field.placeholder || ''"
+                      autocomplete="off"
+                    />
+                  </SettingsFormField>
+                </FieldGroup>
               </template>
 
-              <div class="flex items-center gap-2">
-                <Switch :model-value="newConnection.isActive" @update:model-value="newConnection.isActive = $event" id="active" />
-                <Label for="active">{{ $t("marketplace.marketplacePage.activeConnectionLabel") }}</Label>
-              </div>
-            </template>
+              <Separator />
+
+              <SettingsFormField
+                :label="$t('marketplace.marketplacePage.activeConnectionLabel')"
+                label-for="new-connection-active"
+                inline
+                :description="$t('marketplace.marketplacePage.activeConnectionHint')"
+              >
+                <Switch
+                  id="new-connection-active"
+                  :model-value="newConnection.isActive"
+                  @update:model-value="newConnection.isActive = $event"
+                />
+              </SettingsFormField>
+            </FieldGroup>
           </div>
-          <DialogFooter v-if="adapters.length > 0">
+
+          <DialogFooter v-if="adapters.length > 0" variant="bar">
             <DialogClose as-child>
-              <Button variant="outline" @click="resetForm">{{ $t("common.cancel") }}</Button>
+              <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
-            <Button @click="handleCreateConnection" :disabled="isCreating">
+            <Button
+              :disabled="isCreating || !newConnection.name.trim() || !selectedAdapter"
+              @click="handleCreateConnection"
+            >
               <Spinner v-if="isCreating" class="mr-2" />
-              {{ $t("common.create") }}
+              {{ $t("marketplace.marketplacePage.createConnection") }}
             </Button>
           </DialogFooter>
-          <DialogFooter v-else>
+          <DialogFooter v-else variant="bar">
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.close") }}</Button>
             </DialogClose>

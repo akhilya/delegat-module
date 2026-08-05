@@ -8,7 +8,8 @@ import { t } from "@/i18n";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import {
   Dialog,
   DialogClose,
@@ -270,60 +271,64 @@ function actionRowClass(action) {
           {{ t("products.bulkAdapterDialog.description") }}
         </p>
 
-        <div class="w-full space-y-1.5">
-          <Label for="bulk-adapter-connection">
-            {{ t("products.bulkAdapterDialog.adapterLabel") }}
-          </Label>
-          <Select v-model="selectedConnectionId" :disabled="isLoadingConnections">
-            <SelectTrigger id="bulk-adapter-connection" class="w-full min-w-0">
-              <SelectValue :placeholder="t('products.bulkAdapterDialog.adapterPlaceholder')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="conn in connections" :key="conn.id" :value="conn.id">
-                {{ conn.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <FieldGroup class="gap-4">
+          <SettingsFormField
+            :label="t('products.bulkAdapterDialog.adapterLabel')"
+            label-for="bulk-adapter-connection"
+          >
+            <Select v-model="selectedConnectionId" :disabled="isLoadingConnections">
+              <SelectTrigger id="bulk-adapter-connection" class="w-full min-w-0">
+                <SelectValue :placeholder="t('products.bulkAdapterDialog.adapterPlaceholder')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="conn in connections" :key="conn.id" :value="conn.id">
+                  {{ conn.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsFormField>
 
-        <div
-          v-if="isLoadingCapabilities"
-          class="flex items-center gap-2 py-1 text-sm text-muted-foreground"
-        >
-          <Spinner />
-          {{ t("products.bulkAdapterDialog.loadingCapabilities") }}
-        </div>
-
-        <div
-          v-else-if="selectedConnectionId && availableActions.length === 0"
-          class="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground"
-        >
-          {{ t("products.bulkAdapterDialog.noActions") }}
-        </div>
-
-        <div v-else-if="availableActions.length > 0" class="space-y-1.5">
-          <Label>{{ t("products.bulkAdapterDialog.actionLabel") }}</Label>
-          <div class="space-y-1.5" role="listbox" :aria-label="t('products.bulkAdapterDialog.actionLabel')">
-            <button
-              v-for="action in availableActions"
-              :key="action.key"
-              type="button"
-              role="option"
-              :aria-selected="selectedAction?.key === action.key"
-              :class="actionRowClass(action)"
-              @click="selectedAction = action"
-            >
-              <component
-                :is="action.icon"
-                class="mt-0.5 size-4 shrink-0 text-muted-foreground"
-              />
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium leading-none">{{ action.label }}</div>
-                <div class="mt-1 text-xs text-muted-foreground">{{ action.description }}</div>
-              </div>
-            </button>
+          <div
+            v-if="isLoadingCapabilities"
+            class="flex items-center gap-2 py-1 text-sm text-muted-foreground"
+          >
+            <Spinner />
+            {{ t("products.bulkAdapterDialog.loadingCapabilities") }}
           </div>
-        </div>
+
+          <div
+            v-else-if="selectedConnectionId && availableActions.length === 0"
+            class="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground"
+          >
+            {{ t("products.bulkAdapterDialog.noActions") }}
+          </div>
+
+          <SettingsFormField
+            v-else-if="availableActions.length > 0"
+            :label="t('products.bulkAdapterDialog.actionLabel')"
+          >
+            <div class="space-y-1.5" role="listbox" :aria-label="t('products.bulkAdapterDialog.actionLabel')">
+              <button
+                v-for="action in availableActions"
+                :key="action.key"
+                type="button"
+                role="option"
+                :aria-selected="selectedAction?.key === action.key"
+                :class="actionRowClass(action)"
+                @click="selectedAction = action"
+              >
+                <component
+                  :is="action.icon"
+                  class="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-medium leading-none">{{ action.label }}</div>
+                  <div class="mt-1 text-xs text-muted-foreground">{{ action.description }}</div>
+                </div>
+              </button>
+            </div>
+          </SettingsFormField>
+        </FieldGroup>
 
         <div
           v-if="showLinkStatus"

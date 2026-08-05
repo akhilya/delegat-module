@@ -7,6 +7,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 
 import {
   Dialog,
@@ -76,6 +77,7 @@ export default {
     Textarea,
     Badge,
     SettingsFormField,
+    FieldGroup,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -615,25 +617,23 @@ export default {
         </div>
 
         <!-- Block 1: Settings -->
-        <div class="max-w-2xl space-y-4">
-          <div class="space-y-4">
-            <SettingsFormField :label="$t('common.name')" label-for="group-name">
-              <Input
-                id="group-name"
-                v-model="group.name"
-                :placeholder="$t('pages.productGroupEditPage.fields.name.placeholder')"
-              />
-            </SettingsFormField>
-            <SettingsFormField :label="$t('common.description')" label-for="group-description">
-              <Textarea
-                id="group-description"
-                v-model="group.description"
-                :placeholder="$t('pages.productGroupEditPage.fields.description.placeholder')"
-                class="min-h-24 resize-none"
-              />
-            </SettingsFormField>
-          </div>
-        </div>
+        <FieldGroup class="max-w-2xl gap-4">
+          <SettingsFormField :label="$t('common.name')" label-for="group-name">
+            <Input
+              id="group-name"
+              v-model="group.name"
+              :placeholder="$t('pages.productGroupEditPage.fields.name.placeholder')"
+            />
+          </SettingsFormField>
+          <SettingsFormField :label="$t('common.description')" label-for="group-description">
+            <Textarea
+              id="group-description"
+              v-model="group.description"
+              :placeholder="$t('pages.productGroupEditPage.fields.description.placeholder')"
+              class="min-h-24 resize-none"
+            />
+          </SettingsFormField>
+        </FieldGroup>
 
         <template v-if="!isCreateMode">
           <!-- Block 2: Products -->

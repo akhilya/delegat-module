@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import {
@@ -93,6 +94,7 @@ export default {
     MultiSelectDropdown,
     BarcodeInput,
     SettingsFormField,
+    FieldGroup,
     FormControl,
     FormField,
     FormItem,
@@ -318,9 +320,10 @@ export default {
           </span>
         </AccordionTrigger>
         <AccordionContent>
-          <div
-            class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
-          >
+          <FieldGroup class="gap-5">
+            <div
+              class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
+            >
             <div
               v-for="attribute in group.attributes"
               :key="attribute.id"
@@ -421,7 +424,8 @@ export default {
                 </FormItem>
               </FormField>
             </div>
-          </div>
+            </div>
+          </FieldGroup>
         </AccordionContent>
       </AccordionItem>
     </Accordion>
@@ -432,9 +436,10 @@ export default {
         :key="group.name"
         class="space-y-5"
       >
-        <div
-          class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
-        >
+        <FieldGroup class="gap-5">
+          <div
+            class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
+          >
           <div
             v-for="attribute in group.attributes"
             :key="attribute.id"
@@ -534,7 +539,8 @@ export default {
               </FormItem>
             </FormField>
           </div>
-        </div>
+          </div>
+        </FieldGroup>
       </div>
     </template>
 

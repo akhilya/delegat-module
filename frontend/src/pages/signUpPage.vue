@@ -4,14 +4,9 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import AuthLayout from "@/components/auth/AuthLayout.vue";
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { FormField } from "@/components/ui/form";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 
 import { toTypedSchema } from "@vee-validate/zod";
 import { z } from "zod";
@@ -28,15 +23,12 @@ export default {
   components: {
     Spinner,
     AuthLayout,
-    FormControl,
-    FormDescription,
     FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
+    FieldGroup,
+    SettingsFormField,
     Button,
     Input,
-    PasswordInput
+    PasswordInput,
   },
   setup() {
     const { t } = useI18n();
@@ -102,69 +94,73 @@ export default {
 <template>
   <AuthLayout :title="t('auth.signUp')">
     <form class="auth-form" @submit="onSubmit">
-      <FormField v-slot="{ componentField }" name="userName">
-        <FormItem>
-          <FormLabel>{{ t("auth.userName") }}</FormLabel>
-          <FormControl>
+      <FieldGroup class="gap-4">
+        <FormField v-slot="{ componentField, errorMessage }" name="userName">
+          <SettingsFormField
+            :label="t('auth.userName')"
+            label-for="sign-up-username"
+            :error="errorMessage"
+          >
             <Input
+              id="sign-up-username"
               type="text"
               :placeholder="t('auth.userNamePlaceholder')"
               autocomplete="username"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <FormField v-slot="{ componentField }" name="password">
-        <FormItem>
-          <FormLabel>{{ t("auth.password") }}</FormLabel>
-          <FormControl>
+        <FormField v-slot="{ componentField, errorMessage }" name="password">
+          <SettingsFormField
+            :label="t('auth.password')"
+            label-for="sign-up-password"
+            :error="errorMessage"
+          >
             <PasswordInput
+              id="sign-up-password"
               autocomplete="new-password"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <FormField v-slot="{ componentField }" name="confirmPassword">
-        <FormItem>
-          <FormLabel>{{ t("auth.confirmPassword") }}</FormLabel>
-          <FormControl>
+        <FormField v-slot="{ componentField, errorMessage }" name="confirmPassword">
+          <SettingsFormField
+            :label="t('auth.confirmPassword')"
+            label-for="sign-up-confirm-password"
+            :error="errorMessage"
+          >
             <PasswordInput
+              id="sign-up-confirm-password"
               autocomplete="new-password"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <FormField v-slot="{ componentField }" name="invitationToken">
-        <FormItem>
-          <FormLabel>{{ t("auth.invitationToken") }}</FormLabel>
-          <FormControl>
+        <FormField v-slot="{ componentField, errorMessage }" name="invitationToken">
+          <SettingsFormField
+            :label="t('auth.invitationToken')"
+            label-for="sign-up-invite"
+            :description="t('auth.invitationTokenHint')"
+            :error="errorMessage"
+          >
             <Input
+              id="sign-up-invite"
               type="text"
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               autocomplete="off"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormDescription>
-            {{ t("auth.invitationTokenHint") }}
-          </FormDescription>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <Button type="submit" class="w-full" :disabled="isSubmitting">
-        <Spinner v-if="isSubmitting" />
-        <span v-else>{{ t("auth.createAccount") }}</span>
-      </Button>
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <Spinner v-if="isSubmitting" />
+          <span v-else>{{ t("auth.createAccount") }}</span>
+        </Button>
+      </FieldGroup>
     </form>
 
     <template #footer>
@@ -173,11 +169,3 @@ export default {
     </template>
   </AuthLayout>
 </template>
-
-<style scoped>
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-</style>

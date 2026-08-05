@@ -29,7 +29,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Plugin loader ignores legacy non-`Delegat.Marketplace.*` DLLs; plugin version sync runs after the API is listening
 
 ### Changed
-- UI corner radius base `--radius` raised to **1rem** (aligned with Control Plane)
+- Aligned default brand name and copy to **Delegat.Module** (Vite env, `index.html`, docs/tests, branding defaults)
+- Sonner toasts themed to Catalog Workbench: mount `@/components/ui/sonner` (not raw vue-sonner), flat popover surface + border, Onest, `--z-toast`, compact `--radius-md` (no soft drop shadow)
 - Icons switched from Lucide to **Hugeicons** (same kit as Control Plane) via `frontend/src/lib/icons.js`; denser stroke as a filled-look experiment (true solid styles need Hugeicons Pro)
 - Mapping editor chrome aligned with DESIGN: fill-viewport canvas, flat node cards / controls, primary selection wires, Spinner loaders, Field forms in settings dialogs
 - Product transfer dialog restyled to Catalog Workbench: bordered header/footer, mode Tabs, Field forms, semantic warning/success surfaces, store route strip
@@ -40,6 +41,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Full-region loaders aligned to EmptyState `2xl` (products/trash table, storage, category browser, API keys)
 - Dialog chrome unified: title scale `text-base font-semibold tracking-tight`; `DialogHeader` / `DialogFooter` `variant="bar"` for `p-0` dialogs (no per-call `px-6 py-*` / `text-lg` overrides)
 - Raw search/`textarea` controls replaced with shadcn `Input` / `Textarea` (MultiSelect, SearchableSelect, mapping context menu, TemplateEditor)
+- Forms unified on `FieldGroup` + `SettingsFormField` / `Field` (auth, setup, branding, admin dialogs, catalog create/edit, bulk edit, marketplace connection dialogs); vee-validate `FormField` where validated
+- New adapter connection dialog restyled (bar chrome, adapter pick list, credential section, PasswordInput for secrets)
+- Store permanent delete surfaced in Stores edit dialog danger zone (was only on orphaned `/settings/admin/stores/:id`)
 - Dialog titles are text-only (removed decorative header icons)
 - Product group sidebar collapses to a photos-only rail when the edit row is narrow (e.g. wide AI panel)
 - Product edit: removed fixed action bar; Save/Delete sit in-flow at page bottom; Duplicate moved to header ⋯ menu

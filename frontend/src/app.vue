@@ -1,7 +1,7 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
 import { RouterView, useRoute } from "vue-router";
-import { Toaster } from "vue-sonner";
+import { Toaster } from "@/components/ui/sonner";
 import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
 import LoadingBar from "@/components/LoadingBar.vue";

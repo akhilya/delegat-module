@@ -109,7 +109,7 @@ public static class PluginLoader
 
     /// <summary>
     /// True for host plugin assemblies (Delegat.Marketplace.*.dll) excluding the shared SDK.
-    /// Legacy PrintO / unrelated DLLs in the plugins folder are ignored.
+    /// Non-matching DLLs in the plugins folder are ignored.
     /// </summary>
     internal static bool IsCandidatePluginAssemblyFileName(string fileName)
     {

@@ -35,7 +35,8 @@ import {
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
   Select,
@@ -118,7 +119,8 @@ export default {
     Plus,
     RefreshCw,
     Input,
-    Label,
+    SettingsFormField,
+    FieldGroup,
     Card,
     CardContent,
     CardDescription,
@@ -1738,17 +1740,21 @@ export default {
             {{ $t("productMarketplaceIntegrations.recreateDialogDescription", { adapter: recreateConn?.adapterName }) }}
           </DialogDescription>
         </DialogHeader>
-        <div class="py-4 space-y-4">
-          <div class="space-y-2">
-            <Label for="recreate-sku">{{ $t("productMarketplaceIntegrations.newSkuLabel") }}</Label>
-            <Input
-              id="recreate-sku"
-              v-model="recreateNewSku"
-              maxlength="50"
-              :placeholder="$t('productMarketplaceIntegrations.newSkuPlaceholder')"
-              @keyup.enter="submitRecreate"
-            />
-          </div>
+        <div class="py-4">
+          <FieldGroup class="gap-4">
+            <SettingsFormField
+              :label="$t('productMarketplaceIntegrations.newSkuLabel')"
+              label-for="recreate-sku"
+            >
+              <Input
+                id="recreate-sku"
+                v-model="recreateNewSku"
+                maxlength="50"
+                :placeholder="$t('productMarketplaceIntegrations.newSkuPlaceholder')"
+                @keyup.enter="submitRecreate"
+              />
+            </SettingsFormField>
+          </FieldGroup>
         </div>
         <DialogFooter>
           <DialogClose as-child><Button variant="outline" :disabled="isRecreating">{{ $t("common.cancel") }}</Button></DialogClose>
@@ -1774,10 +1780,21 @@ export default {
             }}
           </DialogDescription>
         </DialogHeader>
-        <div class="py-4 space-y-4">
-          <Label for="link-external-id">{{ $t("productMarketplaceIntegrations.externalIdLabel") }}</Label>
-          <Input id="link-external-id" v-model="linkExternalId" maxlength="100"
-            :placeholder="$t('productMarketplaceIntegrations.externalIdPlaceholder')" @keyup.enter="submitLink" />
+        <div class="py-4">
+          <FieldGroup class="gap-4">
+            <SettingsFormField
+              :label="$t('productMarketplaceIntegrations.externalIdLabel')"
+              label-for="link-external-id"
+            >
+              <Input
+                id="link-external-id"
+                v-model="linkExternalId"
+                maxlength="100"
+                :placeholder="$t('productMarketplaceIntegrations.externalIdPlaceholder')"
+                @keyup.enter="submitLink"
+              />
+            </SettingsFormField>
+          </FieldGroup>
         </div>
         <DialogFooter>
           <DialogClose as-child><Button variant="outline" :disabled="isLinking">{{ $t("common.cancel") }}</Button></DialogClose>

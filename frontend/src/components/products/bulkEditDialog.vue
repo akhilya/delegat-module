@@ -21,10 +21,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
@@ -394,37 +395,36 @@ async function handleSubmit() {
 
         <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="product" class="mt-0">
-            <div class="py-3">
-              <div class="flex items-start gap-3">
+            <FieldGroup class="gap-0">
+              <div class="flex items-start gap-3 py-3">
                 <Checkbox v-model="enabledFields.name" id="bulk-enable-name" class="mt-0.5" />
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <Label for="bulk-name" :class="{ 'text-muted-foreground': !enabledFields.name }">
-                    {{ t("common.name") }}
-                  </Label>
+                <SettingsFormField
+                  class="min-w-0 flex-1"
+                  :class="{ 'opacity-60': !enabledFields.name }"
+                  :label="t('common.name')"
+                  label-for="bulk-name"
+                >
                   <Input
                     id="bulk-name"
                     v-model="formData.name"
                     :disabled="!enabledFields.name"
                     :placeholder="t('products.bulkEditDialog.namePlaceholder')"
                   />
-                </div>
+                </SettingsFormField>
               </div>
-            </div>
 
-            <div class="py-3">
-              <div class="flex items-start gap-3">
+              <div class="flex items-start gap-3 py-3">
                 <Checkbox
                   v-model="enabledFields.description"
                   id="bulk-enable-description"
                   class="mt-0.5"
                 />
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <Label
-                    for="bulk-description"
-                    :class="{ 'text-muted-foreground': !enabledFields.description }"
-                  >
-                    {{ t("common.description") }}
-                  </Label>
+                <SettingsFormField
+                  class="min-w-0 flex-1"
+                  :class="{ 'opacity-60': !enabledFields.description }"
+                  :label="t('common.description')"
+                  label-for="bulk-description"
+                >
                   <Textarea
                     id="bulk-description"
                     v-model="formData.description"
@@ -432,24 +432,21 @@ async function handleSubmit() {
                     :placeholder="t('products.bulkEditDialog.descriptionPlaceholder')"
                     rows="3"
                   />
-                </div>
+                </SettingsFormField>
               </div>
-            </div>
 
-            <div class="py-3">
-              <div class="flex items-start gap-3">
+              <div class="flex items-start gap-3 py-3">
                 <Checkbox
                   v-model="enabledFields.storageQuantity"
                   id="bulk-enable-storageQuantity"
                   class="mt-0.5"
                 />
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <Label
-                    for="bulk-storageQuantity"
-                    :class="{ 'text-muted-foreground': !enabledFields.storageQuantity }"
-                  >
-                    {{ t("products.bulkEditDialog.storageQuantityLabel") }}
-                  </Label>
+                <SettingsFormField
+                  class="min-w-0 flex-1"
+                  :class="{ 'opacity-60': !enabledFields.storageQuantity }"
+                  :label="t('products.bulkEditDialog.storageQuantityLabel')"
+                  label-for="bulk-storageQuantity"
+                >
                   <Input
                     id="bulk-storageQuantity"
                     v-model.number="formData.storageQuantity"
@@ -459,17 +456,17 @@ async function handleSubmit() {
                     placeholder="0"
                     min="0"
                   />
-                </div>
+                </SettingsFormField>
               </div>
-            </div>
 
-            <div class="py-3">
-              <div class="flex items-start gap-3">
+              <div class="flex items-start gap-3 py-3">
                 <Checkbox v-model="enabledFields.price" id="bulk-enable-price" class="mt-0.5" />
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <Label for="bulk-price" :class="{ 'text-muted-foreground': !enabledFields.price }">
-                    {{ t("products.bulkEditDialog.priceLabel") }}
-                  </Label>
+                <SettingsFormField
+                  class="min-w-0 flex-1"
+                  :class="{ 'opacity-60': !enabledFields.price }"
+                  :label="t('products.bulkEditDialog.priceLabel')"
+                  label-for="bulk-price"
+                >
                   <Input
                     id="bulk-price"
                     v-model.number="formData.price"
@@ -480,27 +477,22 @@ async function handleSubmit() {
                     min="0"
                     step="0.01"
                   />
-                </div>
+                </SettingsFormField>
               </div>
-            </div>
 
-            <div class="py-3">
-              <div class="flex items-start gap-3">
+              <div class="flex items-start gap-3 py-3">
                 <Checkbox
                   v-model="enabledFields.barcode"
                   id="bulk-enable-barcode"
                   class="mt-0.5"
                   :disabled="generateBarcodes"
                 />
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <Label
-                    for="bulk-barcode"
-                    :class="{
-                      'text-muted-foreground': !enabledFields.barcode && !generateBarcodes,
-                    }"
-                  >
-                    {{ t("products.bulkEditDialog.barcodeLabel") }}
-                  </Label>
+                <SettingsFormField
+                  class="min-w-0 flex-1"
+                  :class="{ 'opacity-60': !enabledFields.barcode && !generateBarcodes }"
+                  :label="t('products.bulkEditDialog.barcodeLabel')"
+                  label-for="bulk-barcode"
+                >
                   <BarcodeInput
                     v-model="formData.barcode"
                     :show-preview="false"
@@ -512,47 +504,48 @@ async function handleSubmit() {
                       {{ t("products.bulkEditDialog.generateBarcodesLabel") }}
                     </span>
                   </label>
-                </div>
+                </SettingsFormField>
               </div>
-            </div>
+            </FieldGroup>
           </TabsContent>
 
           <TabsContent v-if="hasSameCategory" value="category" class="mt-0">
             <template v-if="visibleCategoryAttributes.length > 0">
-              <div
-                v-for="attr in visibleCategoryAttributes"
-                :key="attr.id"
-                class="py-3"
-              >
-                <div class="flex items-start gap-3">
+              <FieldGroup class="gap-0">
+                <div
+                  v-for="attr in visibleCategoryAttributes"
+                  :key="attr.id"
+                  class="flex items-start gap-3 py-3"
+                >
                   <Checkbox
                     v-model="enabledCategoryAttributes[attr.id]"
                     :id="`bulk-enable-cat-${attr.id}`"
                     class="mt-0.5"
                     :disabled="!isAttributeEditable(attr)"
                   />
-                  <div class="min-w-0 flex-1 space-y-1.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <Label
-                        :for="`bulk-cat-${attr.id}`"
-                        :class="{
-                          'text-muted-foreground':
-                            !enabledCategoryAttributes[attr.id] || !isAttributeEditable(attr),
-                        }"
-                      >
-                        {{ attr.name }}
-                      </Label>
-                      <Badge v-if="isUniqueAttribute(attr)" variant="outline" class="text-[10px]">
+                  <SettingsFormField
+                    class="min-w-0 flex-1"
+                    :class="{
+                      'opacity-60':
+                        !enabledCategoryAttributes[attr.id] || !isAttributeEditable(attr),
+                    }"
+                    :label="attr.name"
+                    :label-for="`bulk-cat-${attr.id}`"
+                    :description="
+                      !isAttributeEditable(attr)
+                        ? t('products.bulkEditDialog.uniqueAttrBlocked')
+                        : ''
+                    "
+                  >
+                    <div
+                      v-if="isUniqueAttribute(attr)"
+                      class="flex flex-wrap items-center gap-2 pb-1.5"
+                    >
+                      <Badge variant="outline" class="text-[10px]">
                         {{ t("products.bulkEditDialog.uniqueBadge") }}
                       </Badge>
                     </div>
-                    <p
-                      v-if="!isAttributeEditable(attr)"
-                      class="text-xs text-muted-foreground"
-                    >
-                      {{ t("products.bulkEditDialog.uniqueAttrBlocked") }}
-                    </p>
-                    <template v-else>
+                    <template v-if="isAttributeEditable(attr)">
                       <Input
                         v-if="isType(attr.type, 'number')"
                         :id="`bulk-cat-${attr.id}`"
@@ -616,9 +609,9 @@ async function handleSubmit() {
                         :placeholder="attr.name"
                       />
                     </template>
-                  </div>
+                  </SettingsFormField>
                 </div>
-              </div>
+              </FieldGroup>
             </template>
             <div v-else class="py-10 text-center text-sm text-muted-foreground">
               {{ t("products.bulkEditDialog.noCategoryAttributes") }}
@@ -627,40 +620,41 @@ async function handleSubmit() {
 
           <TabsContent value="global" class="mt-0">
             <template v-if="visibleStoreAttributes.length > 0">
-              <div
-                v-for="attr in visibleStoreAttributes"
-                :key="attr.id"
-                class="py-3"
-              >
-                <div class="flex items-start gap-3">
+              <FieldGroup class="gap-0">
+                <div
+                  v-for="attr in visibleStoreAttributes"
+                  :key="attr.id"
+                  class="flex items-start gap-3 py-3"
+                >
                   <Checkbox
                     v-model="enabledStoreAttributes[attr.id]"
                     :id="`bulk-enable-store-${attr.id}`"
                     class="mt-0.5"
                     :disabled="!isAttributeEditable(attr)"
                   />
-                  <div class="min-w-0 flex-1 space-y-1.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <Label
-                        :for="`bulk-store-${attr.id}`"
-                        :class="{
-                          'text-muted-foreground':
-                            !enabledStoreAttributes[attr.id] || !isAttributeEditable(attr),
-                        }"
-                      >
-                        {{ attr.name }}
-                      </Label>
-                      <Badge v-if="isUniqueAttribute(attr)" variant="outline" class="text-[10px]">
+                  <SettingsFormField
+                    class="min-w-0 flex-1"
+                    :class="{
+                      'opacity-60':
+                        !enabledStoreAttributes[attr.id] || !isAttributeEditable(attr),
+                    }"
+                    :label="attr.name"
+                    :label-for="`bulk-store-${attr.id}`"
+                    :description="
+                      !isAttributeEditable(attr)
+                        ? t('products.bulkEditDialog.uniqueAttrBlocked')
+                        : ''
+                    "
+                  >
+                    <div
+                      v-if="isUniqueAttribute(attr)"
+                      class="flex flex-wrap items-center gap-2 pb-1.5"
+                    >
+                      <Badge variant="outline" class="text-[10px]">
                         {{ t("products.bulkEditDialog.uniqueBadge") }}
                       </Badge>
                     </div>
-                    <p
-                      v-if="!isAttributeEditable(attr)"
-                      class="text-xs text-muted-foreground"
-                    >
-                      {{ t("products.bulkEditDialog.uniqueAttrBlocked") }}
-                    </p>
-                    <template v-else>
+                    <template v-if="isAttributeEditable(attr)">
                       <Input
                         v-if="isType(attr.type, 'number')"
                         :id="`bulk-store-${attr.id}`"
@@ -724,9 +718,9 @@ async function handleSubmit() {
                         :placeholder="attr.name"
                       />
                     </template>
-                  </div>
+                  </SettingsFormField>
                 </div>
-              </div>
+              </FieldGroup>
             </template>
             <div v-else class="py-10 text-center text-sm text-muted-foreground">
               {{ t("products.bulkEditDialog.noGlobalAttributes") }}

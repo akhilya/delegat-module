@@ -212,11 +212,20 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Error:** `aria-invalid` → destructive border/ring
 - **Password:** Eye toggle in muted → foreground on hover
 - **Checkbox:** only shadcn `Checkbox` with `rounded-xs` (not `rounded-sm` / native inputs — at `--radius` 1rem those look nearly round on a 16px box)
+- **Forms:** every labeled stack = `FieldGroup` + `Field` (prefer `SettingsFormField`); validated fields wrap with vee-validate `FormField`. No raw `Label`+`Input` / `FormItem` alone without Field. `SettingsFormSection` already supplies FieldSet + FieldGroup.
 
 ### Navigation
 - **Sidebar:** `{colors.sidebar}` surface, quiet borders, primary for active emphasis sparingly
 - **App page chrome:** Catalog and settings shells use `AppPageChrome` (`Page` + `adaptive-padding` + sticky `NavigationBar` + `Breadcrumbs`). Page titles come from breadcrumbs, not `PageHeader`. Do not nest a second `Page` inside settings route children; do not override breadcrumb `mb-4` locally.
 - **Auth shell:** Centered brand + card form (`AuthLayout`); language switcher corner; no marketing hero
+
+### Toasts (Sonner)
+- Mount **`Toaster` from `@/components/ui/sonner`** (themed wrapper), not raw `vue-sonner`
+- **Surface:** `{colors.popover}` + border; **flat** (no soft drop shadow) — Flat-By-Default
+- **Radius:** compact `--radius-md` (tighter than cards/dialogs is fine)
+- **Copy:** title inherits foreground; description uses `{colors.muted-foreground}`
+- **Semantics:** default toasts stay neutral; icons carry success/error. Optional `richColors` maps to success/error/warning muted tokens — do not invent Sonner HSL defaults
+- **Stack:** `z-index: var(--z-toast)`
 
 ### Status chips / badges
 - Use success / warning / destructive (and muted companions) for sync and marketplace state — never rainbow decoration

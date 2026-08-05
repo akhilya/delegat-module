@@ -292,6 +292,29 @@ input[type="number"] {
     transparent;
 }
 
+/* Sonner (vue-sonner): Catalog Workbench tokens — flat border surface, no soft float shadow.
+   Mount via `@/components/ui/sonner` (not raw vue-sonner Toaster). Radius stays compact (--radius-md). */
+[data-sonner-toaster] {
+  z-index: var(--z-toast) !important;
+  font-family: var(--font-display);
+}
+
+[data-sonner-toast][data-styled="true"] {
+  box-shadow: none;
+}
+
+[data-sonner-toast]:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+[data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--muted-foreground);
+}
+
+[data-sonner-toaster][data-sonner-theme="dark"] [data-description] {
+  color: var(--muted-foreground);
+}
+
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,

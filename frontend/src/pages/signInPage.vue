@@ -5,13 +5,9 @@ import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import AuthLayout from "@/components/auth/AuthLayout.vue";
-import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { FormField } from "@/components/ui/form";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 
 import { toTypedSchema } from "@vee-validate/zod";
 import { z } from "zod";
@@ -28,15 +24,13 @@ export default {
   components: {
     Spinner,
     AuthLayout,
-    FormControl,
     FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
+    FieldGroup,
+    SettingsFormField,
     Button,
     Input,
     PasswordInput,
-    Checkbox
+    Checkbox,
   },
   setup() {
     const { t } = useI18n();
@@ -91,57 +85,61 @@ export default {
 <template>
   <AuthLayout :title="t('auth.signIn')">
     <form class="auth-form" @submit="onSubmit">
-      <FormField v-slot="{ componentField }" name="userName">
-        <FormItem>
-          <FormLabel>{{ t("auth.userName") }}</FormLabel>
-          <FormControl>
+      <FieldGroup class="gap-4">
+        <FormField v-slot="{ componentField, errorMessage }" name="userName">
+          <SettingsFormField
+            :label="t('auth.userName')"
+            label-for="sign-in-username"
+            :error="errorMessage"
+          >
             <Input
+              id="sign-in-username"
               type="text"
               :placeholder="t('auth.userName')"
               autocomplete="username"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <FormField v-slot="{ componentField }" name="password">
-        <FormItem>
-          <FormLabel>{{ t("auth.password") }}</FormLabel>
-          <FormControl>
+        <FormField v-slot="{ componentField, errorMessage }" name="password">
+          <SettingsFormField
+            :label="t('auth.password')"
+            label-for="sign-in-password"
+            :error="errorMessage"
+          >
             <PasswordInput
+              id="sign-in-password"
               autocomplete="current-password"
               v-bind="componentField"
             />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <FormField
-        v-slot="{ value, handleChange }"
-        type="checkbox"
-        name="rememberMe"
-      >
-        <FormItem class="flex flex-row items-center gap-2 space-y-0">
-          <FormControl>
+        <FormField
+          v-slot="{ value, handleChange, errorMessage }"
+          type="checkbox"
+          name="rememberMe"
+        >
+          <SettingsFormField
+            :label="t('auth.rememberMe')"
+            label-for="sign-in-remember"
+            inline
+            :error="errorMessage"
+          >
             <Checkbox
+              id="sign-in-remember"
               :model-value="value"
               @update:model-value="handleChange"
             />
-          </FormControl>
-          <FormLabel class="!mt-0 text-sm font-normal">
-            {{ t("auth.rememberMe") }}
-          </FormLabel>
-          <FormMessage />
-        </FormItem>
-      </FormField>
+          </SettingsFormField>
+        </FormField>
 
-      <Button type="submit" class="w-full" :disabled="isSubmitting">
-        <Spinner v-if="isSubmitting" />
-        <span v-else>{{ t("auth.signIn") }}</span>
-      </Button>
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <Spinner v-if="isSubmitting" />
+          <span v-else>{{ t("auth.signIn") }}</span>
+        </Button>
+      </FieldGroup>
     </form>
 
     <template #footer>
@@ -150,11 +148,3 @@ export default {
     </template>
   </AuthLayout>
 </template>
-
-<style scoped>
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-</style>

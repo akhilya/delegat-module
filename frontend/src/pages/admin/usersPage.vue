@@ -5,7 +5,8 @@ import PageSection from "@/components/pageSection.vue";
 
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -55,7 +56,8 @@ export default {
     PageSection,
     Button,
     Input,
-    Label,
+    FieldGroup,
+    SettingsFormField,
     Switch,
     Checkbox,
     Badge,
@@ -646,19 +648,23 @@ export default {
           </DialogDescription>
         </DialogHeader>
 
-        <div class="grid max-h-[70vh] gap-4 overflow-y-auto pr-1">
-          <div class="grid gap-2">
-            <Label for="admin-user-name">{{ $t("auth.userName") }}</Label>
+        <FieldGroup class="max-h-[70vh] gap-4 overflow-y-auto pr-1">
+          <SettingsFormField
+            :label="$t('auth.userName')"
+            label-for="admin-user-name"
+          >
             <Input
               id="admin-user-name"
               v-model="editForm.userName"
               :disabled="savingUserId === editingUser?.id"
               autocomplete="off"
             />
-          </div>
+          </SettingsFormField>
 
-          <div class="grid gap-2">
-            <Label for="admin-user-password">{{ $t("pages.usersPage.newPasswordLabel") }}</Label>
+          <SettingsFormField
+            :label="$t('pages.usersPage.newPasswordLabel')"
+            label-for="admin-user-password"
+          >
             <div class="relative">
               <KeyRound class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -671,31 +677,35 @@ export default {
                 :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
               />
             </div>
-          </div>
+          </SettingsFormField>
 
           <div class="grid gap-3 rounded-lg border p-3">
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <div class="text-sm font-medium">{{ $t("pages.usersPage.ownerLabel") }}</div>
-                <div class="text-xs text-muted-foreground">{{ $t("pages.usersPage.ownerHint") }}</div>
-              </div>
+            <SettingsFormField
+              :label="$t('pages.usersPage.ownerLabel')"
+              inline
+            >
               <Switch
                 :model-value="editForm.isAdmin"
                 :disabled="!canToggleOwner || editingSelf || savingUserId === editingUser?.id"
                 @update:model-value="(v) => (editForm.isAdmin = v)"
               />
-            </div>
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <div class="text-sm font-medium">{{ $t("pages.usersPage.activeAccountLabel") }}</div>
-                <div class="text-xs text-muted-foreground">{{ $t("pages.usersPage.activeAccountHint") }}</div>
-              </div>
+              <template #description>
+                {{ $t("pages.usersPage.ownerHint") }}
+              </template>
+            </SettingsFormField>
+            <SettingsFormField
+              :label="$t('pages.usersPage.activeAccountLabel')"
+              inline
+            >
               <Switch
                 :model-value="editForm.isActive"
                 :disabled="editingSelf || savingUserId === editingUser?.id"
                 @update:model-value="(v) => (editForm.isActive = v)"
               />
-            </div>
+              <template #description>
+                {{ $t("pages.usersPage.activeAccountHint") }}
+              </template>
+            </SettingsFormField>
           </div>
 
           <div v-if="canManageRoles" class="grid gap-3 rounded-lg border p-3">
@@ -741,7 +751,7 @@ export default {
               </label>
             </div>
           </div>
-        </div>
+        </FieldGroup>
 
         <DialogFooter>
           <Button variant="outline" @click="closeEditDialog">{{ $t("common.cancel") }}</Button>

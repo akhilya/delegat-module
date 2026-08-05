@@ -4,7 +4,8 @@ import AuthLayout from "@/components/auth/AuthLayout.vue";
 import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Label from "@/components/ui/label/Label.vue";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
@@ -34,7 +35,8 @@ export default {
     BrandingForm,
     Button,
     Input,
-    Label,
+    FieldGroup,
+    SettingsFormField,
     Badge,
     Alert,
     AlertDescription,
@@ -421,9 +423,11 @@ export default {
     </template>
 
     <template v-else-if="step === STEP_STORE">
-      <div class="flex flex-col gap-4">
-        <div class="flex flex-col gap-2">
-          <Label for="setup-store-name">{{ $t("pages.setup.storeNameLabel") }}</Label>
+      <FieldGroup class="gap-4">
+        <SettingsFormField
+          :label="$t('pages.setup.storeNameLabel')"
+          label-for="setup-store-name"
+        >
           <Input
             id="setup-store-name"
             v-model="storeName"
@@ -431,28 +435,26 @@ export default {
             autocomplete="organization"
             :disabled="submitting"
           />
-        </div>
+        </SettingsFormField>
 
         <template v-if="!skippedCatalogs">
-          <div class="flex flex-col gap-2">
-            <Label>{{ $t("pages.setup.baseCurrencyLabel") }}</Label>
+          <SettingsFormField :label="$t('pages.setup.baseCurrencyLabel')">
             <SearchableSelect
               v-model="baseCurrency"
               :options="currencyOptions"
               :placeholder="$t('pages.setup.baseCurrencyPlaceholder')"
               :disabled="submitting || !currencyOptions.length"
             />
-          </div>
+          </SettingsFormField>
 
-          <div class="flex flex-col gap-2">
-            <Label>{{ $t("pages.setup.timezoneLabel") }}</Label>
+          <SettingsFormField :label="$t('pages.setup.timezoneLabel')">
             <SearchableSelect
               v-model="timezone"
               :options="timezoneOptions"
               :placeholder="$t('pages.setup.timezonePlaceholder')"
               :disabled="submitting || !timezoneOptions.length"
             />
-          </div>
+          </SettingsFormField>
         </template>
 
         <p
@@ -480,7 +482,7 @@ export default {
             {{ $t("common.back") }}
           </Button>
         </div>
-      </div>
+      </FieldGroup>
     </template>
 
     <template v-else>

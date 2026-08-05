@@ -10,17 +10,11 @@ Bridge source:
 plugins/Delegat.Marketplace.WooCommerce/wordpress-plugin/delegat-bridge
 ```
 
-Also vendored in the PRINTO store repo for Dokploy image builds:
-
-```text
-../printo-store/wp-content/plugins/delegat-bridge
-```
-
 Requires **bridge ≥ 1.2.1** for archive image transfer (`images.import_archive`) with zip-bomb guards.
 
 ## Connection credentials
 
-- `apiBaseUrl`: WordPress REST base for the bridge, e.g. `https://printo.studio/wp-json/delegat/v1`
+- `apiBaseUrl`: WordPress REST base for the bridge, e.g. `https://shop.example.com/wp-json/delegat/v1`
 - `apiKey`: secret from **Settings → Delegat Bridge** in WP admin
 - `bulkChunkSize`: optional (default 20, max 200). Smaller chunks reduce WordPress/proxy timeouts on large upserts.
 

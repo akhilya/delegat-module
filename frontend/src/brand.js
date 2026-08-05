@@ -1,7 +1,7 @@
 import { computed, reactive, readonly } from "vue";
 import { t } from "@/i18n";
 
-const DEFAULT_NAME = import.meta.env.VITE_BRAND_NAME || "Delegat";
+const DEFAULT_NAME = import.meta.env.VITE_BRAND_NAME || "Delegat.Module";
 /** No default logo — show brand name only until an upload or BRAND_LOGO_URL seed. */
 const DEFAULT_LOGO = (import.meta.env.VITE_BRAND_LOGO || "").trim();
 /** Control Plane square favicon (copied into frontend/public). */

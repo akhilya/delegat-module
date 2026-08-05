@@ -73,6 +73,10 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
     - **Bar (`variant="bar"`):** for `DialogContent` with `p-0` / `gap-0` (scroll / tall editors). Header = `border-b px-6 py-4`; footer = `border-t px-6 py-4`. Do not re-specify those classes at call sites; only add layout extras (`sm:justify-between`, `gap-3` for step rows).
     - Description stays `text-sm text-muted-foreground` from the primitive.
 
+13. **Forms** — every labeled field stack uses shadcn `FieldGroup` + `Field` (prefer [`SettingsFormField`](frontend/src/components/settings/SettingsFormField.vue) which wraps Field/Label/Description/Error). Validated fields: vee-validate `FormField` wrapping that Field stack. Do **not** use `FormItem`/`FormLabel` alone without Field, and do **not** invent raw `Label` + `Input`/`div.space-y-*` form stacks. `SettingsFormSection` already provides `FieldSet` + `FieldGroup`. Exception: dense mapping inspector / modifier param chrome may stay compact; still prefer Field primitives when adding new controls there.
+
+14. **Toasts** — mount [`Toaster`](frontend/src/components/ui/sonner/Sonner.vue) from `@/components/ui/sonner` only (not raw `vue-sonner`). Flat popover surface + border, compact `--radius-md`, no soft shadow; description = muted-foreground. Keep `richColors` off unless a screen needs muted semantic fills.
+
 ---
 
 - Theme no longer jumps from light Setup to dark Products: color scheme boots once (`theme.js`, light default) instead of applying system dark only when the account menu mounts.

@@ -11,7 +11,7 @@ public class PluginLoaderCandidateTests
     [InlineData("Delegat.Marketplace.OpenCart.dll", true)]
     [InlineData("Delegat.Marketplace.SDK.dll", false)]
     [InlineData("delegat.marketplace.sdk.dll", false)]
-    [InlineData("PrintO.Something.dll", false)]
+    [InlineData("Legacy.Something.dll", false)]
     [InlineData("Other.Marketplace.Plugin.dll", false)]
     [InlineData("Delegat.Marketplace.Ozon.exe", false)]
     [InlineData("", false)]
