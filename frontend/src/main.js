@@ -9,6 +9,7 @@ import {
   PAGE_ADMIN_AI,
   PAGE_ADMIN_API,
   PAGE_ADMIN_ERROR_LOGS,
+  PAGE_ADMIN_PLUGINS,
   PAGE_ADAPTER_LOGS,
   PAGE_UNAVAILABLE,
 } from "./router";
@@ -286,6 +287,14 @@ router.beforeEach(async (to) => {
   if (to.path === PAGE_ADMIN_AI || to.path.startsWith(`${PAGE_ADMIN_AI}/`)) {
     const me = getCachedMe() || (await loadMe());
     if (me?.aiEnabled !== true) {
+      return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
+    }
+  }
+
+  // Plugin management requires instance PLUGINS_ENABLED (from /auth/me).
+  if (to.path === PAGE_ADMIN_PLUGINS || to.path.startsWith(`${PAGE_ADMIN_PLUGINS}/`)) {
+    const me = getCachedMe() || (await loadMe());
+    if (me?.pluginsEnabled !== true) {
       return { path: routeAccessFallback(me) || PAGE_PRODUCTS };
     }
   }

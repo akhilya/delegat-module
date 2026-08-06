@@ -121,7 +121,6 @@ public class ReferenceCatalogServiceTests
         public bool Enabled { get; set; } = true;
         public List<PlatformCurrencyDto> Currencies { get; set; } = [];
         public List<PlatformTimezoneDto> Timezones { get; set; } = [];
-        public List<PlatformPluginDto> Plugins { get; set; } = [];
 
         public bool IsEnabled => Enabled;
         public string? InstanceId => "inst_1";
@@ -131,9 +130,6 @@ public class ReferenceCatalogServiceTests
 
         public Task<IReadOnlyList<PlatformTimezoneDto>> GetTimezonesAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<PlatformTimezoneDto>>(Timezones);
-
-        public Task<IReadOnlyList<PlatformPluginDto>> GetPluginsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<PlatformPluginDto>>(Plugins);
 
         public Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default) => Task.CompletedTask;

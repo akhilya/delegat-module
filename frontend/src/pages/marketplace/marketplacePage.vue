@@ -52,6 +52,8 @@ import Switch from "@/components/ui/switch/Switch.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import { getCachedMe } from "@/lib/meCache";
+import { hasPermission, PERMS } from "@/lib/permissions";
 
 export default {
   components: {
@@ -119,6 +121,10 @@ export default {
   computed: {
     breadcrumbs() {
       return [{ label: this.$t("marketplace.marketplacePage.title") }];
+    },
+    canOpenPlugins() {
+      const me = getCachedMe();
+      return me?.pluginsEnabled === true && hasPermission(me, PERMS.PluginsManage);
     },
     selectedAdapterSchema() {
       if (!this.selectedAdapter) return null;
@@ -318,7 +324,12 @@ export default {
               <template #icon>
                 <Package />
               </template>
-              <Button variant="outline" class="mt-4" @click="openPlugins">
+              <Button
+                v-if="canOpenPlugins"
+                variant="outline"
+                class="mt-4"
+                @click="openPlugins"
+              >
                 {{ $t("marketplace.marketplacePage.goToPlugins") }}
               </Button>
             </EmptyState>

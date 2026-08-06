@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Services.PlatformLink;
 
 namespace Delegat.Controllers;
@@ -39,6 +40,9 @@ public class ReferenceCatalogController : ControllerBase
     [RequiresPermission(Permissions.ReferenceRead)]
     public async Task<IActionResult> GetPlugins(CancellationToken ct)
     {
+        if (!FeatureFlags.IsPluginsEnabled())
+            return Ok(Array.Empty<object>());
+
         var items = await _catalog.GetPluginsAsync(ct);
         return Ok(items);
     }

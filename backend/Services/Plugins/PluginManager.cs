@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Marketplace.SDK;
 
 namespace Delegat.Services.Plugins;
@@ -34,19 +35,37 @@ public class PluginManager : IDisposable
     public string PluginsDirectory => _pluginsDirectory;
 
     /// <summary>
-    /// Load all plugins from the plugins directory.
+    /// Load plugins from the plugins directory.
+    /// System plugins (<see cref="IMarketplacePlugin.IsSystem"/>) always load.
+    /// Custom (non-system) plugins load only when <c>PLUGINS_ENABLED</c> is on.
     /// </summary>
     public void LoadAllPlugins()
     {
-        _logger.LogInformation("Loading plugins from {Directory}", _pluginsDirectory);
+        var managementEnabled = FeatureFlags.IsPluginsEnabled();
+        _logger.LogInformation(
+            "Loading plugins from {Directory} (custom management={ManagementEnabled})",
+            _pluginsDirectory,
+            managementEnabled);
 
         var plugins = PluginLoader.LoadPluginsFromDirectory(_pluginsDirectory, _logger);
 
         foreach (var plugin in plugins)
         {
+            if (!plugin.Plugin.IsSystem && !managementEnabled)
+            {
+                _logger.LogInformation(
+                    "Skipping custom plugin {Key}: PLUGINS_ENABLED is off",
+                    plugin.Key);
+                plugin.Dispose();
+                continue;
+            }
+
             if (_plugins.TryAdd(plugin.Key, plugin))
             {
-                _logger.LogInformation("Registered plugin: {Key}", plugin.Key);
+                _logger.LogInformation(
+                    "Registered plugin: {Key} (system={IsSystem})",
+                    plugin.Key,
+                    plugin.Plugin.IsSystem);
             }
             else
             {
@@ -59,11 +78,18 @@ public class PluginManager : IDisposable
     }
 
     /// <summary>
-    /// Load a single plugin from a DLL file.
+    /// Load a single plugin from a DLL file (upload / reload path).
+    /// Requires plugin management (<c>PLUGINS_ENABLED</c>) for non-system plugins.
     /// </summary>
     public LoadedPlugin LoadPlugin(string dllPath)
     {
         var plugin = PluginLoader.LoadPlugin(dllPath);
+
+        if (!plugin.Plugin.IsSystem && !FeatureFlags.IsPluginsEnabled())
+        {
+            plugin.Dispose();
+            throw new InvalidOperationException("Plugin management is disabled (PLUGINS_ENABLED=false)");
+        }
 
         if (!_plugins.TryAdd(plugin.Key, plugin))
         {

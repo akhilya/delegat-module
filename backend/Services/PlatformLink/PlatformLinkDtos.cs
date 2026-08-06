@@ -23,27 +23,6 @@ public sealed class PlatformTimezoneDto
     public string Label { get; set; } = "";
 }
 
-public sealed class PlatformPluginDto
-{
-    [JsonPropertyName("key")]
-    public string Key { get; set; } = "";
-
-    [JsonPropertyName("displayName")]
-    public string DisplayName { get; set; } = "";
-
-    [JsonPropertyName("latestVersion")]
-    public string? LatestVersion { get; set; }
-
-    [JsonPropertyName("minPlatformVersion")]
-    public string? MinPlatformVersion { get; set; }
-
-    [JsonPropertyName("artifactUrl")]
-    public string? ArtifactUrl { get; set; }
-
-    [JsonPropertyName("changelog")]
-    public string? Changelog { get; set; }
-}
-
 public sealed class PlatformErrorReportDto
 {
     [JsonPropertyName("instanceId")]

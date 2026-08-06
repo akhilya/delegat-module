@@ -22,6 +22,25 @@ public static class FeatureFlags
         return IsTruthy(raw);
     }
 
+    /// <summary>
+    /// Plugin management UI (upload/reload/delete) and custom (non-system) DLL load.
+    /// Explicit <c>true</c>/<c>false</c> always win.
+    /// Unset/empty: enabled for self-host; disabled when <c>CONTROL_PLANE_URL</c> is set
+    /// (Ops enables via instance <c>PLUGINS_ENABLED</c>).
+    /// Built-in system marketplace adapters always load regardless of this flag.
+    /// </summary>
+    public static bool IsPluginsEnabled()
+    {
+        var raw = Environment.GetEnvironmentVariable("PLUGINS_ENABLED");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            var cp = Environment.GetEnvironmentVariable("CONTROL_PLANE_URL");
+            return string.IsNullOrWhiteSpace(cp);
+        }
+
+        return IsTruthy(raw);
+    }
+
     /// <summary>Persist API exception rows to MySQL. Used to seed admin UI settings on first boot.</summary>
     public static bool IsErrorLoggingEnabled()
         => ParseBoolEnv("LOG_ERRORS_ENABLED", defaultValue: true);

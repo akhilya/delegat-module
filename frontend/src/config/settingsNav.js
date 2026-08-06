@@ -90,7 +90,7 @@ export function getAdminSettingsItems(ctx) {
   if (can(ctx, PERMS.ApiAccess) && ctx.me?.publicApiEnabled !== false) {
     items.push({ id: "api", labelKey: "nav.api", to: PAGE_ADMIN_API, icon: KeyRound });
   }
-  if (can(ctx, PERMS.PluginsManage)) {
+  if (can(ctx, PERMS.PluginsManage) && ctx.me?.pluginsEnabled === true) {
     items.push({ id: "plugins", labelKey: "nav.plugins", to: PAGE_ADMIN_PLUGINS, icon: Plug });
   }
   if (can(ctx, PERMS.SettingsPlatform)) {

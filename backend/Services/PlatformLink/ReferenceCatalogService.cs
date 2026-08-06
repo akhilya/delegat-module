@@ -151,14 +151,13 @@ public sealed class ReferenceCatalogService : IReferenceCatalogService
             _logger.LogWarning(ex, "Failed to sync reference timezones from Control Plane");
         }
 
-        try
+        // CP no longer publishes a plugin catalog — drop any stale local rows.
+        var stalePlugins = await _db.referencePlugins.ToListAsync(ct);
+        if (stalePlugins.Count > 0)
         {
-            var plugins = await _client.GetPluginsAsync(ct);
-            await UpsertPluginsAsync(plugins, now, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Failed to sync reference plugins from Control Plane");
+            _db.referencePlugins.RemoveRange(stalePlugins);
+            await _db.SaveChangesAsync(ct);
+            _logger.LogInformation("Cleared {Count} stale reference plugin rows", stalePlugins.Count);
         }
     }
 
@@ -240,53 +239,6 @@ public sealed class ReferenceCatalogService : IReferenceCatalogService
 
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Synced {Count} reference timezones from Control Plane", seen.Count);
-    }
-
-    private async Task UpsertPluginsAsync(
-        IReadOnlyList<PlatformPluginDto> items,
-        DateTime now,
-        CancellationToken ct)
-    {
-        var existing = await _db.referencePlugins.ToDictionaryAsync(p => p.key, StringComparer.OrdinalIgnoreCase, ct);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in items)
-        {
-            var key = item.Key?.Trim();
-            if (string.IsNullOrEmpty(key) || key.Length > ReferencePlugin.KEY_MAX_LENGTH)
-                continue;
-            seen.Add(key);
-
-            if (existing.TryGetValue(key, out var row))
-            {
-                row.displayName = Truncate(item.DisplayName, ReferencePlugin.DISPLAY_NAME_MAX_LENGTH) ?? key;
-                row.latestVersion = Truncate(item.LatestVersion, ReferencePlugin.VERSION_MAX_LENGTH);
-                row.minPlatformVersion = Truncate(item.MinPlatformVersion, ReferencePlugin.VERSION_MAX_LENGTH);
-                row.artifactUrl = Truncate(item.ArtifactUrl, ReferencePlugin.ARTIFACT_URL_MAX_LENGTH);
-                row.changelog = item.Changelog;
-                row.syncedAt = now;
-            }
-            else
-            {
-                _db.referencePlugins.Add(new ReferencePlugin
-                {
-                    key = key,
-                    displayName = Truncate(item.DisplayName, ReferencePlugin.DISPLAY_NAME_MAX_LENGTH) ?? key,
-                    latestVersion = Truncate(item.LatestVersion, ReferencePlugin.VERSION_MAX_LENGTH),
-                    minPlatformVersion = Truncate(item.MinPlatformVersion, ReferencePlugin.VERSION_MAX_LENGTH),
-                    artifactUrl = Truncate(item.ArtifactUrl, ReferencePlugin.ARTIFACT_URL_MAX_LENGTH),
-                    changelog = item.Changelog,
-                    syncedAt = now,
-                });
-            }
-        }
-
-        var stale = existing.Values.Where(r => !seen.Contains(r.key)).ToList();
-        if (stale.Count > 0)
-            _db.referencePlugins.RemoveRange(stale);
-
-        await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Synced {Count} reference plugins from Control Plane", seen.Count);
     }
 
     private static string? Truncate(string? value, int max)

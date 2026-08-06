@@ -53,6 +53,30 @@ public class FeatureFlagsTests
     [InlineData("", true)]
     [InlineData("true", true)]
     [InlineData("false", false)]
+    public void IsPluginsEnabled_ParsesEnv_SelfHost(string? raw, bool expected)
+    {
+        using var _plugins = SetEnv("PLUGINS_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+        Assert.Equal(expected, FeatureFlags.IsPluginsEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void IsPluginsEnabled_FailClosedWhenControlPlaneLinked(string? raw, bool expected)
+    {
+        using var _plugins = SetEnv("PLUGINS_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", "https://module.delegat.pro");
+        Assert.Equal(expected, FeatureFlags.IsPluginsEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
     [InlineData("0", false)]
     public void IsErrorLoggingEnabled_DefaultsTrue(string? raw, bool expected)
     {

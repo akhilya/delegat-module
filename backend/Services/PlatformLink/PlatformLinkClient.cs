@@ -10,7 +10,6 @@ public interface IPlatformLinkClient
     string? InstanceId { get; }
     Task<IReadOnlyList<PlatformCurrencyDto>> GetCurrenciesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PlatformTimezoneDto>> GetTimezonesAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<PlatformPluginDto>> GetPluginsAsync(CancellationToken ct = default);
     Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default);
     Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default);
 }
@@ -44,9 +43,6 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
 
     public Task<IReadOnlyList<PlatformTimezoneDto>> GetTimezonesAsync(CancellationToken ct = default) =>
         GetCatalogAsync<PlatformTimezoneDto>("/platform/v1/catalog/timezones", ct);
-
-    public Task<IReadOnlyList<PlatformPluginDto>> GetPluginsAsync(CancellationToken ct = default) =>
-        GetCatalogAsync<PlatformPluginDto>("/platform/v1/catalog/plugins", ct);
 
     public async Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default)
     {

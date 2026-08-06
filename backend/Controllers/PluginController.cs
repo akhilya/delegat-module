@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Services.Plugins;
@@ -28,12 +29,19 @@ public class PluginController : ControllerBase
         _logger = logger;
     }
 
+    private static void EnsurePluginsManagementEnabled()
+    {
+        if (!FeatureFlags.IsPluginsEnabled())
+            throw ApiException.NotFound("Plugin management is disabled", code: "plugins_disabled");
+    }
+
     /// <summary>
     /// Get list of all installed plugins
     /// </summary>
     [HttpGet]
     public IActionResult GetPlugins()
     {
+        EnsurePluginsManagementEnabled();
         var plugins = _pluginManager.GetAllLoadedPlugins().Select(p => new
         {
             key = p.Key,
@@ -57,6 +65,7 @@ public class PluginController : ControllerBase
     [HttpGet("{key}")]
     public IActionResult GetPlugin(string key)
     {
+        EnsurePluginsManagementEnabled();
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
             throw ApiException.NotFound($"Plugin '{key}' not found");
@@ -87,6 +96,7 @@ public class PluginController : ControllerBase
     [RequiresPermission(Permissions.PluginsManage)]
     public async Task<IActionResult> UploadPlugin(IFormFile file)
     {
+        EnsurePluginsManagementEnabled();
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest("No file provided", code: "required_fields_missing");
 
@@ -166,6 +176,7 @@ public class PluginController : ControllerBase
     [RequiresPermission(Permissions.PluginsManage)]
     public IActionResult DeletePlugin(string key)
     {
+        EnsurePluginsManagementEnabled();
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
             throw ApiException.NotFound($"Plugin '{key}' not found");
@@ -211,6 +222,7 @@ public class PluginController : ControllerBase
     [RequiresPermission(Permissions.PluginsManage)]
     public async Task<IActionResult> ReloadPlugin(string key)
     {
+        EnsurePluginsManagementEnabled();
         try
         {
             var reloaded = _pluginManager.ReloadPlugin(key);

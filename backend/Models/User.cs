@@ -65,6 +65,7 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
             isAdmin = isAdmin,
             isActive = isActive,
             aiEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAiEnabled(),
+            pluginsEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsPluginsEnabled(),
             roles = Array.Empty<string>(),
             permissions = Array.Empty<string>(),
         };
@@ -109,6 +110,12 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// Whether the AI assistant is enabled for this instance (from AI_ENABLED env).
         /// </summary>
         public bool aiEnabled { get; set; }
+
+        /// <summary>
+        /// Whether the Plugins admin page (import/reload/delete) is enabled (PLUGINS_ENABLED).
+        /// System marketplace adapters load regardless.
+        /// </summary>
+        public bool pluginsEnabled { get; set; }
 
         /// <summary>Whether error logs are persisted (admin toggle).</summary>
         public bool logErrorsEnabled { get; set; }
