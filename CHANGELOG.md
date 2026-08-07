@@ -11,7 +11,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Public docs deep-links for adapter credentials (Ozon, Wildberries, Yandex Market, OpenCart, WooCommerce) from create-connection and connection settings
+- Instance frontend reads docs origin from runtime `DOCS_PUBLIC_URL` (injected by Control Plane at provision into `runtime-config.js`)
+
 ### Changed
+
+- New adapter connection dialog uses a compact adapter Select instead of tall radio cards
 
 ### Fixed
 

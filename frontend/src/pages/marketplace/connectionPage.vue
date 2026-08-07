@@ -59,6 +59,8 @@ import {
   ArrowRightLeft,
   Unlink,
   SearchCheck,
+  BookOpen,
+  ExternalLink,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -131,6 +133,7 @@ import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
 
 export default {
   components: {
@@ -229,6 +232,8 @@ export default {
     ArrowRightLeft,
     Unlink,
     SearchCheck,
+    BookOpen,
+    ExternalLink,
     FieldChangesPreviewDialog,
     PasswordInput,
     SettingsFormField,
@@ -533,6 +538,11 @@ export default {
         (a) => a.key === this.connection.adapterKey,
       );
       return adapter?.displayName || this.connection.adapterKey;
+    },
+    credentialsDocsUrl() {
+      const key = this.connection?.adapterKey;
+      if (!key) return null;
+      return getAdapterCredentialsDocsUrl(key, this.$i18n.locale);
     },
     canCreateCategory() {
       return !!this.capabilities?.capabilities?.createCategory;
@@ -2916,6 +2926,17 @@ export default {
                 v-if="credentialFields?.length"
                 :title="$t('marketplace.connectionPage.settings.credentialsTitle')"
               >
+                <a
+                  v-if="credentialsDocsUrl"
+                  :href="credentialsDocsUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <BookOpen class="size-3.5 shrink-0" />
+                  {{ $t("marketplace.connectionPage.settings.credentialsDocsLink") }}
+                  <ExternalLink class="size-3 shrink-0 opacity-70" />
+                </a>
                 <SettingsFormField
                   v-for="field in credentialFields"
                   :key="field.key"

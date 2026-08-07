@@ -92,6 +92,8 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - Frontend: [`frontend/src/brand.js`](frontend/src/brand.js); shared form [`BrandingForm.vue`](frontend/src/components/settings/BrandingForm.vue).
 - CP may inject empty/filled `BRAND_*` at provision (`BuildEnvFile`); no CP Ops brand UI yet.
 
+- **Docs links:** SPA resolves docs origin from runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker `DOCS_PUBLIC_URL` → `runtime-config.js`, or Vite middleware reading repo-root `.env.dev`), else build-time `VITE_DOCS_PUBLIC_URL`, else dev `http://localhost:5174` / prod `https://docs.module.delegat.pro`. Helpers: [`frontend/src/utils/docsUrl.js`](frontend/src/utils/docsUrl.js). CP sets `DOCS_PUBLIC_URL` on every provisioned instance.
+
 ---
 
 ## Stack pointers

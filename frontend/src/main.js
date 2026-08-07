@@ -39,13 +39,16 @@ import {
 import { fetchSetupStoreCount } from "./lib/setupStoreCount";
 import { loadBranding } from "./brand";
 import "./theme";
+import { resolveApiBaseUrl } from "./utils/apiBaseUrl";
 
 export { getCachedMe, primeMeCache } from "./lib/meCache";
 export { clearSetupStoreCountCache } from "./lib/setupStoreCount";
 
+const apiBaseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_SERVER);
+
 export const http = setupCache(
   axios.create({
-    baseURL: import.meta.env.VITE_API_SERVER,
+    baseURL: apiBaseUrl,
     adapter: axios.defaults.adapter,
     withCredentials: true,
     timeout: 30000,
@@ -72,7 +75,7 @@ function refreshTokens() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = axios
-    .post(`${import.meta.env.VITE_API_SERVER}/auth/refresh`, null, {
+    .post(`${apiBaseUrl}/auth/refresh`, null, {
       withCredentials: true,
       headers: { "X-CSRF": "1" },
     })

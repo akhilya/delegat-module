@@ -1,5 +1,6 @@
 import { ref, readonly, computed } from "vue";
 import axios from "axios";
+import { resolveApiBaseUrl } from "@/utils/apiBaseUrl";
 
 /** @typedef {"unknown" | "online" | "offline"} ApiAvailabilityStatus */
 
@@ -51,8 +52,7 @@ export function isApiUnavailableError(error) {
 }
 
 function healthUrl() {
-  const base = import.meta.env.VITE_API_SERVER || "/api";
-  return `${String(base).replace(/\/$/, "")}/health`;
+  return `${resolveApiBaseUrl(import.meta.env.VITE_API_SERVER)}/health`;
 }
 
 /**

@@ -5,7 +5,6 @@ import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import Separator from "@/components/ui/separator/Separator.vue";
@@ -17,7 +16,8 @@ import {
   Package,
   Trash2,
   Settings,
-  Check,
+  BookOpen,
+  ExternalLink,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -41,6 +41,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -54,6 +61,7 @@ import { PAGE_ADMIN_PLUGINS } from "@/router";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import { getCachedMe } from "@/lib/meCache";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
 
 export default {
   components: {
@@ -63,7 +71,6 @@ export default {
     Button,
     Input,
     PasswordInput,
-    Badge,
     SettingsFormField,
     FieldGroup,
     Separator,
@@ -72,8 +79,14 @@ export default {
     Package,
     Trash2,
     Settings,
-    Check,
+    BookOpen,
+    ExternalLink,
     AdapterIcon,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
     Table,
     TableBody,
     TableCell,
@@ -140,6 +153,10 @@ export default {
     selectedAdapterMeta() {
       if (!this.selectedAdapter) return null;
       return this.adapters.find((a) => a.key === this.selectedAdapter) || null;
+    },
+    credentialsDocsUrl() {
+      if (!this.selectedAdapter) return null;
+      return getAdapterCredentialsDocsUrl(this.selectedAdapter, this.$i18n.locale);
     },
   },
   methods: {
@@ -275,17 +292,6 @@ export default {
       this.showCreateDialog = open;
       if (!open) this.resetForm();
     },
-
-    adapterRowClass(adapterKey) {
-      const selected = this.selectedAdapter === adapterKey;
-      return [
-        "w-full rounded-lg border bg-background p-3 text-left transition-colors outline-none",
-        "focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected
-          ? "border-primary bg-primary/5"
-          : "border-input hover:bg-muted/40",
-      ];
-    },
   },
   mounted() {
     this.fetchData();
@@ -347,68 +353,49 @@ export default {
                 />
               </SettingsFormField>
 
-              <SettingsFormField :label="$t('marketplace.marketplacePage.adapterLabel')">
-                <div
-                  class="space-y-2"
-                  role="radiogroup"
-                  :aria-label="$t('marketplace.marketplacePage.adapterLabel')"
+              <SettingsFormField
+                :label="$t('marketplace.marketplacePage.adapterLabel')"
+                label-for="new-connection-adapter"
+              >
+                <Select
+                  :model-value="selectedAdapter"
+                  @update:model-value="onAdapterSelect"
                 >
-                  <button
-                    v-for="adapter in adapters"
-                    :key="adapter.key"
-                    type="button"
-                    role="radio"
-                    :aria-checked="selectedAdapter === adapter.key"
-                    :class="adapterRowClass(adapter.key)"
-                    @click="onAdapterSelect(adapter.key)"
-                  >
-                    <div class="flex items-start gap-3">
-                      <span
-                        class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border"
-                        :class="
-                          selectedAdapter === adapter.key
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-input bg-background'
-                        "
-                      >
-                        <Check
-                          v-if="selectedAdapter === adapter.key"
-                          class="size-2.5"
-                        />
-                      </span>
+                  <SelectTrigger id="new-connection-adapter" class="w-full min-w-0">
+                    <div class="flex min-w-0 flex-1 items-center gap-2">
                       <AdapterIcon
-                        :adapter-key="adapter.key"
-                        class="mt-0.5 size-5"
+                        v-if="selectedAdapter"
+                        :adapter-key="selectedAdapter"
+                        class="size-4 shrink-0"
                       />
-                      <div class="min-w-0 flex-1 space-y-0.5">
-                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          <span class="text-sm font-medium text-foreground">
-                            {{ adapter.displayName }}
-                          </span>
-                          <span
-                            v-if="adapter.version"
-                            class="font-mono text-xs tabular-nums text-muted-foreground"
-                          >
-                            v{{ adapter.version }}
-                          </span>
-                          <Badge
-                            v-if="adapter.stability"
-                            variant="outline"
-                            class="h-5 px-1.5 text-[10px] font-normal uppercase tracking-wide"
-                          >
-                            {{ adapter.stability }}
-                          </Badge>
-                        </div>
-                        <p
-                          v-if="adapter.description"
-                          class="text-xs leading-relaxed text-muted-foreground"
-                        >
-                          {{ adapter.description }}
-                        </p>
-                      </div>
+                      <SelectValue
+                        :placeholder="$t('marketplace.marketplacePage.selectAdapterPlaceholder')"
+                      />
                     </div>
-                  </button>
-                </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="adapter in adapters"
+                      :key="adapter.key"
+                      :value="adapter.key"
+                      :text-value="adapter.displayName"
+                    >
+                      <span class="flex min-w-0 items-center gap-2">
+                        <AdapterIcon
+                          :adapter-key="adapter.key"
+                          class="size-4 shrink-0"
+                        />
+                        <span class="truncate">{{ adapter.displayName }}</span>
+                        <span
+                          v-if="adapter.version"
+                          class="font-mono text-xs tabular-nums text-muted-foreground"
+                        >
+                          v{{ adapter.version }}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <template #description>
                   {{ $t("marketplace.marketplacePage.adapterPickHint") }}
                 </template>
@@ -427,6 +414,17 @@ export default {
                       })
                     }}
                   </p>
+                  <a
+                    v-if="credentialsDocsUrl"
+                    :href="credentialsDocsUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 pt-0.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    <BookOpen class="size-3.5 shrink-0" />
+                    {{ $t("marketplace.marketplacePage.credentialsDocsLink") }}
+                    <ExternalLink class="size-3 shrink-0 opacity-70" />
+                  </a>
                 </div>
                 <FieldGroup class="gap-4">
                   <SettingsFormField

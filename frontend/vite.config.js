@@ -1,37 +1,161 @@
+import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
-export default defineConfig({
-  plugins: [vue(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      // Hugeicons (CP kit) behind lucide-compatible names — see src/lib/icons.js
-      "lucide-vue-next": path.resolve(__dirname, "./src/lib/icons.js"),
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
+
+/** Keys Vite may take from repo-root `.env.dev` / `.env` (docs only — do not override VITE_API_SERVER). */
+const REPO_ENV_ALLOWLIST = new Set(["DOCS_PUBLIC_URL", "VITE_DOCS_PUBLIC_URL"]);
+
+/** Load allowlisted KEY=VAL from repo-root env files into process.env (do not override existing). */
+function loadRepoEnvFiles() {
+  for (const name of [".env.dev", ".env"]) {
+    const file = path.join(repoRoot, name);
+    if (!fs.existsSync(file)) continue;
+    const text = fs.readFileSync(file, "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      if (!REPO_ENV_ALLOWLIST.has(key)) continue;
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+}
+
+loadRepoEnvFiles();
+
+/**
+ * Parent API may inject VITE_API_SERVER=http://localhost:5000 from root .env into the
+ * Vite process. That overrides frontend/.env.development and breaks /api routes.
+ * Bare origins get /api appended; prefer relative /api when possible in local serve.
+ */
+function normalizeInheritedApiServer({ command }) {
+  const raw = process.env.VITE_API_SERVER;
+  if (raw == null || String(raw).trim() === "") {
+    if (command === "serve") process.env.VITE_API_SERVER = "/api";
+    return;
+  }
+  const value = String(raw).trim().replace(/\/+$/, "");
+  if (value.startsWith("/")) {
+    process.env.VITE_API_SERVER =
+      value === "/api" || value.endsWith("/api") ? value : `${value}/api`.replace(/\/{2,}/g, "/");
+    return;
+  }
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      const path = (url.pathname || "/").replace(/\/+$/, "") || "/";
+      if (path === "/" || path === "") {
+        // Local absolute origin without /api — use Vite proxy instead of hard-coding :5000.
+        if (command === "serve" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
+          process.env.VITE_API_SERVER = "/api";
+        } else {
+          process.env.VITE_API_SERVER = `${url.origin}/api`;
+        }
+        return;
+      }
+      process.env.VITE_API_SERVER = `${url.origin}${path}`;
+    } catch {
+      process.env.VITE_API_SERVER = value.endsWith("/api") ? value : `${value}/api`;
+    }
+  }
+}
+
+function resolveDocsPublicUrl({ command }) {
+  const fromEnv = String(
+    process.env.DOCS_PUBLIC_URL || process.env.VITE_DOCS_PUBLIC_URL || "",
+  )
+    .trim()
+    .replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  // Local Vite / preview without explicit env → local docs-site.
+  if (command === "serve" || process.env.NODE_ENV !== "production") {
+    return "http://localhost:5174";
+  }
+  return "";
+}
+
+function docsRuntimeConfigPlugin() {
+  const writeScript = (command) => {
+    const docs = resolveDocsPublicUrl({ command });
+    const escaped = docs.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return `window.__DELEGAT_DOCS_PUBLIC_URL__="${escaped}";\n`;
+  };
+
+  return {
+    name: "docs-runtime-config",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split("?")[0];
+        if (url !== "/runtime-config.js") return next();
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+        res.end(writeScript("serve"));
+      });
     },
-  },
-  preview: {
-    allowedHosts: ["dashboard.your-domain.com"],
-  },
-  server: {
-    host: "0.0.0.0",
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://localhost:5000",
-        changeOrigin: true,
-      },
-      "/hubs": {
-        target: "http://localhost:5000",
-        changeOrigin: true,
-        ws: true,
-      },
-      "/swagger": {
-        target: "http://localhost:5000",
-        changeOrigin: true,
+    generateBundle(_options, _bundle, isWrite) {
+      if (isWrite === false) return;
+      this.emitFile({
+        type: "asset",
+        fileName: "runtime-config.js",
+        source: writeScript("build"),
+      });
+    },
+  };
+}
+
+export default defineConfig(({ command }) => {
+  normalizeInheritedApiServer({ command });
+
+  // Mirror into VITE_* so import.meta.env also sees the same origin in app code.
+  const docs = resolveDocsPublicUrl({ command });
+  if (docs && !process.env.VITE_DOCS_PUBLIC_URL) {
+    process.env.VITE_DOCS_PUBLIC_URL = docs;
+  }
+
+  return {
+    plugins: [vue(), tailwindcss(), docsRuntimeConfigPlugin()],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+        // Hugeicons (CP kit) behind lucide-compatible names — see src/lib/icons.js
+        "lucide-vue-next": path.resolve(__dirname, "./src/lib/icons.js"),
       },
     },
-  },
+    preview: {
+      allowedHosts: ["dashboard.your-domain.com"],
+    },
+    server: {
+      host: "0.0.0.0",
+      port: 5173,
+      proxy: {
+        "/api": {
+          target: "http://localhost:5000",
+          changeOrigin: true,
+        },
+        "/hubs": {
+          target: "http://localhost:5000",
+          changeOrigin: true,
+          ws: true,
+        },
+        "/swagger": {
+          target: "http://localhost:5000",
+          changeOrigin: true,
+        },
+      },
+    },
+  };
 });
