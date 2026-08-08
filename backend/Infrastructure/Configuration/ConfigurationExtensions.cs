@@ -26,8 +26,15 @@ public static class ConfigurationExtensions
     /// </summary>
     public static MinIOSettings GetMinIOSettings(this IConfiguration config)
     {
-        var publicEndpoint = GetValue(config, "MINIO_PUBLIC_ENDPOINT", "");
+        var publicEndpointRaw = GetValue(config, "MINIO_PUBLIC_ENDPOINT", "");
         var publicSecureStr = GetValue(config, "MINIO_PUBLIC_SECURE", "");
+        var (publicEndpoint, secureFromUrl) = NormalizeMinioEndpoint(publicEndpointRaw);
+
+        bool? publicSecure = null;
+        if (!string.IsNullOrEmpty(publicSecureStr))
+            publicSecure = bool.Parse(publicSecureStr);
+        else if (secureFromUrl.HasValue)
+            publicSecure = secureFromUrl;
 
         return new MinIOSettings
         {
@@ -37,8 +44,46 @@ public static class ConfigurationExtensions
             Bucket = GetValue(config, "MINIO_BUCKET"),
             Secure = bool.Parse(GetValue(config, "MINIO_SECURE", "false")),
             PublicEndpoint = string.IsNullOrEmpty(publicEndpoint) ? null : publicEndpoint,
-            PublicSecure = string.IsNullOrEmpty(publicSecureStr) ? null : bool.Parse(publicSecureStr)
+            PublicSecure = publicSecure
         };
+    }
+
+    /// <summary>
+    /// MinIO.NET <c>WithEndpoint</c> expects <c>host[:port]</c> only. Strip a pasted
+    /// <c>https://…</c> URL and optionally infer SSL from the scheme.
+    /// </summary>
+    internal static (string Endpoint, bool? SecureFromScheme) NormalizeMinioEndpoint(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return ("", null);
+
+        var s = raw.Trim();
+        bool? secure = null;
+
+        if (s.Contains("://", StringComparison.Ordinal)
+            && Uri.TryCreate(s, UriKind.Absolute, out var uri)
+            && !string.IsNullOrEmpty(uri.Host))
+        {
+            if (uri.Scheme == Uri.UriSchemeHttps)
+                secure = true;
+            else if (uri.Scheme == Uri.UriSchemeHttp)
+                secure = false;
+
+            s = uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
+        }
+        else
+        {
+            // Strip accidental path/query if pasted as host/path
+            var slash = s.IndexOf('/');
+            if (slash >= 0)
+                s = s[..slash];
+            var q = s.IndexOf('?');
+            if (q >= 0)
+                s = s[..q];
+            s = s.Trim().Trim('.');
+        }
+
+        return (s, secure);
     }
 
     /// <summary>

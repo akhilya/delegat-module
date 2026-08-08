@@ -33,7 +33,8 @@ public class MinIOStorageService : IStorageService
         _httpClientFactory = httpClientFactory;
         _logger = logger;
 
-        // Public endpoint for external URL generation (falls back to internal endpoint)
+        // Public endpoint for external URL generation (falls back to internal endpoint).
+        // Host[:port] only — scheme stripped in GetMinIOSettings (NormalizeMinioEndpoint).
         _publicEndpoint = !string.IsNullOrEmpty(settings.PublicEndpoint)
             ? settings.PublicEndpoint
             : settings.Endpoint;

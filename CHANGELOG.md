@@ -17,8 +17,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Changed
 
 - New adapter connection dialog uses a compact adapter Select instead of tall radio cards
+- Marketplace image exports use `MINIO_PUBLIC_ENDPOINT` / `MINIO_PUBLIC_SECURE` (host[:port] only). Control Plane provisions `storage.{label}.{INSTANCE_HOST_BASE}` and Traefik on MinIO; self-host must set a publicly reachable host or exports fall back to the internal Docker MinIO name
 
 ### Fixed
+
+- `MINIO_PUBLIC_ENDPOINT` values pasted with `https://` are normalized to host[:port] so MinIO.NET does not reject the endpoint at startup
 
 ### Security
 

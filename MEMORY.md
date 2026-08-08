@@ -84,6 +84,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - Theme no longer jumps from light Setup to dark Products: color scheme boots once (`theme.js`, light default) instead of applying system dark only when the account menu mounts.
 - Products table shows loading from first paint (was empty while categories/attributes loaded before the products request).
 
+- **MinIO public URLs:** marketplace exports use `MINIO_PUBLIC_ENDPOINT` (host[:port], scheme stripped if pasted) + `MINIO_PUBLIC_SECURE`. CP provisions `storage.{label}.{INSTANCE_HOST_BASE}` via Traefik; API↔MinIO stays on Docker `minio-${STACK_ID}:9000`. Self-host must set a reachable public host or URLs fall back to the internal endpoint.
 - **Runtime** branding: Settings → Branding modal and first-run Setup → Branding step (name, description, logo, favicon, primary/accent).
 - Singleton table `instanceBrandingSettings`; API under `/api/settings/branding` (GET is anonymous).
 - **Defaults:** no logo (name-only until upload); favicon = Control Plane square `/logo-square-favicon.webp` (copied into `frontend/public`).
