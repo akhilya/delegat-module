@@ -25,6 +25,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- Bump `dompurify` to 3.4.13 and npm override `js-yaml` to 4.3.1 (Dependabot GHSA alerts)
+
 ## [1.5.0] - 2026-08-05
 
 ### Added
