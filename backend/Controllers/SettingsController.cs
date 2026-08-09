@@ -173,7 +173,9 @@ public class SettingsController : ControllerBase
     [Route("/settings/branding/assets/logo")]
     [AllowAnonymous]
     [DisableRateLimiting]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "storeId", "v" })]
+    // Do not use VaryByQueryKeys — it requires Response Caching middleware (not registered).
+    // Client cache-busts via ?v=; Cache-Control is set below.
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetBrandingLogoAsset([FromQuery] int storeId, CancellationToken ct)
     {
         if (storeId <= 0)
@@ -192,7 +194,9 @@ public class SettingsController : ControllerBase
     [Route("/settings/branding/assets/favicon")]
     [AllowAnonymous]
     [DisableRateLimiting]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "storeId", "v" })]
+    // Do not use VaryByQueryKeys — it requires Response Caching middleware (not registered).
+    // Client cache-busts via ?v=; Cache-Control is set below.
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetBrandingFaviconAsset([FromQuery] int storeId, CancellationToken ct)
     {
         if (storeId <= 0)
