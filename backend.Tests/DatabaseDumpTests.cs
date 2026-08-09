@@ -187,6 +187,7 @@ public class DatabaseDumpTests
         public Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(int storeId, CancellationToken ct = default) =>
             Task.FromResult<(Stream Stream, string ContentType)?>(null);
         public Task DeleteForStoreAsync(int storeId, CancellationToken ct = default) => Task.CompletedTask;
+        public void InvalidateStoreCache(int storeId) { }
         public Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(IEnumerable<int> storeIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<int, string>>(
                 storeIds.Distinct().ToDictionary(id => id, _ => "/logo-square-favicon.webp"));
