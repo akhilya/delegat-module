@@ -320,6 +320,9 @@ public class ProductSyncService
                 }
             }
 
+            var pinnedExternalId = realExternalId;
+            var previousLinkExternalId = existingLink?.externalProductId;
+
             var result = await adapter.ExportProductAsync(
                 connection,
                 exportDataNonNull,
@@ -377,6 +380,33 @@ public class ProductSyncService
                     $"Marketplace did not return a product ID. The product may still be processing - try again later.");
             }
 
+            var resolvedFrom = MarketplaceExportIdentity.TryGetDetailString(result.Details, "resolvedFrom");
+            if (!MarketplaceExportIdentity.MayUpdateExternalProductId(
+                    previousLinkExternalId,
+                    pinnedExternalId,
+                    result.ExternalProductId,
+                    resolvedFrom))
+            {
+                var msg =
+                    $"Marketplace returned external id '{result.ExternalProductId}' which differs from the linked id '{previousLinkExternalId}'. " +
+                    "Link was not overwritten to prevent silent rebind.";
+                await Log("error", msg);
+                if (existingLink != null)
+                {
+                    existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
+                    {
+                        status = ProductMarketplaceStatus.SyncError,
+                        lastErrorMessage = msg,
+                        lastSyncAt = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync(ct);
+                }
+
+                return ProductExportResult.Failure(msg);
+            }
+
+            var offerIdFromDetails = MarketplaceExportIdentity.TryGetDetailString(result.Details, "offerId");
+
             var isNewProduct = existingLink == null;
 
             // Create or update the link
@@ -409,6 +439,7 @@ public class ProductSyncService
                     productId = productId,
                     connectionId = connectionId,
                     externalProductId = result.ExternalProductId!,
+                    externalSku = offerIdFromDetails,
                     status = ProductMarketplaceStatus.Synced,
                     categoryMappingId = categoryMapping.Id
                 });
@@ -419,6 +450,7 @@ public class ProductSyncService
                 existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
                 {
                     externalProductId = result.ExternalProductId,
+                    externalSku = offerIdFromDetails ?? existingLink.externalSku,
                     status = ProductMarketplaceStatus.Synced,
                     lastErrorMessage = null,
                     lastSyncAt = DateTime.UtcNow,
@@ -810,9 +842,46 @@ public class ProductSyncService
 
                         if (linkByProductId.TryGetValue(pid, out var existingLink))
                         {
+                            var previousId = existingLink.externalProductId;
+                            // What we passed to the adapter (null means create-as-new even if link row exists)
+                            string? pinnedId = null;
+                            foreach (var bi in bulkItems)
+                            {
+                                if (bi.LocalProductId == pid)
+                                {
+                                    pinnedId = bi.ExistingExternalId;
+                                    break;
+                                }
+                            }
+
+                            var resolvedFrom = MarketplaceExportIdentity.TryGetDetailString(
+                                exportItemResult.Details, "resolvedFrom");
+                            if (!MarketplaceExportIdentity.MayUpdateExternalProductId(
+                                    previousId,
+                                    pinnedId,
+                                    exportItemResult.ExternalProductId,
+                                    resolvedFrom))
+                            {
+                                var msg =
+                                    $"Marketplace returned external id '{exportItemResult.ExternalProductId}' which differs from the linked id '{previousId}'. Link was not overwritten.";
+                                existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
+                                {
+                                    status = ProductMarketplaceStatus.SyncError,
+                                    lastErrorMessage = msg,
+                                    lastSyncAt = DateTime.UtcNow
+                                });
+                                itemResults.Add(new BulkProductExportItemResult(
+                                    pid, false, ErrorMessage: msg, Details: exportItemResult.Details));
+                                continue;
+                            }
+
+                            var offerIdFromDetails = MarketplaceExportIdentity.TryGetDetailString(
+                                exportItemResult.Details, "offerId");
+
                             existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
                             {
                                 externalProductId = exportItemResult.ExternalProductId,
+                                externalSku = offerIdFromDetails ?? existingLink.externalSku,
                                 status = ProductMarketplaceStatus.Synced,
                                 lastErrorMessage = null,
                                 lastSyncAt = DateTime.UtcNow,
@@ -840,12 +909,15 @@ public class ProductSyncService
                             }
                             else
                             {
+                                var offerIdFromDetails = MarketplaceExportIdentity.TryGetDetailString(
+                                    exportItemResult.Details, "offerId");
                                 var newLink = new ProductMarketplaceLink();
                                 newLink.AddFill(new ProductMarketplaceLink.AddForm
                                 {
                                     productId = pid,
                                     connectionId = connectionId,
                                     externalProductId = exportItemResult.ExternalProductId!,
+                                    externalSku = offerIdFromDetails,
                                     status = ProductMarketplaceStatus.Synced,
                                     categoryMappingId = usedCategoryMappingId
                                 });

@@ -19,6 +19,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Marketplace export link binding: Ozon/Yandex keep the linked external id (Ozon uses the linked card's `offer_id` for `/v3/product/import`; Yandex prefers stored `offerId` over local sku). Silent rebind to another remote id is blocked; Ozon link/relink accepts product_id, Ozon SKU, or article and stores canonical `product_id`
 - Browser tab title brand suffix follows the selected store after switch/rename (branding name always from current store; document title sync no longer does fragile string replace)
 - Branding logo/favicon asset URLs (`/api/settings/branding/assets/*`) no longer 500: removed `VaryByQueryKeys` (requires Response Caching middleware, which is not registered); client still cache-busts with `?v=`
 - Product clone/move (including same-store duplicate) now enforces product, file, and storage quotas on the target store

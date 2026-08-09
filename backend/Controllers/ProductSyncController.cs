@@ -272,13 +272,30 @@ public class ProductSyncController : ControllerBase
         if (alreadyLinked)
             throw ApiException.BadRequest("Product is already linked to this connection");
 
+        var rawExternalId = input.externalProductId.Trim();
+        var canonicalExternalId = rawExternalId;
+        string? externalSku = null;
+
+        // Resolve product_id / sku / offer_id via the adapter when import is supported (Ozon normalize).
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter != null && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+        {
+            var remote = await adapter.ImportProductAsync(connection, rawExternalId, ct);
+            if (remote == null)
+                throw ApiException.BadRequest(
+                    $"Product '{rawExternalId}' was not found on the marketplace (tried as external id / sku / article).",
+                    code: "remote_product_missing");
+            canonicalExternalId = remote.ExternalId;
+            externalSku = string.IsNullOrWhiteSpace(remote.Sku) ? null : remote.Sku;
+        }
+
         // Check if externalProductId is already used by another product on this connection
         var duplicateExternalId = await _context.productMarketplaceLinks
-            .AnyAsync(l => l.externalProductId == input.externalProductId.Trim()
+            .AnyAsync(l => l.externalProductId == canonicalExternalId
                 && l.connectionId == connectionId, ct);
         if (duplicateExternalId)
             throw ApiException.BadRequest(
-                $"External ID \"{input.externalProductId.Trim()}\" is already linked to another product on this connection");
+                $"External ID \"{canonicalExternalId}\" is already linked to another product on this connection");
 
         // Resolve category mapping (optional - same logic as available-connections)
         int? categoryMappingId = null;
@@ -296,7 +313,8 @@ public class ProductSyncController : ControllerBase
         {
             productId = productId,
             connectionId = connectionId,
-            externalProductId = input.externalProductId.Trim(),
+            externalProductId = canonicalExternalId,
+            externalSku = externalSku,
             status = ProductMarketplaceStatus.NotSynced,
             categoryMappingId = categoryMappingId
         });
@@ -308,6 +326,7 @@ public class ProductSyncController : ControllerBase
         {
             linkId = link.Id,
             externalProductId = link.externalProductId,
+            externalSku = link.externalSku,
             status = link.status.ToString()
         });
     }
@@ -441,8 +460,32 @@ public class ProductSyncController : ControllerBase
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
 
-        link.externalProductId = input.externalProductId.Trim();
-        link.externalSku = null;
+        var rawExternalId = input.externalProductId.Trim();
+        var canonicalExternalId = rawExternalId;
+        string? externalSku = null;
+
+        var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
+        if (adapter != null && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+        {
+            var remote = await adapter.ImportProductAsync(link.connection, rawExternalId, ct);
+            if (remote == null)
+                throw ApiException.BadRequest(
+                    $"Product '{rawExternalId}' was not found on the marketplace (tried as external id / sku / article).",
+                    code: "remote_product_missing");
+            canonicalExternalId = remote.ExternalId;
+            externalSku = string.IsNullOrWhiteSpace(remote.Sku) ? null : remote.Sku;
+        }
+
+        var duplicateExternalId = await _context.productMarketplaceLinks
+            .AnyAsync(l => l.externalProductId == canonicalExternalId
+                && l.connectionId == link.connectionId
+                && l.Id != link.Id, ct);
+        if (duplicateExternalId)
+            throw ApiException.BadRequest(
+                $"External ID \"{canonicalExternalId}\" is already linked to another product on this connection");
+
+        link.externalProductId = canonicalExternalId;
+        link.externalSku = externalSku;
         link.status = ProductMarketplaceStatus.NotSynced;
         link.lastErrorMessage = null;
 
@@ -452,6 +495,7 @@ public class ProductSyncController : ControllerBase
         {
             linkId = link.Id,
             externalProductId = link.externalProductId,
+            externalSku = link.externalSku,
             status = link.status.ToString()
         });
     }
