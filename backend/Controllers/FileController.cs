@@ -176,6 +176,60 @@ public class FileController : ControllerBase
     }
 
     /// <summary>
+    /// Lists product files for a folder with offset paging (infinite scroll).
+    /// Pass <c>folderId</c> (omit value for root) to scope; returns <c>items</c>, <c>totalCount</c>, <c>lastPage</c>.
+    /// </summary>
+    [HttpGet]
+    [Route("/products/{productId}/files")]
+    public async Task<IActionResult> GetProductFiles(
+        int productId,
+        [FromQuery] int? folderId = null,
+        [FromQuery] int startIndex = 0,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var product = await _context.products
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == productId, ct);
+        if (product == null)
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
+        if (product.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+
+        if (startIndex < 0) startIndex = 0;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var folderScoped = Request.Query.ContainsKey("folderId") || Request.Query.ContainsKey("inFolder");
+        var query = _context.files
+            .AsNoTracking()
+            .Include(f => f.tags)
+            .ThenInclude(t => t.tagDefinition)
+            .Where(f => f.productId == productId);
+
+        if (folderScoped)
+            query = query.Where(f => f.folderId == folderId);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(f => f.uploadDateTime)
+            .Skip(startIndex)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return Ok(new
+        {
+            items = items.Select(f => f.MapToDTO(_serviceProvider)),
+            totalCount = total,
+            lastPage = startIndex + pageSize >= total,
+        });
+    }
+
+    /// <summary>
     /// Uploads one or more files for a product using standard model binding (up to 10 GB).
     /// </summary>
     /// <param name="productId">The product identifier.</param>

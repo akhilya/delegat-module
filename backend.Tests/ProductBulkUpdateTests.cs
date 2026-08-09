@@ -55,7 +55,7 @@ public class ProductBulkUpdateTests
             NullLogger<ProductController>.Instance,
             db,
             new ExcelProductService(),
-            new QuotaService(uow),
+            new QuotaService(uow, db),
             new NoopOperationLogger(),
             uniqueness,
             service);

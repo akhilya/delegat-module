@@ -209,7 +209,7 @@ public class CatalogProductDomainTests
             var store = data.AddStore();
             data.AddProduct(store.Id);
             await data.SaveAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
             var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureProductQuotaAsync(store.Id));
             Assert.Equal(409, ex.StatusCode);
         }

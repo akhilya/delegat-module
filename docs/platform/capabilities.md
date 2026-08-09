@@ -82,6 +82,8 @@
 - `MAX_CONNECTIONS` - max marketplace connections
 - `AI_ENABLED` - whether AI assistant is available (`true` / `false`). Unset defaults to enabled for self-host; when `CONTROL_PLANE_URL` is set, unset defaults to disabled. Toggle requires process restart.
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
+- **Administration** (`/settings`): shows plan limits vs usage per store; when over quota after a plan downgrade, lists concrete items that will be permanently trimmed (products, connections, largest files) and the Control Plane `OveragePurgeAt` deadline. Admins can **Trim now**; a background worker applies the same selection when the deadline is due (Platform Link required for auto-trim). Legacy `/settings/admin/usage` redirects here.
+- Usage is reported on Platform Link heartbeat; entitlements (`overagePurgeAt`, plan name) are cached locally for the UI.
 - Adapter HTTP log retention: `ADAPTER_HTTP_LOG_RETENTION_DAYS` (default 7)
 - Queue / operations history retention: `QUEUE_RETENTION_DAYS` (default 7); cancelled export/import rows are marked Cancelled so they are not retried forever
 - Logging toggles (admin UI under Administration / `/settings`, apply immediately; env vars only seed first boot):
@@ -169,7 +171,7 @@
 - DB indexing strategy.
 
 #### Extended Branding
-- Runtime white-label in **Settings → Branding** (name, description, logo, favicon, primary/accent). Seeded once from `BRAND_*` env (Control Plane provision can inject); admin UI is source of truth after first boot.
+- Runtime white-label **per store** in **Settings → Stores → Branding** tab (logo, favicon, primary/accent; display name follows the store; favicon in sidebar store switcher). Seeded from `BRAND_*` env when a store’s branding row is first created; admin UI is source of truth after that. First-run Setup: store create, then branding.
 - Email templates (still future).
 
 ---

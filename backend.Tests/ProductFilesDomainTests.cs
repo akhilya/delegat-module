@@ -257,7 +257,7 @@ public class ProductFilesDomainTests
             await data.SaveAsync();
             db.files.Add(NewFile(product.Id, user.Id));
             await db.SaveChangesAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
 
             var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureFileQuotaAsync(store.Id));
 

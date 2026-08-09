@@ -14,17 +14,29 @@ public class SettingsController : ControllerBase
     private readonly ILoggingSettingsService _loggingSettings;
     private readonly IPublicApiSettingsService _publicApiSettings;
     private readonly IBrandingSettingsService _brandingSettings;
+    private readonly ICurrentUserService _currentUser;
+    private readonly QuotaService _quota;
+    private readonly IOverageTrimService _overageTrim;
+    private readonly IPlatformEntitlementsService _entitlements;
 
     public SettingsController(
         IDatabaseDumpService databaseDumpService,
         ILoggingSettingsService loggingSettings,
         IPublicApiSettingsService publicApiSettings,
-        IBrandingSettingsService brandingSettings)
+        IBrandingSettingsService brandingSettings,
+        ICurrentUserService currentUser,
+        QuotaService quota,
+        IOverageTrimService overageTrim,
+        IPlatformEntitlementsService entitlements)
     {
         _databaseDumpService = databaseDumpService;
         _loggingSettings = loggingSettings;
         _publicApiSettings = publicApiSettings;
         _brandingSettings = brandingSettings;
+        _currentUser = currentUser;
+        _quota = quota;
+        _overageTrim = overageTrim;
+        _entitlements = entitlements;
     }
 
     /// <summary>
@@ -86,20 +98,30 @@ public class SettingsController : ControllerBase
         return Ok(await _publicApiSettings.UpdateAsync(request, ct));
     }
 
-    /// <summary>Current instance white-label branding (public — used on auth and shell before login).</summary>
+    /// <summary>
+    /// Selected-store white-label branding when authenticated with a store;
+    /// otherwise env defaults (auth pages before store selection).
+    /// </summary>
     [HttpGet]
     [Route("/settings/branding")]
     [AllowAnonymous]
     [DisableRateLimiting]
     public async Task<ActionResult<BrandingSettingsDto>> GetBrandingSettings(CancellationToken ct)
     {
-        return Ok(await _brandingSettings.GetAsync(ct));
+        if (_currentUser.IsAuthenticated)
+        {
+            var storeId = await _currentUser.GetSelectedStoreIdAsync(ct);
+            if (storeId.HasValue)
+                return Ok(await _brandingSettings.GetForStoreAsync(storeId.Value, ct));
+        }
+
+        return Ok(_brandingSettings.GetDefaults());
     }
 
-    /// <summary>Update branding identity and colors. Takes effect immediately (no rebuild).</summary>
+    /// <summary>Update branding for the selected store. Takes effect immediately (no rebuild).</summary>
     [HttpPut]
     [Route("/settings/branding")]
-    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequiresPermission(Permissions.StoreSettingsManage)]
     public async Task<ActionResult<BrandingSettingsDto>> UpdateBrandingSettings(
         [FromBody] UpdateBrandingSettingsRequest request,
         CancellationToken ct)
@@ -107,42 +129,57 @@ public class SettingsController : ControllerBase
         if (request is null)
             return BadRequest(new { error = "Body required" });
 
-        return Ok(await _brandingSettings.UpdateAsync(request, ct));
+        var storeId = await _currentUser.GetSelectedStoreIdAsync(ct);
+        if (!storeId.HasValue)
+            return BadRequest(new { error = "No store selected", code = "store_required" });
+
+        return Ok(await _brandingSettings.UpdateAsync(storeId.Value, request, ct));
     }
 
-    /// <summary>Upload custom logo (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
+    /// <summary>Upload custom logo for the selected store (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
     [HttpPost]
     [Route("/settings/branding/logo")]
-    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequiresPermission(Permissions.StoreSettingsManage)]
     [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
     public async Task<ActionResult<BrandingSettingsDto>> UploadBrandingLogo(
         IFormFile file,
         CancellationToken ct)
     {
-        return Ok(await _brandingSettings.UploadLogoAsync(file, ct));
+        var storeId = await _currentUser.GetSelectedStoreIdAsync(ct);
+        if (!storeId.HasValue)
+            return BadRequest(new { error = "No store selected", code = "store_required" });
+
+        return Ok(await _brandingSettings.UploadLogoAsync(storeId.Value, file, ct));
     }
 
-    /// <summary>Upload custom favicon (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
+    /// <summary>Upload custom favicon for the selected store (PNG, JPEG, WebP, SVG, ICO; max 2 MB).</summary>
     [HttpPost]
     [Route("/settings/branding/favicon")]
-    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequiresPermission(Permissions.StoreSettingsManage)]
     [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
     public async Task<ActionResult<BrandingSettingsDto>> UploadBrandingFavicon(
         IFormFile file,
         CancellationToken ct)
     {
-        return Ok(await _brandingSettings.UploadFaviconAsync(file, ct));
+        var storeId = await _currentUser.GetSelectedStoreIdAsync(ct);
+        if (!storeId.HasValue)
+            return BadRequest(new { error = "No store selected", code = "store_required" });
+
+        return Ok(await _brandingSettings.UploadFaviconAsync(storeId.Value, file, ct));
     }
 
-    /// <summary>Stream custom logo bytes (anonymous).</summary>
+    /// <summary>Stream custom logo bytes for a store (anonymous).</summary>
     [HttpGet]
     [Route("/settings/branding/assets/logo")]
     [AllowAnonymous]
     [DisableRateLimiting]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
-    public async Task<IActionResult> GetBrandingLogoAsset(CancellationToken ct)
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "storeId", "v" })]
+    public async Task<IActionResult> GetBrandingLogoAsset([FromQuery] int storeId, CancellationToken ct)
     {
-        var opened = await _brandingSettings.OpenLogoStreamAsync(ct);
+        if (storeId <= 0)
+            return BadRequest(new { error = "storeId required" });
+
+        var opened = await _brandingSettings.OpenLogoStreamAsync(storeId, ct);
         if (opened is null)
             return NotFound();
 
@@ -150,19 +187,59 @@ public class SettingsController : ControllerBase
         return File(opened.Value.Stream, opened.Value.ContentType);
     }
 
-    /// <summary>Stream custom favicon bytes (anonymous).</summary>
+    /// <summary>Stream custom favicon bytes for a store (anonymous).</summary>
     [HttpGet]
     [Route("/settings/branding/assets/favicon")]
     [AllowAnonymous]
     [DisableRateLimiting]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
-    public async Task<IActionResult> GetBrandingFaviconAsset(CancellationToken ct)
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "storeId", "v" })]
+    public async Task<IActionResult> GetBrandingFaviconAsset([FromQuery] int storeId, CancellationToken ct)
     {
-        var opened = await _brandingSettings.OpenFaviconStreamAsync(ct);
+        if (storeId <= 0)
+            return BadRequest(new { error = "storeId required" });
+
+        var opened = await _brandingSettings.OpenFaviconStreamAsync(storeId, ct);
         if (opened is null)
             return NotFound();
 
         Response.Headers.CacheControl = "public, max-age=86400";
         return File(opened.Value.Stream, opened.Value.ContentType);
+    }
+
+    /// <summary>Plan quotas vs current usage (per store and rollup).</summary>
+    [HttpGet]
+    [Route("/settings/quotas")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<QuotaUsageSnapshotDto>> GetQuotas(CancellationToken ct)
+    {
+        var entitlements = await _entitlements.GetCachedAsync(ct);
+        var snapshot = await _quota.GetUsageSnapshotAsync(
+            entitlements.Linked,
+            entitlements.PlanName,
+            entitlements.OveragePurgeAt,
+            ct);
+        return Ok(snapshot);
+    }
+
+    /// <summary>Deterministic preview of data that will be permanently trimmed when over quota.</summary>
+    [HttpGet]
+    [Route("/settings/quotas/overage-preview")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<OverageTrimPreviewDto>> GetOveragePreview(CancellationToken ct)
+    {
+        return Ok(await _overageTrim.PreviewAsync(ct));
+    }
+
+    /// <summary>Apply overage trim now (same selection as preview / auto worker).</summary>
+    [HttpPost]
+    [Route("/settings/quotas/trim")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<ActionResult<OverageTrimResultDto>> TrimOverage(CancellationToken ct)
+    {
+        var preview = await _overageTrim.PreviewAsync(ct);
+        if (!preview.IsOverQuota)
+            return Ok(new OverageTrimResultDto(0, 0, 0, 0));
+
+        return Ok(await _overageTrim.ExecuteAsync(ct));
     }
 }

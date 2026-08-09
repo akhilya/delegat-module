@@ -23,7 +23,7 @@ public class PublicApiCatalogLogicTests
             new PublicApiStoreContext(currentUser, db),
             db,
             TestDbFactory.CreateUnitOfWork(db),
-            new QuotaService(TestDbFactory.CreateUnitOfWork(db)),
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db),
             new ServiceCollection().BuildServiceProvider(),
             new AttributeUniquenessService(db));
 

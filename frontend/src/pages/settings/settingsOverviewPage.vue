@@ -11,14 +11,12 @@ import { notifyMeUpdated } from "@/lib/meCache";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   Download,
-  Palette,
 } from "lucide-vue-next";
 import { t } from "@/i18n";
-import BrandingSettingsDialog from "@/components/settings/BrandingSettingsDialog.vue";
 import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
+import QuotaUsagePanel from "@/components/settings/QuotaUsagePanel.vue";
 
 const isDumping = ref(false);
-const brandingDialogOpen = ref(false);
 const loggingLoading = ref(true);
 const loggingSaving = ref(false);
 const publicApiLoading = ref(true);
@@ -227,21 +225,6 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col">
     <PageSection class="!min-h-0">
-      <SettingsFormSection
-        :title="$t('pages.settingsOverviewPage.branding.title')"
-        :description="$t('pages.settingsOverviewPage.branding.description')"
-      >
-        <SettingsSettingRow
-          :title="$t('pages.settingsOverviewPage.branding.rowLabel')"
-          :description="$t('pages.settingsOverviewPage.branding.rowHint')"
-        >
-          <Button variant="outline" @click="brandingDialogOpen = true">
-            <Palette class="mr-2 size-4" />
-            {{ $t("pages.settingsOverviewPage.branding.openButton") }}
-          </Button>
-        </SettingsSettingRow>
-      </SettingsFormSection>
-
       <SettingsFormSection>
         <SettingsSettingRow
           :title="$t('pages.settingsOverviewPage.publicApiEnabledLabel')"
@@ -353,8 +336,13 @@ onMounted(async () => {
           </Button>
         </SettingsFormField>
       </SettingsFormSection>
-    </PageSection>
 
-    <BrandingSettingsDialog v-model:open="brandingDialogOpen" />
+      <SettingsFormSection
+        :title="$t('nav.usage')"
+        :description="$t('pages.usagePage.description')"
+      >
+        <QuotaUsagePanel />
+      </SettingsFormSection>
+    </PageSection>
   </div>
 </template>

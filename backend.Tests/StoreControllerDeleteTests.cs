@@ -33,10 +33,11 @@ public class StoreControllerDeleteTests
     {
         var controller = new StoreController(
             current,
-            unitOfWork: null!,
-            serviceProvider: null!,
-            authorizationService: null!,
-            storeDeletion: deletion);
+            null!,
+            null!,
+            null!,
+            deletion,
+            null!);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),

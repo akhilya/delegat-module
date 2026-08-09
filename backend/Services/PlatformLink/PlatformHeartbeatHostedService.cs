@@ -1,5 +1,6 @@
 using System.Reflection;
 using Delegat.Infrastructure.Configuration;
+using Delegat.Services;
 
 namespace Delegat.Services.PlatformLink;
 
@@ -35,13 +36,33 @@ public sealed class PlatformHeartbeatHostedService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var client = scope.ServiceProvider.GetRequiredService<IPlatformLinkClient>();
+                var quota = scope.ServiceProvider.GetRequiredService<QuotaService>();
+                var entitlements = scope.ServiceProvider.GetRequiredService<IPlatformEntitlementsService>();
+
+                PlatformUsageReportDto? usage = null;
+                try { usage = await quota.BuildUsageReportAsync(stoppingToken); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Failed to build usage for heartbeat"); }
+
                 await client.SendHeartbeatAsync(new PlatformHeartbeatDto
                 {
                     InstanceId = _options.InstanceId ?? "",
                     OccurredAt = DateTime.UtcNow,
                     PlatformVersion = version,
                     Status = "ok",
+                    Usage = usage,
                 }, stoppingToken);
+
+                var remote = await client.GetEntitlementsAsync(stoppingToken);
+                if (remote != null)
+                {
+                    await entitlements.UpsertAsync(new PlatformEntitlementsCacheDto(
+                        Linked: true,
+                        PlanName: remote.PlanName,
+                        PlanSlug: remote.PlanSlug,
+                        SubscriptionStatus: remote.SubscriptionStatus,
+                        OveragePurgeAt: remote.OveragePurgeAt,
+                        UpdatedAt: DateTime.UtcNow), stoppingToken);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

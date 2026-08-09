@@ -34,17 +34,20 @@ public class ProductTransferService
     private readonly DataContext _context;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IStorageService _storageService;
+    private readonly QuotaService _quotaService;
     private readonly ILogger<ProductTransferService> _logger;
 
     public ProductTransferService(
         DataContext context,
         IUnitOfWork unitOfWork,
         IStorageService storageService,
+        QuotaService quotaService,
         ILogger<ProductTransferService> logger)
     {
         _context = context;
         _unitOfWork = unitOfWork;
         _storageService = storageService;
+        _quotaService = quotaService;
         _logger = logger;
     }
 
@@ -289,6 +292,12 @@ public class ProductTransferService
         if (skuTaken)
             throw new InvalidOperationException(
                 $"SKU '{newSku}' is already taken in the target store. Provide a different one via newSku.");
+
+        // Re-check target quotas at execute time (enqueue may have been earlier; TOCTOU).
+        await _quotaService.EnsureTransferQuotasAsync(
+            request.targetStoreId,
+            source.files.Count,
+            source.files.Sum(f => f.length));
 
         // ---- Resolve target category --------------------------------------------------
 

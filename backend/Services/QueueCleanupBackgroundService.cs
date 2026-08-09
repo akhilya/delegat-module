@@ -6,12 +6,17 @@ namespace Delegat.Services;
 
 /// <summary>
 /// Deletes terminal queue rows and operations older than QUEUE_RETENTION_DAYS (default 7).
-/// Also marks orphaned InProgress rows as Cancelled when their operation is cancelled/missing.
+/// Also marks orphaned InProgress rows as Cancelled when their operation is cancelled/missing,
+/// abandons stuck client-side operations, and fails ancient running ops as a safety net.
 /// </summary>
 public sealed class QueueCleanupBackgroundService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
     private static readonly TimeSpan StaleInProgressAge = TimeSpan.FromHours(24);
+    /// <summary>Client file-upload/delete left running after tab close (upload HTTP timeout is 15m).</summary>
+    private static readonly TimeSpan AbandonedClientOpAge = TimeSpan.FromMinutes(20);
+    /// <summary>Any operation stuck in running/paused with no finish.</summary>
+    private static readonly TimeSpan AncientRunningOpAge = TimeSpan.FromHours(24);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<QueueCleanupBackgroundService> _logger;
@@ -50,9 +55,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        var operationLogger = scope.ServiceProvider.GetRequiredService<IOperationLogger>();
         var retentionDays = FeatureFlags.GetQueueRetentionDays();
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var staleBefore = DateTime.UtcNow - StaleInProgressAge;
+        var abandonedClientBefore = DateTime.UtcNow - AbandonedClientOpAge;
+        var ancientRunningBefore = DateTime.UtcNow - AncientRunningOpAge;
 
         // Pending/InProgress/Failed rows whose operation is already cancelled would otherwise
         // be re-polled forever (retention cleanup only deletes terminal queue statuses).
@@ -65,11 +73,20 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         var orphanedExports = await QueryOrphanedProductExports(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
 
-        if (orphanedImages + orphanedImports + orphanedExports > 0)
+        var orphanedTransfers = await QueryOrphanedProductTransfers(db)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Cancelled), ct);
+
+        var orphanedBulkUpdates = await QueryOrphanedProductBulkUpdates(db)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Cancelled), ct);
+
+        var orphanedFolderJobs = await QueryOrphanedFolderJobs(db)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
+
+        if (orphanedImages + orphanedImports + orphanedExports + orphanedTransfers + orphanedBulkUpdates + orphanedFolderJobs > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}",
-                orphanedImages, orphanedImports, orphanedExports);
+                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}, transfers={Transfers}, bulk={Bulk}, folders={Folders}",
+                orphanedImages, orphanedImports, orphanedExports, orphanedTransfers, orphanedBulkUpdates, orphanedFolderJobs);
         }
 
         // Cancel stale InProgress whose operation is cancelled/missing
@@ -123,6 +140,56 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
             }
         }
 
+        // Abandon client-side ops (file-upload / file-delete) left running after tab close.
+        var abandonedClientOps = await db.operations
+            .Where(o => (o.status == "running" || o.status == "paused")
+                        && (o.batchType == "client"
+                            || o.type == "file-upload"
+                            || o.type == "file-delete")
+                        && o.createdAt < abandonedClientBefore)
+            .Select(o => new { o.operationId, o.storeId })
+            .Take(500)
+            .ToListAsync(ct);
+
+        foreach (var op in abandonedClientOps)
+        {
+            await operationLogger.LogAsync(op.operationId, op.storeId, "warning",
+                "Abandoned: no client activity (tab closed or upload stalled)");
+            await operationLogger.FinishAsync(op.operationId, op.storeId, "failed",
+                "Abandoned: client disconnected or upload stalled");
+        }
+
+        if (abandonedClientOps.Count > 0)
+            _logger.LogInformation("Queue cleanup abandoned {Count} client operations", abandonedClientOps.Count);
+
+        // Safety net: any running/paused op older than 24h without finish.
+        var ancientOps = await db.operations
+            .Where(o => (o.status == "running" || o.status == "paused")
+                        && o.createdAt < ancientRunningBefore)
+            .Select(o => new { o.operationId, o.storeId, o.batchId, o.batchType })
+            .Take(500)
+            .ToListAsync(ct);
+
+        foreach (var op in ancientOps)
+        {
+            if (op.batchId != null && op.batchType == "product-transfer")
+            {
+                await db.pendingProductTransfers
+                    .Where(p => p.batchId == op.batchId
+                                && (p.status == ProductTransferStatus.Pending
+                                    || p.status == ProductTransferStatus.InProgress))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Cancelled), ct);
+            }
+
+            await operationLogger.LogAsync(op.operationId, op.storeId, "warning",
+                "Timed out after 24h with no completion");
+            await operationLogger.FinishAsync(op.operationId, op.storeId, "failed",
+                "Timed out after 24h with no completion");
+        }
+
+        if (ancientOps.Count > 0)
+            _logger.LogInformation("Queue cleanup timed out {Count} ancient running operations", ancientOps.Count);
+
         var deletedExports = await db.pendingProductExports
             .Where(p => (p.status == ProductExportStatus.Completed
                          || p.status == ProductExportStatus.Failed
@@ -147,7 +214,8 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         var deletedTransfers = await db.pendingProductTransfers
             .Where(p => (p.status == ProductTransferStatus.Completed
                          || p.status == ProductTransferStatus.Failed
-                         || p.status == ProductTransferStatus.Cancelled)
+                         || p.status == ProductTransferStatus.Cancelled
+                         || p.status == ProductTransferStatus.Partial)
                         && p.createdAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
@@ -216,4 +284,25 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
              || p.status == ProductExportStatus.Failed)
             && p.batchId != null
             && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
+
+    internal static IQueryable<PendingProductTransfer> QueryOrphanedProductTransfers(DataContext db) =>
+        db.pendingProductTransfers.Where(p =>
+            (p.status == ProductTransferStatus.Pending
+             || p.status == ProductTransferStatus.InProgress)
+            && p.batchId != null
+            && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
+
+    internal static IQueryable<PendingProductBulkUpdate> QueryOrphanedProductBulkUpdates(DataContext db) =>
+        db.pendingProductBulkUpdates.Where(p =>
+            (p.status == ProductBulkUpdateStatus.Pending
+             || p.status == ProductBulkUpdateStatus.InProgress)
+            && p.batchId != null
+            && db.operations.Any(o => o.operationId == p.batchId && o.status == "cancelled"));
+
+    internal static IQueryable<PendingFolderJob> QueryOrphanedFolderJobs(DataContext db) =>
+        db.pendingFolderJobs.Where(p =>
+            (p.status == FolderJobStatus.Pending
+             || p.status == FolderJobStatus.InProgress
+             || p.status == FolderJobStatus.Failed)
+            && db.operations.Any(o => o.operationId == p.operationId && o.status == "cancelled"));
 }

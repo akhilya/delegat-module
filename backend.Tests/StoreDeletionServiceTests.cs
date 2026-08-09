@@ -37,11 +37,34 @@ public class StoreDeletionServiceTests
             Task.FromResult(Objects.Where(o => o.StartsWith(prefix, StringComparison.Ordinal)).ToList());
     }
 
+    private sealed class StubBranding : IBrandingSettingsService
+    {
+        public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public BrandingSettingsDto GetDefaults() =>
+            new("Delegat.Module", "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow);
+        public Task<BrandingSettingsDto> GetForStoreAsync(int storeId, CancellationToken ct = default) =>
+            Task.FromResult(GetDefaults() with { storeId = storeId });
+        public Task<BrandingSettingsDto> UpdateAsync(int storeId, UpdateBrandingSettingsRequest request, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<BrandingSettingsDto> UploadLogoAsync(int storeId, Microsoft.AspNetCore.Http.IFormFile file, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<BrandingSettingsDto> UploadFaviconAsync(int storeId, Microsoft.AspNetCore.Http.IFormFile file, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(int storeId, CancellationToken ct = default) =>
+            Task.FromResult<(Stream Stream, string ContentType)?>(null);
+        public Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(int storeId, CancellationToken ct = default) =>
+            Task.FromResult<(Stream Stream, string ContentType)?>(null);
+        public Task DeleteForStoreAsync(int storeId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(IEnumerable<int> storeIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<int, string>>(
+                storeIds.Distinct().ToDictionary(id => id, _ => "/logo-square-favicon.webp"));
+    }
+
     private static (StoreDeletionService svc, DataContext db, FakeStorage storage, TestDataBuilder data) Create()
     {
         var db = TestDbFactory.CreateDb();
         var storage = new FakeStorage();
-        var svc = new StoreDeletionService(db, storage, NullLogger<StoreDeletionService>.Instance);
+        var svc = new StoreDeletionService(db, storage, new StubBranding(), NullLogger<StoreDeletionService>.Instance);
         return (svc, db, storage, new TestDataBuilder(db));
     }
 

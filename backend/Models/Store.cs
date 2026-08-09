@@ -223,6 +223,11 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Number of members in the store.
         /// </summary>
         public int membersCount { get; set; }
+
+        /// <summary>
+        /// Store favicon URL for switchers/lists (default CP square when unset).
+        /// </summary>
+        public string? faviconUrl { get; set; }
     }
 
     /// <summary>

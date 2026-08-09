@@ -372,6 +372,14 @@ public class OperationsController : ControllerBase
                          || p.status == ProductBulkUpdateStatus.InProgress))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Cancelled), ct);
             }
+            else if (op.batchType == "product-transfer")
+            {
+                cancelledCount = await _context.pendingProductTransfers
+                    .Where(p => p.batchId == op.batchId &&
+                        (p.status == ProductTransferStatus.Pending
+                         || p.status == ProductTransferStatus.InProgress))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Cancelled), ct);
+            }
         }
 
         // Calculate final stats
@@ -422,7 +430,7 @@ public class OperationsController : ControllerBase
                 {
                     childCancelled = await _context.pendingImageDownloads
                         .Where(p => p.batchId == child.batchId &&
-                            (p.status == ImageDownloadStatus.Pending || p.status == ImageDownloadStatus.Cancelled))
+                            (p.status == ImageDownloadStatus.Pending || p.status == ImageDownloadStatus.InProgress))
                         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
 
                     var imgItems = await _context.pendingImageDownloads.AsNoTracking()

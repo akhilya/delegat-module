@@ -11,7 +11,7 @@ public class QuotaServiceTests
     {
         var db = TestDbFactory.CreateDb();
         var uow = TestDbFactory.CreateUnitOfWork(db);
-        var quota = new QuotaService(uow);
+        var quota = new QuotaService(uow, db);
         return (db, quota, new TestDataBuilder(db));
     }
 
@@ -80,6 +80,24 @@ public class QuotaServiceTests
     }
 
     [Fact]
+    public async Task GetUsageSnapshot_NoLimits_DoesNotStackOverflow()
+    {
+        using var _p = SetEnv("MAX_PRODUCTS", null);
+        using var _s = SetEnv("MAX_STORAGE_GB", null);
+        using var _f = SetEnv("MAX_FILES", null);
+        using var _c = SetEnv("MAX_CONNECTIONS", null);
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        var snapshot = await quota.GetUsageSnapshotAsync(false, null, null);
+        Assert.False(snapshot.IsOverQuota);
+        Assert.Null(snapshot.Products.Limit);
+        Assert.Equal(1, snapshot.Products.Used);
+    }
+
+    [Fact]
     public async Task EnsureConnectionQuota_UnderLimit_Allows()
     {
         using var _ = SetEnv("MAX_CONNECTIONS", "3");
@@ -142,5 +160,67 @@ public class QuotaServiceTests
         await data.SaveAsync();
 
         await quota.EnsureProductQuotaAsync(a.Id);
+    }
+
+    [Fact]
+    public async Task EnsureTransferQuotas_AtProductLimit_ThrowsConflict()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "1");
+        using var _f = SetEnv("MAX_FILES", null);
+        using var _s = SetEnv("MAX_STORAGE_GB", null);
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => quota.EnsureTransferQuotasAsync(store.Id, additionalFiles: 0, additionalBytes: 0));
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Equal("product_limit_reached", ex.Code);
+    }
+
+    [Fact]
+    public async Task EnsureTransferQuotas_AtFileLimit_ThrowsConflict()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", null);
+        using var _f = SetEnv("MAX_FILES", "1");
+        using var _s = SetEnv("MAX_STORAGE_GB", null);
+        var (db, quota, data) = Create();
+        var user = data.AddUser("author");
+        var store = data.AddStore();
+        var product = data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        db.files.Add(new Models.File
+        {
+            Id = 1,
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "products/1/a.jpg",
+            length = 10,
+            contentType = "image/jpeg",
+            fileType = Enums.FileType.Image,
+            uploadDateTime = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => quota.EnsureTransferQuotasAsync(store.Id, additionalFiles: 1, additionalBytes: 0));
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Equal("quota_files_reached", ex.Code);
+    }
+
+    [Fact]
+    public async Task EnsureTransferQuotas_UnderLimits_Allows()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "5");
+        using var _f = SetEnv("MAX_FILES", "10");
+        using var _s = SetEnv("MAX_STORAGE_GB", "1");
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        await quota.EnsureTransferQuotasAsync(store.Id, additionalFiles: 2, additionalBytes: 1024);
     }
 }

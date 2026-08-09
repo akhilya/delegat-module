@@ -26,15 +26,18 @@ public sealed class StoreDeletionService : IStoreDeletionService
 {
     private readonly DataContext _db;
     private readonly IStorageService _storage;
+    private readonly IBrandingSettingsService _brandingSettings;
     private readonly ILogger<StoreDeletionService> _logger;
 
     public StoreDeletionService(
         DataContext db,
         IStorageService storage,
+        IBrandingSettingsService brandingSettings,
         ILogger<StoreDeletionService> logger)
     {
         _db = db;
         _storage = storage;
+        _brandingSettings = brandingSettings;
         _logger = logger;
     }
 
@@ -100,6 +103,7 @@ public sealed class StoreDeletionService : IStoreDeletionService
         }
 
         await TryDeleteStoragePrefixAsync(storeId, ct);
+        await _brandingSettings.DeleteForStoreAsync(storeId, ct);
     }
 
     private async Task PurgeOrphansWithoutStoreFkAsync(int storeId, CancellationToken ct)
@@ -131,6 +135,8 @@ public sealed class StoreDeletionService : IStoreDeletionService
             await _db.aiOperations.Where(o => o.storeId == storeId).ToListAsync(ct));
         _db.aiStoreSettings.RemoveRange(
             await _db.aiStoreSettings.Where(s => s.StoreId == storeId).ToListAsync(ct));
+
+        // storeBrandingSettings cascades with store FK; MinIO + cache cleaned after commit.
 
         _db.pendingImageDownloads.RemoveRange(
             await _db.pendingImageDownloads.Where(p => p.storeId == storeId).ToListAsync(ct));

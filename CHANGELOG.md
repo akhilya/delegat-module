@@ -11,21 +11,43 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Administration (Overview): plan quotas vs store usage, overage preview of data that will be permanently trimmed after Control Plane downgrade grace, and Trim now (`/settings/admin/usage` redirects here)
 - Public docs deep-links for adapter credentials (Ozon, Wildberries, Yandex Market, OpenCart, WooCommerce) from create-connection and connection settings
 - Instance frontend reads docs origin from runtime `DOCS_PUBLIC_URL` (injected by Control Plane at provision into `runtime-config.js`)
-
-### Changed
-
-- New adapter connection dialog uses a compact adapter Select instead of tall radio cards
-- Marketplace image exports use `MINIO_PUBLIC_ENDPOINT` / `MINIO_PUBLIC_SECURE` (host[:port] only). Control Plane provisions `storage.{label}.{INSTANCE_HOST_BASE}` and Traefik on MinIO; self-host must set a publicly reachable host or exports fall back to the internal Docker MinIO name
+- File manager: upload date/time column (store timezone); infinite scroll for store and product file lists
+- File manager: Tag action next to Upload (same button style), for selected files
 
 ### Fixed
 
+- Product clone/move (including same-store duplicate) now enforces product, file, and storage quotas on the target store
+- Background operations: cascade stop for image downloads cancels InProgress rows; product-transfer Stop updates the queue; abandoned file-upload/file-delete ops are failed after ~20 minutes; ancient running ops time out after 24h
+- Operations panel: Stop hidden for request-scoped sync ops that cannot actually cancel; Pause hidden for product-transfer; empty logs no longer claim entries were “cleaned up” while still running
+- Client file-upload Stop persists cancelled status immediately; upload HTTP timeout reduced to 15 minutes
+
+- File upload over plan quota: clear message (needed vs free space / file count) and preflight check before upload; no duplicate “Conflict” toasts
+- Quota / conflict API errors (409) no longer show two identical toasts (create product, uploads, etc.)
+- Users / Stores / Plugins / Categories / Product groups: loading and empty states fill the content height; Users no longer shows a fake empty invite state (empty list is treated as a load error with retry)
+- File manager: each file in a multi-upload batch appears in the list as soon as that file finishes (not only after the whole batch)
+- File manager (store storage and product files): subtle used/limit storage hint in the path bar (e.g. `2 GB / 4 GB`)
+- Store storage: multi-file upload progress stays visible after early successes (refresh no longer remounts the file manager mid-batch)
+- Store settings dialog danger zone only on the General tab (was visible on Currencies and Members too)
+- AI settings empty state fills the page content height
+- Category import empty state fills the right column without a double border
+- Store settings dialog: currency add form layout and currency picker restored; member list no longer shows avatar initials
 - `MINIO_PUBLIC_ENDPOINT` values pasted with `https://` are normalized to host[:port] so MinIO.NET does not reject the endpoint at startup
+
+### Changed
+
+- Store branding moved to Settings → Stores → store dialog **Branding** tab (removed from platform Overview); sidebar store switcher shows each store’s favicon
+- Plan quotas UI lives on Settings → Administration (Overview); dedicated Usage nav item removed (`/settings/admin/usage` redirects to Overview)
+- Branding is per selected store (`storeBrandingSettings`) instead of instance-wide; Setup order is Welcome → Store → Branding → Done; brand description, live preview, and editable brand name removed (display name follows the store); Setup branding uses a wider auth card without a clipped scroll strip; logo/favicon dropzones match in size
+- AI settings: personal assistant settings moved into a modal opened next to Add model
+- New adapter connection dialog uses a compact adapter Select instead of tall radio cards
+- Marketplace image exports use `MINIO_PUBLIC_ENDPOINT` / `MINIO_PUBLIC_SECURE` (host[:port] only). Control Plane provisions `storage.{label}.{INSTANCE_HOST_BASE}` and Traefik on MinIO; self-host must set a publicly reachable host or exports fall back to the internal Docker MinIO name
 
 ### Security
 
-- Bump `dompurify` to 3.4.13 and npm override `js-yaml` to 4.3.1 (Dependabot GHSA alerts)
+- Bump `dompurify` to 3.4.13 and npm override `js-yaml` to 4.3.1 (Dependabot GHSA alerts); `nanoid` to 3.3.18 via audit fix
 
 ## [1.5.0] - 2026-08-05
 

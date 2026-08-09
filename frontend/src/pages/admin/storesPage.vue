@@ -22,7 +22,9 @@ import {
   Coins,
   Search,
   Clock3,
+  Palette,
 } from "lucide-vue-next";
+import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -33,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Separator from "@/components/ui/separator/Separator.vue";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDateTime } from "@/utils/dateTime";
 import {
   Dialog,
@@ -73,6 +76,8 @@ export default {
     Coins,
     Search,
     Clock3,
+    Palette,
+    BrandingForm,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -97,7 +102,8 @@ export default {
     TabsContent,
     TabsList,
     TabsTrigger,
-    Separator
+    Separator,
+    SearchableSelect,
   },
   data() {
     return {
@@ -118,6 +124,8 @@ export default {
       isLoading: false,
       isCreating: false,
       isSaving: false,
+      brandingFormDirty: false,
+      brandingFormSaving: false,
       isEditDialogOpen: false,
       newStoreName: "",
       addAllUsers: true,
@@ -136,6 +144,12 @@ export default {
     availableCurrencyOptions() {
       const existing = new Set((this.storeCurrencies || []).map((c) => c.code));
       return (this.addableCurrencies || []).filter((c) => !existing.has(c.code));
+    },
+    availableCurrencySelectOptions() {
+      return this.availableCurrencyOptions.map((c) => ({
+        value: c.code,
+        label: c.label || c.code,
+      }));
     },
     extraCurrencies() {
       return (this.storeCurrencies || []).filter((c) => !c.isBase);
@@ -177,6 +191,11 @@ export default {
       if (!this.editingStore?.name) return false;
       return this.deleteConfirmName.trim() === this.editingStore.name;
     },
+    brandingApplyLive() {
+      return this.editingStore?.id != null
+        && this.me?.selectedStoreId != null
+        && this.editingStore.id === this.me.selectedStoreId;
+    },
   },
   methods: {
     ...mapActions([
@@ -195,13 +214,6 @@ export default {
     ]),
     formatCurrencyDate(iso) {
       return formatDateTime(iso, this.editForm.timezone || "UTC").combined;
-    },
-
-    userInitials(userName) {
-      const parts = String(userName || "").trim().split(/\s+/).filter(Boolean);
-      if (!parts.length) return "?";
-      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-      return (parts[0][0] + parts[1][0]).toUpperCase();
     },
 
     async fetchReferenceCatalogs() {
@@ -329,6 +341,8 @@ export default {
       this.isEditDialogOpen = false;
       this.editingStore = null;
       this.editTab = "general";
+      this.brandingFormDirty = false;
+      this.brandingFormSaving = false;
       this.memberQuery = "";
       this.editForm = {
         name: "",
@@ -377,6 +391,14 @@ export default {
         },
       });
       this.isSaving = false;
+    },
+
+    async saveDialog() {
+      if (this.editTab === "branding") {
+        await this.$refs.brandingForm?.save?.();
+        return;
+      }
+      await this.saveStore();
     },
 
     async addCurrency() {
@@ -477,8 +499,8 @@ export default {
 </script>
 
 <template>
-  <div>
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -613,10 +635,14 @@ export default {
           class="flex min-h-0 flex-1 flex-col"
         >
           <div class="shrink-0 border-b px-6 py-3">
-            <TabsList class="grid w-full grid-cols-3 sm:inline-flex sm:w-auto">
+            <TabsList class="grid w-full grid-cols-2 sm:inline-flex sm:w-auto sm:grid-cols-none">
               <TabsTrigger value="general" class="gap-1.5">
                 <Globe2 class="size-3.5" />
                 {{ $t("pages.storesPage.tabGeneral") }}
+              </TabsTrigger>
+              <TabsTrigger value="branding" class="gap-1.5">
+                <Palette class="size-3.5" />
+                {{ $t("pages.storesPage.tabBranding") }}
               </TabsTrigger>
               <TabsTrigger value="currencies" class="gap-1.5">
                 <Coins class="size-3.5" />
@@ -701,6 +727,45 @@ export default {
                     </template>
                   </SettingsFormField>
                 </section>
+
+                <section
+                  v-if="canDeleteStore"
+                  class="rounded-lg border border-destructive/40 p-4"
+                >
+                  <h3 class="text-sm font-semibold text-destructive">
+                    {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
+                  </h3>
+                  <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
+                  </p>
+                  <p
+                    v-if="isLastStore"
+                    class="mt-2 text-sm text-muted-foreground"
+                  >
+                    {{ $t("pages.storeDetailPage.deleteLastStoreError") }}
+                  </p>
+                  <Button
+                    class="mt-4"
+                    variant="destructive"
+                    :disabled="isLastStore || isSaving"
+                    @click="openDeleteDialog"
+                  >
+                    <Trash2 class="mr-2 size-4" />
+                    {{ $t("pages.storeDetailPage.deleteStoreButton") }}
+                  </Button>
+                </section>
+              </TabsContent>
+
+              <TabsContent value="branding" class="mt-0 outline-none">
+                <BrandingForm
+                  v-if="editTab === 'branding' && editingStore"
+                  ref="brandingForm"
+                  :store-id="editingStore.id"
+                  :apply-live="brandingApplyLive"
+                  compact
+                  @update:dirty="(v) => (brandingFormDirty = v)"
+                  @update:saving="(v) => (brandingFormSaving = v)"
+                />
               </TabsContent>
 
               <TabsContent value="currencies" class="mt-0 space-y-5 outline-none">
@@ -771,40 +836,38 @@ export default {
 
                 <div v-if="availableCurrencyOptions.length" class="rounded-lg border border-dashed p-4">
                   <div class="mb-3 text-sm font-medium">{{ $t("pages.storesPage.addCurrencyTitle") }}</div>
-                  <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <SettingsFormField
-                      :label="$t('pages.storesPage.columnCurrency')"
-                      class="min-w-0 flex-1 gap-1"
-                    >
-                      <Select v-model="newCurrencyCode" :disabled="isSaving">
-                        <SelectTrigger>
-                          <SelectValue :placeholder="$t('pages.storesPage.addCurrencyPlaceholder')" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem v-for="c in availableCurrencyOptions" :key="c.code" :value="c.code">
-                            {{ c.label }}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <FieldGroup class="gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+                    <SettingsFormField :label="$t('pages.storesPage.columnCurrency')">
+                      <SearchableSelect
+                        v-model="newCurrencyCode"
+                        :options="availableCurrencySelectOptions"
+                        :placeholder="$t('pages.storesPage.addCurrencyPlaceholder')"
+                        :disabled="isSaving"
+                      />
                     </SettingsFormField>
                     <SettingsFormField
                       :label="$t('pages.storesPage.rateToPlaceholder', { base: storeBaseCurrency || $t('pages.storesPage.baseFallback') })"
-                      class="gap-1"
                     >
                       <Input
                         v-model="newCurrencyRate"
                         type="number"
                         step="0.01"
                         min="0"
-                        class="w-full sm:w-[140px]"
+                        class="w-full"
                         :disabled="isSaving"
                       />
                     </SettingsFormField>
-                    <Button variant="secondary" :disabled="isSaving" @click="addCurrency">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      class="w-full sm:w-auto"
+                      :disabled="isSaving"
+                      @click="addCurrency"
+                    >
                       <Plus class="mr-1.5 size-4" />
                       {{ $t("common.add") }}
                     </Button>
-                  </div>
+                  </FieldGroup>
                 </div>
               </TabsContent>
 
@@ -839,9 +902,6 @@ export default {
                         class="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
                         :class="editForm.memberIds.includes(user.id) ? 'bg-muted/25' : ''"
                       >
-                        <div class="flex size-9 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-semibold tracking-wide text-muted-foreground">
-                          {{ userInitials(user.userName) }}
-                        </div>
                         <div class="min-w-0 flex-1">
                           <div class="truncate text-sm font-medium">{{ user.userName }}</div>
                           <div class="text-xs tabular-nums text-muted-foreground">ID {{ user.id }}</div>
@@ -856,47 +916,32 @@ export default {
                   </ul>
                 </div>
               </TabsContent>
-
-              <section
-                v-if="canDeleteStore"
-                class="mt-8 rounded-lg border border-destructive/40 p-4"
-              >
-                <h3 class="text-sm font-semibold text-destructive">
-                  {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
-                </h3>
-                <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
-                </p>
-                <p
-                  v-if="isLastStore"
-                  class="mt-2 text-sm text-muted-foreground"
-                >
-                  {{ $t("pages.storeDetailPage.deleteLastStoreError") }}
-                </p>
-                <Button
-                  class="mt-4"
-                  variant="destructive"
-                  :disabled="isLastStore || isSaving"
-                  @click="openDeleteDialog"
-                >
-                  <Trash2 class="mr-2 size-4" />
-                  {{ $t("pages.storeDetailPage.deleteStoreButton") }}
-                </Button>
-              </section>
             </div>
           </div>
         </Tabs>
 
         <DialogFooter variant="bar" class="sm:justify-between">
           <p class="hidden text-xs text-muted-foreground sm:block">
-            {{ $t("pages.storesPage.saveHint") }}
+            {{
+              editTab === "branding"
+                ? $t("pages.storesPage.brandingSaveHint")
+                : $t("pages.storesPage.saveHint")
+            }}
           </p>
           <div class="flex w-full gap-2 sm:w-auto">
-            <Button variant="outline" class="flex-1 sm:flex-none" :disabled="isSaving" @click="closeEditDialog">
+            <Button variant="outline" class="flex-1 sm:flex-none" :disabled="isSaving || brandingFormSaving" @click="closeEditDialog">
               {{ $t("common.cancel") }}
             </Button>
-            <Button class="flex-1 sm:flex-none" :disabled="isSaving || !editingStore" @click="saveStore">
-              <Spinner v-if="isSaving" class="mr-2" />
+            <Button
+              class="flex-1 sm:flex-none"
+              :disabled="
+                editTab === 'branding'
+                  ? brandingFormSaving || !brandingFormDirty || !editingStore
+                  : isSaving || !editingStore
+              "
+              @click="saveDialog"
+            >
+              <Spinner v-if="isSaving || brandingFormSaving" class="mr-2" />
               <Save v-else class="mr-2 size-4" />
               {{ $t("common.save") }}
             </Button>

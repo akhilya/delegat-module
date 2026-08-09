@@ -209,10 +209,31 @@ const isFinished = computed(() =>
 
 const isRunning = computed(() => props.operation.status === "running");
 const isPaused = computed(() => props.operation.status === "paused");
+const NON_CANCELLABLE_TYPES = new Set([
+  "single-export",
+  "single-import",
+  "price-export",
+  "price-import",
+  "stock-export",
+  "stock-import",
+  "excel-import",
+]);
+
 const supportsPause = computed(() =>
-  !["file-upload", "file-delete", "folder-archive", "folder-delete"].includes(props.operation.type),
+  ![
+    "file-upload",
+    "file-delete",
+    "folder-archive",
+    "folder-delete",
+    "product-transfer",
+    ...NON_CANCELLABLE_TYPES,
+  ].includes(props.operation.type),
 );
-const canStop = computed(() => isRunning.value || isPaused.value);
+const canStop = computed(
+  () =>
+    (isRunning.value || isPaused.value) &&
+    !NON_CANCELLABLE_TYPES.has(props.operation.type),
+);
 const canExpand = computed(() => true);
 
 function formatDuration(ms) {
@@ -248,6 +269,16 @@ const hasLogs = computed(() => (props.operation.logs?.length || 0) > 0);
 const logsLoaded = computed(() => !props.operation._fromHistory || props.operation._logsLoaded);
 const showEmptyLogs = computed(() =>
   expanded.value && logsLoaded.value && !loadingLogs.value && !hasLogs.value,
+);
+const emptyLogsTitle = computed(() =>
+  isFinished.value
+    ? t("operations.logsUnavailableTitle")
+    : t("operations.logsEmptyRunningTitle"),
+);
+const emptyLogsDescription = computed(() =>
+  isFinished.value
+    ? t("operations.logsUnavailableDescription")
+    : t("operations.logsEmptyRunningDescription"),
 );
 
 const hasAiModels = computed(() => {
@@ -534,8 +565,8 @@ async function downloadArtifact() {
             v-else-if="showEmptyLogs"
             class="rounded-md border border-dashed bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground"
           >
-            <p class="font-medium text-foreground/80">{{ t("operations.logsUnavailableTitle") }}</p>
-            <p class="mt-0.5 leading-snug">{{ t("operations.logsUnavailableDescription") }}</p>
+            <p class="font-medium text-foreground/80">{{ emptyLogsTitle }}</p>
+            <p class="mt-0.5 leading-snug">{{ emptyLogsDescription }}</p>
           </div>
 
           <div class="flex flex-wrap items-center gap-1.5 pt-1">

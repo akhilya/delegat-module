@@ -29,16 +29,17 @@ import {
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
+  AlertTriangle,
   Check,
   Copy,
   KeyRound,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   UserCheck,
   UserPlus,
-  Users,
 } from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
@@ -74,20 +75,22 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
+    AlertTriangle,
     Check,
     Copy,
     KeyRound,
     Pencil,
     Plus,
+    RefreshCw,
     Save,
     Trash2,
     UserCheck,
     UserPlus,
-    Users
   },
   data() {
     return {
       users: [],
+      loadError: false,
       me: null,
       editingUser: null,
       editForm: {
@@ -196,11 +199,18 @@ export default {
 
     async fetchUsers() {
       this.isLoading = true;
+      this.loadError = false;
       await this.getAdminUsers({
         onSuccess: (response) => {
-          this.users = response.data.value ?? response.data ?? [];
+          const list = response.data.value ?? response.data ?? [];
+          this.users = Array.isArray(list) ? list : [];
+          if (this.users.length === 0) {
+            this.loadError = true;
+          }
         },
         onError: (error) => {
+          this.users = [];
+          this.loadError = true;
           displaySonnerError(error);
         },
       });
@@ -422,8 +432,8 @@ export default {
 </script>
 
 <template>
-  <div>
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
       <Button @click="openInviteDialog">
         <UserPlus class="size-4 mr-2" />
         {{ $t("pages.usersPage.invite.button") }}
@@ -432,15 +442,15 @@ export default {
 
     <PageSection
       :loading="isLoading"
-      :empty="users.length === 0"
-      :empty-icon="Users"
-      :empty-title="$t('pages.usersPage.emptyTitle')"
-      :empty-description="$t('pages.usersPage.emptyDescription')"
+      :empty="loadError"
+      :empty-icon="AlertTriangle"
+      :empty-title="$t('pages.usersPage.loadErrorTitle')"
+      :empty-description="$t('pages.usersPage.loadErrorDescription')"
     >
       <template #empty-action>
-        <Button @click="openInviteDialog">
-          <UserPlus class="size-4 mr-2" />
-          {{ $t("pages.usersPage.invite.button") }}
+        <Button variant="outline" @click="fetchUsers">
+          <RefreshCw class="mr-2 size-4" />
+          {{ $t("common.retry") }}
         </Button>
       </template>
 

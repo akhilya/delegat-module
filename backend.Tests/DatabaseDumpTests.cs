@@ -1,9 +1,11 @@
 using Delegat.Controllers;
 using Delegat.Infrastructure.Configuration;
+using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
@@ -81,8 +83,6 @@ public class DatabaseDumpTests
     [Fact]
     public async Task DefaultsExtraFile_IsWrittenWithoutUtf8Bom()
     {
-        // mysqldump aborts if the option file starts with EF BB BF:
-        // "Found option without preceding group in config file".
         Assert.Empty(DatabaseDumpService.DefaultsExtraFileEncoding.GetPreamble());
 
         var path = Path.Combine(Path.GetTempPath(), $"delegat-cnf-bom-{Guid.NewGuid():N}.cnf");
@@ -111,16 +111,40 @@ public class DatabaseDumpTests
 
     private static SettingsController CreateController(IDatabaseDumpService dump)
     {
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var db = new DataContext(options);
+        var quota = new QuotaService(new UnitOfWork(db), db);
+        var entitlements = new PlatformEntitlementsService(db);
         var controller = new SettingsController(
             dump,
             new StubLoggingSettings(),
             new StubPublicApiSettings(),
-            new StubBrandingSettings());
+            new StubBrandingSettings(),
+            new StubCurrentUser(),
+            quota,
+            new StubOverageTrim(),
+            entitlements);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),
         };
         return controller;
+    }
+
+    private sealed class StubOverageTrim : IOverageTrimService
+    {
+        public Task<OverageTrimPreviewDto> PreviewAsync(CancellationToken ct = default) =>
+            Task.FromResult(new OverageTrimPreviewDto(
+                false, null, false,
+                Array.Empty<OverageTrimItemDto>(),
+                Array.Empty<OverageTrimItemDto>(),
+                Array.Empty<OverageTrimItemDto>(),
+                0, 0, 0, 0));
+
+        public Task<OverageTrimResultDto> ExecuteAsync(CancellationToken ct = default) =>
+            Task.FromResult(new OverageTrimResultDto(0, 0, 0, 0));
     }
 
     private sealed class StubLoggingSettings : ILoggingSettingsService
@@ -148,18 +172,35 @@ public class DatabaseDumpTests
     private sealed class StubBrandingSettings : IBrandingSettingsService
     {
         public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public Task<BrandingSettingsDto> GetAsync(CancellationToken ct = default) =>
-            Task.FromResult(new BrandingSettingsDto("Delegat.Module", null, "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow));
-        public Task<BrandingSettingsDto> UpdateAsync(UpdateBrandingSettingsRequest request, CancellationToken ct = default) =>
-            GetAsync(ct);
-        public Task<BrandingSettingsDto> UploadLogoAsync(IFormFile file, CancellationToken ct = default) =>
-            GetAsync(ct);
-        public Task<BrandingSettingsDto> UploadFaviconAsync(IFormFile file, CancellationToken ct = default) =>
-            GetAsync(ct);
-        public Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(CancellationToken ct = default) =>
+        public BrandingSettingsDto GetDefaults() =>
+            new("Delegat.Module", "", "/logo-square-favicon.webp", false, false, null, null, DateTime.UtcNow);
+        public Task<BrandingSettingsDto> GetForStoreAsync(int storeId, CancellationToken ct = default) =>
+            Task.FromResult(GetDefaults() with { storeId = storeId });
+        public Task<BrandingSettingsDto> UpdateAsync(int storeId, UpdateBrandingSettingsRequest request, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<BrandingSettingsDto> UploadLogoAsync(int storeId, IFormFile file, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<BrandingSettingsDto> UploadFaviconAsync(int storeId, IFormFile file, CancellationToken ct = default) =>
+            GetForStoreAsync(storeId, ct);
+        public Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(int storeId, CancellationToken ct = default) =>
             Task.FromResult<(Stream Stream, string ContentType)?>(null);
-        public Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(CancellationToken ct = default) =>
+        public Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(int storeId, CancellationToken ct = default) =>
             Task.FromResult<(Stream Stream, string ContentType)?>(null);
+        public Task DeleteForStoreAsync(int storeId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(IEnumerable<int> storeIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<int, string>>(
+                storeIds.Distinct().ToDictionary(id => id, _ => "/logo-square-favicon.webp"));
+    }
+
+    private sealed class StubCurrentUser : Delegat.Infrastructure.Auth.ICurrentUserService
+    {
+        public bool IsAuthenticated => true;
+        public int? GetUserId() => 1;
+        public Task<Delegat.Models.User?> GetUserAsync(CancellationToken ct = default) =>
+            Task.FromResult<Delegat.Models.User?>(null);
+        public int? GetSelectedStoreId() => 1;
+        public Task<int?> GetSelectedStoreIdAsync(CancellationToken ct = default) =>
+            Task.FromResult<int?>(1);
     }
 
     private sealed class FakeDumpService : IDatabaseDumpService

@@ -85,12 +85,15 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - Products table shows loading from first paint (was empty while categories/attributes loaded before the products request).
 
 - **MinIO public URLs:** marketplace exports use `MINIO_PUBLIC_ENDPOINT` (host[:port], scheme stripped if pasted) + `MINIO_PUBLIC_SECURE`. CP provisions `storage.{label}.{INSTANCE_HOST_BASE}` via Traefik; API↔MinIO stays on Docker `minio-${STACK_ID}:9000`. Self-host must set a reachable public host or URLs fall back to the internal endpoint.
-- **Runtime** branding: Settings → Branding modal and first-run Setup → Branding step (name, description, logo, favicon, primary/accent).
-- Singleton table `instanceBrandingSettings`; API under `/api/settings/branding` (GET is anonymous).
+- **Runtime** branding: Settings → Stores → store dialog **Branding** tab and first-run Setup → Branding step (logo, favicon, primary/accent) — **per store**. Display name follows the store name (not separately editable). Favicon also shown in the sidebar store switcher.
+- Table `storeBrandingSettings` (1:1 with `stores`); API: anonymous/selected-store under `/settings/branding`; per-store admin under `/stores/{id}/branding` (`StoreSettingsManage`). Mutate requires `StoreSettingsManage`.
+- **Quotas / overage:** Settings → Administration (Overview) shows `MAX_*` vs usage; Platform Link heartbeat sends usage; entitlements cache holds `OveragePurgeAt`. Instance auto-trims when due (products/connections/files per OverageTrimService rules). CP clears purge flag when reported usage is under caps. Product **clone/move** (`ProductTransferService`) enforces the same product/file/storage quotas on the **target** store as create/upload.
+- **Operations (side panel):** model is `Operation` + queue tables + hosted workers. Client ops (`file-upload`/`file-delete`, `batchType=client`) are abandoned by cleanup after ~20m if left `running`. Request-scoped sync types hide Stop in UI (cannot cancel mid-HTTP). `product-transfer` has Stop via queue + status watcher; Pause is hidden. Queue cleanup also orphans transfer/bulk/folder when the op is cancelled and fails ops still running after 24h.
 - **Defaults:** no logo (name-only until upload); favicon = Control Plane square `/logo-square-favicon.webp` (copied into `frontend/public`).
 - Legacy static paths `/logo@0,25x.webp` and `/logo_sm@0,15x.webp` resolve as “no logo” / CP favicon.
-- **Seed once** from env: `BRAND_NAME`, `BRAND_DESCRIPTION`, `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY`, `BRAND_ACCENT`. After first boot, admin UI is source of truth.
-- Frontend: [`frontend/src/brand.js`](frontend/src/brand.js); shared form [`BrandingForm.vue`](frontend/src/components/settings/BrandingForm.vue).
+- **Seed** from env `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_PRIMARY`, `BRAND_ACCENT` when a store’s branding row is first created; `name` is taken from the store. After that, admin UI is source of truth for assets/colors. (`BRAND_DESCRIPTION` is unused.)
+- Frontend: [`frontend/src/brand.js`](frontend/src/brand.js); shared form [`BrandingForm.vue`](frontend/src/components/settings/BrandingForm.vue). Re-loads on store switch.
+- Setup order: Welcome → Store → Branding → Done (Setup uses AuthLayout `xl`).
 - CP may inject empty/filled `BRAND_*` at provision (`BuildEnvFile`); no CP Ops brand UI yet.
 
 - **Docs links:** SPA resolves docs origin from runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker `DOCS_PUBLIC_URL` → `runtime-config.js`, or Vite middleware reading repo-root `.env.dev`), else build-time `VITE_DOCS_PUBLIC_URL`, else dev `http://localhost:5174` / prod `https://docs.module.delegat.pro`. Helpers: [`frontend/src/utils/docsUrl.js`](frontend/src/utils/docsUrl.js). CP sets `DOCS_PUBLIC_URL` on every provisioned instance.
@@ -105,7 +108,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 | Frontend | Vue 3 + Vite + shadcn-vue (reka-ui); icons = **Hugeicons** via [`frontend/src/lib/icons.js`](frontend/src/lib/icons.js) (Lucide import names aliased in Vite) |
 | Migrations | `backend/Migrations/` — Baseline squash `20260731183033_Baseline` then additive |
 | Public API | `/api/v1`, docs in `docs/api/public-v1.md` |
-| Settings toggles | Logging / Public API / Branding singletons + services |
+| Settings toggles | Logging / Public API singletons; Branding per store |
 
 ---
 

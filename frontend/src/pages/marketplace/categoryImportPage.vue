@@ -405,10 +405,11 @@ export default {
           <div class="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
             <div
               v-if="!importCategoryId"
-              class="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed"
+              class="flex min-h-0 w-full flex-1 flex-col rounded-lg border border-dashed"
             >
               <EmptyState
-                class="flex-1 py-12"
+                class="w-full flex-1 py-12"
+                :framed="false"
                 :title="$t('marketplace.categoryImportPage.selectCategoryTitle')"
                 :description="$t('marketplace.categoryImportPage.selectCategoryDescription')"
               >

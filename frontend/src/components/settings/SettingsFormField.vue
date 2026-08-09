@@ -117,7 +117,7 @@ const showDescriptionTooltip = computed(
             </TooltipContent>
           </Tooltip>
         </div>
-        <FieldContent class="min-w-0 w-full overflow-hidden">
+        <FieldContent class="min-w-0 w-full">
           <slot />
         </FieldContent>
         <FieldDescription

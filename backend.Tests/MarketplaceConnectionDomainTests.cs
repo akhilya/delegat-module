@@ -190,7 +190,7 @@ public class MarketplaceConnectionDomainTests
             var store = data.AddStore();
             data.AddConnection(store.Id);
             await data.SaveAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
 
             await quota.EnsureConnectionQuotaAsync(store.Id);
         }
@@ -211,7 +211,7 @@ public class MarketplaceConnectionDomainTests
             var store = data.AddStore();
             data.AddConnection(store.Id);
             await data.SaveAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
 
             var error = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureConnectionQuotaAsync(store.Id));
 
@@ -235,7 +235,7 @@ public class MarketplaceConnectionDomainTests
             var second = data.AddStore();
             data.AddConnection(second.Id);
             await data.SaveAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
 
             await quota.EnsureConnectionQuotaAsync(first.Id);
         }
@@ -257,7 +257,7 @@ public class MarketplaceConnectionDomainTests
             data.AddConnection(store.Id);
             data.AddConnection(store.Id, "wildberries");
             await data.SaveAsync();
-            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db));
+            var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
 
             await quota.EnsureConnectionQuotaAsync(store.Id);
         }

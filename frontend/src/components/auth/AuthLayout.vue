@@ -3,12 +3,29 @@ import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { Card, CardContent } from "@/components/ui/card";
 import { brandLogo, brandName } from "@/brand";
+import { computed } from "vue";
 
-defineProps({
+const props = defineProps({
   /** Page action under the brand (e.g. Sign in / Sign up) */
   title: { type: String, required: true },
-  /** Wider card for multi-field flows (first-run wizard). */
+  /**
+   * Card width: default (auth), wide (short wizard), xl (branding / multi-column).
+   * Boolean `wide` is a legacy alias for size="wide".
+   */
+  size: {
+    type: String,
+    default: "default",
+    validator: (v) => ["default", "wide", "xl"].includes(v),
+  },
+  /** @deprecated Prefer size="wide" */
   wide: { type: Boolean, default: false },
+});
+
+const centerClass = computed(() => {
+  const size = props.size !== "default" ? props.size : (props.wide ? "wide" : "default");
+  if (size === "xl") return "auth-center--xl";
+  if (size === "wide") return "auth-center--wide";
+  return undefined;
 });
 </script>
 
@@ -18,7 +35,7 @@ defineProps({
       <LanguageSwitcher variant="corner" />
     </div>
 
-    <div class="auth-center" :class="{ 'auth-center--wide': wide }">
+    <div class="auth-center" :class="centerClass">
       <header class="auth-brand">
         <Logo v-if="brandLogo" class="auth-logo" />
         <h1 class="auth-brand-name">{{ brandName }}</h1>
@@ -68,6 +85,10 @@ defineProps({
 
 .auth-center--wide {
   max-width: 26rem;
+}
+
+.auth-center--xl {
+  max-width: 36rem;
 }
 
 .auth-brand {

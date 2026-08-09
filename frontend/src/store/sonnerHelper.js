@@ -30,12 +30,18 @@ export function resolveApiErrorMessage(payload, fallbackKey = "errors.generic") 
 /**
  * Displays an error toast notification from an API error response.
  * @param {Object} error - The error object, typically from an Axios response.
+ *
+ * Skips 409 / 429: the axios response interceptor already toasts those globally
+ * (see main.js). Callers still pass the error for form.setErrors etc.
  */
 export function displaySonnerError(error) {
   if (typeof error === "string") {
     toast.error(error);
     return;
   }
+
+  const status = error?.response?.status;
+  if (status === 409 || status === 429) return;
 
   const payload = error?.response?.data;
   if (!payload) {

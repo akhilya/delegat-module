@@ -19,6 +19,7 @@ import { http, invalidateMeCache } from "@/main";
 import { hasAnyPermission, PERMS } from "@/lib/permissions";
 import { ME_UPDATED_EVENT, notifyMeUpdated } from "@/lib/meCache";
 import { resetSelectedStoreCache } from "@/composables/useSelectedStore";
+import { invalidateBrandingCache, loadBranding } from "@/brand";
 
 export default {
   components: {
@@ -231,7 +232,11 @@ export default {
         onSuccess: async (response) => {
           invalidateMeCache();
           resetSelectedStoreCache();
-          await this.loadShellData(false);
+          invalidateBrandingCache();
+          await Promise.all([
+            this.loadShellData(false),
+            loadBranding(http),
+          ]);
           notifyMeUpdated(this.me);
           this.$store.dispatch("operations/reconnectSignalR");
           const next = response.data.value.next;
@@ -258,12 +263,25 @@ export default {
         this.me = event.detail;
       }
     };
+    this._onStoreBrandingUpdated = (event) => {
+      const detail = event?.detail;
+      if (!detail?.storeId || !detail?.faviconUrl) return;
+      this.memberships = this.memberships.map((store) =>
+        store.id === detail.storeId
+          ? { ...store, faviconUrl: detail.faviconUrl }
+          : store,
+      );
+    };
     window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    window.addEventListener("store-branding-updated", this._onStoreBrandingUpdated);
     this.loadShellData();
   },
   beforeUnmount() {
     if (this._onMeUpdated) {
       window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    }
+    if (this._onStoreBrandingUpdated) {
+      window.removeEventListener("store-branding-updated", this._onStoreBrandingUpdated);
     }
   },
 };

@@ -21,17 +21,20 @@ public class ProductTransferController : ControllerBase
     private readonly ProductTransferService _transferService;
     private readonly DataContext _context;
     private readonly IOperationLogger _operationLogger;
+    private readonly QuotaService _quotaService;
 
     public ProductTransferController(
         ICurrentUserService currentUserService,
         ProductTransferService transferService,
         DataContext context,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        QuotaService quotaService)
     {
         _currentUserService = currentUserService;
         _transferService = transferService;
         _context = context;
         _operationLogger = operationLogger;
+        _quotaService = quotaService;
     }
 
     /// <summary>
@@ -120,6 +123,11 @@ public class ProductTransferController : ControllerBase
         if (skuTaken)
             throw ApiException.BadRequest($"SKU '{newSku}' is already used in the target store", code: "sku_already_used");
 
+        // Target store quotas (clone and move both create a new product + copy files there).
+        var fileCount = source.files.Count;
+        var fileBytes = source.files.Sum(f => f.length);
+        await _quotaService.EnsureTransferQuotasAsync(request.targetStoreId, fileCount, fileBytes);
+
         // ---- Enqueue ----
         var operationId = Guid.NewGuid().ToString("N");
         // Total = all copyable entities (product + attrs + store attrs + folders + files + images + notes + variants)
@@ -157,7 +165,8 @@ public class ProductTransferController : ControllerBase
             ? $"Moving product \"{source.name}\" -> {targetStore.name}"
             : $"Cloning product \"{source.name}\" -> {targetStore.name}";
         await _operationLogger.StartAsync(operationId, sourceStoreId.Value, userId.Value,
-            "product-transfer", title, totalItems: totalItems);
+            "product-transfer", title, totalItems: totalItems,
+            batchId: operationId, batchType: "product-transfer");
 
         return Ok(new
         {

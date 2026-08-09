@@ -4,13 +4,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Delegat.Models;
 
 /// <summary>
-/// Singleton row (Id = 1) for instance white-label branding. Seeded from env on first boot;
-/// afterwards the admin UI is the source of truth (no rebuild required).
+/// Per-store white-label branding. Seeded from BRAND_* env when the row is first created;
+/// afterwards the admin UI is the source of truth.
 /// </summary>
-public class InstanceBrandingSettings
+public class StoreBrandingSettings
 {
-    public const int SingletonId = 1;
-
     public const string DefaultName = "Delegat.Module";
 
     /// <summary>Control Plane square favicon shipped in instance <c>frontend/public</c>.</summary>
@@ -23,14 +21,15 @@ public class InstanceBrandingSettings
     public const string LegacyDefaultFaviconUrl = "/logo_sm@0,15x.webp";
 
     [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.None)]
-    public int Id { get; set; } = SingletonId;
+    public int Id { get; set; }
+
+    public int StoreId { get; set; }
+
+    [ForeignKey(nameof(StoreId))]
+    public Store? Store { get; set; }
 
     [MaxLength(120)]
     public string name { get; set; } = DefaultName;
-
-    [MaxLength(500)]
-    public string? description { get; set; }
 
     /// <summary>MinIO object key for uploaded logo; null uses <see cref="logoUrl"/>.</summary>
     [MaxLength(512)]

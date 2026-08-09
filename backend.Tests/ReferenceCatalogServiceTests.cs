@@ -133,5 +133,7 @@ public class ReferenceCatalogServiceTests
 
         public Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default) =>
+            Task.FromResult<PlatformEntitlementsDto?>(null);
     }
 }

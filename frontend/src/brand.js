@@ -45,6 +45,7 @@ const state = reactive({
   primaryColor: null,
   accentColor: null,
   updatedAt: null,
+  storeId: null,
   loaded: false,
 });
 
@@ -96,11 +97,8 @@ export function applyBranding(dto) {
   if (typeof dto.name === "string" && dto.name.trim()) {
     state.name = dto.name.trim();
   }
-  if (dto.description !== undefined) {
-    state.description = dto.description?.trim()
-      ? dto.description.trim()
-      : `${state.name} - ${t("common.brandDescription")}`;
-  }
+  // Keep a static meta description from env/i18n — brand description field was removed.
+  state.description = `${state.name} - ${t("common.brandDescription")}`;
   if (dto.logoUrl !== undefined) {
     state.logoUrl = normalizeLogoUrl(dto.logoUrl);
   }
@@ -112,6 +110,7 @@ export function applyBranding(dto) {
   state.primaryColor = normalizeHex(dto.primaryColor);
   state.accentColor = normalizeHex(dto.accentColor);
   state.updatedAt = dto.updatedAt ?? null;
+  state.storeId = dto.storeId ?? null;
   state.loaded = true;
 
   applyDocumentChrome();
@@ -210,7 +209,7 @@ export async function loadBranding(http) {
   return loadPromise;
 }
 
-/** Reset in-flight load so the next loadBranding hits the network (after save). */
+/** Reset in-flight load so the next loadBranding hits the network (after save / store switch). */
 export function invalidateBrandingCache() {
   loadPromise = null;
 }

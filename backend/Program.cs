@@ -255,8 +255,11 @@ builder.Services.AddHostedService<PluginHostedService>();
 // Controllers resolved via DI (for cross-controller reuse)
 builder.Services.AddScoped<ProductFolderController>();
 
-// Quotas
+// Quotas / overage trim
 builder.Services.AddScoped<QuotaService>();
+builder.Services.AddScoped<IPlatformEntitlementsService, PlatformEntitlementsService>();
+builder.Services.AddScoped<IOverageTrimService, OverageTrimService>();
+builder.Services.AddHostedService<OverageTrimHostedService>();
 builder.Services.AddScoped<StoreStorageController>();
 
 // Excel import/export
@@ -624,9 +627,22 @@ using (var scope = app.Services.CreateScope())
         .Where(p => p.status == ImageDownloadStatus.InProgress)
         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Pending));
 
-    if (stuckImports + stuckExports + stuckImages > 0)
-        resetLogger.LogWarning("Startup recovery: reset {Imports} imports, {Exports} exports, {Images} image downloads from InProgress to Pending",
-            stuckImports, stuckExports, stuckImages);
+    var stuckTransfers = await db.pendingProductTransfers
+        .Where(p => p.status == ProductTransferStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Pending));
+
+    var stuckBulkUpdates = await db.pendingProductBulkUpdates
+        .Where(p => p.status == ProductBulkUpdateStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Pending));
+
+    var stuckFolderJobs = await db.pendingFolderJobs
+        .Where(p => p.status == FolderJobStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Pending));
+
+    if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs > 0)
+        resetLogger.LogWarning(
+            "Startup recovery: reset {Imports} imports, {Exports} exports, {Images} images, {Transfers} transfers, {Bulk} bulk updates, {Folders} folder jobs from InProgress to Pending",
+            stuckImports, stuckExports, stuckImages, stuckTransfers, stuckBulkUpdates, stuckFolderJobs);
 }
 
 // Middleware pipeline

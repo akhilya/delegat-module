@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { t } from "@/i18n";
 import { PAGE_SETUP } from "@/router";
+import { DEFAULT_BRAND_FAVICON } from "@/brand";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -33,6 +34,16 @@ const emit = defineEmits(["select-store"]);
 const hasMemberships = computed(() => props.memberships.length > 0);
 const isNoStoresAdmin = computed(() => props.emptyMode === "no-stores");
 const showEmptyState = computed(() => !hasMemberships.value && props.emptyMode != null);
+
+const selectedStore = computed(() =>
+  props.memberships.find((s) => s.id === props.selectedStoreId)
+  || props.memberships.find((s) => String(s.id) === String(props.selectedStoreId))
+  || null,
+);
+
+function faviconFor(store) {
+  return store?.faviconUrl || DEFAULT_BRAND_FAVICON;
+}
 </script>
 
 <template>
@@ -44,7 +55,19 @@ const showEmptyState = computed(() => !hasMemberships.value && props.emptyMode !
         @update:model-value="emit('select-store', Number($event))"
       >
         <SelectTrigger class="h-9 w-full bg-background">
-          <SelectValue :placeholder="t('components.appSidebarStoreSwitcher.storePlaceholder')" />
+          <SelectValue :placeholder="t('components.appSidebarStoreSwitcher.storePlaceholder')">
+            <span
+              v-if="selectedStore"
+              class="flex min-w-0 items-center gap-2"
+            >
+              <img
+                :src="faviconFor(selectedStore)"
+                alt=""
+                class="size-4 shrink-0 rounded-sm object-cover"
+              >
+              <span class="truncate">{{ selectedStore.name }}</span>
+            </span>
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
@@ -53,8 +76,16 @@ const showEmptyState = computed(() => !hasMemberships.value && props.emptyMode !
               v-for="store in memberships"
               :key="store.id"
               :value="String(store.id)"
+              :text-value="store.name"
             >
-              {{ store.name }}
+              <span class="flex min-w-0 items-center gap-2">
+                <img
+                  :src="faviconFor(store)"
+                  alt=""
+                  class="size-4 shrink-0 rounded-sm object-cover"
+                >
+                <span class="truncate">{{ store.name }}</span>
+              </span>
             </SelectItem>
           </SelectGroup>
         </SelectContent>

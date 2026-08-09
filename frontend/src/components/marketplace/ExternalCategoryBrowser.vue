@@ -153,6 +153,7 @@ export default {
       >
         <EmptyState
           class="w-full py-12"
+          :framed="false"
           :title="emptyTitle"
           :description="emptyDescription"
         >

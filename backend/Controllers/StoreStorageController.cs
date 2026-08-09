@@ -54,21 +54,63 @@ public class StoreStorageController : ControllerBase
         return storeId.Value;
     }
 
+    /// <summary>File count and storage usage vs plan caps for the selected store (upload preflight).</summary>
+    [HttpGet]
+    [Route("/store-storage/quota")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
+    public async Task<ActionResult<StoreFileQuotaDto>> GetQuota(CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        return Ok(await _quotaService.GetStoreFileQuotaAsync(storeId, ct));
+    }
+
+    /// <summary>
+    /// Lists store files. Without paging/folder query params, returns the full array (legacy).
+    /// With <c>startIndex</c>/<c>pageSize</c> and optional <c>folderId</c>, returns a page
+    /// (<c>items</c>, <c>totalCount</c>, <c>lastPage</c>) scoped to that folder (null = root).
+    /// </summary>
     [HttpGet]
     [Route("/store-storage/files")]
-    public async Task<IActionResult> GetFiles(CancellationToken ct)
+    public async Task<IActionResult> GetFiles(
+        [FromQuery] int? folderId = null,
+        [FromQuery] int? startIndex = null,
+        [FromQuery] int? pageSize = null,
+        CancellationToken ct = default)
     {
         var storeId = await GetSelectedStoreId(ct);
 
-        var files = await _context.storeFiles
+        var query = _context.storeFiles
             .AsNoTracking()
             .Include(f => f.tags)
             .ThenInclude(t => t.tagDefinition)
-            .Where(f => f.storeId == storeId)
-            .OrderByDescending(f => f.uploadDateTime)
-            .ToListAsync(ct);
+            .Where(f => f.storeId == storeId);
 
-        return Ok(files.Select(f => f.MapToDTO(_serviceProvider)));
+        var folderScoped = Request.Query.ContainsKey("folderId") || Request.Query.ContainsKey("inFolder");
+        if (folderScoped)
+            query = query.Where(f => f.folderId == folderId);
+
+        var ordered = query.OrderByDescending(f => f.uploadDateTime);
+
+        // Legacy callers (no paging / folder scope): full array
+        if (startIndex == null && pageSize == null && !folderScoped)
+        {
+            var all = await ordered.ToListAsync(ct);
+            return Ok(all.Select(f => f.MapToDTO(_serviceProvider)));
+        }
+
+        var si = Math.Max(0, startIndex ?? 0);
+        var ps = pageSize ?? 50;
+        if (ps < 1) ps = 50;
+        if (ps > 200) ps = 200;
+
+        var total = await query.CountAsync(ct);
+        var items = await ordered.Skip(si).Take(ps).ToListAsync(ct);
+        return Ok(new
+        {
+            items = items.Select(f => f.MapToDTO(_serviceProvider)),
+            totalCount = total,
+            lastPage = si + ps >= total,
+        });
     }
 
     [HttpPut]

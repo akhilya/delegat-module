@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 
 namespace Delegat.Controllers;
 
@@ -17,19 +18,22 @@ public class UserController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly UserManager<User> _userManager;
     private readonly IPermissionService _permissionService;
+    private readonly IBrandingSettingsService _brandingSettings;
 
     public UserController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         UserManager<User> userManager,
-        IPermissionService permissionService)
+        IPermissionService permissionService,
+        IBrandingSettingsService brandingSettings)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _userManager = userManager;
         _permissionService = permissionService;
+        _brandingSettings = brandingSettings;
     }
 
     [HttpGet]
@@ -190,7 +194,15 @@ public class UserController : ControllerBase
             s => s.members.Any(m => m.Id == user.Id && m.isActive),
             query => query.Include(s => s.members).Include(s => s.currencies));
 
-        var result = stores.Select(s => s.MapToDTO(_serviceProvider)).ToList();
+        var favicons = await _brandingSettings.GetFaviconUrlsAsync(stores.Select(s => s.Id));
+        var result = stores.Select(s =>
+        {
+            var dto = s.MapToDTO(_serviceProvider);
+            dto.faviconUrl = favicons.TryGetValue(s.Id, out var url)
+                ? url
+                : StoreBrandingSettings.DefaultFaviconUrl;
+            return dto;
+        }).ToList();
         return Ok(result);
     }
 

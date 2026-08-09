@@ -22,11 +22,11 @@ import { invalidateMeCache, loadMe } from "@/main";
 import { clearSetupStoreCountCache } from "@/lib/setupStoreCount";
 
 const STEP_WELCOME = "welcome";
-const STEP_BRANDING = "branding";
 const STEP_STORE = "store";
+const STEP_BRANDING = "branding";
 const STEP_DONE = "done";
 
-const STEPS = [STEP_WELCOME, STEP_BRANDING, STEP_STORE, STEP_DONE];
+const STEPS = [STEP_WELCOME, STEP_STORE, STEP_BRANDING, STEP_DONE];
 
 export default {
   components: {
@@ -205,24 +205,24 @@ export default {
     async retryCatalogs() {
       await this.bootstrap();
     },
-    goBrandingStep() {
+    goStoreStep() {
       this.skippedCatalogs = false;
-      this.step = STEP_BRANDING;
+      this.step = STEP_STORE;
     },
     skipCatalogs() {
       this.skippedCatalogs = true;
       this.baseCurrency = "";
       this.timezone = "";
-      this.step = STEP_BRANDING;
+      this.step = STEP_STORE;
     },
     goWelcome() {
       this.step = STEP_WELCOME;
     },
-    backToBranding() {
-      this.step = STEP_BRANDING;
+    backToStore() {
+      this.step = STEP_STORE;
     },
     skipBranding() {
-      this.step = STEP_STORE;
+      this.step = STEP_DONE;
     },
     onBrandingLoaded() {
       this.brandingFormLoading = false;
@@ -231,13 +231,13 @@ export default {
       if (this.brandingSaving) return;
       const form = this.$refs.brandingForm;
       if (!form) {
-        this.step = STEP_STORE;
+        this.step = STEP_DONE;
         return;
       }
       this.brandingSaving = true;
       try {
         const data = await form.save({ quiet: true });
-        if (data) this.step = STEP_STORE;
+        if (data) this.step = STEP_DONE;
       } finally {
         this.brandingSaving = false;
       }
@@ -257,7 +257,7 @@ export default {
             await this.selectCreatedStore(this.createdStoreId);
           }
           displaySonnerSuccess(this.$t("pages.setup.storeCreated"));
-          this.step = STEP_DONE;
+          this.step = STEP_BRANDING;
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -294,7 +294,7 @@ export default {
 </script>
 
 <template>
-  <AuthLayout :title="pageTitle" wide>
+  <AuthLayout :title="pageTitle" size="xl">
     <nav
       class="flex items-center gap-1.5 text-xs"
       :aria-label="$t('pages.setup.stepsAriaLabel')"
@@ -357,7 +357,7 @@ export default {
         <Button
           class="w-full"
           :disabled="!catalogsReady"
-          @click="goBrandingStep"
+          @click="goStoreStep"
         >
           {{ $t("pages.setup.continueCreateStore") }}
         </Button>
@@ -376,48 +376,6 @@ export default {
           @click="skipCatalogs"
         >
           {{ $t("pages.setup.skipCatalogs") }}
-        </Button>
-      </div>
-    </template>
-
-    <template v-else-if="step === STEP_BRANDING">
-      <p class="text-sm text-muted-foreground leading-relaxed">
-        {{ $t("pages.setup.brandingBody") }}
-      </p>
-
-      <div class="max-h-[50vh] overflow-y-auto pr-1">
-        <BrandingForm
-          ref="brandingForm"
-          compact
-          load-on-mount
-          @loaded="onBrandingLoaded"
-        />
-      </div>
-
-      <div class="flex flex-col gap-2 pt-1">
-        <Button
-          class="w-full"
-          :disabled="brandingSaving"
-          @click="continueBranding"
-        >
-          <Spinner v-if="brandingSaving" />
-          {{ $t("pages.setup.brandingContinue") }}
-        </Button>
-        <Button
-          variant="ghost"
-          class="w-full"
-          :disabled="brandingSaving"
-          @click="skipBranding"
-        >
-          {{ $t("pages.setup.brandingSkip") }}
-        </Button>
-        <Button
-          variant="ghost"
-          class="w-full"
-          :disabled="brandingSaving"
-          @click="goWelcome"
-        >
-          {{ $t("common.back") }}
         </Button>
       </div>
     </template>
@@ -477,12 +435,52 @@ export default {
             variant="ghost"
             class="w-full"
             :disabled="submitting"
-            @click="backToBranding"
+            @click="goWelcome"
           >
             {{ $t("common.back") }}
           </Button>
         </div>
       </FieldGroup>
+    </template>
+
+    <template v-else-if="step === STEP_BRANDING">
+      <p class="text-sm text-muted-foreground leading-relaxed">
+        {{ $t("pages.setup.brandingBody") }}
+      </p>
+
+      <BrandingForm
+        ref="brandingForm"
+        compact
+        load-on-mount
+        @loaded="onBrandingLoaded"
+      />
+
+      <div class="flex flex-col gap-2 pt-1">
+        <Button
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="continueBranding"
+        >
+          <Spinner v-if="brandingSaving" />
+          {{ $t("pages.setup.brandingContinue") }}
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="skipBranding"
+        >
+          {{ $t("pages.setup.brandingSkip") }}
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          :disabled="brandingSaving"
+          @click="backToStore"
+        >
+          {{ $t("common.back") }}
+        </Button>
+      </div>
     </template>
 
     <template v-else>

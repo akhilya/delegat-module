@@ -1,6 +1,6 @@
 <script setup>
 import { Spinner } from "@/components/ui/spinner";
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   Upload,
@@ -23,9 +23,13 @@ const props = defineProps({
   loadOnMount: { type: Boolean, default: true },
   /** Compact spacing for narrow auth layout. */
   compact: { type: Boolean, default: false },
+  /** When set, load/save this store’s branding (store settings). Otherwise uses selected store via /settings/branding. */
+  storeId: { type: Number, default: null },
+  /** Apply colors/logo to the live chrome after save/upload (selected store only). */
+  applyLive: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(["loaded", "saved"]);
+const emit = defineEmits(["loaded", "saved", "update:dirty", "update:saving"]);
 
 const { t } = useI18n();
 
@@ -35,8 +39,6 @@ const uploadingLogo = ref(false);
 const uploadingFavicon = ref(false);
 
 const saved = reactive({
-  name: "",
-  description: "",
   logoUrl: "",
   faviconUrl: "",
   hasCustomLogo: false,
@@ -46,8 +48,6 @@ const saved = reactive({
 });
 
 const form = reactive({
-  name: "",
-  description: "",
   logoUrl: "",
   faviconUrl: "",
   hasCustomLogo: false,
@@ -63,11 +63,32 @@ const faviconInput = ref(null);
 const draggingLogo = ref(false);
 const draggingFavicon = ref(false);
 
+function brandingPath(suffix = "") {
+  if (props.storeId != null) {
+    return `/stores/${props.storeId}/branding${suffix}`;
+  }
+  return `/settings/branding${suffix}`;
+}
+
+function afterMutation(data) {
+  applyDto(data);
+  if (props.applyLive) {
+    applyBranding(data);
+    invalidateBrandingCache();
+  }
+  const storeId = data?.storeId ?? props.storeId;
+  if (storeId != null && data?.faviconUrl) {
+    window.dispatchEvent(
+      new CustomEvent("store-branding-updated", {
+        detail: { storeId, faviconUrl: data.faviconUrl, logoUrl: data.logoUrl },
+      }),
+    );
+  }
+}
+
 const dirty = computed(() => {
   return (
-    form.name !== saved.name
-    || (form.description || "") !== (saved.description || "")
-    || (form.primaryColor || "") !== (saved.primaryColor || "")
+    (form.primaryColor || "") !== (saved.primaryColor || "")
     || (form.accentColor || "") !== (saved.accentColor || "")
     || form.clearLogo
     || form.clearFavicon
@@ -78,15 +99,13 @@ const dirty = computed(() => {
   );
 });
 
-const canSave = computed(() => Boolean(form.name.trim()) && !loading.value && !saving.value);
+const canSave = computed(() => !loading.value && !saving.value);
 
-const previewPrimary = computed(() => form.primaryColor || "#343434");
-const previewAccent = computed(() => form.accentColor || "#F7F7F7");
+watch(dirty, (v) => emit("update:dirty", v), { immediate: true });
+watch(saving, (v) => emit("update:saving", v), { immediate: true });
 
 function applyDto(dto) {
   const next = {
-    name: dto.name || "",
-    description: dto.description || "",
     logoUrl: dto.logoUrl || "",
     faviconUrl: dto.faviconUrl || DEFAULT_BRAND_FAVICON,
     hasCustomLogo: dto.hasCustomLogo === true,
@@ -101,7 +120,7 @@ function applyDto(dto) {
 async function load() {
   loading.value = true;
   try {
-    const { data } = await http.get("/settings/branding", { cache: false });
+    const { data } = await http.get(brandingPath(), { cache: false });
     applyDto(data);
     emit("loaded", data);
   } catch (error) {
@@ -142,13 +161,11 @@ async function uploadAsset(file, kind) {
     const body = new FormData();
     body.append("file", file);
     const { data } = await http.post(
-      isLogo ? "/settings/branding/logo" : "/settings/branding/favicon",
+      isLogo ? brandingPath("/logo") : brandingPath("/favicon"),
       body,
       { cache: false },
     );
-    applyDto(data);
-    applyBranding(data);
-    invalidateBrandingCache();
+    afterMutation(data);
     displaySonnerSuccess(
       t(
         isLogo
@@ -156,6 +173,7 @@ async function uploadAsset(file, kind) {
           : "pages.settingsOverviewPage.branding.faviconUploaded",
       ),
     );
+    emit("saved", data);
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -201,7 +219,7 @@ function clearFavicon() {
 }
 
 /**
- * Persist identity/colors/clear flags. Returns dto or null on failure.
+ * Persist colors/clear flags. Returns dto or null on failure.
  * @param {{ quiet?: boolean }} [opts]
  */
 async function save(opts = {}) {
@@ -219,8 +237,6 @@ async function save(opts = {}) {
       && !!(saved.primaryColor || saved.accentColor);
 
     const payload = {
-      name: form.name.trim(),
-      description: form.description.trim(),
       primaryColor: form.primaryColor || "",
       accentColor: form.accentColor || "",
       clearColors: colorsCleared || undefined,
@@ -228,10 +244,8 @@ async function save(opts = {}) {
       clearFavicon: form.clearFavicon || undefined,
     };
 
-    const { data } = await http.put("/settings/branding", payload, { cache: false });
-    applyDto(data);
-    applyBranding(data);
-    invalidateBrandingCache();
+    const { data } = await http.put(brandingPath(), payload, { cache: false });
+    afterMutation(data);
     if (!opts.quiet) {
       displaySonnerSuccess(t("pages.settingsOverviewPage.branding.saved"));
     }
@@ -266,79 +280,6 @@ defineExpose({
   </div>
 
   <div v-else class="space-y-6" :class="{ 'space-y-8': !compact }">
-    <!-- Live preview -->
-    <div class="overflow-hidden rounded-lg border">
-      <div class="border-b bg-muted/20 px-4 py-2 text-xs font-medium text-muted-foreground">
-        {{ t("pages.settingsOverviewPage.branding.previewLabel") }}
-      </div>
-      <div class="flex flex-wrap items-center gap-4 px-4 py-4">
-        <img
-          v-if="form.logoUrl"
-          :src="form.logoUrl"
-          :alt="form.name"
-          class="h-10 w-auto max-w-[8rem] object-contain"
-        />
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-base font-semibold tracking-tight">
-            {{ form.name || "—" }}
-          </div>
-          <div class="truncate text-xs text-muted-foreground">
-            {{ form.description || t("pages.settingsOverviewPage.branding.descriptionPlaceholder") }}
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-white"
-            :style="{ backgroundColor: previewPrimary }"
-          >
-            {{ t("pages.settingsOverviewPage.branding.primarySwatch") }}
-          </span>
-          <span
-            class="inline-flex size-8 items-center justify-center rounded-md border text-[10px] font-medium"
-            :style="{ backgroundColor: previewAccent }"
-          >
-            A
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Identity -->
-    <section class="space-y-4">
-      <div>
-        <h3 class="text-sm font-semibold">
-          {{ t("pages.settingsOverviewPage.branding.identityTitle") }}
-        </h3>
-        <p class="text-xs text-muted-foreground">
-          {{ t("pages.settingsOverviewPage.branding.identityHint") }}
-        </p>
-      </div>
-      <FieldGroup class="gap-4">
-        <SettingsFormField
-          :label="t('pages.settingsOverviewPage.branding.nameLabel')"
-          label-for="brand-name"
-        >
-          <Input
-            id="brand-name"
-            v-model="form.name"
-            maxlength="120"
-            :placeholder="t('pages.settingsOverviewPage.branding.namePlaceholder')"
-          />
-        </SettingsFormField>
-        <SettingsFormField
-          :label="t('pages.settingsOverviewPage.branding.descriptionLabel')"
-          label-for="brand-description"
-        >
-          <Input
-            id="brand-description"
-            v-model="form.description"
-            maxlength="500"
-            :placeholder="t('pages.settingsOverviewPage.branding.descriptionPlaceholder')"
-          />
-        </SettingsFormField>
-      </FieldGroup>
-    </section>
-
     <!-- Assets -->
     <section class="space-y-4">
       <div>
@@ -362,7 +303,7 @@ defineExpose({
           <Button
             type="button"
             variant="outline"
-            class="group flex h-auto w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
+            class="group flex h-auto min-h-[11.5rem] w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
             :class="
               draggingLogo
                 ? 'border-foreground/40 bg-muted/40'
@@ -375,16 +316,15 @@ defineExpose({
             @drop.prevent="onLogoDrop"
           >
             <div
-              v-if="form.logoUrl"
               class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
             >
-              <img :src="form.logoUrl" alt="" class="max-h-14 max-w-14 object-contain" />
-            </div>
-            <div
-              v-else
-              class="mb-3 flex size-10 items-center justify-center rounded-md border bg-background text-muted-foreground"
-            >
-              <Upload class="size-4" />
+              <img
+                v-if="form.logoUrl"
+                :src="form.logoUrl"
+                alt=""
+                class="max-h-14 max-w-14 object-contain"
+              >
+              <Upload v-else class="size-4 text-muted-foreground" />
             </div>
             <p class="text-sm font-medium">
               <Spinner v-if="uploadingLogo" size="sm" class="mr-1 inline" />
@@ -394,18 +334,20 @@ defineExpose({
               {{ t("pages.settingsOverviewPage.branding.dropzoneHint") }}
             </p>
           </Button>
-          <Button
-            v-if="form.hasCustomLogo && !form.clearLogo"
-            type="button"
-            variant="ghost"
-            size="sm"
-            class="h-8 px-2 text-muted-foreground"
-            :disabled="uploadingLogo"
-            @click="clearLogo"
-          >
-            <X class="mr-1 size-3.5" />
-            {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
-          </Button>
+          <div class="mt-1 flex h-8 items-center">
+            <Button
+              v-if="form.hasCustomLogo && !form.clearLogo"
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-8 px-2 text-muted-foreground"
+              :disabled="uploadingLogo"
+              @click="clearLogo"
+            >
+              <X class="mr-1 size-3.5" />
+              {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
+            </Button>
+          </div>
         </SettingsFormField>
 
         <SettingsFormField :label="t('pages.settingsOverviewPage.branding.faviconLabel')">
@@ -419,7 +361,7 @@ defineExpose({
           <Button
             type="button"
             variant="outline"
-            class="group flex h-auto w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
+            class="group flex h-auto min-h-[11.5rem] w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
             :class="
               draggingFavicon
                 ? 'border-foreground/40 bg-muted/40'
@@ -432,16 +374,15 @@ defineExpose({
             @drop.prevent="onFaviconDrop"
           >
             <div
-              v-if="form.faviconUrl"
               class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
             >
-              <img :src="form.faviconUrl" alt="" class="max-h-10 max-w-10 object-contain" />
-            </div>
-            <div
-              v-else
-              class="mb-3 flex size-10 items-center justify-center rounded-md border bg-background text-muted-foreground"
-            >
-              <Upload class="size-4" />
+              <img
+                v-if="form.faviconUrl"
+                :src="form.faviconUrl"
+                alt=""
+                class="max-h-14 max-w-14 object-contain"
+              >
+              <Upload v-else class="size-4 text-muted-foreground" />
             </div>
             <p class="text-sm font-medium">
               <Spinner v-if="uploadingFavicon" size="sm" class="mr-1 inline" />
@@ -451,18 +392,20 @@ defineExpose({
               {{ t("pages.settingsOverviewPage.branding.dropzoneHint") }}
             </p>
           </Button>
-          <Button
-            v-if="form.hasCustomFavicon && !form.clearFavicon"
-            type="button"
-            variant="ghost"
-            size="sm"
-            class="h-8 px-2 text-muted-foreground"
-            :disabled="uploadingFavicon"
-            @click="clearFavicon"
-          >
-            <X class="mr-1 size-3.5" />
-            {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
-          </Button>
+          <div class="mt-1 flex h-8 items-center">
+            <Button
+              v-if="form.hasCustomFavicon && !form.clearFavicon"
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-8 px-2 text-muted-foreground"
+              :disabled="uploadingFavicon"
+              @click="clearFavicon"
+            >
+              <X class="mr-1 size-3.5" />
+              {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
+            </Button>
+          </div>
         </SettingsFormField>
       </div>
     </section>
@@ -500,7 +443,7 @@ defineExpose({
               class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
               :value="form.primaryColor || '#343434'"
               @input="(e) => (form.primaryColor = e.target.value.toUpperCase())"
-            />
+            >
             <Input
               id="brand-primary"
               :model-value="form.primaryColor"
@@ -521,7 +464,7 @@ defineExpose({
               class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
               :value="form.accentColor || '#F7F7F7'"
               @input="(e) => (form.accentColor = e.target.value.toUpperCase())"
-            />
+            >
             <Input
               id="brand-accent"
               :model-value="form.accentColor"

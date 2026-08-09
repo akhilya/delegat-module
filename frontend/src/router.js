@@ -64,6 +64,7 @@ export const PAGE_ADMIN_ERROR_LOGS = "/settings/admin/error-logs";
 export const PAGE_ADMIN_API = "/settings/admin/api";
 export const PAGE_ADMIN_PLUGINS = "/settings/admin/plugins";
 export const PAGE_ADMIN_AI = "/settings/admin/ai";
+export const PAGE_ADMIN_USAGE = "/settings/admin/usage";
 export const PAGE_MARKETPLACE = "/adapter";
 export const PAGE_MARKETPLACE_PLUGINS = "/adapter/plugins";
 export const PAGE_ADAPTER_LOGS = "/settings/adapter-logs";
@@ -192,6 +193,10 @@ export const routes = [
         path: "admin/ai",
         component: AiModelsPage,
         meta: { titleKey: "routes.aiModels", permissions: [PERMS.SettingsPlatform] },
+      },
+      {
+        path: "admin/usage",
+        redirect: PAGE_SETTINGS,
       },
       {
         path: "adapter-logs",

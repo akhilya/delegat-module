@@ -26,6 +26,7 @@ import {
 } from "./composables/useApiAvailability";
 import { toast } from "vue-sonner";
 import i18n, { bootstrapLocale, getLocale, t } from "./i18n";
+import { resolveApiErrorMessage } from "./store/sonnerHelper";
 import {
   clearMeCache,
   getCachedMe,
@@ -171,12 +172,7 @@ http.interceptors.response.use(
     }
 
     if (error.response?.status === 409) {
-      const code = error.response.data?.code;
-      toast.error(
-        (code && t(`errors.${code}`)) ||
-          error.response.data?.title ||
-          t("errors.resourceLimit"),
-      );
+      toast.error(resolveApiErrorMessage(error.response.data, "errors.resourceLimit"));
     }
 
     if (error.response?.status === 429) {

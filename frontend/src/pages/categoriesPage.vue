@@ -145,7 +145,8 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
+    <div class="flex min-h-0 flex-1 flex-col">
+    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
       <Dialog v-model:open="showCreateDialog">
         <DialogTrigger as-child>
           <Button>
@@ -267,5 +268,6 @@ export default {
         </div>
       </div>
     </PageSection>
+    </div>
   </AppPageChrome>
 </template>

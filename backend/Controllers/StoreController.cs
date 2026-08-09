@@ -20,19 +20,22 @@ public class StoreController : ControllerBase
     private readonly IServiceProvider _serviceProvider;
     private readonly IAuthorizationService _authorizationService;
     private readonly IStoreDeletionService _storeDeletion;
+    private readonly IBrandingSettingsService _brandingSettings;
 
     public StoreController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
         IAuthorizationService authorizationService,
-        IStoreDeletionService storeDeletion)
+        IStoreDeletionService storeDeletion,
+        IBrandingSettingsService brandingSettings)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _authorizationService = authorizationService;
         _storeDeletion = storeDeletion;
+        _brandingSettings = brandingSettings;
     }
 
     [HttpGet]
@@ -406,6 +409,57 @@ public class StoreController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Branding for a store (admin store settings).</summary>
+    [HttpGet]
+    [Route("/stores/{id}/branding")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
+    public async Task<ActionResult<BrandingSettingsDto>> GetStoreBranding(int id, CancellationToken ct)
+    {
+        await EnsureStoreExistsAsync(id);
+        return Ok(await _brandingSettings.GetForStoreAsync(id, ct));
+    }
+
+    [HttpPut]
+    [Route("/stores/{id}/branding")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
+    public async Task<ActionResult<BrandingSettingsDto>> PutStoreBranding(
+        int id,
+        [FromBody] UpdateBrandingSettingsRequest request,
+        CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Body required" });
+
+        await EnsureStoreExistsAsync(id);
+        return Ok(await _brandingSettings.UpdateAsync(id, request, ct));
+    }
+
+    [HttpPost]
+    [Route("/stores/{id}/branding/logo")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
+    [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
+    public async Task<ActionResult<BrandingSettingsDto>> UploadStoreBrandingLogo(
+        int id,
+        IFormFile file,
+        CancellationToken ct)
+    {
+        await EnsureStoreExistsAsync(id);
+        return Ok(await _brandingSettings.UploadLogoAsync(id, file, ct));
+    }
+
+    [HttpPost]
+    [Route("/stores/{id}/branding/favicon")]
+    [RequiresPermission(Permissions.StoreSettingsManage, requireStoreMembership: true)]
+    [RequestSizeLimit(BrandingSettingsService.MaxUploadBytes)]
+    public async Task<ActionResult<BrandingSettingsDto>> UploadStoreBrandingFavicon(
+        int id,
+        IFormFile file,
+        CancellationToken ct)
+    {
+        await EnsureStoreExistsAsync(id);
+        return Ok(await _brandingSettings.UploadFaviconAsync(id, file, ct));
+    }
+
     public struct DeleteStoreForm
     {
         public string confirmationName { get; set; }
@@ -434,6 +488,13 @@ public class StoreController : ControllerBase
     {
         public decimal? rateToBase { get; set; }
         public bool? isEnabled { get; set; }
+    }
+
+    private async Task EnsureStoreExistsAsync(int id)
+    {
+        var exists = await _unitOfWork.Repository<Store>().FindAsync(s => s.Id == id);
+        if (exists == null)
+            throw ApiException.NotFound("Store not found", code: "store_not_found");
     }
 
     private static IQueryable<Store> StoreIncludes(IQueryable<Store> query) =>

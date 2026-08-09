@@ -62,9 +62,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { MenuKbd } from "@/components/ui/kbd";
 import { t } from "@/i18n";
 import { randomUuidCompact } from "@/utils/uuid";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 
 const props = defineProps({
-  files: { type: Array, required: true },
+  files: { type: Array, default: () => [] },
   productId: { type: Number, default: null },
   productName: { type: String, default: "" },
   productSku: { type: String, default: "" },
@@ -74,10 +75,14 @@ const props = defineProps({
 
 const emit = defineEmits(["deleteFile", "filesChanged"]);
 
-// Debounced emit for incremental file list refresh during multi-file uploads.
-// Each completed file triggers this; 800ms debounce coalesces rapid completions
-// into a single fetchProduct call.
-const debouncedFilesChanged = useDebounceFn(() => emit("filesChanged"), 800);
+const { formatDateTime: formatStoreDateTime } = useStoreDateTime();
+
+// Soft refresh for parent (product images, etc.) — list itself updates immediately from upload responses.
+const debouncedFilesChanged = useDebounceFn(() => {
+  emit("filesChanged");
+  loadStorageQuota();
+  loadFolders();
+}, 800);
 
 const store = useStore();
 const route = useRoute();
@@ -147,6 +152,32 @@ function filePublicToggleUrl(fileId) {
     : `/products/${productRequired()}/files/${fileId}/public`;
 }
 
+function listFilesUrl(folderId, startIndex, pageSize) {
+  const params = new URLSearchParams();
+  params.set("startIndex", String(startIndex));
+  params.set("pageSize", String(pageSize));
+  // inFolder scopes the list to a folder; omit folderId for root (null)
+  params.set("inFolder", "1");
+  if (folderId != null) params.set("folderId", String(folderId));
+  if (isStoreScope.value) {
+    return `/store-storage/files?${params}`;
+  }
+  return `/products/${productRequired()}/files?${params}`;
+}
+
+function normalizeFileDto(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const id = raw.id ?? raw.Id;
+  return { ...raw, id };
+}
+
+function unwrapUploadedFiles(data) {
+  const body = data?.value ?? data;
+  if (Array.isArray(body)) return body.map(normalizeFileDto);
+  if (Array.isArray(body?.items)) return body.items.map(normalizeFileDto);
+  return [];
+}
+
 
 function shareFolderUrl(folderId) {
   const id = folderId ?? "root";
@@ -177,6 +208,18 @@ const storeTags = ref([]);
 const tagPopoverFileId = ref(null);
 const newTagName = ref("");
 const newTagColor = ref("Red");
+
+// File list owned by this component (paginated per folder; uploads merge immediately)
+const localFiles = ref([]);
+const filesTotalCount = ref(0);
+const filesTotalSizeBytes = ref(0);
+const isLoadingFiles = ref(false);
+const isLoadingMoreFiles = ref(false);
+const hasMoreFiles = ref(false);
+const loadMoreSentinel = ref(null);
+const FILES_PAGE_SIZE = 50;
+let nextFilesStartIndex = 0;
+let loadMoreObserver = null;
 // Values must match C# FileTagColor enum NAMES (JsonStringEnumConverter)
 const TAG_COLORS = [
   { value: "Red", get label() { return t("products.productFileManager.tagColorRed"); }, bg: "bg-red-500", text: "text-white" },
@@ -202,7 +245,7 @@ async function updateTagColor(tagId, newColor) {
     const tag = storeTags.value.find(t => t.id === tagId);
     if (tag) tag.color = newColor;
     // Update all local file refs
-    for (const file of props.files) {
+    for (const file of localFiles.value) {
       const ft = file.tags?.find(t => t.id === tagId);
       if (ft) ft.color = newColor;
     }
@@ -229,7 +272,7 @@ async function commitRenameTag() {
     const tag = storeTags.value.find(t => t.id === renamingTagId.value);
     if (tag) tag.name = trimmed;
     // Update local file refs
-    for (const file of props.files) {
+    for (const file of localFiles.value) {
       const ft = file.tags?.find(t => t.id === renamingTagId.value);
       if (ft) ft.name = trimmed;
     }
@@ -247,12 +290,12 @@ async function loadStoreTags() {
 }
 
 function fileHasTag(fileId, tagId) {
-  const file = props.files.find(f => f.id === fileId);
+  const file = localFiles.value.find(f => f.id === fileId);
   return file?.tags?.some(t => t.id === tagId) ?? false;
 }
 
 async function toggleFileTag(fileId, tagId) {
-  const file = props.files.find(f => f.id === fileId);
+  const file = localFiles.value.find(f => f.id === fileId);
   const tag = storeTags.value.find(t => t.id === tagId);
   const hadTag = fileHasTag(fileId, tagId);
 
@@ -292,7 +335,7 @@ async function createAndAssignTag(fileId) {
     storeTags.value.push(newTag);
     await http.post(fileTagUrl(fileId, newTag.id), null, { cache: false });
     // Optimistic: add tag to file locally
-    const file = props.files.find(f => f.id === fileId);
+    const file = localFiles.value.find(f => f.id === fileId);
     if (file) {
       if (!file.tags) file.tags = [];
       file.tags.push({ id: newTag.id, name: newTag.name, color: newTag.color });
@@ -519,15 +562,7 @@ const currentSubfolders = computed(() => {
     .sort((a, b) => a.name.localeCompare(b.name));
 });
 
-const currentFiles = computed(() => {
-  return props.files
-    .filter((f) => (f.folderId ?? null) === currentFolderId.value)
-    .sort((a, b) => {
-      if (a.contentType < b.contentType) return -1;
-      if (a.contentType > b.contentType) return 1;
-      return 0;
-    });
-});
+const currentFiles = computed(() => localFiles.value);
 
 // File upload
 const { open: openFileDialog, reset: resetFileDialog, onChange } = useFileDialog({
@@ -551,6 +586,87 @@ async function loadFolders() {
     displaySonnerError(error);
   }
   isLoadingFolders.value = false;
+}
+
+function mergeUploadedFiles(data) {
+  const uploaded = unwrapUploadedFiles(data);
+  const folder = currentFolderId.value ?? null;
+  for (const file of uploaded) {
+    const id = file.id;
+    if (id == null) continue;
+    if (localFiles.value.some((f) => f.id === id)) continue;
+    if ((file.folderId ?? null) !== folder) continue;
+    localFiles.value.unshift(file);
+    filesTotalCount.value += 1;
+    filesTotalSizeBytes.value += file.length || 0;
+  }
+}
+
+async function loadFiles({ reset = false } = {}) {
+  if (reset) {
+    nextFilesStartIndex = 0;
+    hasMoreFiles.value = true;
+    localFiles.value = [];
+    filesTotalCount.value = 0;
+    filesTotalSizeBytes.value = 0;
+  }
+  if (!hasMoreFiles.value && !reset) return;
+  if (isLoadingFiles.value || isLoadingMoreFiles.value) return;
+
+  const isFirstPage = reset || nextFilesStartIndex === 0;
+  if (isFirstPage) isLoadingFiles.value = true;
+  else isLoadingMoreFiles.value = true;
+
+  try {
+    const response = await http.get(
+      listFilesUrl(currentFolderId.value, nextFilesStartIndex, FILES_PAGE_SIZE),
+      { cache: false },
+    );
+    const body = response.data?.value ?? response.data;
+    const items = (Array.isArray(body) ? body : (body?.items || [])).map(normalizeFileDto);
+    const lastPage = Array.isArray(body) ? true : !!body?.lastPage;
+    const total = Array.isArray(body) ? items.length : (body?.totalCount ?? items.length);
+
+    if (isFirstPage) {
+      localFiles.value = items;
+    } else {
+      const seen = new Set(localFiles.value.map((f) => f.id));
+      localFiles.value.push(...items.filter((f) => !seen.has(f.id)));
+    }
+    nextFilesStartIndex += items.length;
+    hasMoreFiles.value = !lastPage && items.length > 0;
+    filesTotalCount.value = total;
+    if (isFirstPage) {
+      filesTotalSizeBytes.value = localFiles.value.reduce((sum, f) => sum + (f.length || 0), 0);
+    }
+  } catch (error) {
+    displaySonnerError(error);
+    if (isFirstPage) {
+      localFiles.value = [];
+      hasMoreFiles.value = false;
+    }
+  } finally {
+    isLoadingFiles.value = false;
+    isLoadingMoreFiles.value = false;
+  }
+}
+
+function setupLoadMoreObserver() {
+  if (loadMoreObserver) {
+    loadMoreObserver.disconnect();
+    loadMoreObserver = null;
+  }
+  if (!loadMoreSentinel.value) return;
+  const root = loadMoreSentinel.value.closest(".overflow-auto") || null;
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        loadFiles({ reset: false });
+      }
+    },
+    { root, rootMargin: "120px", threshold: 0 },
+  );
+  loadMoreObserver.observe(loadMoreSentinel.value);
 }
 
 function navigateToFolder(folderId) {
@@ -656,9 +772,96 @@ async function onAreaDrop(e) {
   await uploadFiles(files);
 }
 
+function formatQuotaBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(n < 10 * 1024 * 1024 * 1024 ? 1 : 0)} GB`;
+}
+
+/** Compact label for the path-bar hint, e.g. "2 GB / 4 GB". */
+function formatCompactQuotaBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 * 1024 * 1024) {
+    const mb = n / (1024 * 1024);
+    return mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+  }
+  const gb = n / (1024 * 1024 * 1024);
+  return gb < 10 ? `${gb.toFixed(1)} GB` : `${Math.round(gb)} GB`;
+}
+
+const storageQuota = ref(null); // { used, limit } bytes
+
+const storageQuotaLabel = computed(() => {
+  const q = storageQuota.value;
+  if (!q || q.used == null) return null;
+  const used = formatCompactQuotaBytes(q.used);
+  if (q.limit == null) return used;
+  return `${used} / ${formatCompactQuotaBytes(q.limit)}`;
+});
+
+function applyStorageQuota(quota) {
+  const storage = quota?.storageBytes;
+  if (!storage || storage.used == null) return;
+  storageQuota.value = {
+    used: Number(storage.used) || 0,
+    limit: storage.limit != null ? Number(storage.limit) : null,
+  };
+}
+
+async function loadStorageQuota() {
+  try {
+    const res = await http.get("/store-storage/quota", { cache: false });
+    applyStorageQuota(res.data?.value ?? res.data);
+  } catch {
+    // Non-critical chrome hint
+  }
+}
+
+/** Returns false when the batch cannot fit — shows one clear toast and skips upload. */
+async function assertUploadFitsQuota(filesToUpload) {
+  const neededBytes = filesToUpload.reduce((sum, f) => sum + (f.size || 0), 0);
+  const neededFiles = filesToUpload.length;
+  try {
+    const res = await http.get("/store-storage/quota", { cache: false });
+    const quota = res.data?.value ?? res.data;
+    applyStorageQuota(quota);
+    const files = quota?.files;
+    const storage = quota?.storageBytes;
+
+    if (files?.limit != null && files.used + neededFiles > files.limit) {
+      displaySonnerError(t("errors.quota_files_reached", {
+        used: files.used,
+        limit: files.limit,
+        remaining: Math.max(0, files.remaining ?? (files.limit - files.used)),
+        needed: neededFiles,
+      }));
+      return false;
+    }
+
+    if (storage?.limit != null && storage.used + neededBytes > storage.limit) {
+      const remaining = Math.max(0, storage.remaining ?? (storage.limit - storage.used));
+      displaySonnerError(t("errors.quota_storage_reached", {
+        needed: formatQuotaBytes(neededBytes),
+        remaining: formatQuotaBytes(remaining),
+        limit: formatQuotaBytes(storage.limit),
+      }));
+      return false;
+    }
+  } catch {
+    // Fail open — server still enforces quotas on upload.
+  }
+  return true;
+}
+
 async function uploadFiles(fileList) {
   const filesToUpload = Array.from(fileList);
   if (filesToUpload.length === 0) return;
+
+  if (!(await assertUploadFitsQuota(filesToUpload))) return;
 
   const entries = filesToUpload.map((file) => {
     const entry = reactive({
@@ -693,6 +896,7 @@ async function uploadFiles(fileList) {
     title: uploadTitle,
     progress: { total: totalFiles, completed: 0, failed: 0, pending: totalFiles },
     silent: true,
+    batchType: "client",
     onCancel: () => {
       batchAbort.abort();
       for (const entry of entries) {
@@ -710,6 +914,7 @@ async function uploadFiles(fileList) {
     operationId: opId,
     type: "file-upload",
     title: uploadTitle,
+    batchType: "client",
     totalItems: totalFiles,
   }, { cache: false }).catch(() => {});
 
@@ -748,12 +953,12 @@ async function uploadFiles(fileList) {
     const url = uploadFilesUrl(entry.folderId);
 
     try {
-      await http({
+      const response = await http({
         url,
         method: 'PUT',
         data: formData,
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60 * 60 * 1000,
+        timeout: 15 * 60 * 1000,
         cache: false,
         signal: entry.abortController.signal,
         onUploadProgress: (e) => {
@@ -763,12 +968,12 @@ async function uploadFiles(fileList) {
       entry.status = 'done';
       completedFiles++;
       anyDone = true;
-      // Remove from pendingUploads immediately so the user doesn't see
-      // both the real file (from refreshed props.files) and the ✓ entry.
+      // Show the uploaded file immediately from the API response (before batch ends).
+      mergeUploadedFiles(response.data);
       pendingUploads.value = pendingUploads.value.filter(u => u.id !== entry.id);
       updateOpProgress();
       store.dispatch("operations/addLog", { id: opId, level: "success", message: entry.name });
-      // Refresh file list incrementally - each completed file appears immediately.
+      // Soft refresh parent (images tab / quotas); list itself already updated.
       debouncedFilesChanged();
     } catch (error) {
       if (error?.code === 'ERR_CANCELED' || entry.abortController.signal.aborted || batchAbort.signal.aborted) {
@@ -780,7 +985,7 @@ async function uploadFiles(fileList) {
         entry.status = 'error';
         failedFiles++;
         updateOpProgress();
-        store.dispatch("operations/addLog", { id: opId, level: "error", message: `${entry.name}: ${error?.response?.data?.message || error?.message || t("products.productFileManager.errorFallback")}` });
+        store.dispatch("operations/addLog", { id: opId, level: "error", message: `${entry.name}: ${error?.response?.data?.title || error?.response?.data?.message || error?.message || t("products.productFileManager.errorFallback")}` });
         displaySonnerError(error);
       }
     }
@@ -831,6 +1036,7 @@ async function uploadFiles(fileList) {
   if (anyDone) {
     emit("filesChanged");
     loadFolders();
+    loadStorageQuota();
   }
 }
 
@@ -958,6 +1164,8 @@ async function commitInlineRename() {
   } else {
     try {
       await http.patch(renameFileUrl(target.id), { name: newName }, { cache: false });
+      const file = localFiles.value.find((f) => f.id === target.id);
+      if (file) file.fileName = newName;
       emit("filesChanged");
     } catch (error) {
       displaySonnerError(error);
@@ -978,7 +1186,7 @@ function handleF2Rename() {
     const folder = folders.value.find(f => f.id === id);
     if (folder) startInlineRename('folder', folder);
   } else {
-    const file = props.files.find(f => f.id === id);
+    const file = localFiles.value.find(f => f.id === id);
     if (file) startInlineRename('file', file);
   }
 }
@@ -1115,8 +1323,8 @@ const MAX_ARCHIVE_FILES = 50000;
 function getFolderArchiveStats(folderId) {
   if (folderId == null) {
     return {
-      totalFileCount: props.files.length,
-      totalSizeBytes: props.files.reduce((sum, f) => sum + (f.length || 0), 0),
+      totalFileCount: filesTotalCount.value || localFiles.value.length,
+      totalSizeBytes: filesTotalSizeBytes.value || localFiles.value.reduce((sum, f) => sum + (f.length || 0), 0),
     };
   }
   const folder = folders.value.find((f) => f.id === folderId);
@@ -1239,8 +1447,8 @@ async function confirmDeletePendingFile() {
   if (!fileId) return;
 
   isDeletingSelected.value = true;
-  const file = props.files.find((f) => f.id === fileId);
-  const name = file?.displayName || file?.name || `#${fileId}`;
+  const file = localFiles.value.find((f) => f.id === fileId);
+  const name = file?.fileName || file?.displayName || file?.name || `#${fileId}`;
   await deleteFilesWithOperation([fileId], [name]);
   pendingDeleteFileId.value = null;
   isDeletingSelected.value = false;
@@ -1262,11 +1470,13 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
     title,
     progress: { total: count, completed: 0, failed: 0, pending: count },
     silent: true,
+    batchType: "client",
   });
   http.post("/operations/start", {
     operationId: opId,
     type: "file-delete",
     title,
+    batchType: "client",
     totalItems: count,
   }, { cache: false }).catch(() => {});
 
@@ -1274,6 +1484,10 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
 
   try {
     await http.post(bulkDeleteFilesUrl(), { fileIds }, { cache: false });
+
+    const idSet = new Set(fileIds);
+    localFiles.value = localFiles.value.filter((f) => !idSet.has(f.id));
+    filesTotalCount.value = Math.max(0, filesTotalCount.value - fileIds.length);
 
     // Log each file name
     for (const name of fileNames) {
@@ -1304,28 +1518,46 @@ async function deleteFilesWithOperation(fileIds, fileNames) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadFolders();
   loadStoreTags();
+  loadStorageQuota();
   document.addEventListener('keydown', onKeyDown);
+  await loadFiles({ reset: true });
+  await nextTick();
+  setupLoadMoreObserver();
 });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown);
+  if (loadMoreObserver) {
+    loadMoreObserver.disconnect();
+    loadMoreObserver = null;
+  }
 });
 
-// Reload folder counts when files list changes (e.g. file deleted by parent)
-watch(() => props.files.length, () => {
-  loadFolders();
+watch(currentFolderId, () => {
+  clearSelection();
+  loadFiles({ reset: true }).then(() => nextTick(() => setupLoadMoreObserver()));
+});
+
+watch(loadMoreSentinel, () => {
+  nextTick(() => setupLoadMoreObserver());
 });
 
 watch(() => props.productId, () => {
+  const wasRoot = currentFolderId.value == null;
   currentFolderId.value = null;
   folders.value = [];
   clearSelection();
   router.replace({ query: { ...route.query, folder: undefined } });
   loadFolders();
+  if (wasRoot) loadFiles({ reset: true });
 });
+
+const selectedFileCount = computed(
+  () => selectedItems.value.filter((i) => i.type === "file").length,
+);
 </script>
 
 <template>
@@ -1368,6 +1600,13 @@ watch(() => props.productId, () => {
         <!-- Spacer to catch click for editing -->
         <span class="flex-1" @click="startPathEdit" />
       </template>
+      <span
+        v-if="storageQuotaLabel"
+        class="shrink-0 tabular-nums text-[11px] text-muted-foreground/50 select-none"
+        :title="t('products.productFileManager.storageQuotaHint')"
+      >
+        {{ storageQuotaLabel }}
+      </span>
     </div>
 
     <!-- Delete confirmation -->
@@ -1424,7 +1663,14 @@ watch(() => props.productId, () => {
       </div>
 
       <EmptyState
-        v-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
+        v-if="isLoadingFiles && currentFiles.length === 0 && currentPendingUploads.length === 0"
+        loading
+        :framed="false"
+        class="min-h-[16rem]"
+      />
+
+      <EmptyState
+        v-else-if="currentSubfolders.length === 0 && currentFiles.length === 0 && !isLoadingFolders && !isLoadingFiles && !inlineNewFolder && currentPendingUploads.length === 0 && currentFolderId == null"
         :framed="false"
         :title="t('products.productFileManager.emptyFolderTitle')"
         :description="t('products.productFileManager.emptyFolderDescription')"
@@ -1434,7 +1680,7 @@ watch(() => props.productId, () => {
         </template>
       </EmptyState>
 
-      <table v-if="currentFolderId != null || currentSubfolders.length > 0 || currentFiles.length > 0 || inlineNewFolder || currentPendingUploads.length > 0" class="w-full text-sm">
+      <table v-if="!isLoadingFiles || currentFiles.length > 0 || currentFolderId != null || currentSubfolders.length > 0 || inlineNewFolder || currentPendingUploads.length > 0" class="w-full text-sm">
         <tbody>
           <!-- Go up row (..) -->
           <tr
@@ -1453,6 +1699,7 @@ watch(() => props.productId, () => {
             <td></td>
             <td></td>
             <td></td>
+            <td></td>
             <td class="pr-3 w-10"></td>
           </tr>
 
@@ -1462,7 +1709,7 @@ watch(() => props.productId, () => {
               <Spinner v-if="isCreatingFolder" class="text-muted-foreground" />
               <Folder v-else class="size-4 text-muted-foreground" />
             </td>
-            <td colspan="4">
+            <td colspan="5">
               <input
                 ref="inlineNewFolderInput"
                 v-model="inlineNewFolderName"
@@ -1522,6 +1769,7 @@ watch(() => props.productId, () => {
             </td>
             <td class="text-muted-foreground hidden sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</td>
             <td></td>
+            <td></td>
             <td class="text-muted-foreground">
               {{ folder.fileCount }} {{ folder.fileCount === 1 ? t("products.productFileManager.fileCountOne") : t("products.productFileManager.fileCountMany") }}
             </td>
@@ -1569,17 +1817,14 @@ watch(() => props.productId, () => {
               <Badge variant="secondary" class="font-normal">{{ file.contentType }}</Badge>
             </td>
             <td class="px-4" @click.stop>
-              <Popover>
+              <Popover v-if="file.tags?.length > 0">
                 <PopoverTrigger as-child>
                   <Button type="button" variant="ghost" class="h-auto flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50">
-                    <template v-if="file.tags?.length > 0">
-                      <Badge
-                        v-for="t in file.tags"
-                        :key="t.id"
-                        :class="[tagBgClass(t.color), tagTextClass(t.color), 'text-xs border-0']"
-                      >{{ t.name }}</Badge>
-                    </template>
-                    <Tag v-else class="size-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Badge
+                      v-for="tagItem in file.tags"
+                      :key="tagItem.id"
+                      :class="[tagBgClass(tagItem.color), tagTextClass(tagItem.color), 'text-xs border-0']"
+                    >{{ tagItem.name }}</Badge>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" class="w-64 p-0">
@@ -1658,6 +1903,9 @@ watch(() => props.productId, () => {
                 </PopoverContent>
               </Popover>
             </td>
+            <td class="text-muted-foreground whitespace-nowrap">
+              {{ file.uploadDateTime ? formatStoreDateTime(file.uploadDateTime) : "" }}
+            </td>
             <td class="text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</td>
             <td class="pr-3">
               <div class="flex items-center gap-0.5">
@@ -1714,8 +1962,9 @@ watch(() => props.productId, () => {
             <td class="text-muted-foreground text-xs tabular-nums">
               {{ entry.percent }}%
             </td>
-            <td class="text-muted-foreground">{{ formatBytes(entry.size) }}</td>
             <td></td>
+            <td></td>
+            <td class="text-muted-foreground">{{ formatBytes(entry.size) }}</td>
             <td class="pr-3">
               <Button
                 v-if="entry.status !== 'done'"
@@ -1730,6 +1979,14 @@ watch(() => props.productId, () => {
           </tr>
         </tbody>
       </table>
+
+      <div
+        v-if="hasMoreFiles || isLoadingMoreFiles"
+        ref="loadMoreSentinel"
+        class="flex justify-center py-3"
+      >
+        <Spinner v-if="isLoadingMoreFiles" size="sm" class="text-muted-foreground" />
+      </div>
     </div>
 
     <!-- Context menu -->
@@ -1953,6 +2210,31 @@ watch(() => props.productId, () => {
         <Upload class="size-4 mr-1" />
         {{ t("common.upload") }}
       </Button>
+      <Popover>
+        <PopoverTrigger as-child>
+          <Button size="sm" :disabled="selectedFileCount === 0">
+            <Tag class="size-4 mr-1" />
+            {{ t("products.productFileManager.tagLabel") }}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" class="w-56 p-0">
+          <div class="p-1 max-h-48 overflow-y-auto">
+            <Button
+              v-for="tag in storeTags"
+              :key="tag.id"
+              type="button"
+              variant="ghost"
+              class="flex h-auto items-center gap-2 w-full justify-start font-normal px-2 py-1.5 rounded-sm text-sm"
+              @click="bulkToggleTag(tag.id)"
+            >
+              <span :class="['size-5 rounded-full shrink-0', tagBgClass(tag.color)]" />
+              <span class="truncate flex-1 text-left">{{ tag.name }}</span>
+              <Check v-if="bulkAllHaveTag(tag.id)" class="size-4 text-primary shrink-0" />
+            </Button>
+            <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4">{{ t("products.productFileManager.noTagsLabel") }}</div>
+          </div>
+        </PopoverContent>
+      </Popover>
       <Button v-if="isUploading" variant="destructive" size="sm" @click="cancelAllUploads">
         <X class="size-4 mr-1" />
         {{ t("products.productFileManager.cancelUploadsAction") }}
@@ -1968,31 +2250,6 @@ watch(() => props.productId, () => {
           <X class="size-4 mr-1" />
           {{ t("products.productFileManager.deselectAction") }}
         </Button>
-        <Popover>
-          <PopoverTrigger as-child>
-            <Button variant="outline" size="sm">
-              <Tag class="size-4 mr-1" />
-              {{ t("products.productFileManager.tagLabel") }}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-56 p-0">
-            <div class="p-1 max-h-48 overflow-y-auto">
-              <Button
-                v-for="tag in storeTags"
-                :key="tag.id"
-                type="button"
-                variant="ghost"
-                class="flex h-auto items-center gap-2 w-full justify-start font-normal px-2 py-1.5 rounded-sm text-sm"
-                @click="bulkToggleTag(tag.id)"
-              >
-                <span :class="['size-5 rounded-full shrink-0', tagBgClass(tag.color)]" />
-                <span class="truncate flex-1 text-left">{{ tag.name }}</span>
-                <Check v-if="bulkAllHaveTag(tag.id)" class="size-4 text-primary shrink-0" />
-              </Button>
-              <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4">{{ t("products.productFileManager.noTagsLabel") }}</div>
-            </div>
-          </PopoverContent>
-        </Popover>
         <Button variant="outline" size="sm" @click="deleteSelected">
           <Trash2 class="size-4 mr-1" />
           {{ t("common.delete") }}

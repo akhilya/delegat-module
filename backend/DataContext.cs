@@ -80,7 +80,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Instance runtime settings (admin UI toggles)
     public DbSet<InstanceLoggingSettings> instanceLoggingSettings { get; set; }
     public DbSet<InstancePublicApiSettings> instancePublicApiSettings { get; set; }
-    public DbSet<InstanceBrandingSettings> instanceBrandingSettings { get; set; }
+    public DbSet<InstancePlatformEntitlements> instancePlatformEntitlements { get; set; }
+
+    // Per-store white-label branding
+    public DbSet<StoreBrandingSettings> storeBrandingSettings { get; set; }
 
     // Outbound marketplace HTTP request logs
     public DbSet<AdapterHttpLog> adapterHttpLogs { get; set; }
@@ -450,6 +453,16 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiStoreSettings>()
             .HasIndex(s => s.StoreId)
             .IsUnique();
+
+        // StoreBrandingSettings - one row per store
+        builder.Entity<StoreBrandingSettings>()
+            .HasIndex(s => s.StoreId)
+            .IsUnique();
+        builder.Entity<StoreBrandingSettings>()
+            .HasOne(s => s.Store)
+            .WithMany()
+            .HasForeignKey(s => s.StoreId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<StoreCurrency>()
             .HasIndex(c => new { c.storeId, c.code })

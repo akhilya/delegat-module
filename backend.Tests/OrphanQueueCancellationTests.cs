@@ -121,6 +121,69 @@ public class OrphanQueueCancellationTests
     }
 
     [Fact]
+    public async Task QueryOrphanedProductTransfers_SelectsPendingInProgressForCancelledOps()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.operations.Add(new Operation
+        {
+            operationId = "xfer-cancelled",
+            storeId = 1,
+            authorUserId = 1,
+            type = "product-transfer",
+            title = "Clone",
+            status = "cancelled",
+            batchId = "xfer-cancelled",
+            batchType = "product-transfer",
+            createdAt = DateTime.UtcNow,
+        });
+        db.operations.Add(new Operation
+        {
+            operationId = "xfer-running",
+            storeId = 1,
+            authorUserId = 1,
+            type = "product-transfer",
+            title = "Clone",
+            status = "running",
+            batchId = "xfer-running",
+            batchType = "product-transfer",
+            createdAt = DateTime.UtcNow,
+        });
+
+        db.pendingProductTransfers.AddRange(
+            new PendingProductTransfer
+            {
+                sourceProductId = 1, sourceStoreId = 1, targetStoreId = 2,
+                mode = "clone", authorUserId = 1, batchId = "xfer-cancelled",
+                status = ProductTransferStatus.Pending, createdAt = DateTime.UtcNow,
+            },
+            new PendingProductTransfer
+            {
+                sourceProductId = 2, sourceStoreId = 1, targetStoreId = 2,
+                mode = "clone", authorUserId = 1, batchId = "xfer-cancelled",
+                status = ProductTransferStatus.InProgress, createdAt = DateTime.UtcNow,
+            },
+            new PendingProductTransfer
+            {
+                sourceProductId = 3, sourceStoreId = 1, targetStoreId = 2,
+                mode = "clone", authorUserId = 1, batchId = "xfer-cancelled",
+                status = ProductTransferStatus.Completed, createdAt = DateTime.UtcNow,
+            },
+            new PendingProductTransfer
+            {
+                sourceProductId = 4, sourceStoreId = 1, targetStoreId = 2,
+                mode = "clone", authorUserId = 1, batchId = "xfer-running",
+                status = ProductTransferStatus.Pending, createdAt = DateTime.UtcNow,
+            });
+        await db.SaveChangesAsync();
+
+        var orphans = await QueueCleanupBackgroundService.QueryOrphanedProductTransfers(db).ToListAsync();
+
+        Assert.Equal(2, orphans.Count);
+        Assert.All(orphans, o => Assert.Equal("xfer-cancelled", o.batchId));
+        Assert.DoesNotContain(orphans, o => o.status == ProductTransferStatus.Completed);
+    }
+
+    [Fact]
     public async Task QueryBatchRowsToCancel_IncludesPendingInProgressFailed_Only()
     {
         await using var db = TestDbFactory.CreateDb();

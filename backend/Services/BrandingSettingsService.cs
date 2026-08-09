@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
@@ -8,19 +9,18 @@ namespace Delegat.Services;
 
 public sealed record BrandingSettingsDto(
     string name,
-    string? description,
     string logoUrl,
     string faviconUrl,
     bool hasCustomLogo,
     bool hasCustomFavicon,
     string? primaryColor,
     string? accentColor,
-    DateTime updatedAt);
+    DateTime updatedAt,
+    int? storeId = null);
 
 public sealed class UpdateBrandingSettingsRequest
 {
     public string? name { get; set; }
-    public string? description { get; set; }
     public string? primaryColor { get; set; }
     public string? accentColor { get; set; }
     public bool? clearLogo { get; set; }
@@ -31,23 +31,35 @@ public sealed class UpdateBrandingSettingsRequest
 
 public interface IBrandingSettingsService
 {
+    /// <summary>No-op kept for boot parity with other settings warmers.</summary>
     Task EnsureInitializedAsync(CancellationToken ct = default);
 
-    Task<BrandingSettingsDto> GetAsync(CancellationToken ct = default);
+    /// <summary>Env/Vite defaults when no store is selected (auth pages).</summary>
+    BrandingSettingsDto GetDefaults();
 
-    Task<BrandingSettingsDto> UpdateAsync(UpdateBrandingSettingsRequest request, CancellationToken ct = default);
+    Task<BrandingSettingsDto> GetForStoreAsync(int storeId, CancellationToken ct = default);
 
-    Task<BrandingSettingsDto> UploadLogoAsync(IFormFile file, CancellationToken ct = default);
+    Task<BrandingSettingsDto> UpdateAsync(int storeId, UpdateBrandingSettingsRequest request, CancellationToken ct = default);
 
-    Task<BrandingSettingsDto> UploadFaviconAsync(IFormFile file, CancellationToken ct = default);
+    Task<BrandingSettingsDto> UploadLogoAsync(int storeId, IFormFile file, CancellationToken ct = default);
 
-    Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(CancellationToken ct = default);
+    Task<BrandingSettingsDto> UploadFaviconAsync(int storeId, IFormFile file, CancellationToken ct = default);
 
-    Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(CancellationToken ct = default);
+    Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(int storeId, CancellationToken ct = default);
+
+    Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(int storeId, CancellationToken ct = default);
+
+    /// <summary>Delete branding row and MinIO objects for a store being removed.</summary>
+    Task DeleteForStoreAsync(int storeId, CancellationToken ct = default);
+
+    /// <summary>Favicon URL for list UIs (sidebar switcher). Does not seed missing rows.</summary>
+    Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(
+        IEnumerable<int> storeIds,
+        CancellationToken ct = default);
 }
 
 /// <summary>
-/// Cached instance branding. Seeded once from BRAND_* env; admin UI is source of truth after that.
+/// Per-store branding with in-memory cache keyed by store id.
 /// </summary>
 public sealed class BrandingSettingsService : IBrandingSettingsService
 {
@@ -71,20 +83,8 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
     private readonly IStorageService _storage;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BrandingSettingsService> _logger;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-
-    private volatile BrandingSettingsDto _cache = new(
-        name: InstanceBrandingSettings.DefaultName,
-        description: null,
-        logoUrl: "",
-        faviconUrl: InstanceBrandingSettings.DefaultFaviconUrl,
-        hasCustomLogo: false,
-        hasCustomFavicon: false,
-        primaryColor: null,
-        accentColor: null,
-        updatedAt: DateTime.UnixEpoch);
-
-    private volatile bool _initialized;
+    private readonly ConcurrentDictionary<int, BrandingSettingsDto> _cache = new();
+    private readonly ConcurrentDictionary<int, SemaphoreSlim> _gates = new();
 
     public BrandingSettingsService(
         IServiceScopeFactory scopeFactory,
@@ -98,75 +98,95 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         _logger = logger;
     }
 
-    public async Task EnsureInitializedAsync(CancellationToken ct = default)
+    public Task EnsureInitializedAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public BrandingSettingsDto GetDefaults() => CreateDefaultsDto();
+
+    public async Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(
+        IEnumerable<int> storeIds,
+        CancellationToken ct = default)
     {
-        if (_initialized) return;
-        await GetAsync(ct);
+        var ids = storeIds.Distinct().Where(id => id > 0).ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, string>();
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        var rows = await db.storeBrandingSettings
+            .AsNoTracking()
+            .Where(b => ids.Contains(b.StoreId))
+            .ToListAsync(ct);
+
+        var byId = rows.ToDictionary(r => r.StoreId);
+        var result = new Dictionary<int, string>(ids.Count);
+        foreach (var id in ids)
+        {
+            byId.TryGetValue(id, out var row);
+            result[id] = ResolveFaviconUrl(id, row);
+        }
+
+        return result;
     }
 
-    public async Task<BrandingSettingsDto> GetAsync(CancellationToken ct = default)
+    /// <summary>Resolve list/display favicon without seeding a branding row.</summary>
+    public static string ResolveFaviconUrl(int storeId, StoreBrandingSettings? row)
     {
-        if (_initialized) return _cache;
+        if (row is null)
+            return StoreBrandingSettings.DefaultFaviconUrl;
 
-        await _gate.WaitAsync(ct);
+        if (!string.IsNullOrWhiteSpace(row.faviconObjectKey))
+        {
+            var version = new DateTimeOffset(row.updatedAt.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(row.updatedAt, DateTimeKind.Utc)
+                : row.updatedAt.ToUniversalTime()).ToUnixTimeSeconds();
+            return $"/api/settings/branding/assets/favicon?storeId={storeId}&v={version}";
+        }
+
+        if (IsLegacyOrEmptyFavicon(row.faviconUrl))
+            return StoreBrandingSettings.DefaultFaviconUrl;
+
+        return row.faviconUrl!.Trim();
+    }
+
+    public async Task<BrandingSettingsDto> GetForStoreAsync(int storeId, CancellationToken ct = default)
+    {
+        if (_cache.TryGetValue(storeId, out var cached))
+            return cached;
+
+        var gate = GateFor(storeId);
+        await gate.WaitAsync(ct);
         try
         {
-            if (_initialized) return _cache;
+            if (_cache.TryGetValue(storeId, out cached))
+                return cached;
 
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-            var row = await db.instanceBrandingSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == InstanceBrandingSettings.SingletonId, ct);
-
-            if (row is null)
-            {
-                row = CreateSeedRow();
-                db.instanceBrandingSettings.Add(row);
-                await db.SaveChangesAsync(ct);
-                _logger.LogInformation(
-                    "Seeded instance branding from env (name={Name})",
-                    row.name);
-            }
-
-            _cache = ToDto(row);
-            _initialized = true;
-            return _cache;
+            var row = await EnsureRowTrackedAsync(db, storeId, ct);
+            var dto = ToDto(row);
+            _cache[storeId] = dto;
+            return dto;
         }
         finally
         {
-            _gate.Release();
+            gate.Release();
         }
     }
 
     public async Task<BrandingSettingsDto> UpdateAsync(
+        int storeId,
         UpdateBrandingSettingsRequest request,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await _gate.WaitAsync(ct);
+        var gate = GateFor(storeId);
+        await gate.WaitAsync(ct);
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-            var row = await EnsureRowTrackedAsync(db, ct);
-
-            if (request.name is not null)
-            {
-                var trimmed = request.name.Trim();
-                if (trimmed.Length == 0)
-                    throw ApiException.BadRequest("Brand name cannot be empty.", code: "brand_name_required");
-                if (trimmed.Length > 120)
-                    throw ApiException.BadRequest("Brand name is too long.", code: "brand_name_too_long");
-                row.name = trimmed;
-            }
-
-            if (request.description is not null)
-            {
-                var desc = request.description.Trim();
-                row.description = desc.Length == 0 ? null : (desc.Length > 500 ? desc[..500] : desc);
-            }
+            var row = await EnsureRowTrackedAsync(db, storeId, ct);
 
             if (request.clearColors == true)
             {
@@ -181,6 +201,15 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
                     row.accentColor = NormalizeColorOrNull(request.accentColor);
             }
 
+            // Brand display name tracks the store name (no separate editable brand name).
+            var storeName = await db.stores
+                .AsNoTracking()
+                .Where(s => s.Id == storeId)
+                .Select(s => s.name)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(storeName))
+                row.name = storeName.Trim();
+
             if (request.clearLogo == true)
             {
                 await TryDeleteObjectAsync(row.logoObjectKey, ct);
@@ -194,38 +223,35 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
                 await TryDeleteObjectAsync(row.faviconObjectKey, ct);
                 row.faviconObjectKey = null;
                 row.faviconContentType = null;
-                row.faviconUrl = InstanceBrandingSettings.DefaultFaviconUrl;
+                row.faviconUrl = StoreBrandingSettings.DefaultFaviconUrl;
             }
 
             row.updatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            _cache = ToDto(row);
-            _initialized = true;
-            return _cache;
+            var dto = ToDto(row);
+            _cache[storeId] = dto;
+            return dto;
         }
         finally
         {
-            _gate.Release();
+            gate.Release();
         }
     }
 
-    public Task<BrandingSettingsDto> UploadLogoAsync(IFormFile file, CancellationToken ct = default)
-        => UploadAssetAsync(file, isLogo: true, ct);
+    public Task<BrandingSettingsDto> UploadLogoAsync(int storeId, IFormFile file, CancellationToken ct = default)
+        => UploadAssetAsync(storeId, file, isLogo: true, ct);
 
-    public Task<BrandingSettingsDto> UploadFaviconAsync(IFormFile file, CancellationToken ct = default)
-        => UploadAssetAsync(file, isLogo: false, ct);
+    public Task<BrandingSettingsDto> UploadFaviconAsync(int storeId, IFormFile file, CancellationToken ct = default)
+        => UploadAssetAsync(storeId, file, isLogo: false, ct);
 
-    public async Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(CancellationToken ct = default)
+    public async Task<(Stream Stream, string ContentType)?> OpenLogoStreamAsync(int storeId, CancellationToken ct = default)
     {
-        var dto = await GetAsync(ct);
-        if (!dto.hasCustomLogo) return null;
-
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-        var row = await db.instanceBrandingSettings
+        var row = await db.storeBrandingSettings
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == InstanceBrandingSettings.SingletonId, ct);
+            .FirstOrDefaultAsync(x => x.StoreId == storeId, ct);
         if (row?.logoObjectKey is null) return null;
 
         var stream = await _storage.GetStreamAsync(row.logoObjectKey, ct);
@@ -233,16 +259,13 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         return (stream, row.logoContentType ?? "application/octet-stream");
     }
 
-    public async Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(CancellationToken ct = default)
+    public async Task<(Stream Stream, string ContentType)?> OpenFaviconStreamAsync(int storeId, CancellationToken ct = default)
     {
-        var dto = await GetAsync(ct);
-        if (!dto.hasCustomFavicon) return null;
-
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-        var row = await db.instanceBrandingSettings
+        var row = await db.storeBrandingSettings
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == InstanceBrandingSettings.SingletonId, ct);
+            .FirstOrDefaultAsync(x => x.StoreId == storeId, ct);
         if (row?.faviconObjectKey is null) return null;
 
         var stream = await _storage.GetStreamAsync(row.faviconObjectKey, ct);
@@ -250,7 +273,51 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         return (stream, row.faviconContentType ?? "application/octet-stream");
     }
 
-    private async Task<BrandingSettingsDto> UploadAssetAsync(IFormFile file, bool isLogo, CancellationToken ct)
+    public async Task DeleteForStoreAsync(int storeId, CancellationToken ct = default)
+    {
+        var gate = GateFor(storeId);
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+            var row = await db.storeBrandingSettings
+                .FirstOrDefaultAsync(x => x.StoreId == storeId, ct);
+            if (row is not null)
+            {
+                await TryDeleteObjectAsync(row.logoObjectKey, ct);
+                await TryDeleteObjectAsync(row.faviconObjectKey, ct);
+                db.storeBrandingSettings.Remove(row);
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                // Row may already be cascade-deleted with the store — still purge MinIO keys.
+                try
+                {
+                    var keys = await _storage.ListObjectsByPrefixAsync($"branding/{storeId}/", ct);
+                    foreach (var key in keys)
+                        await TryDeleteObjectAsync(key, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to list branding objects for store {StoreId}", storeId);
+                }
+            }
+
+            _cache.TryRemove(storeId, out _);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<BrandingSettingsDto> UploadAssetAsync(
+        int storeId,
+        IFormFile file,
+        bool isLogo,
+        CancellationToken ct)
     {
         if (file is null || file.Length == 0)
             throw ApiException.BadRequest("File is required.", code: "file_required");
@@ -265,15 +332,16 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
 
         var ext = ExtensionForContentType(contentType);
         var objectKey = isLogo
-            ? $"branding/logo{ext}"
-            : $"branding/favicon{ext}";
+            ? $"branding/{storeId}/logo{ext}"
+            : $"branding/{storeId}/favicon{ext}";
 
-        await _gate.WaitAsync(ct);
+        var gate = GateFor(storeId);
+        await gate.WaitAsync(ct);
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-            var row = await EnsureRowTrackedAsync(db, ct);
+            var row = await EnsureRowTrackedAsync(db, storeId, ct);
 
             var previousKey = isLogo ? row.logoObjectKey : row.faviconObjectKey;
 
@@ -306,39 +374,58 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
             row.updatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            _cache = ToDto(row);
-            _initialized = true;
-            return _cache;
+            var dto = ToDto(row);
+            _cache[storeId] = dto;
+            return dto;
         }
         finally
         {
-            _gate.Release();
+            gate.Release();
         }
     }
 
-    private InstanceBrandingSettings CreateSeedRow()
+    private BrandingSettingsDto CreateDefaultsDto()
     {
         var name = Env("BRAND_NAME");
         if (string.IsNullOrWhiteSpace(name))
-            name = InstanceBrandingSettings.DefaultName;
+            name = StoreBrandingSettings.DefaultName;
 
-        var description = Env("BRAND_DESCRIPTION");
         var logoUrl = Env("BRAND_LOGO_URL");
         var faviconUrl = Env("BRAND_FAVICON_URL");
         var primary = TryNormalizeColor(Env("BRAND_PRIMARY"));
         var accent = TryNormalizeColor(Env("BRAND_ACCENT"));
 
-        return new InstanceBrandingSettings
+        return new BrandingSettingsDto(
+            name: name.Trim(),
+            logoUrl: IsLegacyOrEmptyLogo(logoUrl) ? "" : logoUrl!.Trim(),
+            faviconUrl: IsLegacyOrEmptyFavicon(faviconUrl)
+                ? StoreBrandingSettings.DefaultFaviconUrl
+                : faviconUrl!.Trim(),
+            hasCustomLogo: false,
+            hasCustomFavicon: false,
+            primaryColor: primary,
+            accentColor: accent,
+            updatedAt: DateTime.UnixEpoch,
+            storeId: null);
+    }
+
+    private StoreBrandingSettings CreateSeedRow(int storeId, string? storeName)
+    {
+        var defaults = CreateDefaultsDto();
+        var name = string.IsNullOrWhiteSpace(storeName)
+            ? defaults.name
+            : storeName.Trim();
+        if (name.Length > 120)
+            name = name[..120];
+
+        return new StoreBrandingSettings
         {
-            Id = InstanceBrandingSettings.SingletonId,
-            name = name.Trim(),
-            description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-            logoUrl = string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl.Trim(),
-            faviconUrl = string.IsNullOrWhiteSpace(faviconUrl)
-                ? InstanceBrandingSettings.DefaultFaviconUrl
-                : faviconUrl.Trim(),
-            primaryColor = primary,
-            accentColor = accent,
+            StoreId = storeId,
+            name = name,
+            logoUrl = string.IsNullOrWhiteSpace(defaults.logoUrl) ? null : defaults.logoUrl,
+            faviconUrl = defaults.faviconUrl,
+            primaryColor = defaults.primaryColor,
+            accentColor = defaults.accentColor,
             updatedAt = DateTime.UtcNow,
         };
     }
@@ -351,18 +438,36 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         return Environment.GetEnvironmentVariable(key);
     }
 
-    private async Task<InstanceBrandingSettings> EnsureRowTrackedAsync(DataContext db, CancellationToken ct)
+    private async Task<StoreBrandingSettings> EnsureRowTrackedAsync(
+        DataContext db,
+        int storeId,
+        CancellationToken ct)
     {
-        var row = await db.instanceBrandingSettings
-            .FirstOrDefaultAsync(x => x.Id == InstanceBrandingSettings.SingletonId, ct);
+        var row = await db.storeBrandingSettings
+            .FirstOrDefaultAsync(x => x.StoreId == storeId, ct);
         if (row is not null)
             return row;
 
-        row = CreateSeedRow();
-        db.instanceBrandingSettings.Add(row);
+        var store = await db.stores
+            .AsNoTracking()
+            .Where(s => s.Id == storeId)
+            .Select(s => new { s.Id, s.name })
+            .FirstOrDefaultAsync(ct);
+        if (store is null)
+            throw ApiException.NotFound("Store not found", code: "store_not_found");
+
+        row = CreateSeedRow(storeId, store.name);
+        db.storeBrandingSettings.Add(row);
         await db.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Seeded store branding (storeId={StoreId}, name={Name})",
+            storeId,
+            row.name);
         return row;
     }
+
+    private SemaphoreSlim GateFor(int storeId) =>
+        _gates.GetOrAdd(storeId, _ => new SemaphoreSlim(1, 1));
 
     private async Task TryDeleteObjectAsync(string? key, CancellationToken ct)
     {
@@ -411,7 +516,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         _ => ".bin",
     };
 
-    private static BrandingSettingsDto ToDto(InstanceBrandingSettings row)
+    private static BrandingSettingsDto ToDto(StoreBrandingSettings row)
     {
         var version = new DateTimeOffset(row.updatedAt.Kind == DateTimeKind.Unspecified
             ? DateTime.SpecifyKind(row.updatedAt, DateTimeKind.Utc)
@@ -422,7 +527,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
 
         string logoUrl;
         if (hasCustomLogo)
-            logoUrl = $"/api/settings/branding/assets/logo?v={version}";
+            logoUrl = $"/api/settings/branding/assets/logo?storeId={row.StoreId}&v={version}";
         else if (IsLegacyOrEmptyLogo(row.logoUrl))
             logoUrl = "";
         else
@@ -430,29 +535,29 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
 
         string faviconUrl;
         if (hasCustomFavicon)
-            faviconUrl = $"/api/settings/branding/assets/favicon?v={version}";
+            faviconUrl = $"/api/settings/branding/assets/favicon?storeId={row.StoreId}&v={version}";
         else if (IsLegacyOrEmptyFavicon(row.faviconUrl))
-            faviconUrl = InstanceBrandingSettings.DefaultFaviconUrl;
+            faviconUrl = StoreBrandingSettings.DefaultFaviconUrl;
         else
             faviconUrl = row.faviconUrl!.Trim();
 
         return new BrandingSettingsDto(
             row.name,
-            row.description,
             logoUrl,
             faviconUrl,
             hasCustomLogo,
             hasCustomFavicon,
             row.primaryColor,
             row.accentColor,
-            row.updatedAt);
+            row.updatedAt,
+            row.StoreId);
     }
 
     private static bool IsLegacyOrEmptyLogo(string? url) =>
         string.IsNullOrWhiteSpace(url)
-        || string.Equals(url.Trim(), InstanceBrandingSettings.LegacyDefaultLogoUrl, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(url.Trim(), StoreBrandingSettings.LegacyDefaultLogoUrl, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsLegacyOrEmptyFavicon(string? url) =>
         string.IsNullOrWhiteSpace(url)
-        || string.Equals(url.Trim(), InstanceBrandingSettings.LegacyDefaultFaviconUrl, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(url.Trim(), StoreBrandingSettings.LegacyDefaultFaviconUrl, StringComparison.OrdinalIgnoreCase);
 }

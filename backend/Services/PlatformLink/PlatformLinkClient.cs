@@ -12,6 +12,7 @@ public interface IPlatformLinkClient
     Task<IReadOnlyList<PlatformTimezoneDto>> GetTimezonesAsync(CancellationToken ct = default);
     Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default);
     Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default);
+    Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default);
 }
 
 public sealed class PlatformLinkClient : IPlatformLinkClient
@@ -54,6 +55,23 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
     {
         if (!IsEnabled) return;
         await SendAsync(HttpMethod.Post, "/platform/v1/heartbeat", heartbeat, ct);
+    }
+
+    public async Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+
+        using var response = await SendRawAsync(HttpMethod.Get, "/platform/v1/entitlements", body: null, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Platform Link GET /platform/v1/entitlements returned {StatusCode}",
+                (int)response.StatusCode);
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        return await JsonSerializer.DeserializeAsync<PlatformEntitlementsDto>(stream, JsonOptions, ct);
     }
 
     private async Task<IReadOnlyList<T>> GetCatalogAsync<T>(string path, CancellationToken ct)

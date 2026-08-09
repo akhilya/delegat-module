@@ -465,6 +465,11 @@ const actions = {
       localCancel();
       cancelCallbacks.delete(id);
       commit("FINISH_OPERATION", { id, status: "cancelled", summary: t("store.operationsModule.stoppedSummary") });
+      // Persist cancel immediately so a refresh / tab close cannot leave the op running forever.
+      http.post(`/operations/${id}/finish`, {
+        status: "cancelled",
+        summary: t("store.operationsModule.stoppedSummary"),
+      }, { cache: false }).catch(() => {});
       return;
     }
     try {
