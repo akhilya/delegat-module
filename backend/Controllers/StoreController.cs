@@ -209,6 +209,7 @@ public class StoreController : ControllerBase
         if (store == null)
             throw ApiException.NotFound("Store not found");
 
+        var nameChanged = false;
         if (input.name != null)
         {
             var name = input.name.Trim();
@@ -222,7 +223,11 @@ public class StoreController : ControllerBase
             if (duplicate != null)
                 throw ApiException.BadRequest("A store with this name already exists");
 
-            store.name = name;
+            if (!string.Equals(store.name, name, StringComparison.Ordinal))
+            {
+                store.name = name;
+                nameChanged = true;
+            }
         }
 
         if (input.memberIds != null)
@@ -272,6 +277,9 @@ public class StoreController : ControllerBase
             store.extendedPriceParameters = input.extendedPriceParameters.Value;
 
         await _unitOfWork.SaveChangesAsync();
+
+        if (nameChanged)
+            _brandingSettings.InvalidateStoreCache(id);
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }

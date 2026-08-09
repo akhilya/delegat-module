@@ -52,6 +52,9 @@ public interface IBrandingSettingsService
     /// <summary>Delete branding row and MinIO objects for a store being removed.</summary>
     Task DeleteForStoreAsync(int storeId, CancellationToken ct = default);
 
+    /// <summary>Drop in-memory branding cache for a store (e.g. after rename).</summary>
+    void InvalidateStoreCache(int storeId);
+
     /// <summary>Favicon URL for list UIs (sidebar switcher). Does not seed missing rows.</summary>
     Task<IReadOnlyDictionary<int, string>> GetFaviconUrlsAsync(
         IEnumerable<int> storeIds,
@@ -148,21 +151,35 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         return row.faviconUrl!.Trim();
     }
 
+    public void InvalidateStoreCache(int storeId) => _cache.TryRemove(storeId, out _);
+
     public async Task<BrandingSettingsDto> GetForStoreAsync(int storeId, CancellationToken ct = default)
     {
         if (_cache.TryGetValue(storeId, out var cached))
-            return cached;
+        {
+            var refreshed = await WithCurrentStoreNameAsync(storeId, cached, ct);
+            if (!ReferenceEquals(refreshed, cached))
+                _cache[storeId] = refreshed;
+            return refreshed;
+        }
 
         var gate = GateFor(storeId);
         await gate.WaitAsync(ct);
         try
         {
             if (_cache.TryGetValue(storeId, out cached))
-                return cached;
+            {
+                var refreshed = await WithCurrentStoreNameAsync(storeId, cached, ct);
+                if (!ReferenceEquals(refreshed, cached))
+                    _cache[storeId] = refreshed;
+                return refreshed;
+            }
 
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
             var row = await EnsureRowTrackedAsync(db, storeId, ct);
+            if (await SyncRowNameFromStoreAsync(db, row, storeId, ct))
+                await db.SaveChangesAsync(ct);
             var dto = ToDto(row);
             _cache[storeId] = dto;
             return dto;
@@ -202,13 +219,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
             }
 
             // Brand display name tracks the store name (no separate editable brand name).
-            var storeName = await db.stores
-                .AsNoTracking()
-                .Where(s => s.Id == storeId)
-                .Select(s => s.name)
-                .FirstOrDefaultAsync(ct);
-            if (!string.IsNullOrWhiteSpace(storeName))
-                row.name = storeName.Trim();
+            await SyncRowNameFromStoreAsync(db, row, storeId, ct);
 
             if (request.clearLogo == true)
             {
@@ -372,6 +383,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
             }
 
             row.updatedAt = DateTime.UtcNow;
+            await SyncRowNameFromStoreAsync(db, row, storeId, ct);
             await db.SaveChangesAsync(ct);
 
             var dto = ToDto(row);
@@ -468,6 +480,59 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
 
     private SemaphoreSlim GateFor(int storeId) =>
         _gates.GetOrAdd(storeId, _ => new SemaphoreSlim(1, 1));
+
+    /// <summary>Overlay DTO name with current <c>stores.name</c>.</summary>
+    private async Task<BrandingSettingsDto> WithCurrentStoreNameAsync(
+        int storeId,
+        BrandingSettingsDto dto,
+        CancellationToken ct)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        var storeName = await db.stores
+            .AsNoTracking()
+            .Where(s => s.Id == storeId)
+            .Select(s => s.name)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(storeName))
+            return dto;
+
+        var trimmed = storeName.Trim();
+        if (trimmed.Length > 120)
+            trimmed = trimmed[..120];
+
+        if (string.Equals(dto.name, trimmed, StringComparison.Ordinal))
+            return dto;
+
+        return dto with { name = trimmed };
+    }
+
+    /// <summary>Returns true when the branding row name was updated.</summary>
+    private static async Task<bool> SyncRowNameFromStoreAsync(
+        DataContext db,
+        StoreBrandingSettings row,
+        int storeId,
+        CancellationToken ct)
+    {
+        var storeName = await db.stores
+            .AsNoTracking()
+            .Where(s => s.Id == storeId)
+            .Select(s => s.name)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(storeName))
+            return false;
+
+        var trimmed = storeName.Trim();
+        if (trimmed.Length > 120)
+            trimmed = trimmed[..120];
+
+        if (string.Equals(row.name, trimmed, StringComparison.Ordinal))
+            return false;
+
+        row.name = trimmed;
+        return true;
+    }
 
     private async Task TryDeleteObjectAsync(string? key, CancellationToken ct)
     {

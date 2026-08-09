@@ -1,5 +1,5 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
-import { getBrandName } from "@/brand";
+import { setPageTitleDetailProvider, syncDocumentTitle } from "@/brand";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
@@ -256,14 +256,19 @@ routes.forEach((r) => (r.name = r.path));
  */
 export function setPageTitle(detail) {
   _customTitle = detail || null;
-  const brand = getBrandName();
-  document.title = detail ? `${detail} - ${brand}` : brand;
+  syncDocumentTitle(_customTitle);
 }
 
 function resolveRouteTitle(to) {
   const key = to.meta?.titleKey;
   if (key) return t(key);
   return to.meta?.title || null;
+}
+
+function currentPageTitleDetail(route) {
+  if (_customTitle) return _customTitle;
+  if (route) return resolveRouteTitle(route);
+  return null;
 }
 
 /** Used by main.js permission guard. */
@@ -288,13 +293,17 @@ export function createRouter() {
     routes,
   });
 
+  setPageTitleDetailProvider(() => currentPageTitleDetail(router.currentRoute.value));
+
   router.afterEach((to, from) => {
-    if (_customTitle && to.path === from.path) return;
+    if (_customTitle && to.path === from.path) {
+      // Keep custom detail; still refresh brand suffix after store switch.
+      syncDocumentTitle(_customTitle);
+      return;
+    }
 
     _customTitle = null;
-    const title = resolveRouteTitle(to);
-    const brand = getBrandName();
-    document.title = title ? `${title} - ${brand}` : brand;
+    syncDocumentTitle(resolveRouteTitle(to));
   });
 
   return router;

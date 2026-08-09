@@ -19,6 +19,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Browser tab title brand suffix follows the selected store after switch/rename (branding name always from current store; document title sync no longer does fragile string replace)
 - Branding logo/favicon asset URLs (`/api/settings/branding/assets/*`) no longer 500: removed `VaryByQueryKeys` (requires Response Caching middleware, which is not registered); client still cache-busts with `?v=`
 - Product clone/move (including same-store duplicate) now enforces product, file, and storage quotas on the target store
 - Background operations: cascade stop for image downloads cancels InProgress rows; product-transfer Stop updates the queue; abandoned file-upload/file-delete ops are failed after ~20 minutes; ancient running ops time out after 24h

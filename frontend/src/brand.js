@@ -92,8 +92,6 @@ export const brandDescription = computed(() => state.description || DEFAULT_DESC
 export function applyBranding(dto) {
   if (!dto || typeof dto !== "object") return;
 
-  const previousName = state.name;
-
   if (typeof dto.name === "string" && dto.name.trim()) {
     state.name = dto.name.trim();
   }
@@ -115,15 +113,31 @@ export function applyBranding(dto) {
 
   applyDocumentChrome();
   applyThemeColors();
+  syncDocumentTitle();
+}
 
-  if (previousName !== state.name && typeof document !== "undefined") {
-    if (document.title === previousName) {
-      document.title = state.name;
-    } else if (document.title.endsWith(` - ${previousName}`)) {
-      document.title =
-        `${document.title.slice(0, -(previousName.length + 3))} - ${state.name}`;
-    }
-  }
+/** Optional provider for the page/detail segment of the document title (registered by router). */
+let pageTitleDetailProvider = () => null;
+
+/**
+ * Router registers how to resolve the non-brand part of the tab title
+ * (route meta title or setPageTitle detail).
+ * @param {() => string|null} fn
+ */
+export function setPageTitleDetailProvider(fn) {
+  pageTitleDetailProvider = typeof fn === "function" ? fn : () => null;
+}
+
+/**
+ * Set document.title to `{detail} - {brand}` or just `{brand}`.
+ * @param {string|null|undefined} [explicitDetail] - when provided, use this instead of the provider
+ */
+export function syncDocumentTitle(explicitDetail) {
+  if (typeof document === "undefined") return;
+  const brand = state.name || DEFAULT_NAME;
+  const detail =
+    explicitDetail !== undefined ? explicitDetail || null : pageTitleDetailProvider();
+  document.title = detail ? `${detail} - ${brand}` : brand;
 }
 
 function normalizeHex(value) {
