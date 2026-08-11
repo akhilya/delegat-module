@@ -97,6 +97,32 @@ public class CategoryDomainTests
         Assert.Equal("Appearance", attribute.group);
     }
 
+    [Fact]
+    public void CategoryAttributeAddFill_RequiredForcesShowOnProductPage()
+    {
+        var attribute = new CategoryAttribute();
+        attribute.AddFill(new CategoryAttribute.AddForm
+        {
+            categoryId = 1, name = "Color", key = "color", type = AttributeType.Text,
+            isRequired = true, showOnProductPage = false
+        });
+        Assert.True(attribute.isRequired);
+        Assert.True(attribute.showOnProductPage);
+    }
+
+    [Fact]
+    public void CategoryAttributeUpdateFill_RequiredForcesShowOnProductPage()
+    {
+        var attribute = new CategoryAttribute
+        {
+            name = "Color", key = "color", type = AttributeType.Text,
+            isRequired = false, showOnProductPage = false
+        };
+        attribute.UpdateFill(new CategoryAttribute.UpdateForm { isRequired = true, showOnProductPage = false });
+        Assert.True(attribute.isRequired);
+        Assert.True(attribute.showOnProductPage);
+    }
+
     [Theory]
     [InlineData(AttributeType.Text)]
     [InlineData(AttributeType.Number)]

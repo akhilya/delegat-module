@@ -33,6 +33,18 @@ Do this in the **same PR/commit** as the code change whenever the change is user
 
 - `frontend/package.json` `version` — may lag; do not treat as canonical
 - Git tags alone — always bump `VERSION` so the release workflow runs
+- Control Plane / Platform Link — does not inject the SemVer shown in the instance user menu
+
+## How the UI version badge is resolved
+
+The user-menu badge shows the **instance** SemVer (prefixed with `v` in the UI):
+
+1. `GET /api/health` → `version` from API assembly **InformationalVersion** (Docker `APP_VERSION`, or root `VERSION` at build)
+2. Else a real bake-time `VITE_APP_VERSION` (CI/release build-arg from `VERSION`)
+
+Placeholders `dev` / `vdev` are ignored so a bad frontend bake cannot hide a correct API version.
+
+CI pushes to `:latest` pass `APP_VERSION` / `VITE_APP_VERSION` from `VERSION` (same as release). Redeploy the instance after new images land.
 
 ## CI note for Dependabot
 

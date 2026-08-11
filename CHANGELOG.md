@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Products table **Adapters** column: ButtonGroup of store connections with status colors; each opens a sync/link menu (export, import, verify, unlink, open on marketplace / Adapters tab)
+- Store-wide Notes page (`/notes`): browse product notes with sort (importance, date, product) and filters (importance, author, note text, product name/SKU); note authorship and timestamps tracked on create/update
 - Administration (Overview): plan quotas vs store usage, overage preview of data that will be permanently trimmed after Control Plane downgrade grace, and Trim now (`/settings/admin/usage` redirects here)
 - Public docs deep-links for adapter credentials (Ozon, Wildberries, Yandex Market, OpenCart, WooCommerce) from create-connection and connection settings
 - Instance frontend reads docs origin from runtime `DOCS_PUBLIC_URL` (injected by Control Plane at provision into `runtime-config.js`)
@@ -19,6 +21,20 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- User menu version no longer shows `vdev`: CI `latest` images bake SemVer from `VERSION`; API `/health` reports InformationalVersion; UI prefers health over a bake-time `dev` placeholder
+- Products table Adapters column menu respects category mapping status (blocks export / shows configure when mapping is missing), matching the product Adapters tab
+- Products table Adapters buttons show mapping-missing (red) from the list payload, not only after opening the cell menu
+- Product Adapters tab and products-table Adapters column share one connection actions menu component
+- Product Adapters tab: right-click on a connection row opens the actions menu at the cursor (same items as the ⋮ button; native menu kept for external marketplace links)
+- Product Adapters tab: parallel exports to different connections keep their own loading overlays (no longer clearing the first spinner when starting another)
+- Required category and store attributes always stay visible on the product page; “show on product page” cannot be turned off while the field is required
+- Invite token revoke confirm works when opened from the invite dialog (AlertDialog no longer dismissed as “outside” the parent Dialog)
+- App shell no longer shows a dead body scrollbar beside the real page scroll (`body` is `overflow-hidden`; only `SidebarInset` / bare-layout wrapper scroll)
+- Ozon product import omitted category (and price/attributes/images/brand/barcode) on `ExternalProduct`, so “create category” during import produced an empty local «No category» folder without attributes or mapping; mapping now receives real Ozon `description_category_id:type_id`
+- Import dialog no longer treats the i18n “uncategorized” label as a category create name; creating a category for products without an adapter category requires a typed name
+- WooCommerce product get returns primary `category_id` / `category_name` so import can create mappings when available
+- Products table Adapters column ignored list enrichment (`ProductReviewDTO` is a struct), so linked imports looked mapping-missing (red) until the cell menu opened
+- Category import created attributes with “show on product page” off; new imports default to on
 - Marketplace export link binding: Ozon/Yandex keep the linked external id (Ozon uses the linked card's `offer_id` for `/v3/product/import`; Yandex prefers stored `offerId` over local sku). Silent rebind to another remote id is blocked; Ozon link/relink accepts product_id, Ozon SKU, or article and stores canonical `product_id`
 - Browser tab title brand suffix follows the selected store after switch/rename (branding name always from current store; document title sync no longer does fragile string replace)
 - Branding logo/favicon asset URLs (`/api/settings/branding/assets/*`) no longer 500: removed `VaryByQueryKeys` (requires Response Caching middleware, which is not registered); client still cache-busts with `?v=`
@@ -41,6 +57,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Product list search: name is substring; SKU, barcode, product id, marketplace external id/SKU, and variant codes require exact match (`_ПК105` ≠ `ПК105`); exact hits rank first
+- Adapter maturity: Ozon, Wildberries, and Yandex Market marked Stable; OpenCart and WooCommerce marked Beta (was Experimental)
 - Store branding moved to Settings → Stores → store dialog **Branding** tab (removed from platform Overview); sidebar store switcher shows each store’s favicon
 - Plan quotas UI lives on Settings → Administration (Overview); dedicated Usage nav item removed (`/settings/admin/usage` redirects to Overview)
 - Branding is per selected store (`storeBrandingSettings`) instead of instance-wide; Setup order is Welcome → Store → Branding → Done; brand description, live preview, and editable brand name removed (display name follows the store); Setup branding uses a wider auth card without a clipped scroll strip; logo/favicon dropzones match in size

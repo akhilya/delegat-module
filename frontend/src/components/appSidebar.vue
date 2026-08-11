@@ -20,6 +20,7 @@ import { hasAnyPermission, PERMS } from "@/lib/permissions";
 import { ME_UPDATED_EVENT, notifyMeUpdated } from "@/lib/meCache";
 import { resetSelectedStoreCache } from "@/composables/useSelectedStore";
 import { invalidateBrandingCache, loadBranding } from "@/brand";
+import { resolveDisplayVersion, normalizeAppVersion } from "@/lib/appVersion";
 
 export default {
   components: {
@@ -92,7 +93,8 @@ export default {
       return buildSidebarGroups(this.sidebarContext);
     },
     displayVersion() {
-      return this.appVersion || this.platformVersion || "";
+      // Prefer /health (API InformationalVersion); ignore bake-time "dev".
+      return resolveDisplayVersion(this.platformVersion, this.appVersion);
     },
   },
   watch: {
@@ -177,7 +179,7 @@ export default {
       await this.refreshPlatformStoreCount();
 
       http.get("/health").then((response) => {
-        this.platformVersion = response.data?.version;
+        this.platformVersion = normalizeAppVersion(response.data?.version);
       }).catch(() => {});
 
       if (autoSelectStore && this.memberships.length > 0 && (

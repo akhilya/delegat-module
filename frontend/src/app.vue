@@ -106,7 +106,9 @@ export default {
 <template>
   <LoadingBar ref="loadingBar" />
   <RouterView v-if="isBareLayout" v-slot="{ Component, route }">
-    <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+    <div class="h-svh overflow-y-auto">
+      <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+    </div>
   </RouterView>
   <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
     <AppSidebar />

@@ -49,8 +49,9 @@ const sizeClasses = {
 /**
  * Select / MultiSelect / Combobox portal their menus to <body>. A click there is
  * "outside" DialogContent and would dismiss the dialog mid-selection — exactly
- * what broke bulk-edit for select & multiselect fields. Treat known overlay
- * slots (and reka popper wrappers) as inside the dialog.
+ * what broke bulk-edit for select & multiselect fields. Confirm AlertDialog is
+ * also portaled above dialogs; treat known overlay slots (and reka popper
+ * wrappers) as inside the dialog.
  */
 function isPortaledOverlayTarget(target) {
   if (!(target instanceof Element)) return false;
@@ -59,6 +60,8 @@ function isPortaledOverlayTarget(target) {
       target.closest("[data-slot='select-content']") ||
       target.closest("[data-slot='dropdown-menu-content']") ||
       target.closest("[data-slot='combobox-list']") ||
+      target.closest("[data-slot='alert-dialog-content']") ||
+      target.closest("[data-slot='alert-dialog-overlay']") ||
       target.closest("[data-reka-popper-content-wrapper]"),
   );
 }

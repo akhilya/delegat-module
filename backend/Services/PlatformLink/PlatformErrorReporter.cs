@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Delegat.Infrastructure.Configuration;
@@ -102,6 +101,5 @@ public sealed class PlatformErrorReporter : IPlatformErrorReporter
     private static string? Truncate(string? v, int max) =>
         string.IsNullOrEmpty(v) ? v : (v.Length <= max ? v : v[..max]);
 
-    private static string? GetPlatformVersion() =>
-        Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+    private static string? GetPlatformVersion() => Delegat.PlatformVersion.Current;
 }

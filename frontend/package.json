@@ -9,7 +9,7 @@
     "preview": "vite preview --host",
     "lint": "eslint . --ext .js,.vue",
     "lint:fix": "eslint . --ext .js,.vue --fix",
-    "test:unit": "node --test src/lib/setupGate.test.js",
+    "test:unit": "node --test src/lib/setupGate.test.js src/lib/appVersion.test.js",
     "test:e2e": "playwright test",
     "ui:diff": "npx shadcn-vue@latest diff",
     "ui:add": "npx shadcn-vue@latest add",

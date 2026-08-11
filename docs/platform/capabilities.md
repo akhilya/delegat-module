@@ -24,7 +24,7 @@
 - Images (ImageReference) + files (File) stored in MinIO
 - Product groups (ProductGroup) with sidebar navigation
 - Product folders (ProductFolder) for hierarchical organization
-- Notes attached to products
+- Notes attached to products; store-wide Notes page to browse, sort, and filter them
 - Excel import/export (ExcelProductService)
 - Advanced table: search, filters, sorting, column selector, presets, bulk edit
 

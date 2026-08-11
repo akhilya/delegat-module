@@ -346,6 +346,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<Note>()
             .HasIndex(n => n.productId);
+        builder.Entity<Note>()
+            .HasIndex(n => n.authorUserId);
+        builder.Entity<Note>()
+            .HasIndex(n => n.createdAt);
 
         builder.Entity<ProductGroup>()
             .HasIndex(pg => pg.storeId);

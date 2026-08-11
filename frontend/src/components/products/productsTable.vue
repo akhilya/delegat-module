@@ -55,8 +55,12 @@ export default {
       type: Number,
       default: 0,
     },
+    connections: {
+      type: Array,
+      default: () => [],
+    },
   },
-  emits: ["update:rowSelection", "update:columnVisibility", "update:columnOrder", "sort", "row-click"],
+  emits: ["update:rowSelection", "update:columnVisibility", "update:columnOrder", "sort", "row-click", "adapters-changed"],
   setup(props, { emit }) {
     const localRowSelection = ref(props.rowSelection);
     const localColumnVisibility = ref(props.columnVisibility);
@@ -178,6 +182,12 @@ export default {
       meta: {
         get startIndex() {
           return props.startIndex;
+        },
+        get connections() {
+          return props.connections;
+        },
+        onAdaptersChanged() {
+          emit("adapters-changed");
         },
       },
       state: {

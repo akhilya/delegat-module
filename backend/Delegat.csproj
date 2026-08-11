@@ -9,6 +9,9 @@
     <BuildPlugins Condition="'$(BuildPlugins)' == ''">true</BuildPlugins>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- Canonical SemVer is root VERSION; Docker /p:InformationalVersion overrides when set. -->
+    <VersionFilePath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\VERSION'))</VersionFilePath>
+    <InformationalVersion Condition="'$(InformationalVersion)' == '' And Exists('$(VersionFilePath)')">$([System.IO.File]::ReadAllText('$(VersionFilePath)').Trim())</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

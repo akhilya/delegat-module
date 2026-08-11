@@ -237,6 +237,7 @@
     "trash": "Trash",
     "categories": "Categories",
     "barcodes": "Barcodes",
+    "notes": "Notes",
     "storage": "Storage",
     "marketplace": "Marketplace",
     "connections": "Connections",
@@ -346,6 +347,7 @@
     "storage": "Storage",
     "categories": "Categories",
     "barcodes": "Barcodes",
+    "notes": "Notes",
     "groups": "Product groups",
     "tools": "Tools",
     "attributes": "Global attributes",
@@ -649,6 +651,7 @@
         "productUnlinked": "Product unlinked from the adapter",
         "selectUnlinkedProducts": "Select unlinked products",
         "categoryCreateError": "Category creation error: {error}",
+        "categoryNameRequired": "Enter a name for each new category without an adapter category",
         "queuedForImport": "Queued: {count} products",
         "importSummary": "Created: {created}, skipped: {skipped}, failed: {failed}",
         "selectLinkedProducts": "Select linked products",
@@ -1866,6 +1869,7 @@
       "categoryLabel": "Category",
       "storageQuantityLabel": "Stock",
       "priceLabel": "Price",
+      "adaptersLabel": "Adapters",
       "createdAtLabel": "Created",
       "updatedAtLabel": "Updated",
       "copySkuTooltip": "Copy SKU",
@@ -1891,6 +1895,11 @@
           "description": "Merge name, category, and SKU into one column"
         }
       }
+    },
+    "adaptersColumn": {
+      "notLinked": "Not linked",
+      "linkOnProduct": "Link on product page",
+      "configureMapping": "Configure mapping"
     },
     "productTransferDialog": {
       "previewLoadFailed": "Failed to load preview",
@@ -2438,6 +2447,33 @@
       "emptyTitle": "No barcodes",
       "emptyDescription": "Products with EAN barcodes will appear here"
     },
+    "notesPage": {
+      "breadcrumb": "Notes",
+      "searchPlaceholder": "Search note text",
+      "productSearchPlaceholder": "Product name or SKU",
+      "importanceAll": "All importance",
+      "authorAll": "All authors",
+      "authorUnknown": "Unknown author",
+      "sortLabel": "Sort",
+      "sortCreatedDesc": "Newest first",
+      "sortCreatedAsc": "Oldest first",
+      "sortUpdatedDesc": "Recently updated",
+      "sortImportanceDesc": "Importance: high → low",
+      "sortImportanceAsc": "Importance: low → high",
+      "sortProductAsc": "Product A–Z",
+      "sortProductDesc": "Product Z–A",
+      "clearFilters": "Clear filters",
+      "columnImportance": "Importance",
+      "columnNote": "Note",
+      "columnProduct": "Product",
+      "columnAuthor": "Author",
+      "columnCreated": "Created",
+      "pageRange": "{from}-{to} of {total}",
+      "emptyTitle": "No notes yet",
+      "emptyDescription": "Notes added on product pages will appear here",
+      "emptyFilteredTitle": "No matching notes",
+      "emptyFilteredDescription": "Try changing search or filters"
+    },
     "notFoundPage": {
       "errorCode": "Error 404",
       "title": "Page not found",
@@ -2669,6 +2705,7 @@
       "multilineHint": "Field with line breaks on the product page",
       "showOnProductPageLabel": "On the product page",
       "showOnProductPageHint": "Show when editing a product",
+      "showOnProductPageRequiredHint": "Required fields are always shown on the product page",
       "requiredFieldHint": "Require filling in when creating a product",
       "uniqueFieldTitle": "Unique value",
       "uniqueFieldHint": "Value must not repeat on other products in this category",
@@ -2757,6 +2794,7 @@
         "multilineHint": "Field with line breaks on the product page",
         "showOnProductPageLabel": "On the product page",
         "showOnProductPageHint": "Show when editing a product",
+        "showOnProductPageRequiredHint": "Required fields are always shown on the product page",
         "requiredFieldLabel": "Required field",
         "requiredFieldHint": "Require filling in when creating a product",
         "uniqueFieldLabel": "Unique value",
@@ -2779,6 +2817,8 @@
       "emptyDescription": "Categories and attributes are available via the user menu"
     },
     "productsPage": {
+      "searchPlaceholder": "Search",
+      "searchHint": "Name (substring). Exact match: SKU, ID, barcode, marketplace id",
       "toast": {
         "bulkDeleted": "Products deleted: {count}",
         "bulkDeleteFailed": "Failed to delete products",
@@ -3390,6 +3430,7 @@
       "multilineHint": "Field with line breaks on the product page",
       "showOnProductPageLabel": "On product page",
       "showOnProductPageHint": "Show when editing a product",
+      "showOnProductPageRequiredHint": "Required fields are always shown on the product page",
       "requiredFieldHint": "Require this field when creating a product",
       "uniqueFieldTitle": "Unique value",
       "uniqueFieldHint": "Value must not repeat on other products in this category",

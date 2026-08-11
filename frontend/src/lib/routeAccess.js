@@ -12,6 +12,7 @@ const PAGE_ADAPTER_LOGS = "/settings/adapter-logs";
 const PAGE_PRODUCT_CREATION = "/products/create";
 const PAGE_CATEGORIES = "/categories";
 const PAGE_BARCODES = "/barcodes";
+const PAGE_NOTES = "/notes";
 const PAGE_STORE_ATTRIBUTES = "/store-attributes";
 const PAGE_TOOLS = "/tools";
 const PAGE_MARKETPLACE = "/adapter";
@@ -34,6 +35,7 @@ const ROUTE_PERMISSIONS = {
   [PAGE_PRODUCT_CREATION]: [PERMS.CatalogManage],
   [PAGE_CATEGORIES]: [PERMS.CatalogManage],
   [PAGE_BARCODES]: [PERMS.CatalogManage],
+  [PAGE_NOTES]: [PERMS.CatalogManage],
   [PAGE_STORE_ATTRIBUTES]: [PERMS.CatalogManage],
   [PAGE_TOOLS]: [PERMS.OperationsManage, PERMS.CatalogManage],
   [PAGE_MARKETPLACE]: [PERMS.MarketplaceManage],

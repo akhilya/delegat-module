@@ -111,7 +111,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         isRequired = form.isRequired;
         isUnique = form.isUnique;
         isMultiline = form.isMultiline;
-        showOnProductPage = form.showOnProductPage;
+        showOnProductPage = form.isRequired || form.showOnProductPage;
         sortOrder = form.sortOrder;
         options = form.options;
         defaultValue = form.defaultValue;
@@ -138,6 +138,9 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             isMultiline = form.isMultiline.Value;
         if (form.showOnProductPage.HasValue)
             showOnProductPage = form.showOnProductPage.Value;
+        // Required attributes must always appear on the product page.
+        if (isRequired)
+            showOnProductPage = true;
         if (form.sortOrder.HasValue)
             sortOrder = form.sortOrder.Value;
         options = form.options;
@@ -161,7 +164,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             isRequired = isRequired,
             isUnique = isUnique,
             isMultiline = isMultiline,
-            showOnProductPage = showOnProductPage,
+            showOnProductPage = isRequired || showOnProductPage,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
@@ -240,6 +243,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
 
         /// <summary>
         /// Whether this attribute is shown on the product edit page.
+        /// Callers should set true for marketplace imports (entity default is true).
         /// </summary>
         public bool showOnProductPage { get; set; }
 

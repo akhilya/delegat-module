@@ -46,8 +46,7 @@ public static class ProductSortHelper
 
             if (hasSearch)
             {
-                ordered = q.OrderByDescending(p => p.name == searchQuery || p.sku == searchQuery)
-                    .ThenByDescending(p => p.name.StartsWith(searchQuery!) || p.sku.StartsWith(searchQuery!));
+                ordered = q.OrderBySearchRelevance(searchQuery!);
                 foreach (var spec in specs)
                     ordered = ApplyThenSort(ordered, spec);
             }

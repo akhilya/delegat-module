@@ -4,6 +4,21 @@ import { http } from "@/main";
 export default {
   actions: {
     /**
+     * Lists notes for the selected store.
+     */
+    async fetchNotes(ctx, { params = {}, onSuccess, onError }) {
+      try {
+        const response = await http.get("/notes", {
+          params: { ...params },
+          cache: false,
+        });
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    /**
      * Creates a new note for a product.
      * @param {Object} ctx - Vuex action context.
      * @param {Object} params - Action parameters.

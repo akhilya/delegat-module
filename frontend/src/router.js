@@ -13,6 +13,7 @@ const productEditPage = () => import("./pages/productEditPage.vue");
 const categoriesPage = () => import("./pages/categoriesPage.vue");
 const categoryEditPage = () => import("./pages/categoryEditPage.vue");
 const barcodesPage = () => import("./pages/barcodesPage.vue");
+const notesPage = () => import("./pages/notesPage.vue");
 const productGroupsPage = () => import("./pages/productGroupsPage.vue");
 const productGroupEditPage = () => import("./pages/productGroupEditPage.vue");
 const storeAttributesPage = () => import("./pages/storeAttributesPage.vue");
@@ -47,6 +48,7 @@ export const PAGE_PRODUCT_EDIT = "/products/:id/edit";
 export const PAGE_CATEGORIES = "/categories";
 export const PAGE_CATEGORY_EDIT = "/categories/:id/edit";
 export const PAGE_BARCODES = "/barcodes";
+export const PAGE_NOTES = "/notes";
 export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";
@@ -114,6 +116,11 @@ export const routes = [
     path: PAGE_BARCODES,
     component: barcodesPage,
     meta: { titleKey: "routes.barcodes", permissions: [PERMS.CatalogManage] },
+  },
+  {
+    path: PAGE_NOTES,
+    component: notesPage,
+    meta: { titleKey: "routes.notes", permissions: [PERMS.CatalogManage] },
   },
   {
     path: PAGE_PRODUCT_GROUPS,

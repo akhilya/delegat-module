@@ -644,19 +644,40 @@ export default {
       const groups = {};
       for (const product of this.selectedUnlinkedItems) {
         const catId = product.externalCategoryId || "__none__";
-        const catName =
-          product.externalCategoryName ||
+        // Keep marketplace name only when we have a real external category id.
+        // Uncategorized products must not inherit the i18n label as a create name.
+        const marketplaceName = product.externalCategoryName || null;
+        const displayName =
+          marketplaceName ||
           this.$t("marketplace.connectionPage.categories.uncategorized");
         if (!groups[catId]) {
           groups[catId] = {
             externalCategoryId: catId === "__none__" ? null : catId,
-            externalCategoryName: catName,
+            externalCategoryName: marketplaceName,
+            displayName,
             products: [],
           };
         }
         groups[catId].products.push(product);
       }
       return Object.values(groups);
+    },
+    canConfirmImportWithCategories() {
+      if (this.isImportingWithCategories) return false;
+      if (!this.selectedUnlinkedItems.length) return false;
+      for (const group of this.productsByExternalCategory) {
+        const key = group.externalCategoryId || "__none__";
+        const assignment = this.categoryAssignments[key];
+        if (!assignment || assignment.mode !== "new") continue;
+        const typedName = (assignment.newCategoryName || "").trim();
+        if (group.externalCategoryId) {
+          const marketplaceName = (group.externalCategoryName || "").trim();
+          if (!typedName && !marketplaceName) return false;
+        } else if (!typedName) {
+          return false;
+        }
+      }
+      return true;
     },
 
     mappingCategoryGroups() {
@@ -1951,6 +1972,15 @@ export default {
     },
 
     async handleImportWithCategories() {
+      if (!this.canConfirmImportWithCategories) {
+        displaySonnerError(
+          this.$t(
+            "marketplace.connectionPage.notifications.categoryNameRequired",
+          ),
+        );
+        return;
+      }
+
       this.isImportingWithCategories = true;
 
       // Create operation upfront so user sees it immediately
@@ -2001,9 +2031,16 @@ export default {
           } else if (assignment.mode === "existing") {
             categoryIdMap[key] = assignment.localCategoryId;
           } else if (assignment.mode === "new") {
-            const categoryName =
-              assignment.newCategoryName || group.externalCategoryName;
+            const typedName = (assignment.newCategoryName || "").trim();
+            const marketplaceName = (group.externalCategoryName || "").trim();
+            // Never use the i18n "uncategorized" display label as a create name.
+            const categoryName = typedName || (extCatId ? marketplaceName : "");
             if (!categoryName) {
+              displaySonnerError(
+                this.$t(
+                  "marketplace.connectionPage.notifications.categoryNameRequired",
+                ),
+              );
               categoryIdMap[key] = null;
               continue;
             }
@@ -2014,8 +2051,7 @@ export default {
                 connectionId: this.connectionId,
                 data: {
                   externalCategoryId: extCatId,
-                  externalCategoryName:
-                    group.externalCategoryName || categoryName,
+                  externalCategoryName: marketplaceName || categoryName,
                   localCategoryName: categoryName,
                   operationId,
                 },
@@ -4386,7 +4422,7 @@ export default {
           >
             <div class="flex items-center gap-2 mb-3">
               <FolderOpen class="size-4 text-muted-foreground" />
-              <span class="font-medium">{{ group.externalCategoryName }}</span>
+              <span class="font-medium">{{ group.displayName }}</span>
               <Badge variant="secondary" class="ml-auto">
                 {{ $t("marketplace.connectionPage.dialogs.productsCount", { count: group.products.length }) }}
               </Badge>
@@ -4480,7 +4516,7 @@ export default {
                     <span v-if="group.externalCategoryId"
                       >{{
                         $t("marketplace.connectionPage.import.createNewFromAdapter", {
-                          name: group.externalCategoryName,
+                          name: group.displayName,
                         })
                       }}</span
                     >
@@ -4528,7 +4564,7 @@ export default {
           </DialogClose>
           <Button
             @click="handleImportWithCategories"
-            :disabled="isImportingWithCategories"
+            :disabled="!canConfirmImportWithCategories"
           >
             <Spinner v-if="isImportingWithCategories" class="mr-2" />
             <Download v-else class="size-4 mr-2" />

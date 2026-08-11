@@ -1256,7 +1256,19 @@ public class ProductSyncService
                 await Log("info", $"Photos queued");
             }
 
-            // Create the link
+            // Create the link (bind category mapping when importing into a mapped category)
+            int? importCategoryMappingId = null;
+            if (targetCategoryId.HasValue)
+            {
+                importCategoryMappingId = await _context.categoryMappings
+                    .AsNoTracking()
+                    .Where(cm =>
+                        cm.connectionId == connectionId &&
+                        cm.localCategoryId == targetCategoryId.Value)
+                    .Select(cm => (int?)cm.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+
             var link = new ProductMarketplaceLink();
             link.AddFill(new ProductMarketplaceLink.AddForm
             {
@@ -1264,7 +1276,8 @@ public class ProductSyncService
                 connectionId = connectionId,
                 externalProductId = externalProductId,
                 externalSku = externalProduct.Sku,
-                status = ProductMarketplaceStatus.Synced
+                status = ProductMarketplaceStatus.Synced,
+                categoryMappingId = importCategoryMappingId
             });
             link.externalPrice = externalProduct.Price;
             link.externalStock = externalProduct.Quantity;

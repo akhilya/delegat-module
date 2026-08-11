@@ -392,7 +392,7 @@ export default {
         isRequired: attribute.isRequired,
         isUnique: attribute.isUnique === true,
         isMultiline: attribute.isMultiline ?? false,
-        showOnProductPage: attribute.showOnProductPage !== false,
+        showOnProductPage: attribute.isRequired || attribute.showOnProductPage !== false,
         options: this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
           ? ""
           : this.formatOptionsForEdit(optionsRaw),
@@ -429,6 +429,21 @@ export default {
         });
     },
 
+    setAttributeRequired(value) {
+      this.attributeForm.isRequired = !!value;
+      if (this.attributeForm.isRequired) {
+        this.attributeForm.showOnProductPage = true;
+      }
+    },
+
+    setShowOnProductPage(value) {
+      if (this.attributeForm.isRequired) {
+        this.attributeForm.showOnProductPage = true;
+        return;
+      }
+      this.attributeForm.showOnProductPage = !!value;
+    },
+
     async handleSaveAttribute() {
       if (!this.attributeForm.name.trim()) {
         displaySonnerError(this.$t("pages.categoryEditPage.attrNameRequired"));
@@ -448,7 +463,7 @@ export default {
         isRequired: this.attributeForm.isRequired,
         isUnique: this.attributeForm.isUnique,
         isMultiline: this.isTextAttributeType ? this.attributeForm.isMultiline : false,
-        showOnProductPage: this.attributeForm.showOnProductPage,
+        showOnProductPage: this.attributeForm.isRequired || this.attributeForm.showOnProductPage,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
@@ -1256,11 +1271,16 @@ export default {
                 <div class="flex items-center gap-2 h-9">
                   <Switch
                     id="attr-visible"
-                    :model-value="attributeForm.showOnProductPage"
-                    @update:model-value="attributeForm.showOnProductPage = $event"
+                    :model-value="attributeForm.isRequired || attributeForm.showOnProductPage"
+                    :disabled="attributeForm.isRequired"
+                    @update:model-value="setShowOnProductPage"
                   />
                   <Label for="attr-visible" class="font-normal text-muted-foreground">
-                    {{ $t("pages.categoryEditPage.showOnProductPageHint") }}
+                    {{
+                      attributeForm.isRequired
+                        ? $t("pages.categoryEditPage.showOnProductPageRequiredHint")
+                        : $t("pages.categoryEditPage.showOnProductPageHint")
+                    }}
                   </Label>
                 </div>
               </SettingsFormField>
@@ -1270,7 +1290,7 @@ export default {
                   <Switch
                     id="attr-required"
                     :model-value="attributeForm.isRequired"
-                    @update:model-value="attributeForm.isRequired = $event"
+                    @update:model-value="setAttributeRequired"
                   />
                   <Label for="attr-required" class="font-normal text-muted-foreground">
                     {{ $t("pages.categoryEditPage.requiredFieldHint") }}

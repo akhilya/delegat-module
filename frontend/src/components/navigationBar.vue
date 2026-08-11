@@ -8,6 +8,7 @@ import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
+import { normalizeAppVersion, resolveDisplayVersion } from "@/lib/appVersion";
 
 
 export default {
@@ -26,7 +27,13 @@ export default {
       me: undefined,
       isLoading: false,
       platformVersion: null,
+      appVersion: import.meta.env.VITE_APP_VERSION || null,
     };
+  },
+  computed: {
+    displayVersion() {
+      return resolveDisplayVersion(this.platformVersion, this.appVersion);
+    },
   },
   methods: {
     ...mapActions(["getMe"]),
@@ -47,7 +54,7 @@ export default {
     http
       .get("/health")
       .then((r) => {
-        this.platformVersion = r.data?.version;
+        this.platformVersion = normalizeAppVersion(r.data?.version);
       })
       .catch(() => {});
   },
@@ -89,7 +96,7 @@ export default {
           <UserAccountMenu
             variant="navbar"
             :user-name="me?.userName"
-            :version="platformVersion"
+            :version="displayVersion"
           />
         </div>
       </div>

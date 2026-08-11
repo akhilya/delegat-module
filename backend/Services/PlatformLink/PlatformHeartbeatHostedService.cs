@@ -1,4 +1,3 @@
-using System.Reflection;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Services;
 
@@ -28,8 +27,6 @@ public sealed class PlatformHeartbeatHostedService : BackgroundService
         try { await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
-        var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -47,7 +44,7 @@ public sealed class PlatformHeartbeatHostedService : BackgroundService
                 {
                     InstanceId = _options.InstanceId ?? "",
                     OccurredAt = DateTime.UtcNow,
-                    PlatformVersion = version,
+                    PlatformVersion = Delegat.PlatformVersion.Current,
                     Status = "ok",
                     Usage = usage,
                 }, stoppingToken);

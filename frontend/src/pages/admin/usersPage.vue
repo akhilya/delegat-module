@@ -43,7 +43,7 @@ import {
 } from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import { confirm } from "@/composables/useConfirm";
+import { confirm, confirmState } from "@/composables/useConfirm";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default {
@@ -290,6 +290,16 @@ export default {
       this.copiedToken = null;
     },
 
+    onInviteDialogOpenChange(open) {
+      // Nested confirm (AlertDialog) must not dismiss the invite Dialog.
+      if (!open && confirmState.open) {
+        this.isInviteDialogOpen = true;
+        return;
+      }
+      if (!open) this.closeInviteDialog();
+      else this.isInviteDialogOpen = true;
+    },
+
     async fetchTokens() {
       this.tokensLoading = true;
       await this.getAllTokens({
@@ -510,7 +520,7 @@ export default {
 
     <Dialog
       :open="isInviteDialogOpen"
-      @update:open="(v) => { if (!v) closeInviteDialog(); else isInviteDialogOpen = true; }"
+      @update:open="onInviteDialogOpenChange"
     >
       <DialogContent size="3xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader variant="bar">

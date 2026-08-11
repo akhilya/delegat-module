@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure;
@@ -61,7 +60,7 @@ public class ProductController : ControllerBase
     /// <summary>
     /// Retrieves a paginated list of products for the current store, with optional search, category filtering, and sorting.
     /// </summary>
-    /// <param name="searchQuery">Optional search string to filter by name or SKU.</param>
+    /// <param name="searchQuery">Optional search: name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode.</param>
     /// <param name="categoryId">Optional category ID to filter products by.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
@@ -88,27 +87,20 @@ public class ProductController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
-        var productRepo = _unitOfWork.Repository<Product>();
-
-        // Build predicate combining all filters
-        var hasSearch = !string.IsNullOrEmpty(searchQuery);
+        var hasSearch = !string.IsNullOrWhiteSpace(searchQuery);
         var hasCategoryFilter = categoryId.HasValue;
         var isNoCategoryFilter = categoryId == -1;
 
-        Expression<Func<Product, bool>> predicate = (hasSearch, hasCategoryFilter, isNoCategoryFilter) switch
-        {
-            (false, false, _) => p => p.storeId == selectedStoreId.Value,
-            (true, false, _) => p => p.storeId == selectedStoreId.Value &&
-                                     (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)),
-            (false, _, true) => p => p.storeId == selectedStoreId.Value && p.categoryId == null,
-            (false, true, false) => p => p.storeId == selectedStoreId.Value && p.categoryId == categoryId!.Value,
-            (true, _, true) => p => p.storeId == selectedStoreId.Value &&
-                                    (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
-                                    p.categoryId == null,
-            (true, true, false) => p => p.storeId == selectedStoreId.Value &&
-                                        (p.name.Contains(searchQuery!) || p.sku.Contains(searchQuery!)) &&
-                                        p.categoryId == categoryId!.Value,
-        };
+        var query = _context.products
+            .AsNoTracking()
+            .Where(p => p.storeId == selectedStoreId.Value);
+
+        if (isNoCategoryFilter)
+            query = query.Where(p => p.categoryId == null);
+        else if (hasCategoryFilter)
+            query = query.Where(p => p.categoryId == categoryId!.Value);
+
+        query = query.WhereMatchesSearch(searchQuery);
 
         var sortQueryParts = Request.Query["sort"]
             .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -119,19 +111,22 @@ public class ProductController : ControllerBase
             : ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
         var orderBy = ProductSortHelper.BuildOrderBy(sortSpecs, hasSearch, searchQuery);
 
-        var (items, total) = await productRepo.FindPagedAsync(
-            predicate,
-            query => query
-                .AsSplitQuery()
-                .Include(p => p.files)
-                .Include(p => p.images)
-                    .ThenInclude(i => i.file)
-                .Include(p => p.category)
-                .Include(p => p.storeAttributeValues)
-                    .ThenInclude(sav => sav.storeAttribute),
-            orderBy,
-            startIndex,
-            pageSize);
+        var total = await query.CountAsync();
+        var items = await orderBy(query)
+            .AsSplitQuery()
+            .Include(p => p.files)
+            .Include(p => p.images)
+                .ThenInclude(i => i.file)
+            .Include(p => p.category)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.marketplaceLinks)
+                .ThenInclude(l => l.connection)
+            .Include(p => p.marketplaceLinks)
+                .ThenInclude(l => l.categoryMapping)
+            .Skip(startIndex)
+            .Take(pageSize)
+            .ToListAsync();
 
         var paged = new List<Product.ProductReviewDTO>();
         foreach (var p in items)
@@ -139,6 +134,8 @@ public class ProductController : ControllerBase
             var dto = ((Infrastructure.Interfaces.IMapToDTO<Product.ProductReviewDTO>)p).MapToDTO(_serviceProvider);
             paged.Add(dto);
         }
+
+        await EnrichAdapterLinkMappingFlagsAsync(paged, items);
 
         var lastPage = startIndex + pageSize >= total;
         return Ok(new
@@ -779,7 +776,7 @@ public class ProductController : ControllerBase
             .Where(p => p.storeId == selectedStoreId.Value && p.deletedAt != null);
 
         if (!string.IsNullOrEmpty(searchQuery))
-            query = query.Where(p => p.name.Contains(searchQuery) || p.sku.Contains(searchQuery));
+            query = query.WhereMatchesSearch(searchQuery);
 
         var totalCount = await query.CountAsync();
 
@@ -1293,6 +1290,47 @@ public class ProductController : ControllerBase
     }
 
     private static readonly Random _random = new();
+
+    /// <summary>
+    /// Fills hasMapping / mappingMissing on list-row adapterLinks so the products table
+    /// can color adapter buttons without opening each cell menu.
+    /// </summary>
+    private async Task EnrichAdapterLinkMappingFlagsAsync(
+        List<Product.ProductReviewDTO> dtos,
+        List<Product> products)
+    {
+        if (dtos.Count == 0)
+            return;
+
+        var categoryIds = dtos
+            .Where(d => d.categoryId.HasValue)
+            .Select(d => d.categoryId!.Value)
+            .Distinct()
+            .ToList();
+        var connectionIds = dtos
+            .SelectMany(d => d.adapterLinks ?? Enumerable.Empty<Product.AdapterLinkSummary>())
+            .Select(l => l.connectionId)
+            .Distinct()
+            .ToList();
+
+        HashSet<(int categoryId, int connectionId)> mappingPairs = new();
+        if (categoryIds.Count > 0 && connectionIds.Count > 0)
+        {
+            var pairs = await _context.categoryMappings
+                .AsNoTracking()
+                .Where(m => categoryIds.Contains(m.localCategoryId) && connectionIds.Contains(m.connectionId))
+                .Select(m => new { m.localCategoryId, m.connectionId })
+                .ToListAsync();
+            mappingPairs = pairs
+                .Select(p => (p.localCategoryId, p.connectionId))
+                .ToHashSet();
+        }
+
+        ProductAdapterLinkMappingEnrichment.Apply(
+            dtos,
+            mappingPairs,
+            products.ToDictionary(p => p.Id));
+    }
 
     /// <summary>Generates a random valid EAN-13 barcode with prefix 200-299 (internal use).</summary>
     public static string GenerateEan13()

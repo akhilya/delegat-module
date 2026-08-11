@@ -798,7 +798,10 @@ public class ProductTransferService
                         {
                             productId = newProduct.Id,
                             text = srcNote.text,
-                            importance = srcNote.importance
+                            importance = srcNote.importance,
+                            authorUserId = srcNote.authorUserId,
+                            createdAt = srcNote.createdAt,
+                            updatedAt = DateTime.UtcNow
                         });
                         completedItems++;
                     }

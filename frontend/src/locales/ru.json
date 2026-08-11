@@ -237,6 +237,7 @@
     "trash": "Корзина",
     "categories": "Категории",
     "barcodes": "Штрихкоды",
+    "notes": "Заметки",
     "storage": "Хранилище",
     "marketplace": "Маркетплейс",
     "connections": "Подключения",
@@ -346,6 +347,7 @@
     "storage": "Хранилище",
     "categories": "Категории",
     "barcodes": "Штрихкоды",
+    "notes": "Заметки",
     "groups": "Группы товаров",
     "tools": "Инструменты",
     "attributes": "Глобальные атрибуты",
@@ -649,6 +651,7 @@
         "productUnlinked": "Товар отвязан от адаптера",
         "selectUnlinkedProducts": "Выберите несвязанные товары",
         "categoryCreateError": "Ошибка создания категории: {error}",
+        "categoryNameRequired": "Укажите название для каждой новой категории без категории адаптера",
         "queuedForImport": "Добавлено в очередь: {count} товаров",
         "importSummary": "Создано: {created}, пропущено: {skipped}, ошибок: {failed}",
         "selectLinkedProducts": "Выберите связанные товары",
@@ -1866,6 +1869,7 @@
       "categoryLabel": "Категория",
       "storageQuantityLabel": "Остаток",
       "priceLabel": "Цена",
+      "adaptersLabel": "Адаптеры",
       "createdAtLabel": "Создан",
       "updatedAtLabel": "Обновлён",
       "copySkuTooltip": "Скопировать SKU",
@@ -1891,6 +1895,11 @@
           "description": "Объединить название, категорию и SKU в одну колонку"
         }
       }
+    },
+    "adaptersColumn": {
+      "notLinked": "Не связан",
+      "linkOnProduct": "Привязать на странице товара",
+      "configureMapping": "Настроить маппинг"
     },
     "productTransferDialog": {
       "previewLoadFailed": "Не удалось загрузить предпросмотр",
@@ -2438,6 +2447,33 @@
       "emptyTitle": "Нет штрихкодов",
       "emptyDescription": "Здесь появятся товары с EAN-штрихкодами"
     },
+    "notesPage": {
+      "breadcrumb": "Заметки",
+      "searchPlaceholder": "Поиск по тексту заметки",
+      "productSearchPlaceholder": "Название или SKU товара",
+      "importanceAll": "Любая важность",
+      "authorAll": "Все авторы",
+      "authorUnknown": "Автор неизвестен",
+      "sortLabel": "Сортировка",
+      "sortCreatedDesc": "Сначала новые",
+      "sortCreatedAsc": "Сначала старые",
+      "sortUpdatedDesc": "Недавно обновлённые",
+      "sortImportanceDesc": "Важность: высокая → низкая",
+      "sortImportanceAsc": "Важность: низкая → высокая",
+      "sortProductAsc": "Товар А–Я",
+      "sortProductDesc": "Товар Я–А",
+      "clearFilters": "Сбросить фильтры",
+      "columnImportance": "Важность",
+      "columnNote": "Заметка",
+      "columnProduct": "Товар",
+      "columnAuthor": "Автор",
+      "columnCreated": "Создана",
+      "pageRange": "{from}-{to} из {total}",
+      "emptyTitle": "Заметок пока нет",
+      "emptyDescription": "Заметки с карточек товаров появятся здесь",
+      "emptyFilteredTitle": "Ничего не найдено",
+      "emptyFilteredDescription": "Измените поиск или фильтры"
+    },
     "notFoundPage": {
       "errorCode": "Ошибка 404",
       "title": "Страница не найдена",
@@ -2669,6 +2705,7 @@
       "multilineHint": "Поле с переносами строк на странице товара",
       "showOnProductPageLabel": "На странице товара",
       "showOnProductPageHint": "Показывать при редактировании товара",
+      "showOnProductPageRequiredHint": "Обязательные поля всегда показываются на странице товара",
       "requiredFieldHint": "Требовать заполнение при создании товара",
       "uniqueFieldTitle": "Уникальное",
       "uniqueFieldHint": "Значение не должно повторяться у других товаров в этой категории",
@@ -2757,6 +2794,7 @@
         "multilineHint": "Поле с переносами строк на странице товара",
         "showOnProductPageLabel": "На странице товара",
         "showOnProductPageHint": "Показывать при редактировании товара",
+        "showOnProductPageRequiredHint": "Обязательные поля всегда показываются на странице товара",
         "requiredFieldLabel": "Обязательное поле",
         "requiredFieldHint": "Требовать заполнение при создании товара",
         "uniqueFieldLabel": "Уникальное",
@@ -2779,6 +2817,8 @@
       "emptyDescription": "Категории и атрибуты доступны через меню пользователя"
     },
     "productsPage": {
+      "searchPlaceholder": "Поиск",
+      "searchHint": "Название (подстрока). Точное совпадение: SKU, ID, штрихкод, id маркетплейса",
       "toast": {
         "bulkDeleted": "Удалено товаров: {count}",
         "bulkDeleteFailed": "Не удалось удалить товары",
@@ -3390,6 +3430,7 @@
       "multilineHint": "Поле с переносами строк на странице товара",
       "showOnProductPageLabel": "На странице товара",
       "showOnProductPageHint": "Показывать при редактировании товара",
+      "showOnProductPageRequiredHint": "Обязательные поля всегда показываются на странице товара",
       "requiredFieldHint": "Требовать заполнение при создании товара",
       "uniqueFieldTitle": "Уникальное",
       "uniqueFieldHint": "Значение не должно повторяться у других товаров в этой категории",

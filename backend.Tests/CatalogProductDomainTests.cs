@@ -1,3 +1,4 @@
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Products;
 using Delegat.Services;
@@ -122,7 +123,10 @@ public class CatalogProductDomainTests
         data.AddProduct(store.Id, name: "Red sneaker", sku: "A");
         data.AddProduct(store.Id, name: "Blue boot", sku: "B");
         await data.SaveAsync();
-        var items = await db.products.Where(p => p.storeId == store.Id && (p.name.Contains("sneaker") || p.sku.Contains("sneaker"))).ToListAsync();
+        var items = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("sneaker")
+            .ToListAsync();
         Assert.Single(items);
     }
 
@@ -134,7 +138,102 @@ public class CatalogProductDomainTests
         data.AddProduct(store.Id, sku: "RED-01");
         data.AddProduct(store.Id, sku: "BLUE-01");
         await data.SaveAsync();
-        Assert.Single(await db.products.Where(p => p.storeId == store.Id && (p.name.Contains("RED") || p.sku.Contains("RED"))).ToListAsync());
+        Assert.Single(await db.products.Where(p => p.storeId == store.Id).WhereMatchesSearch("RED-01").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Search_SkuExact_DoesNotMatchPartialNeighbor()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id, name: "With underscore", sku: "_ПК105");
+        data.AddProduct(store.Id, name: "Plain", sku: "ПК105");
+        await data.SaveAsync();
+
+        var byUnderscore = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("_ПК105")
+            .ToListAsync();
+        Assert.Single(byUnderscore);
+        Assert.Equal("_ПК105", byUnderscore[0].sku);
+
+        var byPlain = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("ПК105")
+            .ToListAsync();
+        Assert.Single(byPlain);
+        Assert.Equal("ПК105", byPlain[0].sku);
+    }
+
+    [Fact]
+    public async Task Search_ExactSkuRanksAboveNameContains()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id, name: "Box ПК105 deluxe", sku: "OTHER");
+        var exact = data.AddProduct(store.Id, name: "Exact sku product", sku: "ПК105");
+        await data.SaveAsync();
+
+        var ordered = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("ПК105")
+            .OrderBySearchRelevance("ПК105")
+            .ToListAsync();
+
+        Assert.Equal(2, ordered.Count);
+        Assert.Equal(exact.Id, ordered[0].Id);
+    }
+
+    [Fact]
+    public async Task Search_FilterMatchesProductId()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var target = data.AddProduct(store.Id, name: "Target");
+        data.AddProduct(store.Id, name: "Other");
+        await data.SaveAsync();
+        var items = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch(target.Id.ToString())
+            .ToListAsync();
+        Assert.Single(items);
+        Assert.Equal(target.Id, items[0].Id);
+    }
+
+    [Fact]
+    public async Task Search_FilterMatchesBarcode()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var withBarcode = data.AddProduct(store.Id, name: "Coded");
+        withBarcode.barcode = "4601234567890";
+        data.AddProduct(store.Id, name: "Plain");
+        await data.SaveAsync();
+        var items = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("4601234567890")
+            .ToListAsync();
+        Assert.Single(items);
+        Assert.Equal(withBarcode.Id, items[0].Id);
+    }
+
+    [Fact]
+    public async Task Search_FilterMatchesExternalProductId()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var product = data.AddProduct(store.Id, name: "Linked");
+        data.AddProduct(store.Id, name: "Unlinked");
+        var connection = data.AddConnection(store.Id);
+        data.AddProductLink(connection.Id, product.Id, externalProductId: "ozon-ext-42");
+        await data.SaveAsync();
+
+        var items = await db.products
+            .Where(p => p.storeId == store.Id)
+            .WhereMatchesSearch("ozon-ext-42")
+            .ToListAsync();
+        Assert.Single(items);
+        Assert.Equal(product.Id, items[0].Id);
     }
 
     [Fact]

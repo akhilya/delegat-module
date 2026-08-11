@@ -15,7 +15,8 @@ COPY . .
 # Build arguments
 ARG VITE_API_SERVER=/api
 ENV VITE_API_SERVER=$VITE_API_SERVER
-ARG VITE_APP_VERSION=dev
+# Empty default: CI/release must pass SemVer from root VERSION. Treat unset as unknown in the SPA (do not bake "dev").
+ARG VITE_APP_VERSION=
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
 ARG VITE_DOCS_PUBLIC_URL=https://docs.module.delegat.pro
 ENV VITE_DOCS_PUBLIC_URL=$VITE_DOCS_PUBLIC_URL

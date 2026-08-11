@@ -177,7 +177,8 @@ public class CategoryImportService
                 defaultValue = defaultValue,
                 description = field.Description,
                 group = adapter.DisplayName,
-                categoryId = category.Id
+                categoryId = category.Id,
+                showOnProductPage = true,
             });
 
             _context.categoryAttributes.Add(attribute);

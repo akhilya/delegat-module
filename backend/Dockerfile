@@ -27,13 +27,17 @@ RUN dotnet restore plugins/Delegat.Marketplace.WooCommerce/Delegat.Marketplace.W
 COPY backend/ backend/
 COPY sdk/ sdk/
 COPY plugins/ plugins/
+COPY VERSION VERSION
 
 # Do not let host build artifacts overwrite Linux restore outputs.
 RUN find backend sdk plugins -depth -type d \( -name bin -o -name obj -o -name .vs \) -exec rm -rf {} +
 
-# Publish backend app (plugins are built separately for target arch below)
-ARG APP_VERSION=dev
-RUN dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app /p:InformationalVersion=$APP_VERSION /p:BuildPlugins=false
+# Publish backend app (plugins are built separately for target arch below).
+# Prefer build-arg APP_VERSION; otherwise bake root VERSION (never silent "dev").
+ARG APP_VERSION=
+RUN APP_VER="${APP_VERSION:-$(tr -d '[:space:]' < VERSION)}" \
+ && dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app \
+      /p:InformationalVersion=$APP_VER /p:BuildPlugins=false
 
 # Build plugins and copy DLLs to app (plugins/Directory.Build.props points to top-level sdk)
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon

@@ -277,6 +277,27 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             updatedAt = updatedAt,
             deletedAt = deletedAt,
             storeAttributeValues = storeAttributeValues?.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
+            adapterLinks = marketplaceLinks?
+                .Where(l => l.connection != null)
+                .Select(l =>
+                {
+                    var savedMappingWasDeleted = l.categoryMappingId != null && l.categoryMapping == null;
+                    return new AdapterLinkSummary
+                    {
+                        linkId = l.Id,
+                        connectionId = l.connectionId,
+                        adapterKey = l.connection.adapterKey,
+                        status = l.status.ToString(),
+                        externalProductId = l.externalProductId,
+                        externalSku = l.externalSku,
+                        lastSyncAt = l.lastSyncAt,
+                        preferredExportMode = l.preferredExportMode,
+                        // hasMapping / mappingMissing completed by ProductController enrichment
+                        // (needs store category-mapping lookup). Seed deleted-mapping case here.
+                        hasMapping = l.categoryMapping != null,
+                        mappingMissing = savedMappingWasDeleted,
+                    };
+                }),
         };
     }
 
@@ -517,5 +538,35 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Store-level attribute values for table columns.
         /// </summary>
         public IEnumerable<StoreProductAttributeValue.ValueDTO>? storeAttributeValues { get; set; }
+
+        /// <summary>
+        /// Marketplace link summaries for the adapters column (status per connection).
+        /// </summary>
+        public IEnumerable<AdapterLinkSummary>? adapterLinks { get; set; }
+    }
+
+    /// <summary>
+    /// Compact marketplace link info for product list rows.
+    /// </summary>
+    public struct AdapterLinkSummary
+    {
+        public int linkId { get; set; }
+        public int connectionId { get; set; }
+        public string adapterKey { get; set; }
+        public string status { get; set; }
+        public string externalProductId { get; set; }
+        public string? externalSku { get; set; }
+        public DateTime? lastSyncAt { get; set; }
+        public string preferredExportMode { get; set; }
+
+        /// <summary>
+        /// Whether a category mapping exists for this product category + connection.
+        /// </summary>
+        public bool hasMapping { get; set; }
+
+        /// <summary>
+        /// Linked but mapping missing or deleted — UI should treat as error (not Synced green).
+        /// </summary>
+        public bool mappingMissing { get; set; }
     }
 }

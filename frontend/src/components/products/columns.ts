@@ -13,6 +13,7 @@ import {
   renderAttributeValueCell,
 } from "@/lib/attributeTableCell";
 import { formatDateTimeCell } from "@/utils/dateTime";
+import ProductAdaptersCell from "./ProductAdaptersCell.vue";
 import { formatMoney } from "@/lib/currency";
 
 /** Creates a copy icon SVG DOM element. */
@@ -288,6 +289,20 @@ export const columns: ProductColumnDef[] = [
     },
   },
   {
+    id: "adapters",
+    label: t("products.columns.adaptersLabel"),
+    hideable: true,
+    header: t("products.columns.adaptersLabel"),
+    size: 140,
+    enableSorting: false,
+    cell: ({ row, table }) =>
+      h(ProductAdaptersCell, {
+        product: row.original,
+        connections: table.options.meta?.connections ?? [],
+        onChanged: table.options.meta?.onAdaptersChanged,
+      }),
+  },
+  {
     id: "createdAt",
     label: t("products.columns.createdAtLabel"),
     hideable: true,
@@ -316,6 +331,7 @@ export const defaultVisibleColumns: Record<string, boolean> = {
   storageQuantity: true,
   price: false, // hidden by default
   name: true,
+  adapters: true,
   createdAt: false, // hidden by default
   updatedAt: false, // hidden by default
 };

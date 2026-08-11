@@ -26,7 +26,7 @@ import {
   toggleSortColumn,
 } from "@/lib/productSort";
 import { mapActions } from "vuex";
-import { displaySonnerError } from "@/store/sonnerHelper";
+import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { toast } from "vue-sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +82,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { PAGE_PRODUCT_EDIT } from "@/router";
 
 const COLUMN_VISIBILITY_KEY = "products-column-visibility";
@@ -127,6 +133,10 @@ export default {
     DialogHeader,
     DialogTitle,
     Input,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
     Select,
     SelectContent,
     SelectGroup,
@@ -168,6 +178,7 @@ export default {
       "bulkPermanentDeleteProducts",
       "restoreProduct",
       "permanentDeleteProduct",
+      "getConnections",
     ]),
 
     onRowClick(product) {
@@ -256,6 +267,21 @@ export default {
       });
       if (this.page !== 1) this.page = 1;
       else this.fetchProducts();
+    },
+
+    async fetchConnections() {
+      await this.getConnections({
+        onSuccess: (response) => {
+          this.connections = extractResponseData(response, []);
+        },
+        onError: () => {
+          this.connections = [];
+        },
+      });
+    },
+
+    onAdaptersChanged() {
+      if (!this.isTrashMode) this.fetchProducts();
     },
 
     async fetchStoreAttributes() {
@@ -558,6 +584,7 @@ export default {
 
     return {
       products: [],
+      connections: [],
       fetchGeneration: 0,
       // True until first fetch finishes — otherwise the table flashes empty while
       // categories / store attributes load in mounted() before fetchProducts().
@@ -804,6 +831,7 @@ export default {
       this.fetchStoreBaseCurrency(),
       this.fetchCategories(),
       this.fetchTrashCount(),
+      this.fetchConnections(),
     ]);
 
     // Load column visibility from localStorage (now includes store attributes)
@@ -824,21 +852,30 @@ export default {
   <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
     <template #nav-center>
         <div class="flex items-center gap-2 w-full">
-          <div class="relative flex-1 h-9">
-            <Input
-              class="absolute w-full h-full"
-              :placeholder="$t('common.search') + '...'"
-              v-model="searchQuery"
-              @keypress.enter="fetchProducts"
-            />
-            <Button
-              class="absolute top-1/2 -translate-y-1/2 right-0.5 size-8"
-              variant="link"
-              @click="fetchProducts"
-            >
-              <Search class="size-4" />
-            </Button>
-          </div>
+          <TooltipProvider :delay-duration="400">
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <div class="relative h-9 flex-1">
+                  <Input
+                    class="absolute h-full w-full"
+                    :placeholder="$t('common.search')"
+                    v-model="searchQuery"
+                    @keypress.enter="fetchProducts"
+                  />
+                  <Button
+                    class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+                    variant="link"
+                    @click="fetchProducts"
+                  >
+                    <Search class="size-4" />
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" class="max-w-xs text-left">
+                {{ $t("pages.productsPage.searchHint") }}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Popover>
             <PopoverTrigger as-child>
               <Button
@@ -901,11 +938,13 @@ export default {
         :start-index="startIndex"
         :sort-columns="sortColumns"
         :sortable-columns="sortableColumnIds"
+        :connections="connections"
         @update:row-selection="rowSelection = $event"
         @update:column-visibility="onColumnVisibilityChange"
         @update:column-order="onColumnOrderChange"
         @sort="toggleSort"
         @row-click="onRowClick"
+        @adapters-changed="onAdaptersChanged"
         class="flex-1 min-h-0"
       >
         <template #headerActions>

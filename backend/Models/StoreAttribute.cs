@@ -110,7 +110,7 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         isRequired = form.isRequired;
         isUnique = form.isUnique;
         isMultiline = form.isMultiline;
-        showOnProductPage = form.showOnProductPage;
+        showOnProductPage = form.isRequired || form.showOnProductPage;
         sortOrder = form.sortOrder;
         options = form.options;
         defaultValue = form.defaultValue;
@@ -137,6 +137,9 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
             isMultiline = form.isMultiline.Value;
         if (form.showOnProductPage.HasValue)
             showOnProductPage = form.showOnProductPage.Value;
+        // Required attributes must always appear on the product page.
+        if (isRequired)
+            showOnProductPage = true;
         if (form.sortOrder.HasValue)
             sortOrder = form.sortOrder.Value;
         options = form.options;
@@ -158,7 +161,7 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
             isRequired = isRequired,
             isUnique = isUnique,
             isMultiline = isMultiline,
-            showOnProductPage = showOnProductPage,
+            showOnProductPage = isRequired || showOnProductPage,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,

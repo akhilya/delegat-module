@@ -28,6 +28,21 @@ public class Note : IEntity, IMapToDTO<object>, IAddable<Note.AddForm>, IUpdatea
     public Importance importance { get; set; }
 
     /// <summary>
+    /// User who created the note. Null for legacy rows created before authorship tracking.
+    /// </summary>
+    public int? authorUserId { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the note was created.
+    /// </summary>
+    public DateTime createdAt { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the note was last updated.
+    /// </summary>
+    public DateTime updatedAt { get; set; }
+
+    /// <summary>
     /// Foreign key to the associated product.
     /// </summary>
     [ForeignKey(nameof(product))]
@@ -44,6 +59,10 @@ public class Note : IEntity, IMapToDTO<object>, IAddable<Note.AddForm>, IUpdatea
         text = form.userAddForm.text;
         importance = form.userAddForm.importance;
         productId = form.productId;
+        authorUserId = form.authorUserId;
+        var now = DateTime.UtcNow;
+        createdAt = now;
+        updatedAt = now;
 
         return true;
     }
@@ -55,6 +74,8 @@ public class Note : IEntity, IMapToDTO<object>, IAddable<Note.AddForm>, IUpdatea
         if (form.importance.HasValue)
             importance = form.importance.Value;
 
+        updatedAt = DateTime.UtcNow;
+
         return true;
     }
 
@@ -64,7 +85,10 @@ public class Note : IEntity, IMapToDTO<object>, IAddable<Note.AddForm>, IUpdatea
         {
             Id,
             text,
-            importance
+            importance,
+            authorUserId,
+            createdAt,
+            updatedAt
         };
     }
 
@@ -88,10 +112,16 @@ public class Note : IEntity, IMapToDTO<object>, IAddable<Note.AddForm>, IUpdatea
         /// </summary>
         public int productId { get; set; }
 
-        public AddForm(UserAddForm userAddForm, int productId)
+        /// <summary>
+        /// Authenticated user creating the note.
+        /// </summary>
+        public int? authorUserId { get; set; }
+
+        public AddForm(UserAddForm userAddForm, int productId, int? authorUserId = null)
         {
             this.userAddForm = userAddForm;
             this.productId = productId;
+            this.authorUserId = authorUserId;
         }
     }
 

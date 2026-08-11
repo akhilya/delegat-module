@@ -1144,6 +1144,12 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("importance")
                         .HasColumnType("int");
 
@@ -1155,7 +1161,14 @@ namespace Delegat.Migrations
                         .HasMaxLength(10000)
                         .HasColumnType("varchar(10000)");
 
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("authorUserId");
+
+                    b.HasIndex("createdAt");
 
                     b.HasIndex("productId");
 

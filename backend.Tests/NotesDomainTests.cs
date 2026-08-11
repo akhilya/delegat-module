@@ -14,7 +14,7 @@ public class NotesDomainTests
         var product = data.AddProduct(data.AddStore().Id);
         var note = new Note();
 
-        Assert.True(note.AddFill(new Note.AddForm(new Note.UserAddForm { text = "Check packaging", importance = Importance.High }, product.Id)));
+        Assert.True(note.AddFill(new Note.AddForm(new Note.UserAddForm { text = "Check packaging", importance = Importance.High }, product.Id, authorUserId: 7)));
         db.notes.Add(note);
         await data.SaveAsync();
 
@@ -22,6 +22,9 @@ public class NotesDomainTests
         Assert.Equal(product.Id, saved.productId);
         Assert.Equal("Check packaging", saved.text);
         Assert.Equal(Importance.High, saved.importance);
+        Assert.Equal(7, saved.authorUserId);
+        Assert.True(saved.createdAt > DateTime.UtcNow.AddMinutes(-1));
+        Assert.Equal(saved.createdAt, saved.updatedAt);
     }
 
     [Fact]
@@ -39,6 +42,74 @@ public class NotesDomainTests
 
         Assert.Equal("Final", db.notes.Single().text);
         Assert.Equal(Importance.High, db.notes.Single().importance);
+        Assert.True(db.notes.Single().updatedAt >= db.notes.Single().createdAt);
+    }
+
+    [Fact]
+    public async Task Notes_ListQuery_FiltersByStoreImportanceAndSearch()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var storeA = data.AddStore("A");
+        var storeB = data.AddStore("B");
+        var productA = data.AddProduct(storeA.Id, name: "Alpha Chair", sku: "SKU-A");
+        var productB = data.AddProduct(storeB.Id, name: "Beta Table", sku: "SKU-B");
+        var now = DateTime.UtcNow;
+        db.notes.AddRange(
+            new Note
+            {
+                productId = productA.Id,
+                text = "Pack carefully",
+                importance = Importance.High,
+                authorUserId = 1,
+                createdAt = now.AddHours(-2),
+                updatedAt = now.AddHours(-2)
+            },
+            new Note
+            {
+                productId = productA.Id,
+                text = "Low priority remark",
+                importance = Importance.Low,
+                authorUserId = null,
+                createdAt = now.AddHours(-1),
+                updatedAt = now.AddHours(-1)
+            },
+            new Note
+            {
+                productId = productB.Id,
+                text = "Other store",
+                importance = Importance.High,
+                authorUserId = 2,
+                createdAt = now,
+                updatedAt = now
+            });
+        await data.SaveAsync();
+
+        var storeANotes = (
+            from n in db.notes
+            join p in db.products on n.productId equals p.Id
+            where p.storeId == storeA.Id && p.deletedAt == null
+            select n
+        ).ToList();
+        Assert.Equal(2, storeANotes.Count);
+
+        var highOnly = storeANotes.Where(n => n.importance == Importance.High).ToList();
+        Assert.Single(highOnly);
+        Assert.Equal("Pack carefully", highOnly[0].text);
+
+        var search = storeANotes.Where(n => n.text.Contains("priority")).ToList();
+        Assert.Single(search);
+
+        var byProduct = (
+            from n in db.notes
+            join p in db.products on n.productId equals p.Id
+            where p.storeId == storeA.Id && (p.name.Contains("Chair") || p.sku.Contains("Chair"))
+            select n
+        ).ToList();
+        Assert.Equal(2, byProduct.Count);
+
+        var unknownAuthors = storeANotes.Where(n => n.authorUserId == null).ToList();
+        Assert.Single(unknownAuthors);
     }
 
     [Fact]

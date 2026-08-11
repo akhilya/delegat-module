@@ -27,6 +27,7 @@ public class StoreAttributeDomainTests
         Assert.Equal("brand", attribute.key);
         Assert.True(attribute.isRequired);
         Assert.True(attribute.isMultiline);
+        Assert.True(attribute.showOnProductPage);
         Assert.Equal(3, attribute.sortOrder);
     }
 
@@ -43,6 +44,8 @@ public class StoreAttributeDomainTests
         Assert.Equal("New", attribute.name);
         Assert.Equal("new", attribute.key);
         Assert.Equal(AttributeType.Select, attribute.type);
+        Assert.True(attribute.isRequired);
+        Assert.True(attribute.showOnProductPage);
         Assert.Equal(8, attribute.sortOrder);
         Assert.True(attribute.descriptionInTooltip);
     }
