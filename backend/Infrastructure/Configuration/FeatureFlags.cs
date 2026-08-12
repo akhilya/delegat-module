@@ -41,6 +41,24 @@ public static class FeatureFlags
         return IsTruthy(raw);
     }
 
+    /// <summary>
+    /// Public API usage (partner <c>/api/v1</c>). Explicit <c>true</c>/<c>false</c> always win.
+    /// Unset/empty: enabled for self-host; disabled when <c>CONTROL_PLANE_URL</c> is set
+    /// (Control Plane emits <c>API_USAGE_ENABLED</c> from the plan: Lite off, Pro+ on).
+    /// Independent of the admin <c>PUBLIC_API_ENABLED</c> toggle — both must be on for traffic.
+    /// </summary>
+    public static bool IsApiUsageEnabled()
+    {
+        var raw = Environment.GetEnvironmentVariable("API_USAGE_ENABLED");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            var cp = Environment.GetEnvironmentVariable("CONTROL_PLANE_URL");
+            return string.IsNullOrWhiteSpace(cp);
+        }
+
+        return IsTruthy(raw);
+    }
+
     /// <summary>Persist API exception rows to MySQL. Used to seed admin UI settings on first boot.</summary>
     public static bool IsErrorLoggingEnabled()
         => ParseBoolEnv("LOG_ERRORS_ENABLED", defaultValue: true);

@@ -526,6 +526,11 @@ if (!aiEnabled)
     Console.WriteLine("AI_ENABLED=false: AI services and controllers are not registered (restart to enable).");
 }
 
+if (!FeatureFlags.IsApiUsageEnabled())
+{
+    Console.WriteLine("API_USAGE_ENABLED=false: Public API /api/v1 and Swagger are blocked (plan).");
+}
+
 var app = builder.Build();
 
 // Squashed schema baseline (replaces the pre-squash 68-migration chain).

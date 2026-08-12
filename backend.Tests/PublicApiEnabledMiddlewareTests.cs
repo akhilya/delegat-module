@@ -17,9 +17,53 @@ public class PublicApiEnabledMiddlewareTests
             GetAsync(ct);
     }
 
+    private static IDisposable SetEnv(string name, string? value)
+    {
+        var previous = Environment.GetEnvironmentVariable(name);
+        Environment.SetEnvironmentVariable(name, value);
+        return new EnvRestore(name, previous);
+    }
+
+    private sealed class EnvRestore(string name, string? previous) : IDisposable
+    {
+        public void Dispose() => Environment.SetEnvironmentVariable(name, previous);
+    }
+
+    [Fact]
+    public async Task PublicApiPath_WhenPlanDisablesUsage_Returns503ApiUsageDisabled()
+    {
+        using var _api = SetEnv("API_USAGE_ENABLED", "false");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
+        var called = false;
+        var middleware = new PublicApiEnabledMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/v1/stores/1/products";
+        context.Response.Body = new MemoryStream();
+
+        await middleware.InvokeAsync(context, new StubPublicApiSettings(enabled: true));
+
+        Assert.False(called);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        var error = doc.RootElement.GetProperty("error");
+        Assert.Equal("API_USAGE_DISABLED", error.GetProperty("code").GetString());
+        Assert.Equal("Public API is not included in this plan.", error.GetProperty("message").GetString());
+    }
+
     [Fact]
     public async Task PublicApiPath_WhenDisabled_Returns503Envelope()
     {
+        using var _api = SetEnv("API_USAGE_ENABLED", "true");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
         var called = false;
         var middleware = new PublicApiEnabledMiddleware(_ =>
         {
@@ -48,6 +92,9 @@ public class PublicApiEnabledMiddlewareTests
     [Fact]
     public async Task PublicApiPath_WhenEnabled_PassesThrough()
     {
+        using var _api = SetEnv("API_USAGE_ENABLED", "true");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
         var called = false;
         var middleware = new PublicApiEnabledMiddleware(_ =>
         {
@@ -86,6 +133,9 @@ public class PublicApiEnabledMiddlewareTests
     [Fact]
     public async Task SwaggerPath_WhenDisabled_Returns503Envelope()
     {
+        using var _api = SetEnv("API_USAGE_ENABLED", "true");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
         var called = false;
         var middleware = new PublicApiEnabledMiddleware(_ =>
         {
@@ -110,6 +160,9 @@ public class PublicApiEnabledMiddlewareTests
     [Fact]
     public async Task SwaggerPath_WhenEnabled_PassesThrough()
     {
+        using var _api = SetEnv("API_USAGE_ENABLED", "true");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
         var called = false;
         var middleware = new PublicApiEnabledMiddleware(_ =>
         {

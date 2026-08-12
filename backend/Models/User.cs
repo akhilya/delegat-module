@@ -66,6 +66,7 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
             isActive = isActive,
             aiEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsAiEnabled(),
             pluginsEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsPluginsEnabled(),
+            apiUsageEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsApiUsageEnabled(),
             roles = Array.Empty<string>(),
             permissions = Array.Empty<string>(),
         };
@@ -112,10 +113,16 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         public bool aiEnabled { get; set; }
 
         /// <summary>
-        /// Whether the Plugins admin page (import/reload/delete) is enabled (PLUGINS_ENABLED).
+        /// Whether plugin management is enabled for this instance (from PLUGINS_ENABLED).
         /// System marketplace adapters load regardless.
         /// </summary>
         public bool pluginsEnabled { get; set; }
+
+        /// <summary>
+        /// Whether Public API usage is included in the plan (from API_USAGE_ENABLED).
+        /// Independent of the admin Public API toggle.
+        /// </summary>
+        public bool apiUsageEnabled { get; set; }
 
         /// <summary>Whether error logs are persisted (admin toggle).</summary>
         public bool logErrorsEnabled { get; set; }
@@ -126,7 +133,7 @@ public class User : IdentityUser<int>, IEntity, IMapToDTO<User.UserDTO>, IUpdate
         /// <summary>Whether adapter HTTP logs are persisted (admin toggle).</summary>
         public bool logAdapterHttpEnabled { get; set; }
 
-        /// <summary>Whether Public API (/api/v1) accepts traffic (admin toggle).</summary>
+        /// <summary>Whether Public API (/api/v1) accepts traffic (plan flag AND admin toggle).</summary>
         public bool publicApiEnabled { get; set; } = true;
 
         /// <summary>Assigned Identity role names.</summary>

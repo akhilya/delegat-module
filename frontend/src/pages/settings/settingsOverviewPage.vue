@@ -45,6 +45,9 @@ const publicApi = reactive({
   publicApiEnabled: false,
 });
 
+/** Plan flag from /auth/me (`API_USAGE_ENABLED`). Default true until me loads. */
+const apiUsageEnabled = ref(true);
+
 const loggingDirty = computed(
   () =>
     logging.logErrorsEnabled !== savedLogging.logErrorsEnabled
@@ -52,8 +55,12 @@ const loggingDirty = computed(
     || logging.logAdapterHttpEnabled !== savedLogging.logAdapterHttpEnabled,
 );
 
+const publicApiLocked = computed(() => apiUsageEnabled.value === false);
+
 const publicApiDirty = computed(
-  () => publicApi.publicApiEnabled !== savedPublicApi.publicApiEnabled,
+  () =>
+    !publicApiLocked.value
+    && publicApi.publicApiEnabled !== savedPublicApi.publicApiEnabled,
 );
 
 const apiLoggingDisabled = computed(
@@ -61,6 +68,7 @@ const apiLoggingDisabled = computed(
     loggingLoading.value
     || loggingSaving.value
     || publicApiLoading.value
+    || publicApiLocked.value
     || !publicApi.publicApiEnabled,
 );
 
@@ -151,6 +159,15 @@ async function refreshMe() {
   notifyMeUpdated(me);
 }
 
+async function loadPlanFlags() {
+  try {
+    const me = await loadMe();
+    apiUsageEnabled.value = me?.apiUsageEnabled !== false;
+  } catch {
+    apiUsageEnabled.value = true;
+  }
+}
+
 async function loadLoggingSettings() {
   loggingLoading.value = true;
   try {
@@ -218,7 +235,7 @@ async function savePublicApiSettings() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPublicApiSettings(), loadLoggingSettings()]);
+  await Promise.all([loadPlanFlags(), loadPublicApiSettings(), loadLoggingSettings()]);
   settingsLoaded.value = true;
 });
 </script>
@@ -232,12 +249,16 @@ onMounted(async () => {
       >
         <SettingsSettingRow
           :title="$t('pages.settingsOverviewPage.publicApiEnabledLabel')"
-          :description="$t('pages.settingsOverviewPage.publicApiEnabledHint')"
+          :description="
+            publicApiLocked
+              ? $t('pages.settingsOverviewPage.publicApiPlanLockedHint')
+              : $t('pages.settingsOverviewPage.publicApiEnabledHint')
+          "
         >
           <Switch
             v-if="settingsLoaded"
-            :model-value="publicApi.publicApiEnabled"
-            :disabled="publicApiLoading || publicApiSaving"
+            :model-value="publicApiLocked ? false : publicApi.publicApiEnabled"
+            :disabled="publicApiLoading || publicApiSaving || publicApiLocked"
             @update:model-value="(v) => (publicApi.publicApiEnabled = v)"
           />
           <div
@@ -247,7 +268,10 @@ onMounted(async () => {
           />
         </SettingsSettingRow>
 
-        <div class="mt-4 flex justify-end">
+        <div
+          v-if="!publicApiLocked"
+          class="mt-4 flex justify-end"
+        >
           <Button
             :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
             @click="savePublicApiSettings"
@@ -283,9 +307,9 @@ onMounted(async () => {
           <SettingsSettingRow
             :title="$t('pages.settingsOverviewPage.logApiRequestsLabel')"
             :description="
-              publicApi.publicApiEnabled
-                ? $t('pages.settingsOverviewPage.logApiRequestsHint')
-                : $t('pages.settingsOverviewPage.logApiRequestsDisabledHint')
+              publicApiLocked || !publicApi.publicApiEnabled
+                ? $t('pages.settingsOverviewPage.logApiRequestsDisabledHint')
+                : $t('pages.settingsOverviewPage.logApiRequestsHint')
             "
           >
             <Switch

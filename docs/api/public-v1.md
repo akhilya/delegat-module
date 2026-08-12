@@ -57,7 +57,9 @@ Discover stores: `GET /api/v1/stores`.
 
 Public API can be turned off in **Administration** without restarting the instance (`GET/PATCH /settings/public-api`, permission `settings.platform`). Seed default: env `PUBLIC_API_ENABLED` (default `true`); afterwards the DB row `instancePublicApiSettings` is the source of truth.
 
-When disabled, every `/api/v1/*` and `/swagger` request returns **503** with `error.code = PUBLIC_API_DISABLED`. The API keys page is hidden from the admin sidebar until Public API is turned back on.
+Plan flag `API_USAGE_ENABLED` (Control Plane: Lite off, Pro+ on) is separate. Unset defaults to enabled for self-host; when `CONTROL_PLANE_URL` is set, unset defaults to disabled. When the plan flag is off, every `/api/v1/*` and `/swagger` request returns **503** with `error.code = API_USAGE_DISABLED`, even if the admin toggle is on.
+
+When the admin toggle is off (and the plan allows API), every `/api/v1/*` and `/swagger` request returns **503** with `error.code = PUBLIC_API_DISABLED`. The API keys page is hidden from the admin sidebar until Public API is available.
 
 ## Conventions
 
@@ -92,6 +94,7 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 422 | `validation_error` | Invalid body (when used) |
 | 429 | `rate_limited` | Too many requests |
 | 503 | `PUBLIC_API_DISABLED` | Instance Public API toggle is off |
+| 503 | `API_USAGE_DISABLED` | Plan does not include Public API (`API_USAGE_ENABLED=false`) |
 
 ### Async marketplace operations
 

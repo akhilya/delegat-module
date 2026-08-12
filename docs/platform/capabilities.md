@@ -81,6 +81,7 @@
 - `MAX_FILES` - max files per store
 - `MAX_CONNECTIONS` - max marketplace connections
 - `AI_ENABLED` - whether AI assistant is available (`true` / `false`). Unset defaults to enabled for self-host; when `CONTROL_PLANE_URL` is set, unset defaults to disabled. Toggle requires process restart.
+- `API_USAGE_ENABLED` - whether Public API (`/api/v1`) usage is included in the plan (`true` / `false`). Same unset rules as `AI_ENABLED`. Lite is off, Pro+ is on. Independent of the admin `PUBLIC_API_ENABLED` toggle — both must be on for partner traffic. When the plan flag is off, `/api/v1` and `/swagger` return `503 API_USAGE_DISABLED` (restart after CP quota push / redeploy).
 - **Env only** (set by Control Plane on provision / plan change). Not editable in the instance admin UI.
 - **Administration** (`/settings`): shows plan limits vs usage per store; when over quota after a plan downgrade, lists concrete items that will be permanently trimmed (products, connections, largest files) and the Control Plane `OveragePurgeAt` deadline. Admins can **Trim now**; a background worker applies the same selection when the deadline is due (Platform Link required for auto-trim). Legacy `/settings/admin/usage` redirects here.
 - Usage is reported on Platform Link heartbeat; entitlements (`overagePurgeAt`, plan name) are cached locally for the UI.
@@ -95,6 +96,7 @@
   - `PUBLIC_API_ENABLED` (default `true`)
   - Stored in `instancePublicApiSettings`; change via `GET/PATCH /settings/public-api`
   - When off, `/api/v1` and `/swagger` return `503 PUBLIC_API_DISABLED`, Public API request logging is forced off, and the API keys page is hidden from the admin sidebar
+  - Plan flag `API_USAGE_ENABLED` (see Quotas) overrides this: when off, traffic is `503 API_USAGE_DISABLED` and the Administration switch is locked
 
 ### Platform Link (optional)
 - Env: `CONTROL_PLANE_URL`, `INSTANCE_ID`, `INSTANCE_LINK_SECRET` (see [platform-link.md](platform-link.md))

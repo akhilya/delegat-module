@@ -3044,6 +3044,7 @@
       "publicApiDescription": "Приём партнёрского трафика на /api/v1. Нажмите «Сохранить», чтобы применить — перезапуск не нужен.",
       "publicApiEnabledLabel": "Public API включён",
       "publicApiEnabledHint": "При выключении все запросы /api/v1 отвечают 503. Ключи и Swagger в админке остаются доступны.",
+      "publicApiPlanLockedHint": "Не входит в текущий тариф. Чтобы пользоваться API, нужен план Pro или выше.",
       "savePublicApiButton": "Сохранить",
       "publicApiSaved": "Настройки Public API сохранены",
       "loggingTitle": "Логирование",

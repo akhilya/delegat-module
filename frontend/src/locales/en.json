@@ -3044,6 +3044,7 @@
       "publicApiDescription": "Accept partner traffic on /api/v1. Click Save to apply — no restart needed.",
       "publicApiEnabledLabel": "Public API enabled",
       "publicApiEnabledHint": "When off, all /api/v1 requests return 503. API keys and Swagger stay available in the admin UI.",
+      "publicApiPlanLockedHint": "Not included in this plan. Upgrade to Pro or higher to use the Public API.",
       "savePublicApiButton": "Save",
       "publicApiSaved": "Public API settings saved",
       "loggingTitle": "Logging",

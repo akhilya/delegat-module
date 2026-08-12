@@ -103,6 +103,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - CP may inject empty/filled `BRAND_*` at provision (`BuildEnvFile`); no CP Ops brand UI yet.
 
 - **Docs links:** SPA resolves docs base from runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker `DOCS_PUBLIC_URL` → `runtime-config.js`, or Vite middleware reading repo-root `.env.dev`), else build-time `VITE_DOCS_PUBLIC_URL`, else dev `http://localhost:5173/docs` / prod `https://module.delegat.pro/docs`. Helpers: [`frontend/src/utils/docsUrl.js`](frontend/src/utils/docsUrl.js). CP sets `DOCS_PUBLIC_URL` on every provisioned instance.
+- **API usage (`API_USAGE_ENABLED`):** same ladder as AI. Explicit `true`/`false` win; unset = enabled for self-host, disabled when `CONTROL_PLANE_URL` is set. Lite = off, Pro+ = on (CP writes the env on provision / quota push). Middleware blocks `/api/v1` and `/swagger` with `503 API_USAGE_DISABLED` even if the admin Public API toggle is on. `/auth/me.publicApiEnabled` is the effective AND of plan + admin toggle; `apiUsageEnabled` is the plan flag alone.
 
 ---
 

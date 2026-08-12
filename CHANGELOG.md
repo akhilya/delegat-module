@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Honor Control Plane `API_USAGE_ENABLED` (Lite off, Pro+ on): `/api/v1` and `/swagger` return `503 API_USAGE_DISABLED` when the plan does not include API; Administration lock and hide API keys until upgrade
 - Sidebar warning icon on Settings / Administration when the instance is over plan quota (pending trim)
 - Products table **Adapters** column: ButtonGroup of store connections with status colors; each opens a sync/link menu (export, import, verify, unlink, open on marketplace / Adapters tab)
 - Store-wide Notes page (`/notes`): browse product notes with sort (importance, date, product) and filters (importance, author, unified search on note text / product name / SKU); note authorship and timestamps tracked on create/update; row opens a detail sheet to view/edit/delete the note and jump to the product

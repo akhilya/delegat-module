@@ -181,8 +181,10 @@ public class JwtAuthController : ControllerBase
         }
 
         var publicApi = _serviceProvider.GetService<Delegat.Services.IPublicApiSettingsService>();
-        dto.publicApiEnabled = publicApi?.IsPublicApiEnabled
-            ?? Delegat.Infrastructure.Configuration.FeatureFlags.IsPublicApiEnabled();
+        dto.apiUsageEnabled = Delegat.Infrastructure.Configuration.FeatureFlags.IsApiUsageEnabled();
+        dto.publicApiEnabled = dto.apiUsageEnabled
+            && (publicApi?.IsPublicApiEnabled
+                ?? Delegat.Infrastructure.Configuration.FeatureFlags.IsPublicApiEnabled());
 
         return dto;
     }

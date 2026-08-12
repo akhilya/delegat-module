@@ -77,6 +77,30 @@ public class FeatureFlagsTests
     [InlineData("", true)]
     [InlineData("true", true)]
     [InlineData("false", false)]
+    public void IsApiUsageEnabled_ParsesEnv_SelfHost(string? raw, bool expected)
+    {
+        using var _api = SetEnv("API_USAGE_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+        Assert.Equal(expected, FeatureFlags.IsApiUsageEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void IsApiUsageEnabled_FailClosedWhenControlPlaneLinked(string? raw, bool expected)
+    {
+        using var _api = SetEnv("API_USAGE_ENABLED", raw);
+        using var _cp = SetEnv("CONTROL_PLANE_URL", "https://module.delegat.pro");
+        Assert.Equal(expected, FeatureFlags.IsApiUsageEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
     [InlineData("0", false)]
     public void IsErrorLoggingEnabled_DefaultsTrue(string? raw, bool expected)
     {
