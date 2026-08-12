@@ -18,9 +18,12 @@ import {
 } from "lucide-vue-next";
 import { cn } from "@/lib/utils";
 
+const SEARCH_IDLE_MS = 1000;
+
 /**
  * Shared marketplace category tree browser (search + path + scrollable list).
  * Used by create-mapping dialog and category import page.
+ * Search emits after 1s idle; Enter / search button run immediately.
  */
 export default {
   name: "ExternalCategoryBrowser",
@@ -38,7 +41,7 @@ export default {
     BreadcrumbSeparator,
     ChevronRight,
     Home,
-    Search
+    Search,
   },
   props: {
     categories: { type: Array, default: () => [] },
@@ -58,6 +61,11 @@ export default {
     "navigate",
     "path-index",
   ],
+  data() {
+    return {
+      searchIdleTimer: null,
+    };
+  },
   computed: {
     showPath() {
       return this.path.length > 0 && !this.search;
@@ -66,7 +74,33 @@ export default {
       return cn("flex min-h-0 flex-1 flex-col gap-2", this.$attrs.class);
     },
   },
+  beforeUnmount() {
+    this.clearSearchIdleTimer();
+  },
   methods: {
+    clearSearchIdleTimer() {
+      if (this.searchIdleTimer != null) {
+        clearTimeout(this.searchIdleTimer);
+        this.searchIdleTimer = null;
+      }
+    },
+    emitSearchNow() {
+      this.clearSearchIdleTimer();
+      this.$emit("search");
+    },
+    onSearchInput(value) {
+      this.$emit("update:search", value);
+      this.clearSearchIdleTimer();
+      // Cleared query → reload tree immediately
+      if (!value || !String(value).trim()) {
+        this.$emit("search");
+        return;
+      }
+      this.searchIdleTimer = setTimeout(() => {
+        this.searchIdleTimer = null;
+        this.$emit("search");
+      }, SEARCH_IDLE_MS);
+    },
     onRowClick(cat) {
       if (cat.hasChildren) this.$emit("navigate", cat);
       else this.$emit("select", cat);
@@ -86,15 +120,15 @@ export default {
           :model-value="search"
           :placeholder="searchPlaceholder"
           class="pl-9"
-          @update:model-value="$emit('update:search', $event)"
-          @keyup.enter="$emit('search')"
+          @update:model-value="onSearchInput"
+          @keyup.enter="emitSearchNow"
         />
       </div>
       <Button
         variant="outline"
         size="icon"
         :aria-label="searchAriaLabel"
-        @click="$emit('search')"
+        @click="emitSearchNow"
       >
         <Search class="size-4" />
       </Button>

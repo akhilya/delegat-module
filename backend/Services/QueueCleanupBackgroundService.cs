@@ -190,6 +190,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         if (ancientOps.Count > 0)
             _logger.LogInformation("Queue cleanup timed out {Count} ancient running operations", ancientOps.Count);
 
+        // Empty / finished image-download children left running after import (no queue work).
+        var idleImages = await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
+            db, operationLogger, ct);
+        if (idleImages > 0)
+            _logger.LogInformation("Queue cleanup closed {Count} idle image-download operation(s)", idleImages);
+
         var deletedExports = await db.pendingProductExports
             .Where(p => (p.status == ProductExportStatus.Completed
                          || p.status == ProductExportStatus.Failed

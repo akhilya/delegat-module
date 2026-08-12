@@ -5,6 +5,7 @@ import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
+import { FieldSet, FieldLegend, FieldDescription } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -30,6 +31,9 @@ export default {
     SettingsFormField,
     SettingsFormSection,
     ExternalCategoryBrowser,
+    FieldSet,
+    FieldLegend,
+    FieldDescription,
     Button,
     Input,
     Badge,
@@ -358,12 +362,14 @@ export default {
           class="grid h-[max(22rem,calc(100svh-var(--app-navbar-height)-12rem))] min-h-[22rem] gap-5 overflow-hidden xl:grid-cols-2"
         >
           <div class="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
-            <div class="shrink-0">
-              <h2 class="text-lg font-semibold">{{ $t("marketplace.categoryImportPage.adapterCategory") }}</h2>
-              <p class="text-sm text-muted-foreground">
+            <FieldSet class="m-0 shrink-0 gap-1 border-0 p-0">
+              <FieldLegend variant="label" class="mb-0">
+                {{ $t("marketplace.categoryImportPage.adapterCategory") }}
+              </FieldLegend>
+              <FieldDescription>
                 {{ $t("marketplace.categoryImportPage.adapterCategoryDescription") }}
-              </p>
-            </div>
+              </FieldDescription>
+            </FieldSet>
 
             <ExternalCategoryBrowser
               v-model:search="externalCategorySearch"
@@ -494,19 +500,19 @@ export default {
 
               <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
                 <div class="flex shrink-0 items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <h2 class="text-lg font-semibold">
+                  <FieldSet class="m-0 min-w-0 gap-1 border-0 p-0">
+                    <FieldLegend variant="label" class="mb-0">
                       {{
                         $t("marketplace.categoryImportPage.attributesForImportTitle", {
                           selected: importSelectedFieldKeys.length,
                           total: importAttributeFields.length,
                         })
                       }}
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
+                    </FieldLegend>
+                    <FieldDescription>
                       {{ $t("marketplace.categoryImportPage.attributesForImportDescription") }}
-                    </p>
-                  </div>
+                    </FieldDescription>
+                  </FieldSet>
                   <Button
                     v-if="importAttributeFields.length > 0"
                     variant="ghost"

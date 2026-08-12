@@ -10,6 +10,10 @@ import {
   ArrowDown,
   ArrowUpDown,
 } from "lucide-vue-next";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { getSortIndex } from "@/lib/productSort";
 
 export default {
@@ -19,7 +23,9 @@ export default {
     GripVertical,
     ArrowUp,
     ArrowDown,
-    ArrowUpDown
+    ArrowUpDown,
+    ContextMenu,
+    ContextMenuTrigger,
   },
   props: {
     columns: {
@@ -58,6 +64,11 @@ export default {
     connections: {
       type: Array,
       default: () => [],
+    },
+    /** When true, Adapters column is visible but non-interactive (e.g. trash). */
+    adaptersDisabled: {
+      type: Boolean,
+      default: false,
     },
   },
   emits: ["update:rowSelection", "update:columnVisibility", "update:columnOrder", "sort", "row-click", "adapters-changed"],
@@ -185,6 +196,9 @@ export default {
         },
         get connections() {
           return props.connections;
+        },
+        get adaptersDisabled() {
+          return props.adaptersDisabled;
         },
         onAdaptersChanged() {
           emit("adapters-changed");
@@ -417,25 +431,31 @@ export default {
           </thead>
           <tbody class="[&_tr:last-child>td]:border-0">
             <template v-if="table.getRowModel().rows?.length">
-              <tr
+              <ContextMenu
                 v-for="row in table.getRowModel().rows"
                 :key="row.id"
-                :data-state="row.getIsSelected() ? 'selected' : undefined"
-                class="hover:bg-muted/50 data-[state=selected]:bg-muted transition-colors cursor-pointer group"
-                @click="onRowClick(row, $event)"
               >
-                <td
-                  v-for="cell in row.getVisibleCells()"
-                  :key="cell.id"
-                  :style="{ width: cell.column.getSize() + 'px' }"
-                  class="px-2 py-1 align-middle whitespace-nowrap border-b"
-                >
-                  <FlexRender
-                    :render="cell.column.columnDef.cell"
-                    :props="cell.getContext()"
-                  />
-                </td>
-              </tr>
+                <ContextMenuTrigger as-child>
+                  <tr
+                    :data-state="row.getIsSelected() ? 'selected' : undefined"
+                    class="hover:bg-muted/50 data-[state=selected]:bg-muted transition-colors cursor-pointer group"
+                    @click="onRowClick(row, $event)"
+                  >
+                    <td
+                      v-for="cell in row.getVisibleCells()"
+                      :key="cell.id"
+                      :style="{ width: cell.column.getSize() + 'px' }"
+                      class="px-2 py-1 align-middle whitespace-nowrap border-b"
+                    >
+                      <FlexRender
+                        :render="cell.column.columnDef.cell"
+                        :props="cell.getContext()"
+                      />
+                    </td>
+                  </tr>
+                </ContextMenuTrigger>
+                <slot name="rowContextMenu" :row="row" />
+              </ContextMenu>
             </template>
             <template v-else>
               <tr class="transition-colors">

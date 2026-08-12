@@ -227,4 +227,157 @@ public class OrphanQueueCancellationTests
         Assert.All(rows, r => Assert.Equal(batchId, r.batchId));
         Assert.DoesNotContain(rows, r => r.status is ImageDownloadStatus.Cancelled or ImageDownloadStatus.Completed);
     }
+
+    [Fact]
+    public async Task FinishIdleImageDownloadOps_ClosesEmptyChildWhenParentImportFinished()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.operations.AddRange(
+            new Operation
+            {
+                operationId = "batch-1",
+                storeId = 1,
+                authorUserId = 1,
+                type = "batch-import",
+                title = "Import",
+                status = "completed",
+                batchId = "batch-1",
+                batchType = "import",
+                createdAt = DateTime.UtcNow.AddHours(-2),
+                finishedAt = DateTime.UtcNow.AddHours(-1),
+            },
+            new Operation
+            {
+                operationId = "batch-1-img",
+                storeId = 1,
+                authorUserId = 1,
+                type = "image-download",
+                title = "Image download",
+                status = "running",
+                batchId = "batch-1-img",
+                batchType = "image-download",
+                totalItems = 0,
+                createdAt = DateTime.UtcNow.AddHours(-2),
+            },
+            new Operation
+            {
+                operationId = "batch-2",
+                storeId = 1,
+                authorUserId = 1,
+                type = "batch-import",
+                title = "Import still going",
+                status = "running",
+                batchId = "batch-2",
+                batchType = "import",
+                createdAt = DateTime.UtcNow,
+            },
+            new Operation
+            {
+                operationId = "batch-2-img",
+                storeId = 1,
+                authorUserId = 1,
+                type = "image-download",
+                title = "Image download",
+                status = "running",
+                batchId = "batch-2-img",
+                batchType = "image-download",
+                totalItems = 0,
+                createdAt = DateTime.UtcNow,
+            });
+        await db.SaveChangesAsync();
+
+        var logger = new DbFinishOperationLogger(db);
+        var closed = await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
+            db, logger, CancellationToken.None);
+
+        Assert.Equal(1, closed);
+        var idle = await db.operations.SingleAsync(o => o.operationId == "batch-1-img");
+        Assert.Equal("completed", idle.status);
+        Assert.Equal("No images to download", idle.summary);
+        Assert.NotNull(idle.finishedAt);
+
+        var waiting = await db.operations.SingleAsync(o => o.operationId == "batch-2-img");
+        Assert.Equal("running", waiting.status);
+        Assert.Null(waiting.finishedAt);
+    }
+
+    [Fact]
+    public async Task FinishIdleImageDownloadOps_KeepsChildWhileQueueHasActiveWork()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.operations.AddRange(
+            new Operation
+            {
+                operationId = "batch-3",
+                storeId = 1,
+                authorUserId = 1,
+                type = "batch-import",
+                title = "Import",
+                status = "completed",
+                batchId = "batch-3",
+                batchType = "import",
+                createdAt = DateTime.UtcNow.AddHours(-1),
+                finishedAt = DateTime.UtcNow,
+            },
+            new Operation
+            {
+                operationId = "batch-3-img",
+                storeId = 1,
+                authorUserId = 1,
+                type = "image-download",
+                title = "Image download",
+                status = "running",
+                batchId = "batch-3-img",
+                batchType = "image-download",
+                createdAt = DateTime.UtcNow.AddHours(-1),
+            });
+        db.pendingImageDownloads.Add(new PendingImageDownload
+        {
+            productId = 1,
+            storeId = 1,
+            authorUserId = 1,
+            imageUrl = "https://example.test/a.jpg",
+            batchId = "batch-3-img",
+            status = ImageDownloadStatus.Pending,
+        });
+        await db.SaveChangesAsync();
+
+        var logger = new DbFinishOperationLogger(db);
+        var closed = await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
+            db, logger, CancellationToken.None);
+
+        Assert.Equal(0, closed);
+        var op = await db.operations.SingleAsync(o => o.operationId == "batch-3-img");
+        Assert.Equal("running", op.status);
+    }
+
+    private sealed class DbFinishOperationLogger : IOperationLogger
+    {
+        private readonly DataContext _db;
+
+        public DbFinishOperationLogger(DataContext db) => _db = db;
+
+        public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
+            int? connectionId = null, string? connectionName = null,
+            string? batchId = null, string? batchType = null, int? totalItems = null) =>
+            Task.CompletedTask;
+
+        public Task LogAsync(string operationId, int storeId, string level, string message) =>
+            Task.CompletedTask;
+
+        public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed) =>
+            Task.CompletedTask;
+
+        public async Task FinishAsync(string operationId, int storeId, string status, string? summary = null)
+        {
+            var op = await _db.operations.FirstAsync(o => o.operationId == operationId);
+            op.status = status;
+            op.summary = summary;
+            op.finishedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
+        public Task UpdateStatusAsync(string operationId, int storeId, string status) =>
+            Task.CompletedTask;
+    }
 }

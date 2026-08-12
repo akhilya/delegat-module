@@ -79,7 +79,14 @@ export function getPersonalSettingsItems(ctx) {
 export function getAdminSettingsItems(ctx) {
   const items = [];
   if (can(ctx, PERMS.SettingsPlatform)) {
-    items.push({ id: "overview", labelKey: "nav.overview", to: PAGE_SETTINGS, icon: Settings2 });
+    items.push({
+      id: "overview",
+      labelKey: "nav.overview",
+      to: PAGE_SETTINGS,
+      icon: Settings2,
+      attention: ctx.quotaOverAttention === true,
+      attentionTooltipKey: "nav.quotaOverageAttention",
+    });
   }
   if (can(ctx, PERMS.StoresCreate) || can(ctx, PERMS.StoreSettingsManage)) {
     items.push({ id: "stores", labelKey: "nav.stores", to: PAGE_ADMIN_STORES, icon: Store });

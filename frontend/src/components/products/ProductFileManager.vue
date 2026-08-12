@@ -9,13 +9,6 @@ import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -24,13 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Folder,
   FolderOpen,
@@ -42,12 +28,12 @@ import {
   ArrowDownToLine,
   ChevronRight,
   Share2,
-  Copy,
   Check,
   X,
   CornerLeftUp,
   Globe,
 } from "lucide-vue-next";
+import ShareLinkDialog from "@/components/products/ShareLinkDialog.vue";
 import { http } from "@/main";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
@@ -430,7 +416,13 @@ const shareUrl = ref("");
 const publicUrlCopied = ref(false);
 const isCreatingShare = ref(false);
 const shareCopied = ref(false);
-
+const shareItemName = computed(() => {
+  if (!shareTarget.value) return "";
+  if (shareTarget.value.type === "file") {
+    return extractFileName(shareTarget.value.item);
+  }
+  return shareTarget.value.item?.name ?? t("products.productFileManager.allFilesFallback");
+});
 
 // ── Selection ──
 // Keys like "folder:5", "file:12"
@@ -737,9 +729,32 @@ async function onDrop(e, targetFolderId) {
     await http.post(bulkMoveUrl(), { targetFolderId, fileIds, folderIds }, { cache: false });
   } catch (error) {
     displaySonnerError(error);
+    return;
   }
 
-  if (fileIds.length > 0) emit("filesChanged");
+  // Drop always leaves the current folder view — sync local list immediately
+  // (filesChanged only soft-refreshes the parent; it does not reload this list).
+  if (fileIds.length > 0) {
+    const idSet = new Set(fileIds);
+    const removed = localFiles.value.filter((f) => idSet.has(f.id));
+    localFiles.value = localFiles.value.filter((f) => !idSet.has(f.id));
+    filesTotalCount.value = Math.max(0, filesTotalCount.value - removed.length);
+    filesTotalSizeBytes.value = Math.max(
+      0,
+      filesTotalSizeBytes.value - removed.reduce((sum, f) => sum + (f.length || 0), 0),
+    );
+    emit("filesChanged");
+  }
+
+  if (folderIds.length > 0) {
+    const idSet = new Set(folderIds);
+    for (const folder of folders.value) {
+      if (idSet.has(folder.id)) {
+        folder.parentFolderId = targetFolderId;
+      }
+    }
+  }
+
   await loadFolders();
   clearSelection();
 }
@@ -1314,6 +1329,27 @@ async function copyPublicUrl(file) {
   }
 }
 
+async function revokePublicAccess() {
+  if (!shareTarget.value || shareTarget.value.type !== "file" || isCreatingShare.value) return;
+  isCreatingShare.value = true;
+  try {
+    const res = await http.patch(
+      filePublicToggleUrl(shareTarget.value.item.id),
+      { isPublic: false },
+      { cache: false },
+    );
+    const updated = res.data?.value ?? res.data;
+    shareTarget.value.item.isPublic = updated.isPublic === true;
+    shareTarget.value.item.publicUrl = updated.publicUrl ?? null;
+    shareUrl.value = "";
+    shareTtlHours.value = "168";
+    displaySonnerSuccess(t("products.productFileManager.publicAccessStopped"));
+  } catch (error) {
+    displaySonnerError(error);
+  }
+  isCreatingShare.value = false;
+}
+
 
 const isDownloadingArchive = ref(false);
 const downloadingFolderId = ref(null);
@@ -1817,14 +1853,28 @@ const selectedFileCount = computed(
               <Badge variant="secondary" class="font-normal">{{ file.contentType }}</Badge>
             </td>
             <td class="px-4" @click.stop>
-              <Popover v-if="file.tags?.length > 0">
+              <Popover>
                 <PopoverTrigger as-child>
-                  <Button type="button" variant="ghost" class="h-auto flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50">
-                    <Badge
-                      v-for="tagItem in file.tags"
-                      :key="tagItem.id"
-                      :class="[tagBgClass(tagItem.color), tagTextClass(tagItem.color), 'text-xs border-0']"
-                    >{{ tagItem.name }}</Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    :size="file.tags?.length ? undefined : 'icon'"
+                    :class="
+                      file.tags?.length
+                        ? 'h-auto flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50'
+                        : 'size-7 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                    "
+                    :title="t('products.productFileManager.tagLabel')"
+                    :aria-label="t('products.productFileManager.tagLabel')"
+                  >
+                    <template v-if="file.tags?.length">
+                      <Badge
+                        v-for="tagItem in file.tags"
+                        :key="tagItem.id"
+                        :class="[tagBgClass(tagItem.color), tagTextClass(tagItem.color), 'text-xs border-0']"
+                      >{{ tagItem.name }}</Badge>
+                    </template>
+                    <Tag v-else class="size-3.5" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" class="w-64 p-0">
@@ -1871,6 +1921,9 @@ const selectedFileCount = computed(
                           @click="updateTagColor(tag.id, c.value)"
                         />
                       </div>
+                    </div>
+                    <div v-if="storeTags.length === 0" class="text-sm text-muted-foreground text-center py-4 px-2">
+                      {{ t("products.productFileManager.noTagsLabel") }}
                     </div>
                   </div>
                   <!-- Create new tag -->
@@ -1994,11 +2047,20 @@ const selectedFileCount = computed(
       <div v-if="contextMenu.show" class="fixed inset-0 z-50" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu">
         <div
           ref="contextMenuEl"
-          class="fixed z-50 min-w-[10rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+          class="fixed z-50 w-56 min-w-[10rem] max-w-[14rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         >
           <!-- Folder -->
           <template v-if="contextMenu.type === 'folder'">
+            <div class="min-w-0 px-2 py-1.5">
+              <p class="truncate text-sm font-medium text-foreground">
+                {{ contextMenu.item?.name }}
+              </p>
+            </div>
+            <div class="bg-border -mx-1 my-1 h-px" />
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionOpen") }}
+            </p>
             <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
@@ -2007,6 +2069,10 @@ const selectedFileCount = computed(
               <FolderOpen class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.openAction") }}
             </Button>
+            <div class="bg-border -mx-1 my-1 h-px" />
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionManage") }}
+            </p>
             <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
@@ -2033,6 +2099,9 @@ const selectedFileCount = computed(
               <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionDanger") }}
+            </p>
             <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -2046,6 +2115,15 @@ const selectedFileCount = computed(
 
           <!-- File -->
           <template v-else-if="contextMenu.type === 'file'">
+            <div class="min-w-0 px-2 py-1.5">
+              <p class="truncate text-sm font-medium text-foreground">
+                {{ contextMenu.item?.displayName || contextMenu.item?.fileName || contextMenu.item?.name }}
+              </p>
+            </div>
+            <div class="bg-border -mx-1 my-1 h-px" />
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionManage") }}
+            </p>
             <a
               class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
               :href="contextMenu.item.fullPath"
@@ -2064,6 +2142,19 @@ const selectedFileCount = computed(
               {{ t("products.productFileManager.shareAction") }}
             </Button>
             <Button
+              v-if="contextMenu.item?.isPublic && contextMenu.item?.publicUrl"
+              variant="ghost"
+              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
+              @click="
+                shareTarget = { type: 'file', item: contextMenu.item };
+                revokePublicAccess();
+                closeContextMenu();
+              "
+            >
+              <Globe class="size-4" />
+              {{ t("products.productFileManager.stopPublicAccessAction") }}
+            </Button>
+            <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
               @click="startInlineRename('file', contextMenu.item); closeContextMenu()"
@@ -2073,6 +2164,9 @@ const selectedFileCount = computed(
               <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
             <div class="bg-border -mx-1 my-1 h-px" />
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionDanger") }}
+            </p>
             <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -2086,6 +2180,9 @@ const selectedFileCount = computed(
 
           <!-- Empty area -->
           <template v-else>
+            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {{ t("products.productFileManager.menuSectionCreate") }}
+            </p>
             <Button
               variant="ghost"
               class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
@@ -2154,51 +2251,19 @@ const selectedFileCount = computed(
       </AlertDialogContent>
     </AlertDialog>
 
-    <!-- Share dialog (file or folder) -->
-    <Dialog :open="showShareDialog" @update:open="showShareDialog = $event">
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>{{ shareTarget?.type === 'folder' ? t("products.productFileManager.shareFolderTitle") : t("products.productFileManager.shareFileTitle") }}</DialogTitle>
-        </DialogHeader>
-        <p class="text-sm text-muted-foreground -mt-1">
-          {{ shareTarget?.type === 'file' ? extractFileName(shareTarget.item) : (shareTarget?.item?.name ?? t("products.productFileManager.allFilesFallback")) }}
-        </p>
-
-        <template v-if="!shareUrl">
-          <Select v-model="shareTtlHours">
-            <SelectTrigger>
-              <SelectValue :placeholder="t('products.productFileManager.expirationPlaceholder')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">{{ t("products.productFileManager.ttl1Hour") }}</SelectItem>
-              <SelectItem value="24">{{ t("products.productFileManager.ttl1Day") }}</SelectItem>
-              <SelectItem value="168">{{ t("products.productFileManager.ttl7Days") }}</SelectItem>
-              <SelectItem value="720">{{ t("products.productFileManager.ttl30Days") }}</SelectItem>
-              <SelectItem v-if="shareTarget?.type === 'file'" value="permanent">{{ t("products.productFileManager.ttlPermanent") }}</SelectItem>
-            </SelectContent>
-          </Select>
-          <DialogFooter>
-            <Button variant="outline" @click="showShareDialog = false">{{ t("common.cancel") }}</Button>
-            <Button @click="createShareLink" :disabled="isCreatingShare">
-              <Spinner v-if="isCreatingShare" class="mr-1" />
-              {{ t("products.productFileManager.createLinkAction") }}
-            </Button>
-          </DialogFooter>
-        </template>
-        <template v-else>
-          <div class="flex gap-2">
-            <Input :model-value="shareUrl" readonly class="flex-1 text-xs" @click="$event.target.select()" />
-            <Button variant="outline" size="icon" @click="copyShareUrl">
-              <Check v-if="shareCopied" class="size-4 text-success" />
-              <Copy v-else class="size-4" />
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" @click="showShareDialog = false">{{ t("common.close") }}</Button>
-          </DialogFooter>
-        </template>
-      </DialogContent>
-    </Dialog>
+    <ShareLinkDialog
+      v-model:open="showShareDialog"
+      v-model:ttl-hours="shareTtlHours"
+      :target-type="shareTarget?.type || 'file'"
+      :item-name="shareItemName"
+      :allow-permanent="shareTarget?.type === 'file'"
+      :share-url="shareUrl"
+      :creating="isCreatingShare"
+      :copied="shareCopied"
+      @create="createShareLink"
+      @copy="copyShareUrl"
+      @revoke="revokePublicAccess"
+    />
 
     <!-- Sticky bottom actions -->
     <div class="sticky bottom-0 flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl">

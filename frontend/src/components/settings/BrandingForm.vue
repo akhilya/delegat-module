@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import AppImage from "@/components/AppImage.vue";
 import { http } from "@/main";
 import {
   applyBranding,
@@ -318,12 +319,14 @@ defineExpose({
             <div
               class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
             >
-              <img
+              <AppImage
                 v-if="form.logoUrl"
                 :src="form.logoUrl"
                 alt=""
-                class="max-h-14 max-w-14 object-contain"
-              >
+                spinner-size="sm"
+                class="flex size-full items-center justify-center"
+                img-class="max-h-14 max-w-14 object-contain"
+              />
               <Upload v-else class="size-4 text-muted-foreground" />
             </div>
             <p class="text-sm font-medium">
@@ -376,12 +379,14 @@ defineExpose({
             <div
               class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
             >
-              <img
+              <AppImage
                 v-if="form.faviconUrl"
                 :src="form.faviconUrl"
                 alt=""
-                class="max-h-14 max-w-14 object-contain"
-              >
+                spinner-size="sm"
+                class="flex size-full items-center justify-center"
+                img-class="max-h-14 max-w-14 object-contain"
+              />
               <Upload v-else class="size-4 text-muted-foreground" />
             </div>
             <p class="text-sm font-medium">

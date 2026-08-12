@@ -23,6 +23,7 @@ import { NotebookPen, Search, ChevronLeft, ChevronRight, X } from "lucide-vue-ne
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import NoteDetailSheet from "@/components/notes/NoteDetailSheet.vue";
 
 const PAGE_SIZE = 25;
 const AUTHOR_UNKNOWN = "__unknown__";
@@ -52,6 +53,7 @@ export default {
     ChevronLeft,
     ChevronRight,
     X,
+    NoteDetailSheet,
   },
   setup() {
     const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
@@ -66,12 +68,13 @@ export default {
       totalCount: 0,
       startIndex: 0,
       searchQuery: "",
-      productQuery: "",
       importanceFilter: IMPORTANCE_ALL,
       authorFilter: AUTHOR_ALL,
       sortBy: "createdAt",
       sortDesc: true,
       isLoading: false,
+      sheetOpen: false,
+      selectedNote: null,
       breadcrumbs: [{ label: this.$t("pages.notesPage.breadcrumb") }],
       IMPORTANCE_ALL,
       AUTHOR_ALL,
@@ -105,7 +108,6 @@ export default {
     hasActiveFilters() {
       return Boolean(
         this.searchQuery.trim() ||
-          this.productQuery.trim() ||
           this.importanceFilter !== IMPORTANCE_ALL ||
           this.authorFilter !== AUTHOR_ALL ||
           this.sortBy !== "createdAt" ||
@@ -167,7 +169,6 @@ export default {
 
     clearFilters() {
       this.searchQuery = "";
-      this.productQuery = "";
       this.importanceFilter = IMPORTANCE_ALL;
       this.authorFilter = AUTHOR_ALL;
       this.sortBy = "createdAt";
@@ -178,7 +179,6 @@ export default {
 
     applySearch() {
       this.searchQuery = (this.searchQuery || "").trim();
-      this.productQuery = (this.productQuery || "").trim();
       this.startIndex = 0;
       this.fetchPage();
     },
@@ -207,13 +207,48 @@ export default {
       };
     },
 
+    openNote(row) {
+      this.selectedNote = { ...row };
+      this.sheetOpen = true;
+    },
+
+    onNoteUpdated(patch) {
+      const idx = this.items.findIndex((n) => n.id === patch.id);
+      if (idx >= 0) {
+        this.items[idx] = {
+          ...this.items[idx],
+          text: patch.text,
+          importance: patch.importance,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (this.selectedNote?.id === patch.id) {
+        this.selectedNote = {
+          ...this.selectedNote,
+          text: patch.text,
+          importance: patch.importance,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    },
+
+    onNoteDeleted(id) {
+      this.sheetOpen = false;
+      this.selectedNote = null;
+      this.items = this.items.filter((n) => n.id !== id);
+      this.totalCount = Math.max(0, this.totalCount - 1);
+      if (this.items.length === 0 && this.startIndex > 0) {
+        this.startIndex = Math.max(0, this.startIndex - PAGE_SIZE);
+      }
+      this.fetchPage();
+    },
+
     async fetchPage() {
       this.isLoading = true;
       try {
         await this.fetchNotes({
           params: {
             search: this.searchQuery || undefined,
-            productQuery: this.productQuery || undefined,
             importance:
               this.importanceFilter !== IMPORTANCE_ALL
                 ? this.importanceFilter
@@ -272,13 +307,6 @@ export default {
     </template>
 
     <div class="mb-4 flex flex-wrap items-center gap-2">
-      <Input
-        v-model="productQuery"
-        class="h-9 w-full sm:w-52"
-        :placeholder="$t('pages.notesPage.productSearchPlaceholder')"
-        @keypress.enter="applySearch"
-      />
-
       <Select
         :model-value="importanceFilter"
         @update:model-value="
@@ -382,7 +410,12 @@ export default {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="row in items" :key="row.id">
+              <TableRow
+                v-for="row in items"
+                :key="row.id"
+                class="cursor-pointer"
+                @click="openNote(row)"
+              >
                 <TableCell>
                   <Badge
                     :variant="importanceVariant(row.importance)"
@@ -400,6 +433,7 @@ export default {
                   <RouterLink
                     :to="productEditTo(row)"
                     class="block font-medium text-foreground hover:underline"
+                    @click.stop
                   >
                     <span class="line-clamp-1">{{ row.productName }}</span>
                   </RouterLink>
@@ -457,5 +491,12 @@ export default {
         </div>
       </div>
     </PageSection>
+
+    <NoteDetailSheet
+      v-model:open="sheetOpen"
+      :note="selectedNote"
+      @updated="onNoteUpdated"
+      @deleted="onNoteDeleted"
+    />
   </AppPageChrome>
 </template>

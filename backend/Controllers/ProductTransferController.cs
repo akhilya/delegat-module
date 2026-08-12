@@ -95,6 +95,10 @@ public class ProductTransferController : ControllerBase
             throw ApiException.BadRequest($"Unknown mode: {request.mode}");
         if (request.targetStoreId == sourceStoreId.Value && request.mode == "move")
             throw ApiException.BadRequest("Cannot move to the same store. Use clone mode instead.");
+        if (request.mode == "move" && await _context.stores.CountAsync(ct) <= 1)
+            throw ApiException.BadRequest(
+                "Cannot move a product when only one store exists on this instance",
+                code: "single_store_move_forbidden");
 
         var targetStore = await _context.stores
             .Include(s => s.members)
@@ -123,15 +127,16 @@ public class ProductTransferController : ControllerBase
         if (skuTaken)
             throw ApiException.BadRequest($"SKU '{newSku}' is already used in the target store", code: "sku_already_used");
 
-        // Target store quotas (clone and move both create a new product + copy files there).
-        var fileCount = source.files.Count;
-        var fileBytes = source.files.Sum(f => f.length);
+        // Target store quotas (clone and move both create a new product; files only when copying).
+        var shouldCopyFiles = request.mode == "move" || request.copyFiles;
+        var fileCount = shouldCopyFiles ? source.files.Count : 0;
+        var fileBytes = shouldCopyFiles ? source.files.Sum(f => f.length) : 0;
         await _quotaService.EnsureTransferQuotasAsync(request.targetStoreId, fileCount, fileBytes);
 
         // ---- Enqueue ----
         var operationId = Guid.NewGuid().ToString("N");
         // Total = all copyable entities (product + attrs + store attrs + folders + files + images + notes + variants)
-        var totalItems = 1 + source.files.Count; // minimal: product itself + files (full count computed by worker)
+        var totalItems = 1 + fileCount; // minimal: product itself + files (full count computed by worker)
 
         var pending = new PendingProductTransfer
         {
@@ -147,6 +152,7 @@ public class ProductTransferController : ControllerBase
             groupName = request.groupName,
             confirmBreakLinks = request.confirmBreakLinks,
             syncMissingCategoryAttributes = request.syncMissingCategoryAttributes,
+            copyFiles = shouldCopyFiles,
             authorUserId = userId.Value,
             batchId = operationId,
             status = ProductTransferStatus.Pending,

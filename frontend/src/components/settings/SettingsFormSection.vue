@@ -2,6 +2,8 @@
 import {
   FieldSet,
   FieldGroup,
+  FieldLegend,
+  FieldDescription,
 } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +16,9 @@ const props = defineProps({
 
 <template>
   <FieldSet :class="cn('m-0 min-w-0 max-w-2xl border-0 p-0 gap-4 [&+&]:mt-8', props.class)">
-    <div v-if="title || description">
-      <h2 v-if="title" class="text-lg font-semibold">{{ title }}</h2>
-      <p v-if="description" class="text-sm text-muted-foreground">
-        {{ description }}
-      </p>
+    <div v-if="title || description" class="space-y-1">
+      <FieldLegend v-if="title" variant="label" class="mb-0">{{ title }}</FieldLegend>
+      <FieldDescription v-if="description">{{ description }}</FieldDescription>
     </div>
     <FieldGroup class="gap-5">
       <slot />

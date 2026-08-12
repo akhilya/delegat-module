@@ -89,6 +89,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PAGE_PRODUCT_EDIT } from "@/router";
+import { getCachedMe } from "@/lib/meCache";
+import {
+  PRODUCTS_LIST_NS,
+  PRODUCTS_TRASH_NS,
+  buildProductsListCacheKey,
+  buildProductsTrashCacheKey,
+  getProductsListCache,
+  setProductsListCache,
+  invalidateProductsListCache,
+} from "@/lib/productsListCache";
 
 const COLUMN_VISIBILITY_KEY = "products-column-visibility";
 const COLUMN_PRESET_KEY = "products-column-preset";
@@ -195,6 +205,7 @@ export default {
         name: payload.name || "",
         sku: payload.sku || "",
       };
+      this.transferMode = payload.mode === "move" ? "move" : "clone";
       this.isTransferDialogOpen = true;
     },
 
@@ -207,6 +218,33 @@ export default {
     },
 
     async fetchProducts() {
+      const storeId = getCachedMe()?.selectedStoreId ?? null;
+      const sort = serializeSortToQuery(this.sortColumns);
+      const cacheKey = buildProductsListCacheKey({
+        storeId,
+        startIndex: this.startIndex,
+        pageSize: this.pageSize,
+        searchQuery: this.searchQuery,
+        categoryId: this.filterCategoryId,
+        sort,
+      });
+      const cached = getProductsListCache(PRODUCTS_LIST_NS, cacheKey);
+      if (cached) {
+        this.products = cached.items;
+        this.lastPage = cached.lastPage;
+        this.totalCount = cached.totalCount;
+        for (const p of this.products) {
+          if (this.rowSelection[String(p.id)]) {
+            this.selectedProductsMap[p.id] = p;
+          }
+        }
+        if (this.page > this.lastPossiblePage) {
+          this.page = this.lastPossiblePage;
+        }
+        this.isProductsLoading = false;
+        return;
+      }
+
       const generation = ++this.fetchGeneration;
       this.isProductsLoading = true;
       this.products = [];
@@ -216,12 +254,17 @@ export default {
         pageSize: this.pageSize,
         searchQuery: this.searchQuery,
         categoryId: this.filterCategoryId,
-        sort: serializeSortToQuery(this.sortColumns),
+        sort,
         onSuccess: (response) => {
           if (generation !== this.fetchGeneration) return;
           this.products = response.data.value.items.map((f) => f);
           this.lastPage = response.data.value.lastPage;
           this.totalCount = response.data.value.totalCount;
+          setProductsListCache(PRODUCTS_LIST_NS, cacheKey, {
+            items: this.products,
+            totalCount: this.totalCount,
+            lastPage: this.lastPage,
+          });
           // Sync cross-page selection cache with fresh product data
           for (const p of this.products) {
             if (this.rowSelection[String(p.id)]) {
@@ -281,7 +324,9 @@ export default {
     },
 
     onAdaptersChanged() {
-      if (!this.isTrashMode) this.fetchProducts();
+      if (this.isTrashMode) return;
+      invalidateProductsListCache();
+      this.fetchProducts();
     },
 
     async fetchStoreAttributes() {
@@ -366,6 +411,7 @@ export default {
           this.isBulkDeleteDialogOpen = false;
           this.rowSelection = {};
           this.selectedProductsMap = {};
+          invalidateProductsListCache();
           this.fetchProducts();
           this.fetchTrashCount();
         },
@@ -380,6 +426,25 @@ export default {
     },
 
     async fetchTrashProducts() {
+      const storeId = getCachedMe()?.selectedStoreId ?? null;
+      const cacheKey = buildProductsTrashCacheKey({
+        storeId,
+        startIndex: this.trashStartIndex,
+        pageSize: this.pageSize,
+        searchQuery: this.trashSearchQuery,
+      });
+      const cached = getProductsListCache(PRODUCTS_TRASH_NS, cacheKey);
+      if (cached) {
+        this.trashProducts = cached.items;
+        this.trashLastPage = cached.lastPage;
+        this.trashTotalCount = cached.totalCount;
+        if (this.trashPage > this.trashLastPossiblePage) {
+          this.trashPage = this.trashLastPossiblePage;
+        }
+        this.isTrashLoading = false;
+        return;
+      }
+
       this.isTrashLoading = true;
       this.trashProducts = [];
       await this.getTrashProducts({
@@ -390,6 +455,11 @@ export default {
           this.trashProducts = response.data.value.items;
           this.trashLastPage = response.data.value.lastPage;
           this.trashTotalCount = response.data.value.totalCount;
+          setProductsListCache(PRODUCTS_TRASH_NS, cacheKey, {
+            items: this.trashProducts,
+            totalCount: this.trashTotalCount,
+            lastPage: this.trashLastPage,
+          });
           if (this.trashPage > this.trashLastPossiblePage) {
             this.trashPage = this.trashLastPossiblePage;
           }
@@ -413,6 +483,7 @@ export default {
         productId,
         onSuccess: () => {
           toast.success(this.$t("pages.productsPage.toast.restored"));
+          invalidateProductsListCache();
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -425,6 +496,7 @@ export default {
         productId,
         onSuccess: () => {
           toast.success(this.$t("pages.productsPage.toast.permanentlyDeleted"));
+          invalidateProductsListCache();
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -437,6 +509,7 @@ export default {
         productId,
         onSuccess: () => {
           toast.success(this.$t("pages.productsPage.toast.movedToTrash"));
+          invalidateProductsListCache();
           this.fetchProducts();
           this.fetchTrashCount();
         },
@@ -471,6 +544,7 @@ export default {
         onSuccess: ({ data }) => {
           toast.success(this.$t("pages.productsPage.toast.bulkRestored", { count: data.value.restoredCount }));
           this.clearSelection();
+          invalidateProductsListCache();
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -487,6 +561,7 @@ export default {
           toast.success(this.$t("pages.productsPage.toast.bulkPermanentlyDeleted", { count: data.value.deletedCount }));
           this.isBulkPermanentDeleteDialogOpen = false;
           this.clearSelection();
+          invalidateProductsListCache();
           this.fetchTrashProducts();
           this.fetchTrashCount();
         },
@@ -498,6 +573,7 @@ export default {
     handleBulkEditSaved() {
       this.rowSelection = {};
       this.selectedProductsMap = {};
+      invalidateProductsListCache();
       this.fetchProducts();
     },
 
@@ -524,6 +600,7 @@ export default {
 
     handleImportSaved() {
       this.clearSelection();
+      invalidateProductsListCache();
       this.fetchProducts();
     },
 
@@ -633,6 +710,7 @@ export default {
 
       // Transfer dialog
       isTransferDialogOpen: false,
+      transferMode: "clone",
       transferTarget: { id: null, name: "", sku: "" },
 
       // Trash mode
@@ -939,6 +1017,7 @@ export default {
         :sort-columns="sortColumns"
         :sortable-columns="sortableColumnIds"
         :connections="connections"
+        :adapters-disabled="isTrashMode"
         @update:row-selection="rowSelection = $event"
         @update:column-visibility="onColumnVisibilityChange"
         @update:column-order="onColumnOrderChange"
@@ -965,7 +1044,34 @@ export default {
             @transfer="onTransferRequest"
             @delete="handleDeleteOne"
           />
-          <TrashRowActionButtons v-else :id="row.original.id" @restore="handleRestoreOne" @permanent-delete="handlePermanentDeleteOne" />
+          <TrashRowActionButtons
+            v-else
+            :id="row.original.id"
+            :name="row.original.name"
+            :sku="row.original.sku"
+            @restore="handleRestoreOne"
+            @permanent-delete="handlePermanentDeleteOne"
+          />
+        </template>
+        <template #rowContextMenu="{ row }">
+          <ProductRowActionButtons
+            v-if="!isTrashMode"
+            mode="context"
+            :id="row.original.id"
+            :name="row.original.name"
+            :sku="row.original.sku"
+            @transfer="onTransferRequest"
+            @delete="handleDeleteOne"
+          />
+          <TrashRowActionButtons
+            v-else
+            mode="context"
+            :id="row.original.id"
+            :name="row.original.name"
+            :sku="row.original.sku"
+            @restore="handleRestoreOne"
+            @permanent-delete="handlePermanentDeleteOne"
+          />
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
@@ -1158,6 +1264,7 @@ export default {
     <!-- Transfer (Clone/Move to another store) Dialog -->
     <ProductTransferDialog
       v-model:open="isTransferDialogOpen"
+      :mode="transferMode"
       :product-id="transferTarget.id"
       :product-name="transferTarget.name"
       :product-sku="transferTarget.sku"

@@ -74,6 +74,7 @@ import { useStore } from "vuex";
 import { useRoute, onBeforeRouteLeave } from "vue-router";
 import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import ProductGallerySidebar from "@/components/products/ProductGallerySidebar.vue";
+import AppImage from "@/components/AppImage.vue";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
@@ -157,6 +158,7 @@ export default {
     ProductVariantsEditor,
     ProductGroupSidebar,
     ProductGallerySidebar,
+    AppImage,
     BarcodeInput,
     SearchableSelect,
     SettingsFormField,
@@ -1798,10 +1800,13 @@ export default {
           <ChevronLeft class="size-10" />
         </Button>
         <!-- Image -->
-        <img
+        <AppImage
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
           :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
-          class="max-h-[90vh] max-w-[90vw] object-contain"
+          spinner-size="xl"
+          spinner-class="text-white/70"
+          class="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
+          img-class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
         <Button v-if="lightboxIndex < lightboxImages.length - 1" variant="ghost" size="icon" class="absolute right-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')" @click="nextImage">

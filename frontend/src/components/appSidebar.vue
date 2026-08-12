@@ -21,6 +21,12 @@ import { ME_UPDATED_EVENT, notifyMeUpdated } from "@/lib/meCache";
 import { resetSelectedStoreCache } from "@/composables/useSelectedStore";
 import { invalidateBrandingCache, loadBranding } from "@/brand";
 import { resolveDisplayVersion, normalizeAppVersion } from "@/lib/appVersion";
+import {
+  applyQuotaSnapshot,
+  clearQuotaAttention,
+  QUOTA_ATTENTION_REFRESH_EVENT,
+  quotaAttentionState,
+} from "@/lib/quotaAttention";
 
 export default {
   components: {
@@ -87,6 +93,7 @@ export default {
         hasPermission: (p) => hasAnyPermission(this.me, [p]),
         connections: this.connections,
         adapters: this.adapters,
+        quotaOverAttention: quotaAttentionState.isOverQuota,
       };
     },
     navGroups() {
@@ -159,6 +166,18 @@ export default {
         },
       });
     },
+    async refreshQuotaAttention() {
+      if (!hasAnyPermission(this.me, [PERMS.SettingsPlatform])) {
+        clearQuotaAttention();
+        return;
+      }
+      try {
+        const { data } = await http.get("/settings/quotas", { cache: false });
+        applyQuotaSnapshot(data?.value ?? data);
+      } catch {
+        clearQuotaAttention();
+      }
+    },
     async loadShellData(autoSelectStore = true) {
       await this.getMe({
         onSuccess: (response) => {
@@ -192,6 +211,7 @@ export default {
 
       if (this.memberships.length === 0) {
         this.connections = [];
+        this.refreshQuotaAttention();
         const path = this.$route.path;
         const isStoreSurface =
           path === "/" ||
@@ -210,6 +230,7 @@ export default {
 
       this.fetchConnections();
       this.fetchAdapters();
+      this.refreshQuotaAttention();
     },
     async selectStore(storeId) {
       const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
@@ -263,6 +284,7 @@ export default {
     this._onMeUpdated = (event) => {
       if (event?.detail && typeof event.detail === "object") {
         this.me = event.detail;
+        this.refreshQuotaAttention();
       }
     };
     this._onStoreBrandingUpdated = (event) => {
@@ -274,8 +296,12 @@ export default {
           : store,
       );
     };
+    this._onQuotaAttentionRefresh = () => {
+      this.refreshQuotaAttention();
+    };
     window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
     window.addEventListener("store-branding-updated", this._onStoreBrandingUpdated);
+    window.addEventListener(QUOTA_ATTENTION_REFRESH_EVENT, this._onQuotaAttentionRefresh);
     this.loadShellData();
   },
   beforeUnmount() {
@@ -284,6 +310,9 @@ export default {
     }
     if (this._onStoreBrandingUpdated) {
       window.removeEventListener("store-branding-updated", this._onStoreBrandingUpdated);
+    }
+    if (this._onQuotaAttentionRefresh) {
+      window.removeEventListener(QUOTA_ATTENTION_REFRESH_EVENT, this._onQuotaAttentionRefresh);
     }
   },
 };

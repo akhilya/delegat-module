@@ -1,10 +1,12 @@
 <script>
-// ImageFile - Displays an image from a file object with loading state and a placeholder fallback.
+// ImageFile - Displays an image from a file object with loading spinner and a placeholder fallback.
 import { Image } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 
 export default {
   components: {
     Image,
+    Spinner,
   },
   props: {
     file: Object,
@@ -36,10 +38,9 @@ export default {
         this.isLoading = false;
         return;
       }
-      // Check if image is already cached
       const img = new window.Image();
       img.src = this.resolvedSrc;
-      if (img.complete) {
+      if (img.complete && img.naturalWidth > 0) {
         this.isLoading = false;
       } else {
         this.isLoading = true;
@@ -58,29 +59,26 @@ export default {
 <template>
   <div
     v-if="file"
-    class="bg-secondary rounded-lg overflow-hidden relative"
-    :class="{
-      ' animate-pulse': isLoading,
-    }"
+    class="bg-secondary relative overflow-hidden rounded-lg"
   >
-    <!--
-    <img
-      :src="resolvedSrc"
-      class="absolute top-0 left-0 w-full h-full blur-3xl"
-      v-show="!isLoading"
-    />
-    -->
+    <div
+      v-if="isLoading"
+      class="absolute inset-0 z-10 flex items-center justify-center"
+      aria-hidden="true"
+    >
+      <Spinner size="sm" class="text-muted-foreground" />
+    </div>
     <img
       @load="onImageLoad"
       @error="onImageError"
       :src="resolvedSrc"
       :alt="file?.displayName || file?.fileName || $t('components.imageFile.altFallback')"
-      class="absolute w-full h-full object-contain"
-      v-show="!isLoading"
+      class="absolute h-full w-full object-contain"
+      :class="isLoading ? 'opacity-0' : 'opacity-100'"
     />
     <slot />
   </div>
-  <div v-else class="bg-secondary rounded-lg flex items-center justify-center">
+  <div v-else class="bg-secondary flex items-center justify-center rounded-lg">
     <Image class="text-secondary-foreground size-[25%]" aria-hidden="true" />
     <slot />
   </div>

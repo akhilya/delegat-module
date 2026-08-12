@@ -5,6 +5,7 @@ import {
   X,
 } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
+import AppImage from "@/components/AppImage.vue";
 import draggable from "vuedraggable";
 import { t } from "@/i18n";
 
@@ -68,16 +69,13 @@ function thumbSrc(element) {
             @click="emit('preview', index)"
           >
             <!-- Blurred fill so letterboxed contain never shows empty muted bands -->
-            <img
-              :src="thumbSrc(element)"
-              alt=""
-              aria-hidden="true"
-              class="pointer-events-none absolute inset-0 size-full scale-110 object-cover blur-xl"
-            />
-            <img
+            <AppImage
               :src="thumbSrc(element)"
               :alt="element.displayName || t('products.productGallerySidebar.productPhotoAlt')"
-              class="pointer-events-none relative z-10 size-full object-contain"
+              blur-backdrop
+              spinner-size="sm"
+              class="pointer-events-none absolute inset-0 size-full"
+              img-class="pointer-events-none relative z-10 size-full object-contain"
             />
             <div
               v-if="index === 0"

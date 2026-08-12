@@ -930,6 +930,7 @@ public class CategoryMappingController : ControllerBase
             return Ok(new { updated = 0 });
 
         var productIds = input.selections.Select(s => s.productId).ToList();
+        await ProductNotTrashed.EnsureNoneAsync(_context, productIds, ct);
 
         // Load existing links
         var existingLinks = await _context.productMarketplaceLinks

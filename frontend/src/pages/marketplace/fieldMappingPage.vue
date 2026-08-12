@@ -18,6 +18,7 @@ import {
 } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
+import AppImage from "@/components/AppImage.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import {
@@ -57,6 +58,7 @@ export default {
     TabsList,
     TabsTrigger,
     Spinner,
+    AppImage,
     Plus,
     SettingsFormField,
     FieldGroup,
@@ -1170,18 +1172,20 @@ export default {
                     <div
                       v-for="(url, idx) in parseImageUrls(item.resultValue)"
                       :key="idx"
-                      class="h-24 w-24 rounded-xl border overflow-hidden bg-muted relative group"
+                      class="group relative h-24 w-24 overflow-hidden rounded-xl border bg-muted"
                     >
-                      <img
+                      <AppImage
                         :src="url"
-                        class="h-full w-full object-cover"
+                        :alt="String(idx + 1)"
+                        spinner-size="sm"
+                        class="absolute inset-0 size-full"
+                        img-class="size-full object-cover"
                         loading="lazy"
                         referrerpolicy="no-referrer"
-                        @error="$event.target.classList.add('opacity-0')"
                       />
                       <!-- Fallback: shows image index when img fails -->
                       <div
-                        class="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground pointer-events-none"
+                        class="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground"
                       >
                         {{ idx + 1 }}
                       </div>

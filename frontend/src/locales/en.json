@@ -265,7 +265,8 @@
     "errorLogs": "Error logs",
     "adapterLogs": "Adapter logs",
     "api": "API",
-    "usage": "Usage"
+    "usage": "Usage",
+    "quotaOverageAttention": "Plan overage — review Administration; excess data may be deleted"
   },
   "theme": {
     "light": "Light theme",
@@ -676,7 +677,8 @@
       },
       "fields": {
         "price": "Price",
-        "storageQuantity": "Stock"
+        "storageQuantity": "Stock",
+        "barcode": "Barcode"
       },
       "status": {
         "unlinked": "Unlinked",
@@ -1770,7 +1772,8 @@
       "name": "Name",
       "description": "Description",
       "price": "Price",
-      "storageQuantity": "Stock"
+      "storageQuantity": "Stock",
+      "barcode": "Barcode"
     },
     "updatedFieldsMessage": "Updated: {fields}"
   },
@@ -1898,8 +1901,9 @@
     },
     "adaptersColumn": {
       "notLinked": "Not linked",
-      "linkOnProduct": "Link on product page",
-      "configureMapping": "Configure mapping"
+      "linkOnProduct": "Link manually",
+      "configureMapping": "Configure mapping",
+      "disabledInTrash": "Adapters are unavailable while the product is in the trash"
     },
     "productTransferDialog": {
       "previewLoadFailed": "Failed to load preview",
@@ -1909,10 +1913,14 @@
       "progressWithFiles": "Progress for {count} files can be tracked in the operations panel",
       "progressGeneric": "Progress can be tracked in the operations panel",
       "dialogTitle": "Transfer product to another store",
+      "cloneDialogTitle": "Clone product to another store",
+      "cloneSameStoreDialogTitle": "Clone product",
+      "moveDialogTitle": "Move product to another store",
       "modeLabel": "Mode",
       "cloneAction": "Clone",
       "moveAction": "Move",
       "cloneModeHint": "The product will be copied to the target store, the original stays unchanged.",
+      "cloneSameStoreHint": "A copy will be created in the current store. The original stays unchanged.",
       "moveModeHint": "The product will be moved to the target store, the original will go to the current store's trash.",
       "targetStoreLabel": "Target store",
       "loadingStoresPlaceholder": "Loading stores...",
@@ -1950,6 +1958,8 @@
       "confirmBreakLinksLabel": "I understand that marketplace links will be broken",
       "alsoMovesLabel": "Will also be moved:",
       "alsoCopiesLabel": "Will also be copied:",
+      "copyFilesLabel": "Copy files and gallery images",
+      "copyFilesHint": "Folders and product photos from the file manager. Turn off for a lighter duplicate.",
       "inFoldersPrefix": "in",
       "attrMappableOne": "attribute will be mapped",
       "attrMappableFew": "attributes will be mapped",
@@ -2046,18 +2056,28 @@
       "renameAction": "Rename",
       "createFolderAction": "Create folder",
       "uploadFilesAction": "Upload files",
+      "menuSectionOpen": "Open",
+      "menuSectionManage": "Manage",
+      "menuSectionCreate": "Create",
+      "menuSectionDanger": "Danger zone",
       "deleteFolderTitle": "Delete folder \"{name}\"?",
       "deleteFolderContentsLabel": "Also delete contents: {fileCount} files ({size}), {subfolderCount} subfolders",
       "shareFolderTitle": "Share folder",
       "shareFileTitle": "Share file",
       "allFilesFallback": "All files",
+      "expirationLabel": "Link expiration",
       "expirationPlaceholder": "Link expiration",
+      "expirationDescription": "After this period the link stops working. Anyone with the link can access the item until then.",
+      "expirationPermanentDescription": "Makes this file permanently public. Anyone with the link can access it with no expiration.",
+      "shareLinkLabel": "Link",
       "ttl1Hour": "1 hour",
       "ttl1Day": "1 day",
       "ttl7Days": "7 days",
       "ttl30Days": "30 days",
       "ttlPermanent": "No expiration",
       "createLinkAction": "Create link",
+      "stopPublicAccessAction": "Stop public access",
+      "publicAccessStopped": "Public access disabled",
       "cancelUploadsAction": "Cancel upload",
       "selectedCount": "Selected: {count}",
       "deselectAction": "Deselect",
@@ -2449,8 +2469,7 @@
     },
     "notesPage": {
       "breadcrumb": "Notes",
-      "searchPlaceholder": "Search note text",
-      "productSearchPlaceholder": "Product name or SKU",
+      "searchPlaceholder": "Search note text, product name or SKU",
       "importanceAll": "All importance",
       "authorAll": "All authors",
       "authorUnknown": "Unknown author",
@@ -2472,7 +2491,13 @@
       "emptyTitle": "No notes yet",
       "emptyDescription": "Notes added on product pages will appear here",
       "emptyFilteredTitle": "No matching notes",
-      "emptyFilteredDescription": "Try changing search or filters"
+      "emptyFilteredDescription": "Try changing search or filters",
+      "sheetTitleFallback": "Note",
+      "sheetCreated": "Created {date}",
+      "sheetUpdated": "Updated {date}",
+      "sheetSaving": "Saving…",
+      "openProduct": "Open product",
+      "deleteNote": "Delete note"
     },
     "notFoundPage": {
       "errorCode": "Error 404",
@@ -2818,7 +2843,7 @@
     },
     "productsPage": {
       "searchPlaceholder": "Search",
-      "searchHint": "Name (substring). Exact match: SKU, ID, barcode, marketplace id",
+      "searchHint": "Name, SKU, barcode, marketplace id (substring). Exact hits rank first; product ID is exact",
       "toast": {
         "bulkDeleted": "Products deleted: {count}",
         "bulkDeleteFailed": "Failed to delete products",
@@ -3445,11 +3470,15 @@
   },
   "productRowActions": {
     "goTo": "Open",
+    "cloneToStore": "Clone to store",
     "moveToStore": "Move to store",
+    "moveToStoreDisabledSingleStore": "Move requires another store on this instance",
     "moveToTrash": "Move to trash",
     "confirmTrashTitle": "Move to trash?",
     "confirmTrashDescription": "The product will be moved to trash. It can be restored later.",
-    "toTrash": "Move to trash"
+    "toTrash": "Move to trash",
+    "menuSectionProduct": "Product",
+    "menuSectionDanger": "Danger zone"
   },
   "trashRowActions": {
     "restore": "Restore",
@@ -3457,7 +3486,9 @@
     "confirmRestoreTitle": "Restore product?",
     "confirmRestoreDescription": "The product will be restored from trash and will appear in the product list again.",
     "confirmDeleteTitle": "Delete forever?",
-    "confirmDeleteDescription": "All files, photos, notes, and adapter data will be deleted. This action cannot be undone."
+    "confirmDeleteDescription": "All files, photos, notes, and adapter data will be deleted. This action cannot be undone.",
+    "menuSectionRestore": "Restore",
+    "menuSectionDanger": "Danger zone"
   },
   "marketplacePillChain": {
     "moveLeft": "Move left",

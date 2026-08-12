@@ -14,6 +14,10 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
 import { confirm } from "@/composables/useConfirm";
 import {
+  applyQuotaSnapshot,
+  notifyQuotaAttentionRefresh,
+} from "@/lib/quotaAttention";
+import {
   AlertTriangle,
   ChevronDown,
   RefreshCw,
@@ -81,6 +85,7 @@ async function load() {
     ]);
     snapshot.value = usageRes.data?.value ?? usageRes.data;
     preview.value = previewRes.data?.value ?? previewRes.data;
+    applyQuotaSnapshot(snapshot.value);
   } catch (error) {
     displaySonnerError(error);
   } finally {
@@ -109,6 +114,7 @@ async function trimNow() {
       }),
     );
     await load();
+    notifyQuotaAttentionRefresh();
   } catch (error) {
     displaySonnerError(error);
   } finally {

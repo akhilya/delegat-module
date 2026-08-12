@@ -265,7 +265,8 @@
     "errorLogs": "Логи ошибок",
     "adapterLogs": "Логи адаптеров",
     "api": "API",
-    "usage": "Квоты"
+    "usage": "Квоты",
+    "quotaOverageAttention": "Превышение квоты — откройте Администрирование; лишние данные могут быть удалены"
   },
   "theme": {
     "light": "Светлая тема",
@@ -676,7 +677,8 @@
       },
       "fields": {
         "price": "Цена",
-        "storageQuantity": "Остаток"
+        "storageQuantity": "Остаток",
+        "barcode": "Штрихкод"
       },
       "status": {
         "unlinked": "Не связан",
@@ -1770,7 +1772,8 @@
       "name": "Название",
       "description": "Описание",
       "price": "Цена",
-      "storageQuantity": "Остаток"
+      "storageQuantity": "Остаток",
+      "barcode": "Штрихкод"
     },
     "updatedFieldsMessage": "Обновлено: {fields}"
   },
@@ -1898,8 +1901,9 @@
     },
     "adaptersColumn": {
       "notLinked": "Не связан",
-      "linkOnProduct": "Привязать на странице товара",
-      "configureMapping": "Настроить маппинг"
+      "linkOnProduct": "Привязать вручную",
+      "configureMapping": "Настроить маппинг",
+      "disabledInTrash": "Адаптеры недоступны, пока товар в корзине"
     },
     "productTransferDialog": {
       "previewLoadFailed": "Не удалось загрузить предпросмотр",
@@ -1909,10 +1913,14 @@
       "progressWithFiles": "Прогресс переноса {count} файлов можно отслеживать в панели операций",
       "progressGeneric": "Прогресс можно отслеживать в панели операций",
       "dialogTitle": "Перенести товар в другой магазин",
+      "cloneDialogTitle": "Клонировать товар в другой магазин",
+      "cloneSameStoreDialogTitle": "Клонировать товар",
+      "moveDialogTitle": "Переместить товар в другой магазин",
       "modeLabel": "Режим",
       "cloneAction": "Копировать",
       "moveAction": "Переместить",
       "cloneModeHint": "Товар будет скопирован в целевой магазин, оригинал останется без изменений.",
+      "cloneSameStoreHint": "Копия будет создана в текущем магазине. Оригинал останется без изменений.",
       "moveModeHint": "Товар будет перемещён в целевой магазин, оригинал попадёт в корзину текущего магазина.",
       "targetStoreLabel": "Целевой магазин",
       "loadingStoresPlaceholder": "Загрузка магазинов...",
@@ -1950,6 +1958,8 @@
       "confirmBreakLinksLabel": "Я понимаю, что связи с адаптерами будут разорваны",
       "alsoMovesLabel": "Также будет перемещено:",
       "alsoCopiesLabel": "Также будет скопировано:",
+      "copyFilesLabel": "Копировать файлы и изображения галереи",
+      "copyFilesHint": "Папки и фото товара из файлового менеджера. Выключите, чтобы сделать лёгкую копию без файлов.",
       "inFoldersPrefix": "в",
       "attrMappableOne": "атрибут будет сопоставлен",
       "attrMappableFew": "атрибута будет сопоставлено",
@@ -2046,18 +2056,28 @@
       "renameAction": "Переименовать",
       "createFolderAction": "Создать папку",
       "uploadFilesAction": "Загрузить файлы",
+      "menuSectionOpen": "Открыть",
+      "menuSectionManage": "Управление",
+      "menuSectionCreate": "Создать",
+      "menuSectionDanger": "Опасная зона",
       "deleteFolderTitle": "Удалить папку «{name}»?",
       "deleteFolderContentsLabel": "Также удалить содержимое: {fileCount} файлов ({size}), {subfolderCount} подпапок",
       "shareFolderTitle": "Поделиться папкой",
       "shareFileTitle": "Поделиться файлом",
       "allFilesFallback": "Все файлы",
+      "expirationLabel": "Срок действия",
       "expirationPlaceholder": "Срок действия ссылки",
+      "expirationDescription": "После этого срока ссылка перестанет работать. До истечения доступ есть у любого, у кого есть ссылка.",
+      "expirationPermanentDescription": "Файл станет постоянно публичным. Доступ по ссылке без срока действия.",
+      "shareLinkLabel": "Ссылка",
       "ttl1Hour": "1 час",
       "ttl1Day": "1 день",
       "ttl7Days": "7 дней",
       "ttl30Days": "30 дней",
       "ttlPermanent": "Без ограничения",
       "createLinkAction": "Создать ссылку",
+      "stopPublicAccessAction": "Закрыть публичный доступ",
+      "publicAccessStopped": "Публичный доступ отключён",
       "cancelUploadsAction": "Отменить загрузку",
       "selectedCount": "Выбрано: {count}",
       "deselectAction": "Снять выделение",
@@ -2449,8 +2469,7 @@
     },
     "notesPage": {
       "breadcrumb": "Заметки",
-      "searchPlaceholder": "Поиск по тексту заметки",
-      "productSearchPlaceholder": "Название или SKU товара",
+      "searchPlaceholder": "Поиск по тексту заметки, названию или SKU товара",
       "importanceAll": "Любая важность",
       "authorAll": "Все авторы",
       "authorUnknown": "Автор неизвестен",
@@ -2472,7 +2491,13 @@
       "emptyTitle": "Заметок пока нет",
       "emptyDescription": "Заметки с карточек товаров появятся здесь",
       "emptyFilteredTitle": "Ничего не найдено",
-      "emptyFilteredDescription": "Измените поиск или фильтры"
+      "emptyFilteredDescription": "Измените поиск или фильтры",
+      "sheetTitleFallback": "Заметка",
+      "sheetCreated": "Создана {date}",
+      "sheetUpdated": "Обновлена {date}",
+      "sheetSaving": "Сохранение…",
+      "openProduct": "Открыть товар",
+      "deleteNote": "Удалить заметку"
     },
     "notFoundPage": {
       "errorCode": "Ошибка 404",
@@ -2818,7 +2843,7 @@
     },
     "productsPage": {
       "searchPlaceholder": "Поиск",
-      "searchHint": "Название (подстрока). Точное совпадение: SKU, ID, штрихкод, id маркетплейса",
+      "searchHint": "Название, SKU, штрихкод, id маркетплейса (подстрока). Точные совпадения выше; ID товара — точный",
       "toast": {
         "bulkDeleted": "Удалено товаров: {count}",
         "bulkDeleteFailed": "Не удалось удалить товары",
@@ -3445,11 +3470,15 @@
   },
   "productRowActions": {
     "goTo": "Перейти",
+    "cloneToStore": "Клонировать в магазин",
     "moveToStore": "Переместить в магазин",
+    "moveToStoreDisabledSingleStore": "Перемещение доступно, только если в инстансе есть другой магазин",
     "moveToTrash": "Переместить в корзину",
     "confirmTrashTitle": "Отправить в корзину?",
     "confirmTrashDescription": "Товар будет перемещён в корзину. Его можно будет восстановить.",
-    "toTrash": "В корзину"
+    "toTrash": "В корзину",
+    "menuSectionProduct": "Товар",
+    "menuSectionDanger": "Опасная зона"
   },
   "trashRowActions": {
     "restore": "Восстановить",
@@ -3457,7 +3486,9 @@
     "confirmRestoreTitle": "Восстановить товар?",
     "confirmRestoreDescription": "Товар будет восстановлен из корзины и снова появится в списке товаров.",
     "confirmDeleteTitle": "Удалить навсегда?",
-    "confirmDeleteDescription": "Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить."
+    "confirmDeleteDescription": "Все файлы, фото, заметки и данные адаптеров будут удалены. Это действие нельзя отменить.",
+    "menuSectionRestore": "Восстановление",
+    "menuSectionDanger": "Опасная зона"
   },
   "marketplacePillChain": {
     "moveLeft": "Переместить влево",

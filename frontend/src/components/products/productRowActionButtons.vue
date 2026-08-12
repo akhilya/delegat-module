@@ -1,12 +1,13 @@
 <script>
-// ProductRowActionButtons - Dropdown menu with actions for a single product table row.
+// ProductRowActionButtons - Dropdown or context-menu content with actions for a product table row.
+import { computed, onMounted } from "vue";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ContextMenuContent } from "@/components/ui/context-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,16 +18,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import ProductRowActionMenuItems from "./ProductRowActionMenuItems.vue";
 import { PAGE_PRODUCT_EDIT } from "@/router";
-import { EllipsisVertical, ArrowRight, ArrowRightLeft, Trash2 } from "lucide-vue-next";
+import { EllipsisVertical } from "lucide-vue-next";
+import { useSelectedStore } from "@/composables/useSelectedStore";
 
 export default {
   components: {
     Button,
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
+    ContextMenuContent,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -35,10 +38,8 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    ProductRowActionMenuItems,
     EllipsisVertical,
-    ArrowRight,
-    ArrowRightLeft,
-    Trash2,
   },
   props: {
     id: {
@@ -53,12 +54,32 @@ export default {
       type: String,
       default: "",
     },
+    /** "dropdown" | "context" — context renders ContextMenuContent for a parent ContextMenu */
+    mode: {
+      type: String,
+      default: "dropdown",
+      validator: (v) => v === "dropdown" || v === "context",
+    },
   },
   emits: ["transfer", "delete"],
+  setup() {
+    const { memberships, loadMemberships } = useSelectedStore();
+    onMounted(() => {
+      loadMemberships();
+    });
+    // Move needs another store the user can access (single-store instances → disabled).
+    const canMove = computed(() => memberships.value.length > 1);
+    return { canMove };
+  },
   data() {
     return {
       showDeleteDialog: false,
     };
+  },
+  computed: {
+    menuSurface() {
+      return this.mode === "context" ? "context" : "dropdown";
+    },
   },
   methods: {
     navigate() {
@@ -67,8 +88,14 @@ export default {
         params: { id: this.id },
       });
     },
-    openTransfer() {
-      this.$emit("transfer", { id: this.id, name: this.name, sku: this.sku });
+    openTransfer(mode) {
+      if (mode === "move" && !this.canMove) return;
+      this.$emit("transfer", {
+        id: this.id,
+        name: this.name,
+        sku: this.sku,
+        mode,
+      });
     },
     confirmDelete() {
       this.$emit("delete", this.id);
@@ -79,30 +106,40 @@ export default {
 </script>
 
 <template>
-  <DropdownMenu>
+  <DropdownMenu v-if="mode === 'dropdown'">
     <DropdownMenuTrigger as-child>
       <Button variant="ghost" class="w-full h-full rounded-none px-2 sm:px-3">
         <EllipsisVertical class="size-4" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end">
-      <DropdownMenuItem @click.stop="navigate">
-        <ArrowRight />
-        {{ $t("productRowActions.goTo") }}
-      </DropdownMenuItem>
-      <DropdownMenuItem @click.stop="openTransfer">
-        <ArrowRightLeft />
-        {{ $t("productRowActions.moveToStore") }}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        variant="destructive"
-        @click.stop="showDeleteDialog = true"
-      >
-        <Trash2 />
-        {{ $t("productRowActions.moveToTrash") }}
-      </DropdownMenuItem>
+    <DropdownMenuContent align="end" class="w-56">
+      <ProductRowActionMenuItems
+        surface="dropdown"
+        :id="id"
+        :name="name"
+        :sku="sku"
+        :can-move="canMove"
+        @go-to="navigate"
+        @clone="openTransfer('clone')"
+        @move="openTransfer('move')"
+        @trash="showDeleteDialog = true"
+      />
     </DropdownMenuContent>
   </DropdownMenu>
+
+  <ContextMenuContent v-else class="w-56">
+    <ProductRowActionMenuItems
+      :surface="menuSurface"
+      :id="id"
+      :name="name"
+      :sku="sku"
+      :can-move="canMove"
+      @go-to="navigate"
+      @clone="openTransfer('clone')"
+      @move="openTransfer('move')"
+      @trash="showDeleteDialog = true"
+    />
+  </ContextMenuContent>
 
   <AlertDialog v-model:open="showDeleteDialog">
     <AlertDialogContent>
@@ -118,7 +155,7 @@ export default {
           variant="destructive"
           @click="confirmDelete"
         >
-          {{ $t("productRowActions.toTrash") }}
+          {{ $t("productRowActions.moveToTrash") }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

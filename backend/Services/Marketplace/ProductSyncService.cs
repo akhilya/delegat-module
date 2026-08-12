@@ -59,6 +59,9 @@ public class ProductSyncService
                 await _operationLogger.LogAsync(operationId, operationStoreId.Value, level, message);
         }
 
+        if (await ProductNotTrashed.IsTrashedAsync(_context, productId, ct))
+            return ProductExportResult.Failure(ProductNotTrashed.Message);
+
         // Load the product with all relations
         var product = await _context.products
             .Include(p => p.category)
@@ -649,7 +652,10 @@ public class ProductSyncService
         {
             if (!productDict.TryGetValue(productId, out var product))
             {
-                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: $"Product with ID {productId} not found"));
+                var trashMessage = await ProductNotTrashed.IsTrashedAsync(_context, productId, ct)
+                    ? ProductNotTrashed.Message
+                    : $"Product with ID {productId} not found";
+                itemResults.Add(new BulkProductExportItemResult(productId, false, ErrorMessage: trashMessage));
                 failedProductIds.Add(productId);
                 continue;
             }
@@ -1181,15 +1187,17 @@ public class ProductSyncService
             }
 
             var productLabel = externalProduct.Name ?? externalProductId;
-            await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "-"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
+            var importBarcode = MarketplaceImportBarcode.Resolve(externalProduct);
+            await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "-"} | Barcode: {importBarcode ?? "-"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
 
             _logger.LogInformation(
-                "Importing product {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Attributes={AttrCount}",
+                "Importing product {ExternalId}: Name={Name}, Description={Description}, Price={Price}, Quantity={Quantity}, Barcode={Barcode}, Attributes={AttrCount}",
                 externalProductId,
                 externalProduct.Name,
                 externalProduct.Description?.Substring(0, Math.Min(50, externalProduct.Description?.Length ?? 0)) ?? "null",
                 externalProduct.Price,
                 externalProduct.Quantity,
+                importBarcode ?? "null",
                 externalProduct.Attributes?.Count ?? 0);
 
             // Check whether a link already exists
@@ -1215,6 +1223,7 @@ public class ProductSyncService
                 new Product.UserAddForm
                 {
                     sku = externalProduct.Sku ?? $"MP-{externalProductId}",
+                    barcode = importBarcode,
                     name = externalProduct.Name ?? $"Product {externalProductId}",
                     description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description) ?? "",
                     price = externalProduct.Price,

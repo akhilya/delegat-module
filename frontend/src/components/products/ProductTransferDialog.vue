@@ -1,13 +1,15 @@
 <script setup>
 // ProductTransferDialog
 // ----------------------
-// Dialog for cloning or moving a product to another store. Driven entirely by
-// the backend preview endpoint (`/products/:id/transfer-preview`) so the UI
-// always reflects current server-side data (SKU conflicts, attribute
+// Dialog for cloning or moving a product to another store. Mode is chosen in
+// the row menu (`mode` prop) — the dialog does not switch clone/move itself.
+// Driven by the backend preview endpoint (`/products/:id/transfer-preview`) so
+// the UI always reflects current server-side data (SKU conflicts, attribute
 // mappability, broken marketplace links, available target groups, etc.).
 //
 // Two-step flow:
-//   1. user picks target store + mode → preview loads
+//   1. user picks target store → preview loads
+//      (same-store clone with a single membership auto-selects and skips the picker)
 //   2. user resolves conflicts (SKU override, category action, group action)
 //      → confirms → /products/:id/transfer fires
 //
@@ -34,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -42,9 +43,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   AlertTriangle,
   ArrowRight,
-  ArrowRightLeft,
   CheckCircle2,
-  Copy,
   ExternalLink,
   FileText,
   Image,
@@ -56,6 +55,12 @@ import { t } from "@/i18n";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
+  /** Locked transfer mode from the menu — no in-dialog clone/move switch. */
+  mode: {
+    type: String,
+    default: "clone",
+    validator: (v) => v === "clone" || v === "move",
+  },
   productId: { type: Number, default: null },
   productName: { type: String, default: "" },
   productSku: { type: String, default: "" },
@@ -79,7 +84,7 @@ const memberships = ref([]);
 const isLoadingMemberships = ref(false);
 const currentStoreId = ref(null);
 const targetStoreId = ref(null);
-const mode = ref("clone"); // "clone" | "move"
+const mode = computed(() => (props.mode === "move" ? "move" : "clone"));
 
 const preview = ref(null);
 const isLoadingPreview = ref(false);
@@ -93,6 +98,7 @@ const groupUseId = ref(null);
 const groupNewName = ref("");
 const confirmBreakLinks = ref(false);
 const syncMissingAttrs = ref(true);
+const copyFiles = ref(true);
 
 const isSubmitting = ref(false);
 
@@ -107,10 +113,29 @@ const productLabel = computed(
   () => props.productName || props.productSku || `#${props.productId}`,
 );
 
-const modeHint = computed(() =>
-  mode.value === "clone"
-    ? t("products.productTransferDialog.cloneModeHint")
-    : t("products.productTransferDialog.moveModeHint"),
+const dialogTitle = computed(() => {
+  if (mode.value === "move") {
+    return t("products.productTransferDialog.moveDialogTitle");
+  }
+  if (isSameStoreClone.value) {
+    return t("products.productTransferDialog.cloneSameStoreDialogTitle");
+  }
+  return t("products.productTransferDialog.cloneDialogTitle");
+});
+
+const modeHint = computed(() => {
+  if (mode.value === "move") {
+    return t("products.productTransferDialog.moveModeHint");
+  }
+  if (isSameStoreClone.value) {
+    return t("products.productTransferDialog.cloneSameStoreHint");
+  }
+  return t("products.productTransferDialog.cloneModeHint");
+});
+
+/** Clone with only one accessible store — no destination picker. */
+const isSameStoreClone = computed(
+  () => mode.value === "clone" && !isLoadingMemberships.value && memberships.value.length <= 1,
 );
 
 const syncingMissingAttrs = computed(
@@ -126,6 +151,7 @@ watch(() => props.open, async (isOpen) => {
     return;
   }
   await loadMemberships();
+  autoSelectTargetIfNeeded();
 });
 
 async function loadMemberships() {
@@ -153,6 +179,17 @@ async function loadMemberships() {
   isLoadingMemberships.value = false;
 }
 
+function autoSelectTargetIfNeeded() {
+  if (mode.value !== "clone") return;
+  if (memberships.value.length === 1) {
+    targetStoreId.value = memberships.value[0].id;
+    return;
+  }
+  if (memberships.value.length === 0 && currentStoreId.value != null) {
+    targetStoreId.value = currentStoreId.value;
+  }
+}
+
 // Stores available as transfer target. Move excludes current store; clone allows it
 // (in-store duplicate is a useful operation - SKU collision will force a new SKU).
 const availableTargetStores = computed(() => {
@@ -162,16 +199,15 @@ const availableTargetStores = computed(() => {
   return memberships.value;
 });
 
-// If user switched to "move" while having current store selected as target - clear it.
-watch(mode, (newMode) => {
-  if (newMode === "move" && targetStoreId.value === currentStoreId.value) {
+// Move cannot target the current store — clear if mode/memberships make selection invalid.
+watch([mode, currentStoreId], () => {
+  if (mode.value === "move" && targetStoreId.value === currentStoreId.value) {
     targetStoreId.value = null;
   }
 });
 
 function resetState() {
   targetStoreId.value = null;
-  mode.value = "clone";
   preview.value = null;
   previewError.value = null;
   newSku.value = "";
@@ -182,6 +218,7 @@ function resetState() {
   groupNewName.value = "";
   confirmBreakLinks.value = false;
   syncMissingAttrs.value = true;
+  copyFiles.value = true;
   isSubmitting.value = false;
 }
 
@@ -277,6 +314,7 @@ async function submit() {
     // Clone never breaks links (only move does); always send true so backend accepts.
     confirmBreakLinks: mode.value === "move" ? confirmBreakLinks.value : true,
     syncMissingCategoryAttributes: syncMissingAttrs.value,
+    copyFiles: mode.value === "move" ? true : copyFiles.value,
   };
 
   await store.dispatch("transferProduct", {
@@ -319,7 +357,7 @@ function close() {
     >
       <DialogHeader variant="bar">
         <DialogTitle>
-          {{ t("products.productTransferDialog.dialogTitle") }}
+          {{ dialogTitle }}
         </DialogTitle>
         <DialogDescription class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span class="font-medium text-foreground">{{ productLabel }}</span>
@@ -331,24 +369,9 @@ function close() {
       </DialogHeader>
 
       <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4 thin-scrollbar">
-        <!-- Mode: Tabs (clone vs move) -->
-        <div class="space-y-2">
-          <Tabs v-model="mode">
-            <TabsList class="grid h-9 w-full grid-cols-2">
-              <TabsTrigger value="clone" class="gap-1.5">
-                <Copy class="size-3.5" />
-                {{ t("products.productTransferDialog.cloneAction") }}
-              </TabsTrigger>
-              <TabsTrigger value="move" class="gap-1.5">
-                <ArrowRightLeft class="size-3.5" />
-                {{ t("products.productTransferDialog.moveAction") }}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <p class="text-xs text-muted-foreground">{{ modeHint }}</p>
-        </div>
+        <p class="text-sm text-muted-foreground">{{ modeHint }}</p>
 
-        <FieldGroup class="gap-5">
+        <FieldGroup v-if="!isSameStoreClone" class="gap-5">
           <SettingsFormField
             :label="t('products.productTransferDialog.targetStoreLabel')"
             label-for="target-store"
@@ -384,9 +407,9 @@ function close() {
           </SettingsFormField>
         </FieldGroup>
 
-        <!-- Signature: store route once destination is known -->
+        <!-- Signature: store route once destination is known (skip for same-store clone) -->
         <div
-          v-if="targetStoreName"
+          v-if="targetStoreName && !isSameStoreClone"
           class="flex min-w-0 items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm"
           aria-live="polite"
         >
@@ -763,8 +786,29 @@ function close() {
                   : t("products.productTransferDialog.alsoCopiesLabel")
               }}
             </p>
+            <label
+              v-if="mode === 'clone' && (preview.filesCount > 0 || preview.foldersCount > 0 || preview.imagesCount > 0)"
+              class="mb-3 flex cursor-pointer items-start gap-2 text-sm"
+            >
+              <Checkbox
+                id="copy-files"
+                v-model="copyFiles"
+                class="mt-0.5"
+              />
+              <span class="leading-snug">
+                {{ t("products.productTransferDialog.copyFilesLabel") }}
+                <span class="block text-xs font-normal text-muted-foreground">
+                  {{ t("products.productTransferDialog.copyFilesHint") }}
+                </span>
+              </span>
+            </label>
             <ul class="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
-              <li class="flex items-center gap-2">
+              <li
+                :class="[
+                  'flex items-center gap-2',
+                  mode === 'clone' && !copyFiles && 'text-muted-foreground/60 line-through',
+                ]"
+              >
                 <FileText class="size-3.5 shrink-0" />
                 <span>
                   {{ preview.filesCount }}
@@ -788,7 +832,12 @@ function close() {
                   </template>
                 </span>
               </li>
-              <li class="flex items-center gap-2">
+              <li
+                :class="[
+                  'flex items-center gap-2',
+                  mode === 'clone' && !copyFiles && 'text-muted-foreground/60 line-through',
+                ]"
+              >
                 <Image class="size-3.5 shrink-0" />
                 <span>
                   {{ preview.imagesCount }}

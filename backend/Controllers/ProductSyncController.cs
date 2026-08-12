@@ -210,6 +210,7 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
+        await ProductNotTrashed.EnsureAsync(_context, productId, ct);
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = connection.storeId;
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
@@ -255,6 +256,7 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
+        await ProductNotTrashed.EnsureAsync(_context, productId, ct);
 
         if (string.IsNullOrWhiteSpace(input.externalProductId) || input.externalProductId.Length > 100)
             throw ApiException.BadRequest("externalProductId is required (max 100 characters)", code: "required_fields_missing");
@@ -350,6 +352,8 @@ public class ProductSyncController : ControllerBase
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
 
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
+
         var productId = link.productId;
         var externalProductId = link.externalProductId;
 
@@ -411,6 +415,8 @@ public class ProductSyncController : ControllerBase
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
 
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
+
         try
         {
             var result = await _productSyncService.VerifyLinksAsync(link.connectionId, linkId, ct);
@@ -459,6 +465,8 @@ public class ProductSyncController : ControllerBase
 
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
+
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
 
         var rawExternalId = input.externalProductId.Trim();
         var canonicalExternalId = rawExternalId;
@@ -512,9 +520,10 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         await GetConnectionAsync(connectionId);
+        await ProductNotTrashed.EnsureNoneAsync(_context, input.productIds ?? new List<int>(), ct);
 
         var bulkResult = await _productSyncService.ExportProductsBulkAsync(
-            input.productIds, connectionId, ct);
+            input.productIds ?? new List<int>(), connectionId, ct);
 
         var results = bulkResult.Items.Select(r => new
         {
@@ -579,6 +588,7 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
+        await ProductNotTrashed.EnsureNoneAsync(_context, input.productIds, ct);
 
         var batchId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -1399,6 +1409,9 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
+        var importLinkIds = input?.linkIds;
+        if (importLinkIds is { Count: > 0 })
+            await ProductNotTrashed.EnsureLinksAsync(_context, importLinkIds, ct);
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -1441,6 +1454,9 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
+        var priceLinkIds = input?.linkIds;
+        if (priceLinkIds is { Count: > 0 })
+            await ProductNotTrashed.EnsureLinksAsync(_context, priceLinkIds, ct);
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -1485,6 +1501,9 @@ public class ProductSyncController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
+        var stockLinkIds = input?.linkIds;
+        if (stockLinkIds is { Count: > 0 })
+            await ProductNotTrashed.EnsureLinksAsync(_context, stockLinkIds, ct);
 
         var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -1758,6 +1777,8 @@ public class ProductSyncController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
+        await ProductNotTrashed.EnsureAsync(_context, productId, ct);
+
         // Get product with category
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(
@@ -1882,6 +1903,8 @@ public class ProductSyncController : ControllerBase
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
 
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
+
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Access denied", code: "access_denied_store");
 
@@ -1918,6 +1941,8 @@ public class ProductSyncController : ControllerBase
         var mode = input?.Mode;
         if (!PreferredExportModes.IsValid(mode))
             throw ApiException.BadRequest("Invalid export mode", code: "invalid_export_mode");
+
+        await ProductNotTrashed.EnsureAsync(_context, productId, ct);
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdTrackingAsync(productId, ct);
@@ -1979,6 +2004,8 @@ public class ProductSyncController : ControllerBase
 
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
+
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
 
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Access denied", code: "access_denied_store");
@@ -2072,6 +2099,16 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("storageQuantity");
         }
 
+        // Update barcode (valid EAN-8/13 from marketplace / variants)
+        if (excludeFields?.Contains("barcode") != true &&
+            MarketplaceImportBarcode.WouldChange(product, externalProduct, out var oldBarcode, out var newBarcode))
+        {
+            oldValues["barcode"] = oldBarcode;
+            newValues["barcode"] = newBarcode;
+            product.barcode = newBarcode;
+            updatedFields.Add("barcode");
+        }
+
         // Update attributes based on the category mapping
         // Build set of excluded attribute field names (strip "attr:" prefix)
         HashSet<string>? excludeAttrFieldNames = null;
@@ -2150,6 +2187,8 @@ public class ProductSyncController : ControllerBase
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
 
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
+
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Access denied", code: "access_denied_store");
 
@@ -2208,6 +2247,13 @@ public class ProductSyncController : ControllerBase
             updatedFields.Add("storageQuantity");
         }
 
+        if (MarketplaceImportBarcode.WouldChange(product, externalProduct, out var previewOldBarcode, out var previewNewBarcode))
+        {
+            oldValues["barcode"] = previewOldBarcode;
+            newValues["barcode"] = previewNewBarcode;
+            updatedFields.Add("barcode");
+        }
+
         var irreversibleFields = new List<string>();
 
         if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
@@ -2252,6 +2298,8 @@ public class ProductSyncController : ControllerBase
     {
         if (input.linkIds == null || input.linkIds.Count == 0)
             throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
+
+        await ProductNotTrashed.EnsureLinksAsync(_context, input.linkIds, ct);
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -2353,6 +2401,13 @@ public class ProductSyncController : ControllerBase
                     updatedFields.Add("storageQuantity");
                 }
 
+                if (MarketplaceImportBarcode.WouldChange(product, externalProduct, out var bulkPreviewOldBarcode, out var bulkPreviewNewBarcode))
+                {
+                    oldValues["barcode"] = bulkPreviewOldBarcode;
+                    newValues["barcode"] = bulkPreviewNewBarcode;
+                    updatedFields.Add("barcode");
+                }
+
                 if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
                 {
                     var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
@@ -2418,6 +2473,8 @@ public class ProductSyncController : ControllerBase
 
         if (link == null)
             throw ApiException.NotFound("Marketplace link not found");
+
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
 
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Access denied", code: "access_denied_store");
@@ -2485,6 +2542,7 @@ public class ProductSyncController : ControllerBase
             throw ApiException.NotFound("Marketplace link not found");
         if (link.connection?.storeId != selectedStoreId.Value)
             throw ApiException.Forbidden("Access denied", code: "access_denied_store");
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
         if (link.product == null)
             throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
@@ -2623,6 +2681,8 @@ public class ProductSyncController : ControllerBase
         if (input.linkIds == null || input.linkIds.Count == 0)
             throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
 
+        await ProductNotTrashed.EnsureLinksAsync(_context, input.linkIds, ct);
+
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -2733,6 +2793,12 @@ public class ProductSyncController : ControllerBase
                         updatedFields.Add("storageQuantity");
                     }
 
+                    if (MarketplaceImportBarcode.WouldChange(product, externalProduct, out _, out var bulkNewBarcode))
+                    {
+                        product.barcode = bulkNewBarcode;
+                        updatedFields.Add("barcode");
+                    }
+
                     if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
                     {
                         var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
@@ -2787,6 +2853,8 @@ public class ProductSyncController : ControllerBase
     {
         if (input.linkIds == null || input.linkIds.Count == 0)
             throw ApiException.BadRequest("No links specified", code: "required_fields_missing");
+
+        await ProductNotTrashed.EnsureLinksAsync(_context, input.linkIds, ct);
 
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();

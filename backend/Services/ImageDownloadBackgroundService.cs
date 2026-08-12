@@ -86,7 +86,14 @@ public class ImageDownloadBackgroundService : BackgroundService
             .ToListAsync(ct);
 
         if (pendingImages.Count == 0)
+        {
+            // Pre-created empty "-img" ops stay running until the first image is queued.
+            // Once the parent import is terminal and the queue is idle, close them.
+            var closed = await FinishIdleImageDownloadOpsAsync(context, _operationLogger, ct);
+            if (closed > 0)
+                _logger.LogInformation("Closed {Count} idle image-download operation(s)", closed);
             return;
+        }
 
         _logger.LogInformation("Processing {Count} images from the queue", pendingImages.Count);
 
@@ -159,12 +166,25 @@ public class ImageDownloadBackgroundService : BackgroundService
                 var total = batchItems.Count;
                 var completed = batchItems.Count(p => p.status == ImageDownloadStatus.Completed);
                 var failed = batchItems.Count(p => p.status == ImageDownloadStatus.Failed);
+                var cancelled = batchItems.Count(p => p.status == ImageDownloadStatus.Cancelled);
                 await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
-                if (total == completed + failed)
-                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
-                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                        $"Downloaded: {completed} succeeded, {failed} failed");
+                var hasActive = batchItems.Any(p =>
+                    p.status == ImageDownloadStatus.Pending
+                    || p.status == ImageDownloadStatus.InProgress
+                    || (p.status == ImageDownloadStatus.Failed
+                        && p.retryCount < PendingImageDownload.MAX_RETRIES));
+
+                if (!hasActive)
+                {
+                    var status = failed == 0
+                        ? (completed == 0 ? (cancelled > 0 ? "cancelled" : "completed") : "completed")
+                        : (completed == 0 ? "failed" : "partial");
+                    var summary = cancelled > 0
+                        ? $"Downloaded: {completed} succeeded, {failed} failed, {cancelled} cancelled"
+                        : $"Downloaded: {completed} succeeded, {failed} failed";
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId, status, summary);
+                }
             }
 
             // Delay between images to avoid overloading the CDN
@@ -304,4 +324,105 @@ public class ImageDownloadBackgroundService : BackgroundService
             (p.status == ImageDownloadStatus.Pending
              || p.status == ImageDownloadStatus.InProgress
              || p.status == ImageDownloadStatus.Failed));
+
+    /// <summary>
+    /// Completes running/paused image-download ops that have no active queue work once the parent
+    /// import is terminal (or missing). Fixes pre-created empty <c>{batchId}-img</c> ops that would
+    /// otherwise stay <c>running</c> until the 24h safety net.
+    /// </summary>
+    /// <param name="db">EF data context.</param>
+    /// <param name="operationLogger">Writes finish/log events for the operations panel.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="onlyBatchId">When set, only consider this image-download operation id.</param>
+    /// <returns>Number of operations closed.</returns>
+    internal static async Task<int> FinishIdleImageDownloadOpsAsync(
+        DataContext db,
+        IOperationLogger operationLogger,
+        CancellationToken ct,
+        string? onlyBatchId = null)
+    {
+        var query = db.operations.AsNoTracking()
+            .Where(o => (o.status == "running" || o.status == "paused")
+                        && (o.batchType == "image-download" || o.type == "image-download"));
+
+        if (!string.IsNullOrEmpty(onlyBatchId))
+            query = query.Where(o => o.operationId == onlyBatchId);
+
+        var ops = await query
+            .Select(o => new { o.operationId, o.storeId, o.batchId })
+            .Take(200)
+            .ToListAsync(ct);
+
+        var finished = 0;
+        foreach (var op in ops)
+        {
+            var batchKey = op.batchId ?? op.operationId;
+
+            string? parentStatus = null;
+            if (op.operationId.EndsWith("-img", StringComparison.Ordinal))
+            {
+                var parentId = op.operationId[..^4];
+                parentStatus = await db.operations.AsNoTracking()
+                    .Where(o => o.operationId == parentId)
+                    .Select(o => o.status)
+                    .FirstOrDefaultAsync(ct);
+
+                // Parent import still running — images may still be queued; leave the child open.
+                if (parentStatus is "running" or "paused")
+                    continue;
+            }
+
+            var rows = await db.pendingImageDownloads.AsNoTracking()
+                .Where(p => p.batchId == batchKey)
+                .Select(p => new { p.status, p.retryCount })
+                .ToListAsync(ct);
+
+            var hasActive = rows.Any(p =>
+                p.status == ImageDownloadStatus.Pending
+                || p.status == ImageDownloadStatus.InProgress
+                || (p.status == ImageDownloadStatus.Failed
+                    && p.retryCount < PendingImageDownload.MAX_RETRIES));
+            if (hasActive)
+                continue;
+
+            var completed = rows.Count(p => p.status == ImageDownloadStatus.Completed);
+            var failed = rows.Count(p => p.status == ImageDownloadStatus.Failed);
+            var cancelled = rows.Count(p => p.status == ImageDownloadStatus.Cancelled);
+
+            string status;
+            string summary;
+            if (rows.Count == 0)
+            {
+                status = parentStatus == "cancelled" ? "cancelled" : "completed";
+                summary = parentStatus == "cancelled"
+                    ? "Cancelled (no images queued)"
+                    : "No images to download";
+            }
+            else if (completed == 0 && failed == 0 && cancelled > 0)
+            {
+                status = "cancelled";
+                summary = $"Cancelled. Downloaded: 0, errors: 0, cancelled: {cancelled}";
+            }
+            else if (parentStatus == "cancelled" && completed == 0)
+            {
+                status = "cancelled";
+                summary = $"Cancelled. Downloaded: {completed}, errors: {failed}, cancelled: {cancelled}";
+            }
+            else
+            {
+                status = failed == 0
+                    ? "completed"
+                    : (completed == 0 ? "failed" : "partial");
+                summary = cancelled > 0
+                    ? $"Downloaded: {completed} succeeded, {failed} failed, {cancelled} cancelled"
+                    : $"Downloaded: {completed} succeeded, {failed} failed";
+            }
+
+            await operationLogger.LogAsync(op.operationId, op.storeId, "info", summary);
+            await operationLogger.FinishAsync(op.operationId, op.storeId, status, summary);
+            finished++;
+        }
+
+        return finished;
+    }
 }

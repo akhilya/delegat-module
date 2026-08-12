@@ -71,7 +71,10 @@ public class NoteController : ControllerBase
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim();
-            query = query.Where(x => x.Note.text.Contains(s));
+            query = query.Where(x =>
+                x.Note.text.Contains(s) ||
+                x.Product.name.Contains(s) ||
+                x.Product.sku.Contains(s));
         }
 
         if (!string.IsNullOrWhiteSpace(productQuery))

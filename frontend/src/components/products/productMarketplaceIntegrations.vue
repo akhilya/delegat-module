@@ -678,7 +678,7 @@ export default {
 
     getFieldLabel(field) {
       if (field.startsWith("attr:")) return field.substring(5);
-      const known = ["name", "description", "price", "storageQuantity"];
+      const known = ["name", "description", "price", "storageQuantity", "barcode"];
       return known.includes(field)
         ? t(`productMarketplaceIntegrations.fieldLabels.${field}`)
         : field;

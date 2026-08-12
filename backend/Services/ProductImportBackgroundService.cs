@@ -227,9 +227,18 @@ public class ProductImportBackgroundService : BackgroundService
                 await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
                 if (total == completed + failed)
+                {
                     await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
                         failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
                         $"Imported: {completed} succeeded, {failed} failed");
+
+                    // Pre-created empty image-download child would otherwise stay running forever.
+                    await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
+                        context,
+                        _operationLogger,
+                        ct,
+                        onlyBatchId: $"{pending.batchId}-img");
+                }
             }
 
             _logger.LogInformation(

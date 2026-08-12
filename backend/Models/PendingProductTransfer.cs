@@ -56,6 +56,12 @@ public class PendingProductTransfer
     /// <summary>When true, missing attribute definitions are added to the existing target category.</summary>
     public bool syncMissingCategoryAttributes { get; set; }
 
+    /// <summary>
+    /// Clone only: when false, skip copying files, folders, and gallery image links.
+    /// Move always copies files (this flag is ignored / stored as true).
+    /// </summary>
+    public bool copyFiles { get; set; } = true;
+
     /// <summary>User who initiated the transfer.</summary>
     public int authorUserId { get; set; }
 

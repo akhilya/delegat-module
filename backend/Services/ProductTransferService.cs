@@ -245,6 +245,10 @@ public class ProductTransferService
         if (request.targetStoreId == sourceStoreId && request.mode == "move")
             throw new InvalidOperationException("Cannot move into the same store. Use clone mode instead.");
 
+        if (request.mode == "move" && await _context.stores.CountAsync(ct) <= 1)
+            throw new InvalidOperationException(
+                "Cannot move a product when only one store exists on this instance");
+
         var targetStore = await _context.stores
             .Include(s => s.members)
             .FirstOrDefaultAsync(s => s.Id == request.targetStoreId, ct);
@@ -294,10 +298,11 @@ public class ProductTransferService
                 $"SKU '{newSku}' is already taken in the target store. Provide a different one via newSku.");
 
         // Re-check target quotas at execute time (enqueue may have been earlier; TOCTOU).
+        var shouldCopyFiles = request.mode == "move" || request.copyFiles;
         await _quotaService.EnsureTransferQuotasAsync(
             request.targetStoreId,
-            source.files.Count,
-            source.files.Sum(f => f.length));
+            shouldCopyFiles ? source.files.Count : 0,
+            shouldCopyFiles ? source.files.Sum(f => f.length) : 0);
 
         // ---- Resolve target category --------------------------------------------------
 
@@ -446,9 +451,9 @@ public class ProductTransferService
             // Total items = all copyable entities (for unified progress bar)
             var totalItems = source.attributeValues.Count
                 + source.storeAttributeValues.Count
-                + source.folders.Count
-                + source.files.Count
-                + source.images.Count
+                + (shouldCopyFiles ? source.folders.Count : 0)
+                + (shouldCopyFiles ? source.files.Count : 0)
+                + (shouldCopyFiles ? source.images.Count : 0)
                 + source.notes.Count
                 + source.variants.Count
                 + 1; // +1 for the product itself
@@ -584,9 +589,20 @@ public class ProductTransferService
                     throw;
                 }
 
-                // ---- Copy ProductFolder tree ---------------------------------------------
+                // ---- Copy ProductFolder tree / Files / gallery images --------------------
 
                 var folderIdMap = new Dictionary<int, int>();
+                var fileIdMap = new Dictionary<int, int>();
+                var copiedFileCount = 0;
+                var failedFileCount = 0;
+                var imagesCopied = 0;
+
+                if (!shouldCopyFiles)
+                {
+                    await Log("info", "Skipping files, folders, and gallery images (copyFiles=false)");
+                }
+                else
+                {
                 var pendingFolders = source.folders.ToList();
                 try
                 {
@@ -633,10 +649,7 @@ public class ProductTransferService
 
                 // ---- Copy Files (MinIO + DB) ---------------------------------------------
 
-                var fileIdMap = new Dictionary<int, int>();
                 var totalFiles = source.files.Count;
-                var copiedFileCount = 0;
-                var failedFileCount = 0;
 
                 if (totalFiles > 0)
                     await Log("info", $"Copying files: {totalFiles}");
@@ -759,7 +772,6 @@ public class ProductTransferService
 
                 // ---- Copy ImageReferences (rebuilt with new fileIds) ---------------------
 
-                var imagesCopied = 0;
                 try
                 {
                     foreach (var srcImg in source.images.OrderBy(i => i.index))
@@ -787,6 +799,7 @@ public class ProductTransferService
                     await Log("error", $"Error linking images: {ex.Message}");
                     throw;
                 }
+                } // end shouldCopyFiles
 
                 // ---- Copy Notes ----------------------------------------------------------
 
@@ -1062,6 +1075,11 @@ public class TransferRequest
     /// attributes, the missing attribute definitions are added to the existing category.
     /// When false, the existing category is used as-is and unmappable values are silently dropped.</summary>
     public bool syncMissingCategoryAttributes { get; set; }
+    /// <summary>
+    /// Clone only: when false, skip copying product files, folders, and gallery image links.
+    /// Move always copies files regardless of this flag. Default true.
+    /// </summary>
+    public bool copyFiles { get; set; } = true;
 }
 
 public class TransferResult

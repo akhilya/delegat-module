@@ -155,7 +155,8 @@ public class ProductTransferBackgroundService : BackgroundService
             groupId = item.groupId,
             groupName = item.groupName,
             confirmBreakLinks = item.confirmBreakLinks,
-            syncMissingCategoryAttributes = item.syncMissingCategoryAttributes
+            syncMissingCategoryAttributes = item.syncMissingCategoryAttributes,
+            copyFiles = item.copyFiles
         };
 
         try

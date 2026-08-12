@@ -5,7 +5,7 @@ import { ColumnDef } from "@tanstack/vue-table";
 import { h } from "vue";
 
 import { t } from "@/i18n";
-import ImageFile from "../imageFile.vue";
+import ProductImageCell from "./ProductImageCell.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -201,10 +201,10 @@ export const columns: ProductColumnDef[] = [
     hideable: true,
     header: "",
     cell: ({ row }) => {
-      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
-      return h(ImageFile, {
-        class: "size-32",
-        file: src ? { fullPath: src } : null,
+      return h(ProductImageCell, {
+        imageClass: "size-32",
+        thumbnailUrl: row.original.primaryImageThumbnail ?? null,
+        imageUrl: row.original.primaryImage ?? null,
       });
     },
   },
@@ -299,6 +299,7 @@ export const columns: ProductColumnDef[] = [
       h(ProductAdaptersCell, {
         product: row.original,
         connections: table.options.meta?.connections ?? [],
+        disabled: table.options.meta?.adaptersDisabled === true,
         onChanged: table.options.meta?.onAdaptersChanged,
       }),
   },
@@ -461,11 +462,11 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     header: t("products.columns.presets.product.label"),
     size: 320,
     cell: ({ row }) => {
-      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
       return h("div", { class: "flex gap-3 items-start py-1" }, [
-        h(ImageFile, {
-          class: "size-14 shrink-0 rounded",
-          file: src ? { fullPath: src } : null,
+        h(ProductImageCell, {
+          imageClass: "size-14 shrink-0 rounded",
+          thumbnailUrl: row.original.primaryImageThumbnail ?? null,
+          imageUrl: row.original.primaryImage ?? null,
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(
@@ -492,11 +493,11 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     header: t("products.columns.presets.product.label"),
     size: 360,
     cell: ({ row }) => {
-      const src = row.original.primaryImageThumbnail ?? row.original.primaryImage;
       return h("div", { class: "flex gap-3 items-start py-1" }, [
-        h(ImageFile, {
-          class: "size-14 shrink-0 rounded",
-          file: src ? { fullPath: src } : null,
+        h(ProductImageCell, {
+          imageClass: "size-14 shrink-0 rounded",
+          thumbnailUrl: row.original.primaryImageThumbnail ?? null,
+          imageUrl: row.original.primaryImage ?? null,
         }),
         h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
           h(

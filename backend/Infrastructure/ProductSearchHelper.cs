@@ -8,8 +8,8 @@ namespace Delegat.Infrastructure;
 public static class ProductSearchHelper
 {
     /// <summary>
-    /// Filters products: name is substring; SKU / barcode / id / marketplace &amp; variant codes are exact equality only
-    /// (<c>_ПК105</c> ≠ <c>ПК105</c>). Exact hits are still included and ranked first via
+    /// Filters products: name and codes (SKU / barcode / marketplace &amp; variant) are substring matches;
+    /// product id is exact when the query parses as an int. Exact code hits rank first via
     /// <see cref="OrderBySearchRelevance"/>.
     /// </summary>
     public static IQueryable<Product> WhereMatchesSearch(this IQueryable<Product> query, string? searchQuery)
@@ -22,19 +22,19 @@ public static class ProductSearchHelper
 
         return query.Where(p =>
             p.name.Contains(q)
-            || p.sku == q
-            || (p.barcode != null && p.barcode == q)
+            || p.sku.Contains(q)
+            || (p.barcode != null && p.barcode.Contains(q))
             || (parsedId != null && p.Id == parsedId.Value)
             || p.marketplaceLinks.Any(l =>
-                l.externalProductId == q
-                || (l.externalSku != null && l.externalSku == q))
+                l.externalProductId.Contains(q)
+                || (l.externalSku != null && l.externalSku.Contains(q)))
             || p.variants.Any(v =>
-                (v.sku != null && v.sku == q)
-                || (v.barcode != null && v.barcode == q)));
+                (v.sku != null && v.sku.Contains(q))
+                || (v.barcode != null && v.barcode.Contains(q))));
     }
 
     /// <summary>
-    /// Relevance: exact id → exact code/name → name prefix / name contains (broader name hits last).
+    /// Relevance: exact id → exact code → code contains → exact name → name prefix → name contains.
     /// </summary>
     public static IOrderedQueryable<Product> OrderBySearchRelevance(
         this IQueryable<Product> query,
@@ -54,6 +54,15 @@ public static class ProductSearchHelper
                 || p.variants.Any(v =>
                     (v.sku != null && v.sku == q)
                     || (v.barcode != null && v.barcode == q)))
+            .ThenByDescending(p =>
+                p.sku.Contains(q)
+                || (p.barcode != null && p.barcode.Contains(q))
+                || p.marketplaceLinks.Any(l =>
+                    l.externalProductId.Contains(q)
+                    || (l.externalSku != null && l.externalSku.Contains(q)))
+                || p.variants.Any(v =>
+                    (v.sku != null && v.sku.Contains(q))
+                    || (v.barcode != null && v.barcode.Contains(q))))
             .ThenByDescending(p => p.name == q)
             .ThenByDescending(p => p.name.StartsWith(q))
             .ThenByDescending(p => p.name.Contains(q));

@@ -1,12 +1,12 @@
 <script>
-// TrashRowActionButtons - Dropdown menu with confirm dialogs for trashed product row actions.
+// TrashRowActionButtons - Dropdown or context-menu content for trashed product row actions.
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ContextMenuContent } from "@/components/ui/context-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,15 +17,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EllipsisVertical, Undo2, Trash2 } from "lucide-vue-next";
+import TrashRowActionMenuItems from "./TrashRowActionMenuItems.vue";
+import { EllipsisVertical } from "lucide-vue-next";
 
 export default {
   components: {
     Button,
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
+    ContextMenuContent,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -34,14 +35,27 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    TrashRowActionMenuItems,
     EllipsisVertical,
-    Undo2,
-    Trash2,
   },
   props: {
     id: {
       type: Number,
       required: true,
+    },
+    name: {
+      type: String,
+      default: "",
+    },
+    sku: {
+      type: String,
+      default: "",
+    },
+    /** "dropdown" | "context" — context renders ContextMenuContent for a parent ContextMenu */
+    mode: {
+      type: String,
+      default: "dropdown",
+      validator: (v) => v === "dropdown" || v === "context",
     },
   },
   emits: ["restore", "permanent-delete"],
@@ -51,30 +65,53 @@ export default {
       showDeleteDialog: false,
     };
   },
+  computed: {
+    menuSurface() {
+      return this.mode === "context" ? "context" : "dropdown";
+    },
+  },
+  methods: {
+    confirmRestore() {
+      this.$emit("restore", this.id);
+      this.showRestoreDialog = false;
+    },
+    confirmDelete() {
+      this.$emit("permanent-delete", this.id);
+      this.showDeleteDialog = false;
+    },
+  },
 };
 </script>
 
 <template>
-  <DropdownMenu>
+  <DropdownMenu v-if="mode === 'dropdown'">
     <DropdownMenuTrigger as-child>
       <Button variant="ghost" class="w-full h-full rounded-none px-2">
         <EllipsisVertical class="size-4" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end">
-      <DropdownMenuItem @click.stop="showRestoreDialog = true">
-        <Undo2 />
-        {{ $t("trashRowActions.restore") }}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        variant="destructive"
-        @click.stop="showDeleteDialog = true"
-      >
-        <Trash2 />
-        {{ $t("trashRowActions.deleteForever") }}
-      </DropdownMenuItem>
+    <DropdownMenuContent align="end" class="w-56">
+      <TrashRowActionMenuItems
+        surface="dropdown"
+        :id="id"
+        :name="name"
+        :sku="sku"
+        @restore="showRestoreDialog = true"
+        @permanent-delete="showDeleteDialog = true"
+      />
     </DropdownMenuContent>
   </DropdownMenu>
+
+  <ContextMenuContent v-else class="w-56">
+    <TrashRowActionMenuItems
+      :surface="menuSurface"
+      :id="id"
+      :name="name"
+      :sku="sku"
+      @restore="showRestoreDialog = true"
+      @permanent-delete="showDeleteDialog = true"
+    />
+  </ContextMenuContent>
 
   <AlertDialog v-model:open="showRestoreDialog">
     <AlertDialogContent>
@@ -86,7 +123,7 @@ export default {
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-        <AlertDialogAction @click="$emit('restore', id)">
+        <AlertDialogAction @click="confirmRestore">
           {{ $t("trashRowActions.restore") }}
         </AlertDialogAction>
       </AlertDialogFooter>
@@ -105,7 +142,7 @@ export default {
         <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
         <AlertDialogAction
           variant="destructive"
-          @click="$emit('permanent-delete', id)"
+          @click="confirmDelete"
         >
           {{ $t("trashRowActions.deleteForever") }}
         </AlertDialogAction>

@@ -226,6 +226,8 @@ const SIDEBAR_GROUPS = [
         type: "link",
         to: s.to,
         icon: s.icon,
+        attention: s.attention === true,
+        attentionTooltipKey: s.attentionTooltipKey,
       })),
   },
 ];

@@ -67,6 +67,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import ProductImageCell from "@/components/products/ProductImageCell.vue";
 
 export default {
   components: {
@@ -80,6 +81,7 @@ export default {
     SettingsFormField,
     FieldGroup,
     AdapterIcon,
+    ProductImageCell,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -558,16 +560,18 @@ export default {
       }
     },
 
-    getProductImageUrl(product) {
-      // Handle GroupProductDTO structure (members in group)
+    getProductThumbnailUrl(product) {
       if (product.images && product.images.length > 0) {
-        return product.images[0].thumbnailUrl ?? product.images[0].url;
+        return product.images[0].thumbnailUrl ?? product.images[0].url ?? null;
       }
-      // Handle ProductReviewDTO structure (product search results)
-      if (product.primaryImageThumbnail ?? product.primaryImage) {
-        return product.primaryImageThumbnail ?? product.primaryImage;
+      return product.primaryImageThumbnail ?? product.primaryImage ?? null;
+    },
+
+    getProductFullImageUrl(product) {
+      if (product.images && product.images.length > 0) {
+        return product.images[0].url ?? product.images[0].thumbnailUrl ?? null;
       }
-      return null;
+      return product.primaryImage ?? product.primaryImageThumbnail ?? null;
     },
 
     openProductSearchDialog() {
@@ -716,20 +720,11 @@ export default {
                           {{ member.product.sku || "-" }}
                         </TableCell>
                         <TableCell class="w-14 px-2">
-                          <div class="size-10 rounded-md overflow-hidden bg-muted">
-                            <img
-                              v-if="getProductImageUrl(member.product)"
-                              :src="getProductImageUrl(member.product)"
-                              :alt="member.product.name"
-                              class="size-full object-cover"
-                            />
-                            <div
-                              v-else
-                              class="size-full flex items-center justify-center"
-                            >
-                              <Package class="size-4 text-muted-foreground" />
-                            </div>
-                          </div>
+                          <ProductImageCell
+                            :thumbnail-url="getProductThumbnailUrl(member.product)"
+                            :image-url="getProductFullImageUrl(member.product)"
+                            image-class="size-10 shrink-0 rounded-md"
+                          />
                         </TableCell>
                         <TableCell class="min-w-0 px-3">
                           <router-link
@@ -1093,20 +1088,12 @@ export default {
                 <span class="truncate font-mono text-xs text-muted-foreground">
                   {{ product.sku || "-" }}
                 </span>
-                <div class="size-10 overflow-hidden rounded-md bg-muted">
-                  <img
-                    v-if="getProductImageUrl(product)"
-                    :src="getProductImageUrl(product)"
-                    :alt="product.name"
-                    class="size-full object-cover"
-                  />
-                  <div
-                    v-else
-                    class="flex size-full items-center justify-center"
-                  >
-                    <Package class="size-4 text-muted-foreground" />
-                  </div>
-                </div>
+                <ProductImageCell
+                  :thumbnail-url="getProductThumbnailUrl(product)"
+                  :image-url="getProductFullImageUrl(product)"
+                  image-class="size-10 shrink-0 rounded-md"
+                  :stop-events="false"
+                />
                 <span class="min-w-0 truncate text-sm font-medium">
                   {{ product.name }}
                 </span>

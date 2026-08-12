@@ -2722,6 +2722,7 @@ export default {
         description: this.$t("common.description"),
         price: this.$t("marketplace.connectionPage.fields.price"),
         storageQuantity: this.$t("marketplace.connectionPage.fields.storageQuantity"),
+        barcode: this.$t("marketplace.connectionPage.fields.barcode"),
       };
       if (field.startsWith("attr:")) return field.substring(5);
       return labels[field] || field;
@@ -3327,7 +3328,7 @@ export default {
                   </DialogTrigger>
                   <DialogContent
                     size="6xl"
-                    class="flex min-h-[36rem] max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl"
+                    class="flex h-[min(92vh,60rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl"
                   >
                     <DialogHeader variant="bar">
                       <DialogTitle>
@@ -3338,7 +3339,7 @@ export default {
                       </DialogDescription>
                     </DialogHeader>
 
-                    <div class="px-6 pb-4">
+                    <div class="px-6 pt-5 pb-4">
                       <SettingsFormField :label="$t('marketplace.connectionPage.mappings.mappingNameLabel')">
                         <Input
                           v-model="newMapping.name"
@@ -3350,7 +3351,7 @@ export default {
                       </SettingsFormField>
                     </div>
 
-                    <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-y px-6">
+                    <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-t px-6">
                       <div class="flex min-h-0 flex-col gap-2 py-4">
                         <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.localCategory") }}</p>
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">

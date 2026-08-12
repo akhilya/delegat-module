@@ -37,6 +37,7 @@ export default {
   props: {
     product: { type: Object, required: true },
     connections: { type: Array, default: () => [] },
+    disabled: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -137,6 +138,14 @@ export default {
       });
     },
 
+    buttonTitle(conn) {
+      const base = `${conn.name || conn.adapterKey} — ${this.statusLabel(conn)}`;
+      if (this.disabled) {
+        return `${base}. ${t("products.adaptersColumn.disabledInTrash")}`;
+      }
+      return base;
+    },
+
     marketplaceUrl(conn) {
       const rich = this.richFor(conn);
       const link = this.linkFor(conn);
@@ -169,7 +178,7 @@ export default {
     },
 
     async ensureDetails() {
-      if (this.detailsLoaded || this.detailsLoading) return;
+      if (this.disabled || this.detailsLoaded || this.detailsLoading) return;
       this.detailsLoading = true;
       this.detailsError = false;
       await this.getAvailableConnectionsForProduct({
@@ -201,6 +210,7 @@ export default {
     },
 
     onMenuOpen(open) {
+      if (this.disabled) return;
       if (open) this.ensureDetails();
     },
 
@@ -467,6 +477,25 @@ export default {
   >
     —
   </div>
+  <ButtonGroup
+    v-else-if="disabled"
+    class="max-w-full flex-wrap opacity-60"
+    @click="stopRow"
+  >
+    <Button
+      v-for="conn in activeConnections"
+      :key="conn.id"
+      type="button"
+      variant="outline"
+      size="icon"
+      disabled
+      :class="buttonClass(conn)"
+      :title="buttonTitle(conn)"
+      :aria-label="buttonTitle(conn)"
+    >
+      <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+    </Button>
+  </ButtonGroup>
   <ButtonGroup v-else class="max-w-full flex-wrap" @click="stopRow">
     <ProductAdapterConnectionMenu
       v-for="conn in activeConnections"
@@ -498,7 +527,7 @@ export default {
           variant="outline"
           size="icon"
           :class="buttonClass(conn)"
-          :title="`${conn.name || conn.adapterKey} — ${statusLabel(conn)}`"
+          :title="buttonTitle(conn)"
           :aria-label="`${conn.name || conn.adapterKey}: ${statusLabel(conn)}`"
           :disabled="busyKey != null && String(busyKey).endsWith(`-${conn.id}`)"
         >

@@ -1,12 +1,17 @@
 <script setup>
 import { ref, nextTick, watch, onMounted, onBeforeUnmount } from "vue";
-import { Plus, Copy } from "lucide-vue-next";
+import { Plus, Copy, Image } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
+import AppImage from "@/components/AppImage.vue";
+import ProductImageCell from "@/components/products/ProductImageCell.vue";
 import { t } from "@/i18n";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -115,6 +120,14 @@ function memberLabel(member) {
   return name;
 }
 
+function memberThumbSrc(member) {
+  return member.imageThumbnailUrl || member.imageUrl || null;
+}
+
+function memberPreviewSrc(member) {
+  return member.imageUrl || member.imageThumbnailUrl || null;
+}
+
 defineExpose({ scrollCurrentIntoView, scrollRef, compact });
 </script>
 
@@ -193,24 +206,50 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                     :aria-label="memberLabel(member)"
                     :aria-current="member.isCurrent ? 'page' : undefined"
                   >
-                    <div
-                      class="relative shrink-0 overflow-hidden rounded-md bg-muted"
-                      :class="compact ? 'size-full rounded-lg' : 'size-14'"
+                    <ProductImageCell
+                      v-if="!compact"
+                      :thumbnail-url="member.imageThumbnailUrl || null"
+                      :image-url="member.imageUrl || null"
+                      :stop-events="false"
                     >
-                      <template v-if="member.imageThumbnailUrl || member.imageUrl">
-                        <img
-                          :src="member.imageThumbnailUrl ?? member.imageUrl"
-                          alt=""
+                      <AppImage
+                        :src="memberThumbSrc(member)"
+                        :alt="member.productName"
+                        blur-backdrop
+                        spinner-size="sm"
+                        :class="[
+                          'size-14 shrink-0 rounded-md',
+                          !memberThumbSrc(member)
+                            ? 'bg-secondary flex items-center justify-center'
+                            : 'bg-muted',
+                        ]"
+                        img-class="relative z-10 size-full object-contain"
+                      >
+                        <Image
+                          class="text-secondary-foreground size-[25%]"
                           aria-hidden="true"
-                          class="absolute inset-0 size-full scale-110 object-cover blur-md"
                         />
-                        <img
-                          :src="member.imageThumbnailUrl ?? member.imageUrl"
-                          class="relative z-10 size-full object-contain"
-                          :alt="compact ? '' : member.productName"
-                        />
-                      </template>
-                    </div>
+                      </AppImage>
+                    </ProductImageCell>
+                    <AppImage
+                      v-else
+                      :src="memberThumbSrc(member)"
+                      alt=""
+                      blur-backdrop
+                      spinner-size="xs"
+                      :class="[
+                        'size-full shrink-0 rounded-lg',
+                        !memberThumbSrc(member)
+                          ? 'bg-secondary flex items-center justify-center'
+                          : 'bg-muted',
+                      ]"
+                      img-class="relative z-10 size-full object-contain"
+                    >
+                      <Image
+                        class="text-secondary-foreground size-[25%]"
+                        aria-hidden="true"
+                      />
+                    </AppImage>
                     <div v-if="!compact" class="min-w-0">
                       <p class="truncate text-sm">
                         {{ member.productName || member.productSku }}
@@ -229,18 +268,58 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                   </router-link>
                 </ContextMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent v-if="compact" side="right" class="max-w-xs">
-                <p class="font-medium">{{ member.productName || member.productSku }}</p>
-                <p v-if="member.productName && member.productSku" class="text-muted-foreground text-xs">
-                  {{ member.productSku }}
-                </p>
+              <TooltipContent
+                v-if="compact"
+                side="right"
+                :side-offset="8"
+                :class="
+                  memberPreviewSrc(member)
+                    ? 'max-w-none overflow-hidden p-1.5'
+                    : 'max-w-xs'
+                "
+              >
+                <div class="flex flex-col gap-1.5">
+                  <AppImage
+                    v-if="memberPreviewSrc(member)"
+                    :src="memberPreviewSrc(member)"
+                    alt=""
+                    spinner-size="default"
+                    class="flex size-64 items-center justify-center"
+                    img-class="max-h-64 max-w-64 rounded-sm object-contain"
+                  />
+                  <div :class="memberPreviewSrc(member) ? 'px-0.5 pb-0.5' : undefined">
+                    <p class="font-medium">{{ member.productName || member.productSku }}</p>
+                    <p
+                      v-if="member.productName && member.productSku"
+                      class="text-muted-foreground text-xs"
+                    >
+                      {{ member.productSku }}
+                    </p>
+                  </div>
+                </div>
               </TooltipContent>
             </Tooltip>
-            <ContextMenuContent v-if="getDuplicateUrl">
-              <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
-                <Copy />
-                {{ t("products.productGroupSidebar.duplicate") }}
-              </ContextMenuItem>
+            <ContextMenuContent v-if="getDuplicateUrl" class="w-56">
+              <ContextMenuLabel class="min-w-0 overflow-hidden font-normal">
+                <div class="flex min-w-0 flex-col gap-0.5">
+                  <span class="block truncate text-sm font-medium text-foreground">
+                    {{ member.productName || member.productSku }}
+                  </span>
+                  <span
+                    v-if="member.productName && member.productSku"
+                    class="block truncate text-xs font-normal text-muted-foreground"
+                  >
+                    {{ member.productSku }}
+                  </span>
+                </div>
+              </ContextMenuLabel>
+              <ContextMenuSeparator />
+              <ContextMenuGroup>
+                <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
+                  <Copy />
+                  {{ t("products.productGroupSidebar.duplicate") }}
+                </ContextMenuItem>
+              </ContextMenuGroup>
             </ContextMenuContent>
           </ContextMenu>
         </template>

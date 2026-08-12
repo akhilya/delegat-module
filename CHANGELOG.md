@@ -11,17 +11,38 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Sidebar warning icon on Settings / Administration when the instance is over plan quota (pending trim)
 - Products table **Adapters** column: ButtonGroup of store connections with status colors; each opens a sync/link menu (export, import, verify, unlink, open on marketplace / Adapters tab)
-- Store-wide Notes page (`/notes`): browse product notes with sort (importance, date, product) and filters (importance, author, note text, product name/SKU); note authorship and timestamps tracked on create/update
+- Store-wide Notes page (`/notes`): browse product notes with sort (importance, date, product) and filters (importance, author, unified search on note text / product name / SKU); note authorship and timestamps tracked on create/update; row opens a detail sheet to view/edit/delete the note and jump to the product
 - Administration (Overview): plan quotas vs store usage, overage preview of data that will be permanently trimmed after Control Plane downgrade grace, and Trim now (`/settings/admin/usage` redirects here)
 - Public docs deep-links for adapter credentials (Ozon, Wildberries, Yandex Market, OpenCart, WooCommerce) from create-connection and connection settings
 - Instance frontend reads docs origin from runtime `DOCS_PUBLIC_URL` (injected by Control Plane at provision into `runtime-config.js`)
 - File manager: upload date/time column (store timezone); infinite scroll for store and product file lists
 - File manager: Tag action next to Upload (same button style), for selected files
 
+### Changed
+
+- Products table reuses the last list/trash page for ~10s when navigating back from a product (avoids re-fetching large pages); cache clears after delete/restore/import/bulk/adapters changes
+- Product image hover preview (same as products table) on product group members table, add-to-group picker, and group variants sidebar
+- File manager share dialog rebuilt to Catalog Workbench patterns: Field stacks, dialog description for the item name, expiration help text, and a dedicated link field with copy
+- Products table row menu: separate **Clone to store** and **Move to store** actions; transfer dialog opens locked to that mode (no clone/move tabs)
+
 ### Fixed
 
+- File manager: empty-row Tag control matches Share icon color; permanent public shares can be revoked from the share dialog (and via context menu)
+- File manager: tag assign control is available on every file row again (not only when the file already has tags)
+- Products in trash: Adapters column stays visible but disabled; API rejects marketplace export/import/link/unlink/verify/price/stock ops for soft-deleted products
+- Administration Overview: Public API section shows the same section title/description typography as Logging and the other blocks
+- Category import: section titles (Adapter category, Where to import, Attributes to import) use shadcn FieldLegend / FieldDescription at label scale under the page heading
+- Create mapping dialog (adapter page): fixed tall height, spacing under the header before Mapping name, single bottom border (no double rule with footer), and adapter category search runs automatically after 1s idle
+- Adapter product import now fills the local product barcode from marketplace data (valid EAN-8/13, including variant barcodes); re-import preview/apply includes barcode too
+- File manager: dragging a file/folder into another folder updates the current list immediately (no page reload)
+- Products table: **Move to store** is disabled when the user has only one store membership; API rejects `mode=move` when the instance has a single store
+- Product **Clone** dialog skips the target-store picker when only one store is available (same-store duplicate)
+- Product **Clone** can skip copying files, folders, and gallery images (`copyFiles` flag; move always copies)
+- Background operations: empty Image download ops pre-created with import no longer stay running forever when no images were queued (closed when parent import finishes / on worker poll / queue cleanup)
 - User menu version no longer shows `vdev`: CI `latest` images bake SemVer from `VERSION`; API `/health` reports InformationalVersion; UI prefers health over a bake-time `dev` placeholder
+- Product group sidebar (variants rail): empty product images show the same placeholder icon as the products table
 - Products table Adapters column menu respects category mapping status (blocks export / shows configure when mapping is missing), matching the product Adapters tab
 - Products table Adapters buttons show mapping-missing (red) from the list payload, not only after opening the cell menu
 - Product Adapters tab and products-table Adapters column share one connection actions menu component
@@ -57,7 +78,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
-- Product list search: name is substring; SKU, barcode, product id, marketplace external id/SKU, and variant codes require exact match (`_ПК105` ≠ `ПК105`); exact hits rank first
+- Product list search: name and codes (SKU, barcode, marketplace external id/SKU, variant codes) are substring; product id is exact; exact code/id hits rank above partial matches
+- Products table: hover preview on product images (short delay); right-click row opens the same actions menu as the Actions column
+- Notes page: single top search covers note text, product name, and SKU (removed separate product filter field)
+- Context menus (products, trash, group variants, file manager) use section labels and separators like adapter connection menus
+- Content images show a Spinner while loading (catalog thumbs, galleries, lightbox, branding assets, mapping previews)
 - Adapter maturity: Ozon, Wildberries, and Yandex Market marked Stable; OpenCart and WooCommerce marked Beta (was Experimental)
 - Store branding moved to Settings → Stores → store dialog **Branding** tab (removed from platform Overview); sidebar store switcher shows each store’s favicon
 - Plan quotas UI lives on Settings → Administration (Overview); dedicated Usage nav item removed (`/settings/admin/usage` redirects to Overview)

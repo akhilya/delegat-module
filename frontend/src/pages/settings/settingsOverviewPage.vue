@@ -11,6 +11,7 @@ import { notifyMeUpdated } from "@/lib/meCache";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   Download,
+  Save,
 } from "lucide-vue-next";
 import { t } from "@/i18n";
 import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
@@ -225,7 +226,10 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col">
     <PageSection class="!min-h-0">
-      <SettingsFormSection>
+      <SettingsFormSection
+        :title="$t('pages.settingsOverviewPage.publicApiTitle')"
+        :description="$t('pages.settingsOverviewPage.publicApiDescription')"
+      >
         <SettingsSettingRow
           :title="$t('pages.settingsOverviewPage.publicApiEnabledLabel')"
           :description="$t('pages.settingsOverviewPage.publicApiEnabledHint')"
@@ -249,6 +253,7 @@ onMounted(async () => {
             @click="savePublicApiSettings"
           >
             <Spinner v-if="publicApiSaving" class="mr-2" />
+            <Save v-else class="mr-2 size-4" />
             {{ $t("pages.settingsOverviewPage.savePublicApiButton") }}
           </Button>
         </div>
@@ -319,6 +324,7 @@ onMounted(async () => {
             @click="saveLoggingSettings"
           >
             <Spinner v-if="loggingSaving" class="mr-2" />
+            <Save v-else class="mr-2 size-4" />
             {{ $t("pages.settingsOverviewPage.saveLoggingButton") }}
           </Button>
         </div>

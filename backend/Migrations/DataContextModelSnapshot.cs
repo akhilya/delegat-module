@@ -1603,6 +1603,9 @@ namespace Delegat.Migrations
                     b.Property<bool>("confirmBreakLinks")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<bool>("copyFiles")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 

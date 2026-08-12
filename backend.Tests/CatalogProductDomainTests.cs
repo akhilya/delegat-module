@@ -142,12 +142,12 @@ public class CatalogProductDomainTests
     }
 
     [Fact]
-    public async Task Search_SkuExact_DoesNotMatchPartialNeighbor()
+    public async Task Search_SkuSubstring_MatchesNeighbor_ExactRanksFirst()
     {
         var (db, data) = Create();
         var store = data.AddStore();
-        data.AddProduct(store.Id, name: "With underscore", sku: "_ПК105");
-        data.AddProduct(store.Id, name: "Plain", sku: "ПК105");
+        var neighbor = data.AddProduct(store.Id, name: "With underscore", sku: "_ПК105");
+        var exact = data.AddProduct(store.Id, name: "Plain", sku: "ПК105");
         await data.SaveAsync();
 
         var byUnderscore = await db.products
@@ -157,12 +157,14 @@ public class CatalogProductDomainTests
         Assert.Single(byUnderscore);
         Assert.Equal("_ПК105", byUnderscore[0].sku);
 
-        var byPlain = await db.products
+        var ordered = await db.products
             .Where(p => p.storeId == store.Id)
             .WhereMatchesSearch("ПК105")
+            .OrderBySearchRelevance("ПК105")
             .ToListAsync();
-        Assert.Single(byPlain);
-        Assert.Equal("ПК105", byPlain[0].sku);
+        Assert.Equal(2, ordered.Count);
+        Assert.Equal(exact.Id, ordered[0].Id);
+        Assert.Equal(neighbor.Id, ordered[1].Id);
     }
 
     [Fact]
