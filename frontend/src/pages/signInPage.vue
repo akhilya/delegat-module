@@ -19,6 +19,11 @@ import { ref } from "vue";
 
 import { PAGE_SIGN_UP } from "@/router";
 import { useI18n } from "vue-i18n";
+import {
+  passwordSchema,
+  translateApiFieldErrors,
+  usernameSchema,
+} from "@/lib/authValidation";
 
 export default {
   components: {
@@ -41,8 +46,8 @@ export default {
 
     const formSchema = toTypedSchema(
       z.object({
-        userName: z.string().min(4).max(45),
-        password: z.string().min(8).max(128),
+        userName: usernameSchema(t),
+        password: passwordSchema(t),
         rememberMe: z.boolean().default(true).optional(),
       }),
     );
@@ -64,7 +69,9 @@ export default {
         },
         onError: (error) => {
           if (error?.response?.data?.errors)
-            form.setErrors(error.response.data.errors);
+            form.setErrors(
+              translateApiFieldErrors(error.response.data.errors, t),
+            );
           displaySonnerError(error);
         },
       });

@@ -60,7 +60,7 @@ public class JwtAuthController : ControllerBase
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, lockoutOnFailure: true);
         if (result.IsLockedOut)
-            return StatusCode(429, new { title = "Account locked. Try again later.", status = 429 });
+            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
         if (!result.Succeeded)
             throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
 
@@ -90,9 +90,7 @@ public class JwtAuthController : ControllerBase
 
         var user = new User { UserName = input.userName, isActive = true };
         var result = await _userManager.CreateAsync(user, input.password);
-
-        if (!result.Succeeded)
-            throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+        result.ThrowIfFailed();
 
         // Mark token as used
         tokenEntity.UpdateFill(new InvitationToken.UseForm(user.Id));

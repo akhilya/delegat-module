@@ -176,7 +176,12 @@ http.interceptors.response.use(
     }
 
     if (error.response?.status === 429) {
-      toast.warning(t("errors.rateLimited"));
+      const code = error.response?.data?.code;
+      toast.warning(
+        code === "account_locked"
+          ? t("errors.account_locked")
+          : t("errors.rateLimited"),
+      );
     }
 
     // Backend down / proxy gateway errors (deploy, restart) → dedicated page.

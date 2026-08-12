@@ -89,6 +89,8 @@ builder.Services.AddIdentity<User, UserRole>(options =>
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 8;
 
+    // Username charset: Identity default (letters, digits, -._@+) — no Cyrillic/Unicode.
+
     // Lockout policy
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.MaxFailedAccessAttempts = 5;

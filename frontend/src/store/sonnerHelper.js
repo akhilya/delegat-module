@@ -79,6 +79,16 @@ function formatErrorDetails(payload) {
       );
       if (looksLikeParams && keys.length <= 4) return null;
     }
+    // Field errors that are stable API codes (set on the form) — skip toast dump
+    if (details === payload.errors && payload.code) {
+      const values = Object.values(details).flat();
+      const looksLikeCodes =
+        values.length > 0 &&
+        values.every(
+          (v) => typeof v === "string" && /^[a-z][a-z0-9_]*$/.test(v),
+        );
+      if (looksLikeCodes) return null;
+    }
     try {
       return truncateDetails(JSON.stringify(details, null, 2));
     } catch {

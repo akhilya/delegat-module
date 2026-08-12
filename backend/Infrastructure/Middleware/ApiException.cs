@@ -52,6 +52,9 @@ public class ApiException : Exception
     public static ApiException Conflict(string message, object? data, string? code = "conflict")
         => new(message, StatusCodes.Status409Conflict, data: data, code: code);
 
+    public static ApiException TooManyRequests(string message = "Too many requests", string? code = "rate_limited")
+        => new(message, StatusCodes.Status429TooManyRequests, code: code);
+
     public static ApiException InternalServerError(string message = "Internal server error", string? code = "internal_error")
         => new(message, StatusCodes.Status500InternalServerError, code: code);
 }

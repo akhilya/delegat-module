@@ -29,6 +29,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Sign-up / sign-in: clearer validation errors for username charset (Latin / allowed symbols), password policy, duplicate username, and account lockout (instead of a generic “Bad request”)
 - File manager: empty-row Tag control matches Share icon color; permanent public shares can be revoked from the share dialog (and via context menu)
 - File manager: tag assign control is available on every file row again (not only when the file already has tags)
 - Products in trash: Adapters column stays visible but disabled; API rejects marketplace export/import/link/unlink/verify/price/stock ops for soft-deleted products

@@ -16,6 +16,11 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useRouter, useRoute } from "vue-router";
 import { PAGE_SIGN_IN } from "@/router";
 import { ref } from "vue";
+import {
+  passwordSchema,
+  translateApiFieldErrors,
+  usernameSchema,
+} from "@/lib/authValidation";
 
 import { useI18n } from "vue-i18n";
 
@@ -40,9 +45,9 @@ export default {
     const formSchema = toTypedSchema(
       z
         .object({
-          userName: z.string().min(4).max(45),
-          password: z.string().min(8).max(128),
-          confirmPassword: z.string().min(8).max(128),
+          userName: usernameSchema(t),
+          password: passwordSchema(t, { requirePolicy: true }),
+          confirmPassword: z.string().min(8, { message: t("auth.passwordTooShort") }).max(128),
           invitationToken: z.string(),
         })
         .refine((data) => data.password === data.confirmPassword, {
@@ -73,7 +78,9 @@ export default {
         },
         onError: (error) => {
           if (error?.response?.data?.errors)
-            form.setErrors(error.response.data.errors);
+            form.setErrors(
+              translateApiFieldErrors(error.response.data.errors, t),
+            );
           displaySonnerError(error);
         },
       });
@@ -99,6 +106,7 @@ export default {
           <SettingsFormField
             :label="t('auth.userName')"
             label-for="sign-up-username"
+            :description="t('auth.userNameHint')"
             :error="errorMessage"
           >
             <Input

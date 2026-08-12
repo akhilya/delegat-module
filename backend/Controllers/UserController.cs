@@ -121,8 +121,7 @@ public class UserController : ControllerBase
         }
 
         var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-            throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+        result.ThrowIfFailed();
 
         _permissionService.InvalidateUserAccess(user.Id);
 
@@ -133,8 +132,7 @@ public class UserController : ControllerBase
 
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, input.password);
-            if (!passwordResult.Succeeded)
-                throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
+            passwordResult.ThrowIfFailed();
         }
 
         return Ok(await MapUserDtoAsync(user, ct));
@@ -248,14 +246,12 @@ public class UserController : ControllerBase
         }
 
         var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-            throw ApiException.BadRequest(result.Errors.Select(e => e.Description).ToArray());
+        result.ThrowIfFailed();
 
         if (input.password != null)
         {
             var passwordResult = await _userManager.ChangePasswordAsync(user, input.currentPassword!, input.password!);
-            if (!passwordResult.Succeeded)
-                throw ApiException.BadRequest(passwordResult.Errors.Select(e => e.Description).ToArray());
+            passwordResult.ThrowIfFailed();
         }
 
         return Ok(await MapUserDtoAsync(user, ct));
