@@ -18,7 +18,7 @@ ENV VITE_API_SERVER=$VITE_API_SERVER
 # Empty default: CI/release must pass SemVer from root VERSION. Treat unset as unknown in the SPA (do not bake "dev").
 ARG VITE_APP_VERSION=
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
-ARG VITE_DOCS_PUBLIC_URL=https://docs.module.delegat.pro
+ARG VITE_DOCS_PUBLIC_URL=https://module.delegat.pro/docs
 ENV VITE_DOCS_PUBLIC_URL=$VITE_DOCS_PUBLIC_URL
 
 # Build the application
@@ -34,7 +34,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 ENV API_UPSTREAM=delegat-api
 # Overwritten per instance from CP BuildEnvFile (see docker-entrypoint.d).
-ENV DOCS_PUBLIC_URL=https://docs.module.delegat.pro
+ENV DOCS_PUBLIC_URL=https://module.delegat.pro/docs
 COPY docker-entrypoint.d/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 

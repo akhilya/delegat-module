@@ -16,6 +16,18 @@ const DEFAULT_DOCS_PUBLIC_URL = "https://module.delegat.pro/docs";
  * 2. Build-time `VITE_DOCS_PUBLIC_URL`
  * 3. Dev → http://localhost:5173/docs · Prod → https://module.delegat.pro/docs
  */
+function normalizeDocsBase(url) {
+  const trimmed = String(url || "")
+    .trim()
+    .replace(/\/$/, "");
+  if (!trimmed) return "";
+  // Legacy VitePress host (baked into older images) → CP SPA path.
+  if (/^https?:\/\/docs\.module\.delegat\.pro$/i.test(trimmed)) {
+    return DEFAULT_DOCS_PUBLIC_URL;
+  }
+  return trimmed;
+}
+
 function docsBaseUrl() {
   const runtime =
     typeof window !== "undefined"
@@ -25,7 +37,12 @@ function docsBaseUrl() {
   const fallback = import.meta.env.DEV
     ? "http://localhost:5173/docs"
     : DEFAULT_DOCS_PUBLIC_URL;
-  return (runtime || fromVite || fallback).replace(/\/$/, "");
+  return (
+    normalizeDocsBase(runtime) ||
+    normalizeDocsBase(fromVite) ||
+    normalizeDocsBase(fallback) ||
+    DEFAULT_DOCS_PUBLIC_URL
+  );
 }
 
 function isEnglishLocale(locale) {

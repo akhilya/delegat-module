@@ -102,7 +102,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Instance owner can permanently delete a store (type exact name to confirm; last store protected; catalog/adapters/files purged including MinIO)
 - Instance branding (white-label): Settings modal and first-run Setup step for name, description, logo, favicon, and primary/accent colors; seeded once from `BRAND_*` env; applied at runtime without rebuild
 - Default favicon matches Control Plane (`/logo-square-favicon.webp`); no default logo until upload
-- Account menu link to public product docs (`VITE_DOCS_PUBLIC_URL`, default `https://docs.module.delegat.pro`)
+- Account menu link to public product docs (`DOCS_PUBLIC_URL` / `VITE_DOCS_PUBLIC_URL`, default `https://module.delegat.pro/docs`)
 - `ADMIN_FORCE_RESET` passthrough in production Compose for first-admin reset
 - Product Adapters tab: remembered Export mode (Entire product / Price only / Stock only) per product and adapter in the database; split control runs export on the main click and changes mode via ›
 - Mapping canvas: snap-to-grid and alignment guidelines toggles in the bottom-left controls
