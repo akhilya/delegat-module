@@ -22,7 +22,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
-- Products table reuses the last list/trash page for ~10s when navigating back from a product (avoids re-fetching large pages); cache clears after delete/restore/import/bulk/adapters changes
+- Products table reuses the last list/trash page for ~60s when navigating back from a product (avoids re-fetching large pages; list paints from cache without waiting on categories/attributes); cache clears after delete/restore/import/bulk/adapters changes
 - Product image hover preview (same as products table) on product group members table, add-to-group picker, and group variants sidebar
 - File manager share dialog rebuilt to Catalog Workbench patterns: Field stacks, dialog description for the item name, expiration help text, and a dedicated link field with copy
 - Products table row menu: separate **Clone to store** and **Move to store** actions; transfer dialog opens locked to that mode (no clone/move tabs)

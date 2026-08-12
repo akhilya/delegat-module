@@ -1,9 +1,11 @@
 /**
  * Short in-memory TTL cache for products / trash list pages.
  * Survives productsPage remount when navigating product ↔ table.
+ * Callers must read the cache before awaiting unrelated meta fetches.
  */
 
-export const PRODUCTS_LIST_CACHE_TTL_MS = 10_000;
+/** Long enough to open a product, glance, and return without re-fetching. */
+export const PRODUCTS_LIST_CACHE_TTL_MS = 60_000;
 
 export const PRODUCTS_LIST_NS = "list";
 export const PRODUCTS_TRASH_NS = "trash";

@@ -903,8 +903,9 @@ export default {
       this.isTrashMode = true;
     }
 
-    // Fetch store attributes and categories in parallel
-    await Promise.all([
+    // Meta (categories / attributes / …) must not block the list: otherwise a
+    // cache hit on remount still waits on those APIs and feels like a full reload.
+    const metaPromise = Promise.all([
       this.fetchStoreAttributes(),
       this.fetchStoreBaseCurrency(),
       this.fetchCategories(),
@@ -912,16 +913,16 @@ export default {
       this.fetchConnections(),
     ]);
 
-    // Load column visibility from localStorage (now includes store attributes)
-    this.columnVisibility = this.loadColumnVisibility();
-
-    // Activate trash mode if ?trash=1 query param present
     if (this.isTrashMode) {
       await this.fetchTrashProducts();
     } else {
       await this.fetchProducts();
       if (this.page > this.lastPossiblePage) this.page = this.lastPossiblePage;
     }
+
+    await metaPromise;
+    // After store attributes exist, re-merge saved column visibility presets.
+    this.columnVisibility = this.loadColumnVisibility();
   },
 };
 </script>
