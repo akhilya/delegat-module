@@ -102,7 +102,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - Setup order: Welcome → Store → Branding → Done (Setup uses AuthLayout `xl`).
 - CP may inject empty/filled `BRAND_*` at provision (`BuildEnvFile`); no CP Ops brand UI yet.
 
-- **Docs links:** SPA resolves docs origin from runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker `DOCS_PUBLIC_URL` → `runtime-config.js`, or Vite middleware reading repo-root `.env.dev`), else build-time `VITE_DOCS_PUBLIC_URL`, else dev `http://localhost:5174` / prod `https://docs.module.delegat.pro`. Helpers: [`frontend/src/utils/docsUrl.js`](frontend/src/utils/docsUrl.js). CP sets `DOCS_PUBLIC_URL` on every provisioned instance.
+- **Docs links:** SPA resolves docs base from runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker `DOCS_PUBLIC_URL` → `runtime-config.js`, or Vite middleware reading repo-root `.env.dev`), else build-time `VITE_DOCS_PUBLIC_URL`, else dev `http://localhost:5173/docs` / prod `https://module.delegat.pro/docs`. Helpers: [`frontend/src/utils/docsUrl.js`](frontend/src/utils/docsUrl.js). CP sets `DOCS_PUBLIC_URL` on every provisioned instance.
 
 ---
 

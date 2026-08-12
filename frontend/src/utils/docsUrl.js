@@ -1,4 +1,4 @@
-/** Public product docs (VitePress on Control Plane). */
+/** Public product docs (Control Plane SPA under /docs). */
 
 const ADAPTER_CREDENTIALS_DOC_KEYS = new Set([
   "ozon",
@@ -8,13 +8,13 @@ const ADAPTER_CREDENTIALS_DOC_KEYS = new Set([
   "woocommerce",
 ]);
 
-const DEFAULT_DOCS_PUBLIC_URL = "https://docs.module.delegat.pro";
+const DEFAULT_DOCS_PUBLIC_URL = "https://module.delegat.pro/docs";
 
 /**
- * Resolve docs origin:
+ * Resolve docs base URL (may include `/docs` path):
  * 1. Runtime `window.__DELEGAT_DOCS_PUBLIC_URL__` (Docker DOCS_PUBLIC_URL / Vite middleware from repo `.env.dev`)
  * 2. Build-time `VITE_DOCS_PUBLIC_URL`
- * 3. Dev → http://localhost:5174 · Prod → https://docs.module.delegat.pro
+ * 3. Dev → http://localhost:5173/docs · Prod → https://module.delegat.pro/docs
  */
 function docsBaseUrl() {
   const runtime =
@@ -23,7 +23,7 @@ function docsBaseUrl() {
       : "";
   const fromVite = String(import.meta.env.VITE_DOCS_PUBLIC_URL || "").trim();
   const fallback = import.meta.env.DEV
-    ? "http://localhost:5174"
+    ? "http://localhost:5173/docs"
     : DEFAULT_DOCS_PUBLIC_URL;
   return (runtime || fromVite || fallback).replace(/\/$/, "");
 }
@@ -32,7 +32,7 @@ function isEnglishLocale(locale) {
   return locale === "en" || String(locale || "").startsWith("en");
 }
 
-/** Locale home: `/` or `/en/`. */
+/** Locale home: `/` or `/en/` under the docs base. */
 export function getDocsPublicUrl(locale = "ru") {
   const base = docsBaseUrl();
   if (isEnglishLocale(locale)) return `${base}/en/`;
