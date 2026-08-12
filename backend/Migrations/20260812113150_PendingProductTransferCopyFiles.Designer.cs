@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Delegat.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20260812102904_PendingProductTransferCopyFiles")]
+    [Migration("20260812113150_PendingProductTransferCopyFiles")]
     partial class PendingProductTransferCopyFiles
     {
         /// <inheritdoc />
@@ -1607,7 +1607,9 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("copyFiles")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");

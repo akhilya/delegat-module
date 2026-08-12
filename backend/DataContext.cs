@@ -244,6 +244,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<PendingProductTransfer>()
             .HasIndex(p => new { p.status, p.createdAt });
 
+        // Clone defaults to copying files; DB default must match CLR default on the entity.
+        builder.Entity<PendingProductTransfer>()
+            .Property(p => p.copyFiles)
+            .HasDefaultValue(true);
+
         builder.Entity<PendingProductBulkUpdate>()
             .HasIndex(p => p.batchId);
 

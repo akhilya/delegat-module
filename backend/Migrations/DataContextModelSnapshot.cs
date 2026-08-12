@@ -1604,7 +1604,9 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("copyFiles")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");

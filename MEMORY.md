@@ -22,9 +22,9 @@ Chat with the human may be Russian; **everything written into this repo stays En
 
 1. **English in repo** — code, identifiers, comments, commits, PRs, docs (i18n locale values may be Russian).
 
-2. **EF Core migrations only via `dotnet ef` CLI — never hand-write migration classes.**
-   - A valid migration is a **pair**: `YYYYMMDDHHMMSS_Name.cs` + `YYYYMMDDHHMMSS_Name.Designer.cs`.
-   - The Designer **must** carry `[Migration("YYYYMMDDHHMMSS_Name")]`. Without it, EF does **not** discover the migration and startup `MigrateAsync` will skip it (silent miss). Also updates `Migrations/DataContextModelSnapshot.cs`.
+2. **EF Core migrations only via `dotnet ef` CLI — absolute, no exceptions.**
+   - A valid migration is a **pair**: `YYYYMMDDHHMMSS_Name.cs` + `YYYYMMDDHHMMSS_Name.Designer.cs` (+ updated `Migrations/DataContextModelSnapshot.cs`).
+   - The Designer **must** carry `[DbContext(typeof(DataContext))]` and `[Migration("YYYYMMDDHHMMSS_Name")]`. Without `[Migration]`, EF does **not** discover the migration and startup `MigrateAsync` will skip it (silent miss).
    - **Add a migration:**
      ```bash
      cd backend
@@ -33,7 +33,13 @@ Chat with the human may be Russian; **everything written into this repo stays En
      ```
    - Design-time factory: [`backend/Infrastructure/Data/DesignTimeDbContextFactory.cs`](backend/Infrastructure/Data/DesignTimeDbContextFactory.cs) (reads `MYSQL_*` env).
    - **Apply:** API applies pending migrations on startup, or `dotnet ef database update` with the same env.
-   - **Never** edit already-applied migrations. **Never** invent a migration `.cs` by hand (missing Designer / `[Migration]` has bitten us more than once).
+   - **Forbidden (forever):**
+     - Inventing / pasting a migration `.cs` by hand
+     - Hand-editing `Up`/`Down` after `dotnet ef` generated them (including changing `defaultValue`)
+     - Any `migrationBuilder.Sql(...)` / raw SQL for schema or “quick” column adds
+     - Copying Designer/`[Migration]` attributes by hand or omitting the Designer
+   - Change the **model** (entity + Fluent API in `DataContext`) first; then let `dotnet ef migrations add` produce the files. If the default/column shape is wrong, fix the model and **remove + re-add** the last unused migration (`dotnet ef migrations remove`), do not patch the generated C#.
+   - **Never** edit already-applied migrations — add a new EF-generated migration instead.
    - If the API process locks `Delegat.dll`, stop it before `dotnet ef` / rebuild.
 
 3. **CHANGELOG** — user-visible / ops / security changes update `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md). Process: [`docs/platform/releasing.md`](docs/platform/releasing.md). Canonical version is root [`VERSION`](VERSION).
